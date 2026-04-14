@@ -53,15 +53,16 @@ class Database:
     def update(self, instance: SQLModel, **values: object) -> SQLModel:
         """Update fields on an existing record."""
         with Session(self._engine) as session:
-            session.add(instance)
+            merged = session.merge(instance)
             for key, val in values.items():
-                setattr(instance, key, val)
+                setattr(merged, key, val)
             session.commit()
-            session.refresh(instance)
-            return instance
+            session.refresh(merged)
+            return merged
 
     def delete(self, instance: SQLModel) -> None:
         """Delete a record."""
         with Session(self._engine) as session:
-            session.delete(instance)
+            merged = session.merge(instance)
+            session.delete(merged)
             session.commit()

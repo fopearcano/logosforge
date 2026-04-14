@@ -1,13 +1,13 @@
 """Data models for StoryPlanner.
 
-All models belong to a Project. SQLModel gives us both SQLAlchemy tables
-and Pydantic validation in one class.
+All models belong to a Project via project_id.
+SQLModel gives us both SQLAlchemy tables and Pydantic validation in one class.
 """
 
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlmodel import Field, Relationship, SQLModel
+from sqlmodel import Field, SQLModel
 
 
 def _now() -> datetime:
@@ -23,12 +23,6 @@ class Project(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 
-    # Relationships (back-populated from children)
-    characters: list["Character"] = Relationship(back_populates="project")
-    places: list["Place"] = Relationship(back_populates="project")
-    notes: list["Note"] = Relationship(back_populates="project")
-    scenes: list["Scene"] = Relationship(back_populates="project")
-
 
 class Character(SQLModel, table=True):
     """A character in the story."""
@@ -37,10 +31,8 @@ class Character(SQLModel, table=True):
     project_id: int = Field(foreign_key="project.id")
     name: str
     description: str = ""
-    color: str = "#3498db"  # Hex color for future timeline display
+    color: str = "#3498db"
     created_at: datetime = Field(default_factory=_now)
-
-    project: Optional[Project] = Relationship(back_populates="characters")
 
 
 class Place(SQLModel, table=True):
@@ -52,19 +44,15 @@ class Place(SQLModel, table=True):
     description: str = ""
     created_at: datetime = Field(default_factory=_now)
 
-    project: Optional[Project] = Relationship(back_populates="places")
-
 
 class Note(SQLModel, table=True):
     """A freeform note attached to a project."""
 
     id: Optional[int] = Field(default=None, primary_key=True)
     project_id: int = Field(foreign_key="project.id")
-    title: str = ""
+    title: str
     content: str = ""
     created_at: datetime = Field(default_factory=_now)
-
-    project: Optional[Project] = Relationship(back_populates="notes")
 
 
 class Scene(SQLModel, table=True):
@@ -74,7 +62,5 @@ class Scene(SQLModel, table=True):
     project_id: int = Field(foreign_key="project.id")
     title: str
     summary: str = ""
-    sort_order: int = 0  # For ordering scenes in a future timeline
+    sort_order: int = 0
     created_at: datetime = Field(default_factory=_now)
-
-    project: Optional[Project] = Relationship(back_populates="scenes")
