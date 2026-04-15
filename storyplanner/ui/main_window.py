@@ -25,16 +25,19 @@ class MainWindow(QMainWindow):
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
 
+        self.sidebar_buttons: dict[str, QPushButton] = {}
         for label in ("Projects", "Characters", "Places", "Notes", "Scenes"):
             btn = QPushButton(label)
             sidebar_layout.addWidget(btn)
+            self.sidebar_buttons[label] = btn
 
         # Push buttons to the top
         sidebar_layout.addStretch()
 
         # -- Right content area ----------------------------------------------
-        self.content_area = QLabel("Select a section from the sidebar")
-        self.content_area.setWordWrap(True)
+        self.content_area = QWidget()
+        content_layout = QVBoxLayout(self.content_area)
+        content_layout.addWidget(QLabel("Select a section from the sidebar"))
 
         # -- Assemble --------------------------------------------------------
         root_layout.addWidget(sidebar)
