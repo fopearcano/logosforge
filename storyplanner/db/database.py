@@ -108,6 +108,10 @@ class Database:
 
     # -- Scenes --------------------------------------------------------------
 
+    def get_scene_by_id(self, scene_id: int) -> Scene | None:
+        with Session(self._engine) as session:
+            return session.get(Scene, scene_id)
+
     def get_all_scenes(self, project_id: int) -> list[Scene]:
         with Session(self._engine) as session:
             stmt = (
@@ -136,6 +140,45 @@ class Database:
                 session.add(SceneCharacterLink(scene_id=scene.id, character_id=cid))
             for pid in place_ids or []:
                 session.add(ScenePlaceLink(scene_id=scene.id, place_id=pid))
+
+            session.commit()
+            session.refresh(scene)
+            return scene
+
+    def update_scene(
+        self,
+        scene_id: int,
+        title: str,
+        summary: str = "",
+        character_ids: list[int] | None = None,
+        place_ids: list[int] | None = None,
+    ) -> Scene:
+        with Session(self._engine) as session:
+            scene = session.get(Scene, scene_id)
+            scene.title = title
+            scene.summary = summary
+
+            # Replace character links
+            old_char_links = session.exec(
+                select(SceneCharacterLink).where(
+                    SceneCharacterLink.scene_id == scene_id
+                )
+            ).all()
+            for link in old_char_links:
+                session.delete(link)
+            for cid in character_ids or []:
+                session.add(SceneCharacterLink(scene_id=scene_id, character_id=cid))
+
+            # Replace place links
+            old_place_links = session.exec(
+                select(ScenePlaceLink).where(
+                    ScenePlaceLink.scene_id == scene_id
+                )
+            ).all()
+            for link in old_place_links:
+                session.delete(link)
+            for pid in place_ids or []:
+                session.add(ScenePlaceLink(scene_id=scene_id, place_id=pid))
 
             session.commit()
             session.refresh(scene)
