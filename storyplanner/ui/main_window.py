@@ -13,6 +13,7 @@ from storyplanner.db import Database
 from storyplanner.ui.characters_view import CharactersView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.places_view import PlacesView
+from storyplanner.ui.scenes_view import ScenesView
 
 
 class MainWindow(QMainWindow):
@@ -45,6 +46,7 @@ class MainWindow(QMainWindow):
         self.sidebar_buttons["Characters"].clicked.connect(self._show_characters)
         self.sidebar_buttons["Places"].clicked.connect(self._show_places)
         self.sidebar_buttons["Notes"].clicked.connect(self._show_notes)
+        self.sidebar_buttons["Scenes"].clicked.connect(self._show_scenes)
 
         # -- Right content area ----------------------------------------------
         self.content_area = QWidget()
@@ -73,3 +75,6 @@ class MainWindow(QMainWindow):
 
     def _show_notes(self) -> None:
         self._set_content(NotesView(self._db, self._project_id))
+
+    def _show_scenes(self) -> None:
+        self._set_content(ScenesView(self._db, self._project_id))

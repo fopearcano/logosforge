@@ -13,7 +13,7 @@ from typing import Optional
 
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from storyplanner.models import Character, Note, Place, Project
+from storyplanner.models import Character, Note, Place, Project, Scene
 
 
 class Database:
@@ -97,3 +97,26 @@ class Database:
             session.commit()
             session.refresh(note)
             return note
+
+    # -- Scenes --------------------------------------------------------------
+
+    def get_all_scenes(self, project_id: int) -> list[Scene]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(Scene)
+                .where(Scene.project_id == project_id)
+                .order_by(Scene.sort_order)
+            )
+            return list(session.exec(stmt).all())
+
+    def create_scene(
+        self, project_id: int, title: str, summary: str = ""
+    ) -> Scene:
+        with Session(self._engine) as session:
+            scene = Scene(
+                project_id=project_id, title=title, summary=summary
+            )
+            session.add(scene)
+            session.commit()
+            session.refresh(scene)
+            return scene
