@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
-from storyplanner.models import Place
 
 
 class PlacesView(QWidget):
@@ -52,23 +51,20 @@ class PlacesView(QWidget):
         self._refresh_list()
 
     def _refresh_list(self) -> None:
-        """Reload the place list from the database."""
         self._list.clear()
-        places = self._db.get_all(Place, project_id=self._project_id)
-        for place in places:
+        for place in self._db.get_all_places(self._project_id):
             self._list.addItem(place.name)
 
     def _on_save(self) -> None:
-        """Create a new place from the form fields."""
         name = self._name_input.text().strip()
         if not name:
             return
 
-        self._db.add(Place(
+        self._db.create_place(
             project_id=self._project_id,
             name=name,
             description=self._desc_input.toPlainText().strip(),
-        ))
+        )
 
         self._name_input.clear()
         self._desc_input.clear()
