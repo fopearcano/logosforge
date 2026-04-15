@@ -9,10 +9,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from storyplanner.db import Database
+from storyplanner.ui.characters_view import CharactersView
+
 
 class MainWindow(QMainWindow):
-    def __init__(self) -> None:
+    def __init__(self, db: Database, project_id: int) -> None:
         super().__init__()
+        self._db = db
+        self._project_id = project_id
         self.setWindowTitle("StoryPlanner")
         self.resize(900, 600)
 
@@ -34,13 +39,27 @@ class MainWindow(QMainWindow):
         # Push buttons to the top
         sidebar_layout.addStretch()
 
+        # Connect sidebar buttons
+        self.sidebar_buttons["Characters"].clicked.connect(self._show_characters)
+
         # -- Right content area ----------------------------------------------
         self.content_area = QWidget()
-        content_layout = QVBoxLayout(self.content_area)
-        content_layout.addWidget(QLabel("Select a section from the sidebar"))
+        QVBoxLayout(self.content_area).addWidget(
+            QLabel("Select a section from the sidebar")
+        )
 
         # -- Assemble --------------------------------------------------------
         root_layout.addWidget(sidebar)
         root_layout.addWidget(self.content_area, stretch=1)
 
         self.setCentralWidget(central)
+
+    def _set_content(self, widget: QWidget) -> None:
+        """Replace the content area with a new widget."""
+        layout = self.centralWidget().layout()
+        layout.replaceWidget(self.content_area, widget)
+        self.content_area.deleteLater()
+        self.content_area = widget
+
+    def _show_characters(self) -> None:
+        self._set_content(CharactersView(self._db, self._project_id))

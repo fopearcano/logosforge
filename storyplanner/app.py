@@ -4,10 +4,24 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
+from storyplanner.db import Database
+from storyplanner.models import Project
 from storyplanner.ui.main_window import MainWindow
+
+DB_PATH = "storyplanner.db"
 
 
 def create_app() -> tuple[QApplication, MainWindow]:
     app = QApplication.instance() or QApplication(sys.argv)
-    window = MainWindow()
+
+    db = Database(DB_PATH)
+
+    # Use the first project, or create a default one
+    projects = db.get_all(Project)
+    if projects:
+        project = projects[0]
+    else:
+        project = db.add(Project(title="My Story"))
+
+    window = MainWindow(db, project.id)
     return app, window
