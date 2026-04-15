@@ -13,7 +13,7 @@ from typing import Optional
 
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from storyplanner.models import Character, Place, Project
+from storyplanner.models import Character, Note, Place, Project
 
 
 class Database:
@@ -78,3 +78,22 @@ class Database:
             session.commit()
             session.refresh(place)
             return place
+
+    # -- Notes ---------------------------------------------------------------
+
+    def get_all_notes(self, project_id: int) -> list[Note]:
+        with Session(self._engine) as session:
+            stmt = select(Note).where(Note.project_id == project_id)
+            return list(session.exec(stmt).all())
+
+    def create_note(
+        self, project_id: int, title: str, content: str = ""
+    ) -> Note:
+        with Session(self._engine) as session:
+            note = Note(
+                project_id=project_id, title=title, content=content
+            )
+            session.add(note)
+            session.commit()
+            session.refresh(note)
+            return note
