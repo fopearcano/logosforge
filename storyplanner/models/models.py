@@ -64,3 +64,17 @@ class Scene(SQLModel, table=True):
     summary: str = ""
     sort_order: int = 0
     created_at: datetime = Field(default_factory=_now)
+
+
+class SceneCharacterLink(SQLModel, table=True):
+    """Links a scene to a character (many-to-many)."""
+
+    scene_id: int = Field(foreign_key="scene.id", primary_key=True)
+    character_id: int = Field(foreign_key="character.id", primary_key=True)
+
+
+class ScenePlaceLink(SQLModel, table=True):
+    """Links a scene to a place (many-to-many)."""
+
+    scene_id: int = Field(foreign_key="scene.id", primary_key=True)
+    place_id: int = Field(foreign_key="place.id", primary_key=True)

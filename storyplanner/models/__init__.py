@@ -4,6 +4,16 @@ from storyplanner.models.models import (
     Place,
     Project,
     Scene,
+    SceneCharacterLink,
+    ScenePlaceLink,
 )
 
-__all__ = ["Project", "Character", "Place", "Note", "Scene"]
+__all__ = [
+    "Project",
+    "Character",
+    "Place",
+    "Note",
+    "Scene",
+    "SceneCharacterLink",
+    "ScenePlaceLink",
+]

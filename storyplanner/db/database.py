@@ -13,7 +13,15 @@ from typing import Optional
 
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from storyplanner.models import Character, Note, Place, Project, Scene
+from storyplanner.models import (
+    Character,
+    Note,
+    Place,
+    Project,
+    Scene,
+    SceneCharacterLink,
+    ScenePlaceLink,
+)
 
 
 class Database:
@@ -110,13 +118,39 @@ class Database:
             return list(session.exec(stmt).all())
 
     def create_scene(
-        self, project_id: int, title: str, summary: str = ""
+        self,
+        project_id: int,
+        title: str,
+        summary: str = "",
+        character_ids: list[int] | None = None,
+        place_ids: list[int] | None = None,
     ) -> Scene:
         with Session(self._engine) as session:
             scene = Scene(
                 project_id=project_id, title=title, summary=summary
             )
             session.add(scene)
+            session.flush()  # get scene.id before creating links
+
+            for cid in character_ids or []:
+                session.add(SceneCharacterLink(scene_id=scene.id, character_id=cid))
+            for pid in place_ids or []:
+                session.add(ScenePlaceLink(scene_id=scene.id, place_id=pid))
+
             session.commit()
             session.refresh(scene)
             return scene
+
+    def get_scene_character_ids(self, scene_id: int) -> list[int]:
+        with Session(self._engine) as session:
+            stmt = select(SceneCharacterLink.character_id).where(
+                SceneCharacterLink.scene_id == scene_id
+            )
+            return list(session.exec(stmt).all())
+
+    def get_scene_place_ids(self, scene_id: int) -> list[int]:
+        with Session(self._engine) as session:
+            stmt = select(ScenePlaceLink.place_id).where(
+                ScenePlaceLink.scene_id == scene_id
+            )
+            return list(session.exec(stmt).all())
