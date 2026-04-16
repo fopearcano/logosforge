@@ -66,6 +66,11 @@ class ScenesView(QWidget):
         self._save_btn.clicked.connect(self._on_save)
         right.addWidget(self._save_btn)
 
+        self._delete_btn = QPushButton("Delete")
+        self._delete_btn.setEnabled(False)
+        self._delete_btn.clicked.connect(self._on_delete)
+        right.addWidget(self._delete_btn)
+
         new_btn = QPushButton("New Scene")
         new_btn.clicked.connect(self._clear_form)
         right.addWidget(new_btn)
@@ -119,6 +124,7 @@ class ScenesView(QWidget):
 
         self._selected_scene_id = scene.id
         self._form_label.setText("Edit Scene")
+        self._delete_btn.setEnabled(True)
         self._title_input.setText(scene.title)
         self._summary_input.setPlainText(scene.summary)
 
@@ -171,11 +177,21 @@ class ScenesView(QWidget):
         self._clear_form()
         self._refresh_list()
 
+    # -- Delete --------------------------------------------------------------
+
+    def _on_delete(self) -> None:
+        if self._selected_scene_id is None:
+            return
+        self._db.delete_scene(self._selected_scene_id)
+        self._clear_form()
+        self._refresh_list()
+
     # -- Helpers -------------------------------------------------------------
 
     def _clear_form(self) -> None:
         self._selected_scene_id = None
         self._form_label.setText("New Scene")
+        self._delete_btn.setEnabled(False)
         self._title_input.clear()
         self._summary_input.clear()
         self._uncheck_all(self._char_list)

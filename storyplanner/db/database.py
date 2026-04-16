@@ -184,6 +184,28 @@ class Database:
             session.refresh(scene)
             return scene
 
+    def delete_scene(self, scene_id: int) -> None:
+        with Session(self._engine) as session:
+            # Delete links first
+            for link in session.exec(
+                select(SceneCharacterLink).where(
+                    SceneCharacterLink.scene_id == scene_id
+                )
+            ).all():
+                session.delete(link)
+            for link in session.exec(
+                select(ScenePlaceLink).where(
+                    ScenePlaceLink.scene_id == scene_id
+                )
+            ).all():
+                session.delete(link)
+
+            # Delete the scene
+            scene = session.get(Scene, scene_id)
+            if scene:
+                session.delete(scene)
+            session.commit()
+
     def get_scene_character_ids(self, scene_id: int) -> list[int]:
         with Session(self._engine) as session:
             stmt = select(SceneCharacterLink.character_id).where(
