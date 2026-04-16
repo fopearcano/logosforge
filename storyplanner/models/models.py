@@ -62,6 +62,7 @@ class Scene(SQLModel, table=True):
     project_id: int = Field(foreign_key="project.id")
     title: str
     summary: str = ""
+    chapter: str = ""
     sort_order: int = 0
     created_at: datetime = Field(default_factory=_now)
 

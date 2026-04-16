@@ -1,7 +1,8 @@
-"""Scenes management view — list, create, edit, with character/place links."""
+"""Scenes management view — list, create, edit, with chapter grouping."""
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
 from storyplanner.db import Database
 
 USER_ROLE = Qt.ItemDataRole.UserRole
+ALL_CHAPTERS = "All"
 
 
 class ScenesView(QWidget):
@@ -30,6 +32,12 @@ class ScenesView(QWidget):
         # -- Left: scene list ------------------------------------------------
         left = QVBoxLayout()
         left.addWidget(QLabel("Scenes"))
+
+        # Chapter filter
+        self._chapter_filter = QComboBox()
+        self._chapter_filter.currentTextChanged.connect(self._on_filter_changed)
+        left.addWidget(self._chapter_filter)
+
         self._list = QListWidget()
         self._list.currentItemChanged.connect(self._on_scene_selected)
         left.addWidget(self._list)
@@ -56,6 +64,11 @@ class ScenesView(QWidget):
         right.addWidget(QLabel("Title"))
         self._title_input = QLineEdit()
         right.addWidget(self._title_input)
+
+        right.addWidget(QLabel("Chapter"))
+        self._chapter_input = QLineEdit()
+        self._chapter_input.setPlaceholderText("e.g. Chapter 1")
+        right.addWidget(self._chapter_input)
 
         right.addWidget(QLabel("Summary"))
         self._summary_input = QPlainTextEdit()
@@ -92,6 +105,7 @@ class ScenesView(QWidget):
 
         self._load_characters()
         self._load_places()
+        self._refresh_chapter_filter()
         self._refresh_list()
 
     # -- Populate checkable lists --------------------------------------------
@@ -112,13 +126,40 @@ class ScenesView(QWidget):
             item.setCheckState(Qt.CheckState.Unchecked)
             self._place_list.addItem(item)
 
+    # -- Chapter filter ------------------------------------------------------
+
+    def _refresh_chapter_filter(self) -> None:
+        self._chapter_filter.blockSignals(True)
+        current = self._chapter_filter.currentText()
+        self._chapter_filter.clear()
+        self._chapter_filter.addItem(ALL_CHAPTERS)
+        for ch in self._db.get_scene_chapters(self._project_id):
+            self._chapter_filter.addItem(ch)
+        # Restore previous selection if it still exists
+        idx = self._chapter_filter.findText(current)
+        self._chapter_filter.setCurrentIndex(idx if idx >= 0 else 0)
+        self._chapter_filter.blockSignals(False)
+
+    def _get_active_chapter_filter(self) -> str | None:
+        text = self._chapter_filter.currentText()
+        return None if text == ALL_CHAPTERS else text
+
+    def _on_filter_changed(self) -> None:
+        self._clear_form()
+        self._refresh_list()
+
     # -- Scene list ----------------------------------------------------------
 
     def _refresh_list(self) -> None:
         self._list.blockSignals(True)
         self._list.clear()
-        for scene in self._db.get_all_scenes(self._project_id):
-            item = QListWidgetItem(scene.title)
+        chapter_filter = self._get_active_chapter_filter()
+        for scene in self._db.get_all_scenes(self._project_id, chapter=chapter_filter):
+            if scene.chapter:
+                label = f"[{scene.chapter}] {scene.title}"
+            else:
+                label = scene.title
+            item = QListWidgetItem(label)
             item.setData(USER_ROLE, scene.id)
             self._list.addItem(item)
         self._list.blockSignals(False)
@@ -140,6 +181,7 @@ class ScenesView(QWidget):
         self._move_up_btn.setEnabled(True)
         self._move_down_btn.setEnabled(True)
         self._title_input.setText(scene.title)
+        self._chapter_input.setText(scene.chapter)
         self._summary_input.setPlainText(scene.summary)
 
         # Check linked characters
@@ -168,6 +210,7 @@ class ScenesView(QWidget):
             return
 
         summary = self._summary_input.toPlainText().strip()
+        chapter = self._chapter_input.text().strip()
         char_ids = self._get_checked_ids(self._char_list)
         place_ids = self._get_checked_ids(self._place_list)
 
@@ -176,6 +219,7 @@ class ScenesView(QWidget):
                 scene_id=self._selected_scene_id,
                 title=title,
                 summary=summary,
+                chapter=chapter,
                 character_ids=char_ids,
                 place_ids=place_ids,
             )
@@ -184,11 +228,13 @@ class ScenesView(QWidget):
                 project_id=self._project_id,
                 title=title,
                 summary=summary,
+                chapter=chapter,
                 character_ids=char_ids,
                 place_ids=place_ids,
             )
 
         self._clear_form()
+        self._refresh_chapter_filter()
         self._refresh_list()
 
     # -- Delete --------------------------------------------------------------
@@ -198,6 +244,7 @@ class ScenesView(QWidget):
             return
         self._db.delete_scene(self._selected_scene_id)
         self._clear_form()
+        self._refresh_chapter_filter()
         self._refresh_list()
 
     # -- Reorder -------------------------------------------------------------
@@ -217,7 +264,6 @@ class ScenesView(QWidget):
         self._reselect(self._selected_scene_id)
 
     def _reselect(self, scene_id: int) -> None:
-        """Re-select a scene by id after the list has been refreshed."""
         for i in range(self._list.count()):
             if self._list.item(i).data(USER_ROLE) == scene_id:
                 self._list.setCurrentRow(i)
@@ -232,6 +278,7 @@ class ScenesView(QWidget):
         self._move_up_btn.setEnabled(False)
         self._move_down_btn.setEnabled(False)
         self._title_input.clear()
+        self._chapter_input.clear()
         self._summary_input.clear()
         self._uncheck_all(self._char_list)
         self._uncheck_all(self._place_list)

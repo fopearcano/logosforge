@@ -192,12 +192,24 @@ class Database:
         with Session(self._engine) as session:
             return session.get(Scene, scene_id)
 
-    def get_all_scenes(self, project_id: int) -> list[Scene]:
+    def get_all_scenes(
+        self, project_id: int, chapter: str | None = None
+    ) -> list[Scene]:
+        with Session(self._engine) as session:
+            stmt = select(Scene).where(Scene.project_id == project_id)
+            if chapter is not None:
+                stmt = stmt.where(Scene.chapter == chapter)
+            stmt = stmt.order_by(Scene.sort_order, Scene.id)
+            return list(session.exec(stmt).all())
+
+    def get_scene_chapters(self, project_id: int) -> list[str]:
+        """Return distinct non-empty chapter values for a project."""
         with Session(self._engine) as session:
             stmt = (
-                select(Scene)
+                select(Scene.chapter)
                 .where(Scene.project_id == project_id)
-                .order_by(Scene.sort_order, Scene.id)
+                .where(Scene.chapter != "")
+                .distinct()
             )
             return list(session.exec(stmt).all())
 
@@ -206,6 +218,7 @@ class Database:
         project_id: int,
         title: str,
         summary: str = "",
+        chapter: str = "",
         character_ids: list[int] | None = None,
         place_ids: list[int] | None = None,
     ) -> Scene:
@@ -224,6 +237,7 @@ class Database:
                 project_id=project_id,
                 title=title,
                 summary=summary,
+                chapter=chapter,
                 sort_order=next_order,
             )
             session.add(scene)
@@ -243,6 +257,7 @@ class Database:
         scene_id: int,
         title: str,
         summary: str = "",
+        chapter: str = "",
         character_ids: list[int] | None = None,
         place_ids: list[int] | None = None,
     ) -> Scene:
@@ -250,6 +265,7 @@ class Database:
             scene = session.get(Scene, scene_id)
             scene.title = title
             scene.summary = summary
+            scene.chapter = chapter
 
             # Replace character links
             old_char_links = session.exec(
