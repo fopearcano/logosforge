@@ -395,6 +395,14 @@ class Database:
             )
             session.commit()
 
+    def update_scene_plotline(self, scene_id: int, plotline: str) -> None:
+        with Session(self._engine) as session:
+            scene = session.get(Scene, scene_id)
+            if scene is None:
+                return
+            scene.plotline = plotline
+            session.commit()
+
     def get_scene_character_ids(self, scene_id: int) -> list[int]:
         with Session(self._engine) as session:
             stmt = select(SceneCharacterLink.character_id).where(
