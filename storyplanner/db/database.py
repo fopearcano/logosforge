@@ -51,6 +51,10 @@ class Database:
 
     # -- Characters ----------------------------------------------------------
 
+    def get_character_by_id(self, character_id: int) -> Character | None:
+        with Session(self._engine) as session:
+            return session.get(Character, character_id)
+
     def get_all_characters(self, project_id: int) -> list[Character]:
         with Session(self._engine) as session:
             stmt = select(Character).where(Character.project_id == project_id)
@@ -68,7 +72,36 @@ class Database:
             session.refresh(character)
             return character
 
+    def update_character(
+        self, character_id: int, name: str, description: str = ""
+    ) -> Character:
+        with Session(self._engine) as session:
+            character = session.get(Character, character_id)
+            character.name = name
+            character.description = description
+            session.commit()
+            session.refresh(character)
+            return character
+
+    def delete_character(self, character_id: int) -> None:
+        with Session(self._engine) as session:
+            # Remove scene links
+            for link in session.exec(
+                select(SceneCharacterLink).where(
+                    SceneCharacterLink.character_id == character_id
+                )
+            ).all():
+                session.delete(link)
+            character = session.get(Character, character_id)
+            if character:
+                session.delete(character)
+            session.commit()
+
     # -- Places --------------------------------------------------------------
+
+    def get_place_by_id(self, place_id: int) -> Place | None:
+        with Session(self._engine) as session:
+            return session.get(Place, place_id)
 
     def get_all_places(self, project_id: int) -> list[Place]:
         with Session(self._engine) as session:
@@ -87,7 +120,36 @@ class Database:
             session.refresh(place)
             return place
 
+    def update_place(
+        self, place_id: int, name: str, description: str = ""
+    ) -> Place:
+        with Session(self._engine) as session:
+            place = session.get(Place, place_id)
+            place.name = name
+            place.description = description
+            session.commit()
+            session.refresh(place)
+            return place
+
+    def delete_place(self, place_id: int) -> None:
+        with Session(self._engine) as session:
+            # Remove scene links
+            for link in session.exec(
+                select(ScenePlaceLink).where(
+                    ScenePlaceLink.place_id == place_id
+                )
+            ).all():
+                session.delete(link)
+            place = session.get(Place, place_id)
+            if place:
+                session.delete(place)
+            session.commit()
+
     # -- Notes ---------------------------------------------------------------
+
+    def get_note_by_id(self, note_id: int) -> Note | None:
+        with Session(self._engine) as session:
+            return session.get(Note, note_id)
 
     def get_all_notes(self, project_id: int) -> list[Note]:
         with Session(self._engine) as session:
@@ -105,6 +167,24 @@ class Database:
             session.commit()
             session.refresh(note)
             return note
+
+    def update_note(
+        self, note_id: int, title: str, content: str = ""
+    ) -> Note:
+        with Session(self._engine) as session:
+            note = session.get(Note, note_id)
+            note.title = title
+            note.content = content
+            session.commit()
+            session.refresh(note)
+            return note
+
+    def delete_note(self, note_id: int) -> None:
+        with Session(self._engine) as session:
+            note = session.get(Note, note_id)
+            if note:
+                session.delete(note)
+            session.commit()
 
     # -- Scenes --------------------------------------------------------------
 

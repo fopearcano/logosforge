@@ -1,10 +1,12 @@
-"""Places management view — list + create form."""
+"""Places management view — list, create, edit, delete."""
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -13,12 +15,15 @@ from PySide6.QtWidgets import (
 
 from storyplanner.db import Database
 
+USER_ROLE = Qt.ItemDataRole.UserRole
+
 
 class PlacesView(QWidget):
     def __init__(self, db: Database, project_id: int) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
+        self._selected_id: int | None = None
 
         root = QHBoxLayout(self)
 
@@ -26,12 +31,15 @@ class PlacesView(QWidget):
         left = QVBoxLayout()
         left.addWidget(QLabel("Places"))
         self._list = QListWidget()
+        self._list.currentItemChanged.connect(self._on_selected)
         left.addWidget(self._list)
         root.addLayout(left)
 
-        # -- Right: create form ----------------------------------------------
+        # -- Right: form -----------------------------------------------------
         right = QVBoxLayout()
-        right.addWidget(QLabel("New Place"))
+
+        self._form_label = QLabel("New Place")
+        right.addWidget(self._form_label)
 
         right.addWidget(QLabel("Name"))
         self._name_input = QLineEdit()
@@ -45,27 +53,66 @@ class PlacesView(QWidget):
         save_btn.clicked.connect(self._on_save)
         right.addWidget(save_btn)
 
+        self._delete_btn = QPushButton("Delete")
+        self._delete_btn.setEnabled(False)
+        self._delete_btn.clicked.connect(self._on_delete)
+        right.addWidget(self._delete_btn)
+
+        new_btn = QPushButton("New Place")
+        new_btn.clicked.connect(self._clear_form)
+        right.addWidget(new_btn)
+
         right.addStretch()
         root.addLayout(right)
 
         self._refresh_list()
 
     def _refresh_list(self) -> None:
+        self._list.blockSignals(True)
         self._list.clear()
         for place in self._db.get_all_places(self._project_id):
-            self._list.addItem(place.name)
+            item = QListWidgetItem(place.name)
+            item.setData(USER_ROLE, place.id)
+            self._list.addItem(item)
+        self._list.blockSignals(False)
+
+    def _on_selected(self, current: QListWidgetItem | None) -> None:
+        if current is None:
+            return
+        place = self._db.get_place_by_id(current.data(USER_ROLE))
+        if place is None:
+            return
+        self._selected_id = place.id
+        self._form_label.setText("Edit Place")
+        self._delete_btn.setEnabled(True)
+        self._name_input.setText(place.name)
+        self._desc_input.setPlainText(place.description)
 
     def _on_save(self) -> None:
         name = self._name_input.text().strip()
         if not name:
             return
+        desc = self._desc_input.toPlainText().strip()
 
-        self._db.create_place(
-            project_id=self._project_id,
-            name=name,
-            description=self._desc_input.toPlainText().strip(),
-        )
+        if self._selected_id is not None:
+            self._db.update_place(self._selected_id, name, desc)
+        else:
+            self._db.create_place(self._project_id, name, desc)
 
+        self._clear_form()
+        self._refresh_list()
+
+    def _on_delete(self) -> None:
+        if self._selected_id is None:
+            return
+        self._db.delete_place(self._selected_id)
+        self._clear_form()
+        self._refresh_list()
+
+    def _clear_form(self) -> None:
+        self._selected_id = None
+        self._form_label.setText("New Place")
+        self._delete_btn.setEnabled(False)
         self._name_input.clear()
         self._desc_input.clear()
-        self._refresh_list()
+        self._list.clearSelection()
