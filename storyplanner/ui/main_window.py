@@ -82,4 +82,15 @@ class MainWindow(QMainWindow):
         self._set_content(ScenesView(self._db, self._project_id))
 
     def _show_timeline(self) -> None:
-        self._set_content(TimelineView(self._db, self._project_id))
+        self._set_content(
+            TimelineView(
+                self._db,
+                self._project_id,
+                on_scene_selected=self._open_scene_in_editor,
+            )
+        )
+
+    def _open_scene_in_editor(self, scene_id: int) -> None:
+        view = ScenesView(self._db, self._project_id)
+        self._set_content(view)
+        view.select_scene(scene_id)

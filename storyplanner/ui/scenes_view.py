@@ -299,6 +299,10 @@ class ScenesView(QWidget):
         self._refresh_list()
         self._reselect(self._selected_scene_id)
 
+    def select_scene(self, scene_id: int) -> None:
+        """Programmatically select a scene by ID (used by Timeline navigation)."""
+        self._reselect(scene_id)
+
     def _reselect(self, scene_id: int) -> None:
         for i in range(self._list.count()):
             if self._list.item(i).data(USER_ROLE) == scene_id:

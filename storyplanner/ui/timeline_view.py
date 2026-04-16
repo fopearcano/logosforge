@@ -1,5 +1,7 @@
 """Timeline view — read-only ordered overview of all scenes."""
 
+from collections.abc import Callable
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
@@ -18,10 +20,17 @@ FILTER_ALL = "All"
 
 
 class TimelineView(QWidget):
-    def __init__(self, db: Database, project_id: int) -> None:
+    def __init__(
+        self,
+        db: Database,
+        project_id: int,
+        on_scene_selected: Callable[[int], None] | None = None,
+    ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
+        self._on_scene_selected = on_scene_selected
+        self._scene_ids: list[int] = []
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Timeline"))
@@ -51,6 +60,7 @@ class TimelineView(QWidget):
             3, QHeaderView.ResizeMode.Stretch
         )
         self._table.verticalHeader().setVisible(False)
+        self._table.cellDoubleClicked.connect(self._on_double_click)
         layout.addWidget(self._table)
 
         self._refresh_filters()
@@ -94,6 +104,7 @@ class TimelineView(QWidget):
             chapter=self._get_filter_value(self._chapter_filter),
             plotline=self._get_filter_value(self._plotline_filter),
         )
+        self._scene_ids = [scene.id for scene in scenes]
         self._table.setRowCount(len(scenes))
         for row, scene in enumerate(scenes):
             self._table.setItem(row, 0, QTableWidgetItem(str(row + 1)))
@@ -106,3 +117,9 @@ class TimelineView(QWidget):
                     item.setTextAlignment(
                         Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
                     )
+
+    def _on_double_click(self, row: int, _column: int) -> None:
+        if self._on_scene_selected is None:
+            return
+        if 0 <= row < len(self._scene_ids):
+            self._on_scene_selected(self._scene_ids[row])
