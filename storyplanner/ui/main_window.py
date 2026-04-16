@@ -14,6 +14,7 @@ from storyplanner.ui.characters_view import CharactersView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.places_view import PlacesView
 from storyplanner.ui.scenes_view import ScenesView
+from storyplanner.ui.timeline_view import TimelineView
 
 
 class MainWindow(QMainWindow):
@@ -34,7 +35,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
 
         self.sidebar_buttons: dict[str, QPushButton] = {}
-        for label in ("Projects", "Characters", "Places", "Notes", "Scenes"):
+        for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline"):
             btn = QPushButton(label)
             sidebar_layout.addWidget(btn)
             self.sidebar_buttons[label] = btn
@@ -47,6 +48,7 @@ class MainWindow(QMainWindow):
         self.sidebar_buttons["Places"].clicked.connect(self._show_places)
         self.sidebar_buttons["Notes"].clicked.connect(self._show_notes)
         self.sidebar_buttons["Scenes"].clicked.connect(self._show_scenes)
+        self.sidebar_buttons["Timeline"].clicked.connect(self._show_timeline)
 
         # -- Right content area ----------------------------------------------
         self.content_area = QWidget()
@@ -78,3 +80,6 @@ class MainWindow(QMainWindow):
 
     def _show_scenes(self) -> None:
         self._set_content(ScenesView(self._db, self._project_id))
+
+    def _show_timeline(self) -> None:
+        self._set_content(TimelineView(self._db, self._project_id))
