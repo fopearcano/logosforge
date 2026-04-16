@@ -197,7 +197,7 @@ class Database:
             stmt = (
                 select(Scene)
                 .where(Scene.project_id == project_id)
-                .order_by(Scene.sort_order)
+                .order_by(Scene.sort_order, Scene.id)
             )
             return list(session.exec(stmt).all())
 
@@ -210,8 +210,21 @@ class Database:
         place_ids: list[int] | None = None,
     ) -> Scene:
         with Session(self._engine) as session:
+            # Assign next sort_order
+            from sqlalchemy import func
+
+            max_order = session.exec(
+                select(func.max(Scene.sort_order)).where(
+                    Scene.project_id == project_id
+                )
+            ).one()
+            next_order = (max_order or 0) + 1
+
             scene = Scene(
-                project_id=project_id, title=title, summary=summary
+                project_id=project_id,
+                title=title,
+                summary=summary,
+                sort_order=next_order,
             )
             session.add(scene)
             session.flush()  # get scene.id before creating links
@@ -284,6 +297,68 @@ class Database:
             scene = session.get(Scene, scene_id)
             if scene:
                 session.delete(scene)
+            session.commit()
+
+    def move_scene_up(self, scene_id: int) -> None:
+        """Swap sort_order with the scene directly above (lower sort_order)."""
+        with Session(self._engine) as session:
+            scene = session.get(Scene, scene_id)
+            if scene is None:
+                return
+
+            # Find the scene just before this one
+            stmt = (
+                select(Scene)
+                .where(Scene.project_id == scene.project_id)
+                .where(
+                    (Scene.sort_order < scene.sort_order)
+                    | (
+                        (Scene.sort_order == scene.sort_order)
+                        & (Scene.id < scene.id)
+                    )
+                )
+                .order_by(Scene.sort_order.desc(), Scene.id.desc())
+            )
+            prev_scene = session.exec(stmt).first()
+            if prev_scene is None:
+                return  # already first
+
+            # Swap sort_order values
+            scene.sort_order, prev_scene.sort_order = (
+                prev_scene.sort_order,
+                scene.sort_order,
+            )
+            session.commit()
+
+    def move_scene_down(self, scene_id: int) -> None:
+        """Swap sort_order with the scene directly below (higher sort_order)."""
+        with Session(self._engine) as session:
+            scene = session.get(Scene, scene_id)
+            if scene is None:
+                return
+
+            # Find the scene just after this one
+            stmt = (
+                select(Scene)
+                .where(Scene.project_id == scene.project_id)
+                .where(
+                    (Scene.sort_order > scene.sort_order)
+                    | (
+                        (Scene.sort_order == scene.sort_order)
+                        & (Scene.id > scene.id)
+                    )
+                )
+                .order_by(Scene.sort_order, Scene.id)
+            )
+            next_scene = session.exec(stmt).first()
+            if next_scene is None:
+                return  # already last
+
+            # Swap sort_order values
+            scene.sort_order, next_scene.sort_order = (
+                next_scene.sort_order,
+                scene.sort_order,
+            )
             session.commit()
 
     def get_scene_character_ids(self, scene_id: int) -> list[int]:

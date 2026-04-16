@@ -33,6 +33,18 @@ class ScenesView(QWidget):
         self._list = QListWidget()
         self._list.currentItemChanged.connect(self._on_scene_selected)
         left.addWidget(self._list)
+
+        # Reorder buttons
+        self._move_up_btn = QPushButton("Move Up")
+        self._move_up_btn.setEnabled(False)
+        self._move_up_btn.clicked.connect(self._on_move_up)
+        left.addWidget(self._move_up_btn)
+
+        self._move_down_btn = QPushButton("Move Down")
+        self._move_down_btn.setEnabled(False)
+        self._move_down_btn.clicked.connect(self._on_move_down)
+        left.addWidget(self._move_down_btn)
+
         root.addLayout(left)
 
         # -- Right: form -----------------------------------------------------
@@ -125,6 +137,8 @@ class ScenesView(QWidget):
         self._selected_scene_id = scene.id
         self._form_label.setText("Edit Scene")
         self._delete_btn.setEnabled(True)
+        self._move_up_btn.setEnabled(True)
+        self._move_down_btn.setEnabled(True)
         self._title_input.setText(scene.title)
         self._summary_input.setPlainText(scene.summary)
 
@@ -186,12 +200,37 @@ class ScenesView(QWidget):
         self._clear_form()
         self._refresh_list()
 
+    # -- Reorder -------------------------------------------------------------
+
+    def _on_move_up(self) -> None:
+        if self._selected_scene_id is None:
+            return
+        self._db.move_scene_up(self._selected_scene_id)
+        self._refresh_list()
+        self._reselect(self._selected_scene_id)
+
+    def _on_move_down(self) -> None:
+        if self._selected_scene_id is None:
+            return
+        self._db.move_scene_down(self._selected_scene_id)
+        self._refresh_list()
+        self._reselect(self._selected_scene_id)
+
+    def _reselect(self, scene_id: int) -> None:
+        """Re-select a scene by id after the list has been refreshed."""
+        for i in range(self._list.count()):
+            if self._list.item(i).data(USER_ROLE) == scene_id:
+                self._list.setCurrentRow(i)
+                return
+
     # -- Helpers -------------------------------------------------------------
 
     def _clear_form(self) -> None:
         self._selected_scene_id = None
         self._form_label.setText("New Scene")
         self._delete_btn.setEnabled(False)
+        self._move_up_btn.setEnabled(False)
+        self._move_down_btn.setEnabled(False)
         self._title_input.clear()
         self._summary_input.clear()
         self._uncheck_all(self._char_list)
