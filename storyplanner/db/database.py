@@ -193,22 +193,36 @@ class Database:
             return session.get(Scene, scene_id)
 
     def get_all_scenes(
-        self, project_id: int, chapter: str | None = None
+        self,
+        project_id: int,
+        chapter: str | None = None,
+        plotline: str | None = None,
     ) -> list[Scene]:
         with Session(self._engine) as session:
             stmt = select(Scene).where(Scene.project_id == project_id)
             if chapter is not None:
                 stmt = stmt.where(Scene.chapter == chapter)
+            if plotline is not None:
+                stmt = stmt.where(Scene.plotline == plotline)
             stmt = stmt.order_by(Scene.sort_order, Scene.id)
             return list(session.exec(stmt).all())
 
     def get_scene_chapters(self, project_id: int) -> list[str]:
-        """Return distinct non-empty chapter values for a project."""
         with Session(self._engine) as session:
             stmt = (
                 select(Scene.chapter)
                 .where(Scene.project_id == project_id)
                 .where(Scene.chapter != "")
+                .distinct()
+            )
+            return list(session.exec(stmt).all())
+
+    def get_scene_plotlines(self, project_id: int) -> list[str]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(Scene.plotline)
+                .where(Scene.project_id == project_id)
+                .where(Scene.plotline != "")
                 .distinct()
             )
             return list(session.exec(stmt).all())
@@ -219,6 +233,7 @@ class Database:
         title: str,
         summary: str = "",
         chapter: str = "",
+        plotline: str = "",
         character_ids: list[int] | None = None,
         place_ids: list[int] | None = None,
     ) -> Scene:
@@ -238,6 +253,7 @@ class Database:
                 title=title,
                 summary=summary,
                 chapter=chapter,
+                plotline=plotline,
                 sort_order=next_order,
             )
             session.add(scene)
@@ -258,6 +274,7 @@ class Database:
         title: str,
         summary: str = "",
         chapter: str = "",
+        plotline: str = "",
         character_ids: list[int] | None = None,
         place_ids: list[int] | None = None,
     ) -> Scene:
@@ -266,6 +283,7 @@ class Database:
             scene.title = title
             scene.summary = summary
             scene.chapter = chapter
+            scene.plotline = plotline
 
             # Replace character links
             old_char_links = session.exec(
