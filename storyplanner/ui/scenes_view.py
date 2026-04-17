@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
+from storyplanner.ui.link_preview import create_link_browser, render_linked_text
 
 USER_ROLE = Qt.ItemDataRole.UserRole
 FILTER_ALL = "All"
@@ -42,11 +43,13 @@ class ScenesView(QWidget):
         db: Database,
         project_id: int,
         on_data_changed: Callable[[], None] | None = None,
+        on_link_clicked: Callable[[str, int], None] | None = None,
     ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
         self._on_data_changed = on_data_changed
+        self._on_link_clicked = on_link_clicked
         self._selected_scene_id: int | None = None
 
         root = QHBoxLayout(self)
@@ -146,6 +149,11 @@ class ScenesView(QWidget):
         self._outcome_input = QPlainTextEdit()
         self._outcome_input.setMaximumHeight(40)
         right.addWidget(self._outcome_input)
+
+        # Link preview
+        right.addWidget(QLabel("Link Preview"))
+        self._link_preview = create_link_browser(self._on_link_name_clicked)
+        right.addWidget(self._link_preview)
 
         # Checkable character list
         right.addWidget(QLabel("Characters"))
@@ -289,6 +297,7 @@ class ScenesView(QWidget):
         self._goal_input.setPlainText(scene.goal)
         self._conflict_input.setPlainText(scene.conflict)
         self._outcome_input.setPlainText(scene.outcome)
+        self._update_link_preview(scene.summary, scene.synopsis)
 
         # Check linked characters
         linked_char_ids = set(self._db.get_scene_character_ids(scene_id))
@@ -428,6 +437,7 @@ class ScenesView(QWidget):
         self._goal_input.clear()
         self._conflict_input.clear()
         self._outcome_input.clear()
+        self._link_preview.clear()
         self._uncheck_all(self._char_list)
         self._uncheck_all(self._place_list)
         self._list.clearSelection()
@@ -443,3 +453,21 @@ class ScenesView(QWidget):
     def _uncheck_all(self, list_widget: QListWidget) -> None:
         for i in range(list_widget.count()):
             list_widget.item(i).setCheckState(Qt.CheckState.Unchecked)
+
+    def _update_link_preview(self, summary: str, synopsis: str) -> None:
+        parts: list[str] = []
+        if summary:
+            parts.append(render_linked_text(summary))
+        if synopsis:
+            if parts:
+                parts.append("<hr>")
+            parts.append(render_linked_text(synopsis))
+        self._link_preview.setHtml("".join(parts) if parts else "")
+
+    def _on_link_name_clicked(self, name: str) -> None:
+        result = self._db.resolve_link(self._project_id, name)
+        if result is None:
+            return
+        entity_type, entity_id = result
+        if self._on_link_clicked:
+            self._on_link_clicked(entity_type, entity_id)

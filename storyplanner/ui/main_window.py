@@ -112,12 +112,22 @@ class MainWindow(QMainWindow):
 
     def _show_notes(self) -> None:
         self._set_content(
-            NotesView(self._db, self._project_id, on_data_changed=self._on_data_changed)
+            NotesView(
+                self._db,
+                self._project_id,
+                on_data_changed=self._on_data_changed,
+                on_link_clicked=self._on_link_navigated,
+            )
         )
 
     def _show_scenes(self) -> None:
         self._set_content(
-            ScenesView(self._db, self._project_id, on_data_changed=self._on_data_changed)
+            ScenesView(
+                self._db,
+                self._project_id,
+                on_data_changed=self._on_data_changed,
+                on_link_clicked=self._on_link_navigated,
+            )
         )
 
     def _show_timeline(self) -> None:
@@ -149,6 +159,9 @@ class MainWindow(QMainWindow):
         )
 
     def _on_search_result_selected(self, entity_type: str, entity_id: int) -> None:
+        self._on_link_navigated(entity_type, entity_id)
+
+    def _on_link_navigated(self, entity_type: str, entity_id: int) -> None:
         if entity_type == "Character":
             view = CharactersView(self._db, self._project_id, on_data_changed=self._on_data_changed)
             self._set_content(view)
@@ -158,14 +171,22 @@ class MainWindow(QMainWindow):
             self._set_content(view)
             view.select_place(entity_id)
         elif entity_type == "Note":
-            view = NotesView(self._db, self._project_id, on_data_changed=self._on_data_changed)
+            view = NotesView(
+                self._db, self._project_id,
+                on_data_changed=self._on_data_changed,
+                on_link_clicked=self._on_link_navigated,
+            )
             self._set_content(view)
             view.select_note(entity_id)
         elif entity_type == "Scene":
             self._open_scene_in_editor(entity_id)
 
     def _open_scene_in_editor(self, scene_id: int) -> None:
-        view = ScenesView(self._db, self._project_id, on_data_changed=self._on_data_changed)
+        view = ScenesView(
+            self._db, self._project_id,
+            on_data_changed=self._on_data_changed,
+            on_link_clicked=self._on_link_navigated,
+        )
         self._set_content(view)
         view.select_scene(scene_id)
 

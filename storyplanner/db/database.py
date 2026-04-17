@@ -540,6 +540,24 @@ class Database:
 
         return results
 
+    def resolve_link(
+        self, project_id: int, name: str
+    ) -> tuple[str, int] | None:
+        name_lower = name.strip().lower()
+        for char in self.get_all_characters(project_id):
+            if char.name.lower() == name_lower:
+                return ("Character", char.id)
+        for place in self.get_all_places(project_id):
+            if place.name.lower() == name_lower:
+                return ("Place", place.id)
+        for scene in self.get_all_scenes(project_id):
+            if scene.title.lower() == name_lower:
+                return ("Scene", scene.id)
+        for note in self.get_all_notes(project_id):
+            if note.title.lower() == name_lower:
+                return ("Note", note.id)
+        return None
+
     @staticmethod
     def _matches(query_lower: str, *fields: str) -> bool:
         for field in fields:

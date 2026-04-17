@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
+from storyplanner.ui.link_preview import create_link_browser, render_linked_text
 
 USER_ROLE = Qt.ItemDataRole.UserRole
 
@@ -26,11 +27,13 @@ class NotesView(QWidget):
         db: Database,
         project_id: int,
         on_data_changed: Callable[[], None] | None = None,
+        on_link_clicked: Callable[[str, int], None] | None = None,
     ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
         self._on_data_changed = on_data_changed
+        self._on_link_clicked = on_link_clicked
         self._selected_id: int | None = None
 
         root = QHBoxLayout(self)
@@ -56,6 +59,10 @@ class NotesView(QWidget):
         right.addWidget(QLabel("Content"))
         self._content_input = QPlainTextEdit()
         right.addWidget(self._content_input)
+
+        right.addWidget(QLabel("Link Preview"))
+        self._link_preview = create_link_browser(self._on_link_name_clicked)
+        right.addWidget(self._link_preview)
 
         save_btn = QPushButton("Save")
         save_btn.clicked.connect(self._on_save)
@@ -95,6 +102,7 @@ class NotesView(QWidget):
         self._delete_btn.setEnabled(True)
         self._title_input.setText(note.title)
         self._content_input.setPlainText(note.content)
+        self._link_preview.setHtml(render_linked_text(note.content))
 
     def _on_save(self) -> None:
         title = self._title_input.text().strip()
@@ -133,4 +141,13 @@ class NotesView(QWidget):
         self._delete_btn.setEnabled(False)
         self._title_input.clear()
         self._content_input.clear()
+        self._link_preview.clear()
         self._list.clearSelection()
+
+    def _on_link_name_clicked(self, name: str) -> None:
+        result = self._db.resolve_link(self._project_id, name)
+        if result is None:
+            return
+        entity_type, entity_id = result
+        if self._on_link_clicked:
+            self._on_link_clicked(entity_type, entity_id)
