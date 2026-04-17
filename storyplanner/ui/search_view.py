@@ -87,6 +87,14 @@ class SearchView(QWidget):
         self._plotline_filter.currentTextChanged.connect(self._on_filter_changed)
         scene_filter_row.addWidget(self._plotline_filter)
 
+        scene_filter_row.addWidget(QLabel("Tag:"))
+        self._tag_filter = QComboBox()
+        self._tag_filter.addItem(FILTER_ALL)
+        for tag in self._db.get_scene_tags(self._project_id):
+            self._tag_filter.addItem(tag)
+        self._tag_filter.currentTextChanged.connect(self._on_filter_changed)
+        scene_filter_row.addWidget(self._tag_filter)
+
         scene_filter_row.addStretch()
         layout.addLayout(scene_filter_row)
 
@@ -126,11 +134,13 @@ class SearchView(QWidget):
         scenes_checked = self._type_checks["Scene"].isChecked()
         self._chapter_filter.setEnabled(scenes_checked)
         self._plotline_filter.setEnabled(scenes_checked)
+        self._tag_filter.setEnabled(scenes_checked)
 
     def _apply_filters(self) -> None:
         allowed_types = {t for t, cb in self._type_checks.items() if cb.isChecked()}
         chapter_filter = self._chapter_filter.currentText()
         plotline_filter = self._plotline_filter.currentText()
+        tag_filter = self._tag_filter.currentText()
 
         filtered: list[dict] = []
         for result in self._last_results:
@@ -142,6 +152,14 @@ class SearchView(QWidget):
                         continue
                 if plotline_filter != FILTER_ALL:
                     if result.get("plotline", "") != plotline_filter:
+                        continue
+                if tag_filter != FILTER_ALL:
+                    scene_tags = [
+                        t.strip().lower()
+                        for t in result.get("tags", "").split(",")
+                        if t.strip()
+                    ]
+                    if tag_filter.lower() not in scene_tags:
                         continue
             filtered.append(result)
 

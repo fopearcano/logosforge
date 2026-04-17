@@ -67,6 +67,12 @@ class ScenesView(QWidget):
         self._plotline_filter.currentTextChanged.connect(self._on_filter_changed)
         left.addWidget(self._plotline_filter)
 
+        # Tag filter
+        left.addWidget(QLabel("Tag filter"))
+        self._tag_filter = QComboBox()
+        self._tag_filter.currentTextChanged.connect(self._on_filter_changed)
+        left.addWidget(self._tag_filter)
+
         self._list = QListWidget()
         self._list.currentItemChanged.connect(self._on_scene_selected)
         left.addWidget(self._list)
@@ -203,6 +209,10 @@ class ScenesView(QWidget):
             self._plotline_filter,
             self._db.get_scene_plotlines(self._project_id),
         )
+        self._refresh_combo(
+            self._tag_filter,
+            self._db.get_scene_tags(self._project_id),
+        )
 
     def _refresh_combo(self, combo: QComboBox, values: list[str]) -> None:
         combo.blockSignals(True)
@@ -232,6 +242,7 @@ class ScenesView(QWidget):
             self._project_id,
             chapter=self._get_filter_value(self._chapter_filter),
             plotline=self._get_filter_value(self._plotline_filter),
+            tag=self._get_filter_value(self._tag_filter),
         )
         for scene in scenes:
             label = self._format_scene_label(scene)

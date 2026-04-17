@@ -201,6 +201,7 @@ class Database:
         project_id: int,
         chapter: str | None = None,
         plotline: str | None = None,
+        tag: str | None = None,
     ) -> list[Scene]:
         with Session(self._engine) as session:
             stmt = select(Scene).where(Scene.project_id == project_id)
@@ -209,7 +210,14 @@ class Database:
             if plotline is not None:
                 stmt = stmt.where(Scene.plotline == plotline)
             stmt = stmt.order_by(Scene.sort_order, Scene.id)
-            return list(session.exec(stmt).all())
+            scenes = list(session.exec(stmt).all())
+            if tag is not None:
+                tag_lower = tag.lower()
+                scenes = [
+                    s for s in scenes
+                    if any(t.strip().lower() == tag_lower for t in s.tags.split(","))
+                ]
+            return scenes
 
     def get_scene_chapters(self, project_id: int) -> list[str]:
         with Session(self._engine) as session:
@@ -230,6 +238,22 @@ class Database:
                 .distinct()
             )
             return list(session.exec(stmt).all())
+
+    def get_scene_tags(self, project_id: int) -> list[str]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(Scene.tags)
+                .where(Scene.project_id == project_id)
+                .where(Scene.tags != "")
+            )
+            raw = list(session.exec(stmt).all())
+        tags: set[str] = set()
+        for csv_tags in raw:
+            for tag in csv_tags.split(","):
+                tag = tag.strip()
+                if tag:
+                    tags.add(tag)
+        return sorted(tags)
 
     def create_scene(
         self,
@@ -505,12 +529,13 @@ class Database:
         for scene in self.get_all_scenes(project_id):
             if self._matches(
                 query_lower, scene.title, scene.summary,
-                scene.chapter, scene.plotline, scene.beat,
+                scene.chapter, scene.plotline, scene.beat, scene.tags,
             ):
                 results.append(
                     {"type": "Scene", "id": scene.id, "label": scene.title,
                      "preview": scene.summary,
-                     "chapter": scene.chapter, "plotline": scene.plotline}
+                     "chapter": scene.chapter, "plotline": scene.plotline,
+                     "tags": scene.tags}
                 )
 
         return results
