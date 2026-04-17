@@ -1,5 +1,7 @@
-"""Export project data to JSON or Markdown."""
+"""Export project data to JSON, Markdown, or CSV."""
 
+import csv
+import io
 import json
 
 from storyplanner.db import Database
@@ -140,3 +142,26 @@ def export_markdown(db: Database, project_id: int) -> str:
 
     lines.append("")
     return "\n".join(lines)
+
+
+def export_csv_scenes(db: Database, project_id: int) -> str:
+    data = _gather_project_data(db, project_id)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        ["order_index", "title", "summary", "chapter", "plotline", "characters", "places"]
+    )
+    for scene in data["scenes"]:
+        writer.writerow(
+            [
+                scene["order_index"],
+                scene["title"],
+                scene["summary"],
+                scene["chapter"],
+                scene["plotline"],
+                ", ".join(scene["characters"]),
+                ", ".join(scene["places"]),
+            ]
+        )
+    return output.getvalue()

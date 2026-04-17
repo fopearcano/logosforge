@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
-from storyplanner.export import export_json, export_markdown
+from storyplanner.export import export_csv_scenes, export_json, export_markdown
 from storyplanner.ui.characters_view import CharactersView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.places_view import PlacesView
@@ -108,12 +108,16 @@ class MainWindow(QMainWindow):
             self,
             "Export Project",
             "",
-            "JSON (*.json);;Markdown (*.md)",
+            "JSON (*.json);;Markdown (*.md);;CSV – Scenes (*.csv)",
         )
         if not path:
             return
 
-        if path.endswith(".md") or "Markdown" in selected_filter:
+        if path.endswith(".csv") or "CSV" in selected_filter:
+            content = export_csv_scenes(self._db, self._project_id)
+            if not path.endswith(".csv"):
+                path += ".csv"
+        elif path.endswith(".md") or "Markdown" in selected_filter:
             content = export_markdown(self._db, self._project_id)
             if not path.endswith(".md"):
                 path += ".md"
