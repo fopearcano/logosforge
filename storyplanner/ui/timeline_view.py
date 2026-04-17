@@ -332,6 +332,8 @@ class TimelineView(QWidget):
         card_layout.addWidget(title_label)
 
         meta_parts = [f"#{index}"]
+        if scene.act:
+            meta_parts.append(scene.act)
         if mode == MODE_BY_PLOTLINE and scene.chapter:
             meta_parts.append(scene.chapter)
         elif mode == MODE_BY_CHAPTER and scene.plotline:

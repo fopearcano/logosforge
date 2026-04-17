@@ -113,6 +113,11 @@ class ScenesView(QWidget):
         self._plotline_input.setPlaceholderText("e.g. Main Plot")
         right.addWidget(self._plotline_input)
 
+        right.addWidget(QLabel("Act"))
+        self._act_input = QComboBox()
+        self._act_input.addItems(["", "Act I", "Act II", "Act III"])
+        right.addWidget(self._act_input)
+
         right.addWidget(QLabel("Beat"))
         self._beat_input = QComboBox()
         self._beat_input.setEditable(True)
@@ -360,6 +365,8 @@ class ScenesView(QWidget):
         self._title_input.setText(scene.title)
         self._chapter_input.setText(scene.chapter)
         self._plotline_input.setText(scene.plotline)
+        idx = self._act_input.findText(scene.act)
+        self._act_input.setCurrentIndex(idx if idx >= 0 else 0)
         self._beat_input.setCurrentText(scene.beat)
         self._tags_input.setText(scene.tags)
         self._summary_input.setPlainText(scene.summary)
@@ -405,6 +412,7 @@ class ScenesView(QWidget):
         tags = ", ".join(
             t for t in (t.strip() for t in self._tags_input.text().split(",")) if t
         )
+        act = self._act_input.currentText()
         chapter = self._chapter_input.text().strip()
         plotline = self._plotline_input.text().strip()
         char_ids = self._get_checked_ids(self._char_list)
@@ -422,6 +430,7 @@ class ScenesView(QWidget):
                 outcome=outcome,
                 beat=beat,
                 tags=tags,
+                act=act,
                 chapter=chapter,
                 plotline=plotline,
                 character_ids=char_ids,
@@ -439,6 +448,7 @@ class ScenesView(QWidget):
                 outcome=outcome,
                 beat=beat,
                 tags=tags,
+                act=act,
                 chapter=chapter,
                 plotline=plotline,
                 character_ids=char_ids,
@@ -505,6 +515,7 @@ class ScenesView(QWidget):
         self._title_input.clear()
         self._chapter_input.clear()
         self._plotline_input.clear()
+        self._act_input.setCurrentIndex(0)
         self._beat_input.setCurrentIndex(0)
         self._tags_input.clear()
         self._summary_input.clear()

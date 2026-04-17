@@ -35,6 +35,7 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
                 "beat": scene.beat,
                 "tags": [t.strip() for t in scene.tags.split(",") if t.strip()] if scene.tags else [],
                 "order_index": i + 1,
+                "act": scene.act,
                 "chapter": scene.chapter,
                 "plotline": scene.plotline,
                 "characters": [
@@ -137,6 +138,8 @@ def export_markdown(db: Database, project_id: int) -> str:
         for scene in data["scenes"]:
             lines.append("")
             lines.append(f"### {scene['order_index']}. {scene['title']}")
+            if scene["act"]:
+                lines.append(f"- **Act:** {scene['act']}")
             if scene["chapter"]:
                 lines.append(f"- **Chapter:** {scene['chapter']}")
             if scene["plotline"]:
@@ -214,6 +217,8 @@ def export_outline_markdown(db: Database, project_id: int) -> str:
         for scene in group_scenes:
             lines.append("")
             lines.append(f"### {scene['order_index']}. {scene['title']}")
+            if scene["act"]:
+                lines.append(f"- **Act:** {scene['act']}")
             if scene["plotline"]:
                 lines.append(f"- **Plotline:** {scene['plotline']}")
             if scene["beat"]:
@@ -253,7 +258,7 @@ def export_csv_scenes(db: Database, project_id: int) -> str:
     writer = csv.writer(output)
     writer.writerow(
         ["order_index", "title", "summary", "synopsis", "goal", "conflict", "outcome",
-         "beat", "tags", "chapter", "plotline", "characters", "places"]
+         "beat", "tags", "act", "chapter", "plotline", "characters", "places"]
     )
     for scene in data["scenes"]:
         writer.writerow(
@@ -267,6 +272,7 @@ def export_csv_scenes(db: Database, project_id: int) -> str:
                 scene["outcome"],
                 scene["beat"],
                 ", ".join(scene["tags"]),
+                scene["act"],
                 scene["chapter"],
                 scene["plotline"],
                 ", ".join(scene["characters"]),

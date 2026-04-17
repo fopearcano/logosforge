@@ -116,6 +116,8 @@ class OutlineView(QWidget):
         parts.append(f"<h3>{index}. {_esc(scene.title)}</h3>")
 
         meta_lines: list[str] = []
+        if scene.act:
+            meta_lines.append(f"<b>Act:</b> {_esc(scene.act)}")
         if scene.plotline:
             meta_lines.append(f"<b>Plotline:</b> {_esc(scene.plotline)}")
         if scene.beat:
