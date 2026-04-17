@@ -3,14 +3,15 @@
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QComboBox,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QPushButton,
     QTableWidget,
-    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -22,6 +23,11 @@ UNASSIGNED = "Unassigned"
 
 MODE_BY_PLOTLINE = "By Plotline"
 MODE_BY_CHAPTER = "By Chapter"
+
+CARD_STYLE = "QFrame { background: #ffffff; border: 1px solid #d0d0d0; border-radius: 3px; }"
+CARD_SELECTED_STYLE = (
+    "QFrame { background: #e3f2fd; border: 2px solid #64b5f6; border-radius: 3px; }"
+)
 
 
 class TimelineView(QWidget):
@@ -37,6 +43,7 @@ class TimelineView(QWidget):
         self._on_scene_selected = on_scene_selected
         self._cell_scene_ids: dict[tuple[int, int], int] = {}
         self._selected_scene_id: int | None = None
+        self._selected_card: QWidget | None = None
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Timeline"))
@@ -64,8 +71,8 @@ class TimelineView(QWidget):
         self._table = QTableWidget()
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        self._table.setWordWrap(True)
         self._table.verticalHeader().setVisible(False)
+        self._table.setShowGrid(False)
         self._table.cellClicked.connect(self._on_cell_clicked)
         self._table.cellDoubleClicked.connect(self._on_double_click)
         layout.addWidget(self._table)
@@ -148,6 +155,7 @@ class TimelineView(QWidget):
     # -- Reload (single entry point) -----------------------------------------
 
     def _reload(self) -> None:
+        self._selected_card = None
         self._load_table()
         self._reselect()
 
@@ -160,15 +168,22 @@ class TimelineView(QWidget):
         mode = self._get_mode()
         if mode == MODE_BY_PLOTLINE:
             columns = self._build_columns(scenes, key=lambda s: s.plotline)
+            prefix = "Plotline"
         else:
             columns = self._build_columns(scenes, key=lambda s: s.chapter)
+            prefix = "Chapter"
 
         col_to_idx = {name: i for i, name in enumerate(columns)}
 
         self._table.blockSignals(True)
-        self._table.clear()
+        self._table.setRowCount(0)
         self._table.setColumnCount(max(len(columns), 1))
-        self._table.setHorizontalHeaderLabels(columns if columns else [UNASSIGNED])
+
+        if columns:
+            headers = [f"{prefix}: {c}" for c in columns]
+        else:
+            headers = [f"{prefix}: {UNASSIGNED}"]
+        self._table.setHorizontalHeaderLabels(headers)
         self._table.setRowCount(len(scenes))
         self._cell_scene_ids.clear()
 
@@ -179,18 +194,15 @@ class TimelineView(QWidget):
                 col_name = scene.chapter if scene.chapter else UNASSIGNED
             col = col_to_idx[col_name]
 
-            item = QTableWidgetItem(self._format_cell(row + 1, scene, mode))
-            item.setTextAlignment(
-                Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
-            )
-            self._table.setItem(row, col, item)
+            card = self._create_card(row + 1, scene, mode)
+            self._table.setCellWidget(row, col, card)
+            self._table.setRowHeight(row, max(card.sizeHint().height(), 56))
             self._cell_scene_ids[(row, col)] = scene.id
 
         header = self._table.horizontalHeader()
         for i in range(self._table.columnCount()):
             header.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
 
-        self._table.resizeRowsToContents()
         self._table.blockSignals(False)
 
         if not scenes:
@@ -213,13 +225,33 @@ class TimelineView(QWidget):
             columns.append(UNASSIGNED)
         return columns
 
-    def _format_cell(self, index: int, scene, mode: str) -> str:
-        parts = [f"#{index}  {scene.title}"]
+    def _create_card(self, index: int, scene, mode: str) -> QFrame:
+        card = QFrame()
+        card.setStyleSheet(CARD_STYLE)
+        card.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(6, 4, 6, 4)
+        card_layout.setSpacing(2)
+
+        title_label = QLabel(scene.title)
+        bold_font = QFont()
+        bold_font.setBold(True)
+        title_label.setFont(bold_font)
+        title_label.setWordWrap(True)
+        card_layout.addWidget(title_label)
+
+        meta_parts = [f"#{index}"]
         if mode == MODE_BY_PLOTLINE and scene.chapter:
-            parts.append(scene.chapter)
+            meta_parts.append(scene.chapter)
         elif mode == MODE_BY_CHAPTER and scene.plotline:
-            parts.append(scene.plotline)
-        return "\n".join(parts)
+            meta_parts.append(scene.plotline)
+
+        meta_label = QLabel(" \u00b7 ".join(meta_parts))
+        meta_label.setStyleSheet("color: #757575;")
+        card_layout.addWidget(meta_label)
+
+        return card
 
     # -- Selection -----------------------------------------------------------
 
@@ -231,11 +263,16 @@ class TimelineView(QWidget):
         has_scene = scene_id is not None
         self._set_actions_enabled(has_scene)
 
+        if self._selected_card is not None:
+            self._selected_card.setStyleSheet(CARD_STYLE)
+            self._selected_card = None
+
         if has_scene:
             scene = self._db.get_scene_by_id(scene_id)
             if scene:
                 self._sync_plotline_combo(scene.plotline)
                 self._status_label.setText(f"Selected: {scene.title}")
+                self._highlight_selected_card()
             else:
                 self._selected_scene_id = None
                 self._set_actions_enabled(False)
@@ -243,6 +280,17 @@ class TimelineView(QWidget):
         else:
             self._clear_plotline_combo()
             self._table.setCurrentCell(-1, -1)
+
+    def _highlight_selected_card(self) -> None:
+        if self._selected_scene_id is None:
+            return
+        for (row, col), sid in self._cell_scene_ids.items():
+            if sid == self._selected_scene_id:
+                card = self._table.cellWidget(row, col)
+                if card:
+                    card.setStyleSheet(CARD_SELECTED_STYLE)
+                    self._selected_card = card
+                return
 
     def _reselect(self) -> None:
         if self._selected_scene_id is None:
