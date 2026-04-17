@@ -38,11 +38,13 @@ class TimelineView(QWidget):
         db: Database,
         project_id: int,
         on_scene_selected: Callable[[int], None] | None = None,
+        on_data_changed: Callable[[], None] | None = None,
     ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
         self._on_scene_selected = on_scene_selected
+        self._on_data_changed = on_data_changed
 
         # Scene data: (row, col) → (scene_id, title, plotline)
         self._cell_data: dict[tuple[int, int], tuple[int, str, str]] = {}
@@ -390,6 +392,8 @@ class TimelineView(QWidget):
             self._db.reorder_scene(drag_scene, target_row)
 
         self._reload()
+        if self._on_data_changed:
+            self._on_data_changed()
         return True
 
     # -- Selection -----------------------------------------------------------
@@ -479,12 +483,16 @@ class TimelineView(QWidget):
             return
         self._db.move_scene_up(self._selected_scene_id)
         self._reload()
+        if self._on_data_changed:
+            self._on_data_changed()
 
     def _on_move_down(self) -> None:
         if self._selected_scene_id is None:
             return
         self._db.move_scene_down(self._selected_scene_id)
         self._reload()
+        if self._on_data_changed:
+            self._on_data_changed()
 
     def _on_set_plotline(self) -> None:
         if self._selected_scene_id is None:
@@ -492,6 +500,8 @@ class TimelineView(QWidget):
         plotline = self._plotline_combo.currentText().strip()
         self._db.update_scene_plotline(self._selected_scene_id, plotline)
         self._reload()
+        if self._on_data_changed:
+            self._on_data_changed()
 
     # -- Navigation ----------------------------------------------------------
 

@@ -1,5 +1,7 @@
 """Scenes management view — list, create, edit, with chapter/plotline grouping."""
 
+from collections.abc import Callable
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
@@ -21,10 +23,16 @@ FILTER_ALL = "All"
 
 
 class ScenesView(QWidget):
-    def __init__(self, db: Database, project_id: int) -> None:
+    def __init__(
+        self,
+        db: Database,
+        project_id: int,
+        on_data_changed: Callable[[], None] | None = None,
+    ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
+        self._on_data_changed = on_data_changed
         self._selected_scene_id: int | None = None
 
         root = QHBoxLayout(self)
@@ -272,6 +280,8 @@ class ScenesView(QWidget):
         self._clear_form()
         self._refresh_filters()
         self._refresh_list()
+        if self._on_data_changed:
+            self._on_data_changed()
 
     # -- Delete --------------------------------------------------------------
 
@@ -282,6 +292,8 @@ class ScenesView(QWidget):
         self._clear_form()
         self._refresh_filters()
         self._refresh_list()
+        if self._on_data_changed:
+            self._on_data_changed()
 
     # -- Reorder -------------------------------------------------------------
 
@@ -291,6 +303,8 @@ class ScenesView(QWidget):
         self._db.move_scene_up(self._selected_scene_id)
         self._refresh_list()
         self._reselect(self._selected_scene_id)
+        if self._on_data_changed:
+            self._on_data_changed()
 
     def _on_move_down(self) -> None:
         if self._selected_scene_id is None:
@@ -298,6 +312,8 @@ class ScenesView(QWidget):
         self._db.move_scene_down(self._selected_scene_id)
         self._refresh_list()
         self._reselect(self._selected_scene_id)
+        if self._on_data_changed:
+            self._on_data_changed()
 
     def select_scene(self, scene_id: int) -> None:
         """Programmatically select a scene by ID (used by Timeline navigation)."""

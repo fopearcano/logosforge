@@ -33,6 +33,7 @@ class MainWindow(QMainWindow):
         self._db = db
         self._project_id = project_id
         self._current_file: str | None = None
+        self._dirty = False
         self._update_title()
         self.resize(900, 600)
 
@@ -94,16 +95,24 @@ class MainWindow(QMainWindow):
         self.content_area = widget
 
     def _show_characters(self) -> None:
-        self._set_content(CharactersView(self._db, self._project_id))
+        self._set_content(
+            CharactersView(self._db, self._project_id, on_data_changed=self._on_data_changed)
+        )
 
     def _show_places(self) -> None:
-        self._set_content(PlacesView(self._db, self._project_id))
+        self._set_content(
+            PlacesView(self._db, self._project_id, on_data_changed=self._on_data_changed)
+        )
 
     def _show_notes(self) -> None:
-        self._set_content(NotesView(self._db, self._project_id))
+        self._set_content(
+            NotesView(self._db, self._project_id, on_data_changed=self._on_data_changed)
+        )
 
     def _show_scenes(self) -> None:
-        self._set_content(ScenesView(self._db, self._project_id))
+        self._set_content(
+            ScenesView(self._db, self._project_id, on_data_changed=self._on_data_changed)
+        )
 
     def _show_timeline(self) -> None:
         self._set_content(
@@ -111,6 +120,7 @@ class MainWindow(QMainWindow):
                 self._db,
                 self._project_id,
                 on_scene_selected=self._open_scene_in_editor,
+                on_data_changed=self._on_data_changed,
             )
         )
 
@@ -118,7 +128,7 @@ class MainWindow(QMainWindow):
         self._set_content(OutlineView(self._db, self._project_id))
 
     def _open_scene_in_editor(self, scene_id: int) -> None:
-        view = ScenesView(self._db, self._project_id)
+        view = ScenesView(self._db, self._project_id, on_data_changed=self._on_data_changed)
         self._set_content(view)
         view.select_scene(scene_id)
 
@@ -146,6 +156,8 @@ class MainWindow(QMainWindow):
 
         new_project_id = import_json(self._db, data)
         self._project_id = new_project_id
+        self._current_file = None
+        self._mark_clean()
         self._reset_content("Import complete. Select a section from the sidebar.")
         QMessageBox.information(
             self, "Import", f"Project imported successfully (ID {new_project_id})."
@@ -215,11 +227,12 @@ class MainWindow(QMainWindow):
             self._recent_menu.addAction(action)
 
     def _update_title(self) -> None:
+        dirty_mark = " *" if self._dirty else ""
         if self._current_file:
             name = Path(self._current_file).name
-            self.setWindowTitle(f"StoryPlanner — {name}")
+            self.setWindowTitle(f"StoryPlanner — {name}{dirty_mark}")
         else:
-            self.setWindowTitle("StoryPlanner")
+            self.setWindowTitle(f"StoryPlanner{dirty_mark}")
 
     def _on_open_project(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -247,7 +260,7 @@ class MainWindow(QMainWindow):
         new_project_id = import_json(self._db, data)
         self._project_id = new_project_id
         self._current_file = path
-        self._update_title()
+        self._mark_clean()
         recent_projects.add(path)
         self._refresh_recent_menu()
 
@@ -270,7 +283,7 @@ class MainWindow(QMainWindow):
             f.write(content)
 
         self._current_file = path
-        self._update_title()
+        self._mark_clean()
         recent_projects.add(path)
         self._refresh_recent_menu()
         QMessageBox.information(self, "Save As", f"Project saved to {path}")
@@ -279,3 +292,23 @@ class MainWindow(QMainWindow):
         widget = QWidget()
         QVBoxLayout(widget).addWidget(QLabel(message))
         self._set_content(widget)
+
+    # -- Dirty state and autosave --------------------------------------------
+
+    def _on_data_changed(self) -> None:
+        self._dirty = True
+        self._update_title()
+        self._auto_save()
+
+    def _auto_save(self) -> None:
+        if not self._current_file:
+            return
+        content = export_json(self._db, self._project_id)
+        with open(self._current_file, "w", encoding="utf-8") as f:
+            f.write(content)
+        self._dirty = False
+        self._update_title()
+
+    def _mark_clean(self) -> None:
+        self._dirty = False
+        self._update_title()

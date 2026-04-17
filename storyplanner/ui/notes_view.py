@@ -1,5 +1,7 @@
 """Notes management view — list, create, edit, delete."""
 
+from collections.abc import Callable
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -19,10 +21,16 @@ USER_ROLE = Qt.ItemDataRole.UserRole
 
 
 class NotesView(QWidget):
-    def __init__(self, db: Database, project_id: int) -> None:
+    def __init__(
+        self,
+        db: Database,
+        project_id: int,
+        on_data_changed: Callable[[], None] | None = None,
+    ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
+        self._on_data_changed = on_data_changed
         self._selected_id: int | None = None
 
         root = QHBoxLayout(self)
@@ -101,6 +109,8 @@ class NotesView(QWidget):
 
         self._clear_form()
         self._refresh_list()
+        if self._on_data_changed:
+            self._on_data_changed()
 
     def _on_delete(self) -> None:
         if self._selected_id is None:
@@ -108,6 +118,8 @@ class NotesView(QWidget):
         self._db.delete_note(self._selected_id)
         self._clear_form()
         self._refresh_list()
+        if self._on_data_changed:
+            self._on_data_changed()
 
     def _clear_form(self) -> None:
         self._selected_id = None
