@@ -1,4 +1,4 @@
-"""Timeline view — plotline-column overview with minimal editing."""
+"""Timeline view — plotline-column or chapter-column overview with minimal editing."""
 
 from collections.abc import Callable
 
@@ -20,6 +20,9 @@ from storyplanner.db import Database
 FILTER_ALL = "All"
 UNASSIGNED = "Unassigned"
 
+MODE_BY_PLOTLINE = "By Plotline"
+MODE_BY_CHAPTER = "By Chapter"
+
 
 class TimelineView(QWidget):
     def __init__(
@@ -38,14 +41,24 @@ class TimelineView(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Timeline"))
 
-        # -- Chapter filter --------------------------------------------------
-        filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("Chapter"))
-        self._chapter_filter = QComboBox()
-        self._chapter_filter.currentTextChanged.connect(self._on_filter_changed)
-        filter_row.addWidget(self._chapter_filter)
-        filter_row.addStretch()
-        layout.addLayout(filter_row)
+        # -- Mode + filter row -----------------------------------------------
+        controls_row = QHBoxLayout()
+
+        controls_row.addWidget(QLabel("View"))
+        self._mode_combo = QComboBox()
+        self._mode_combo.addItem(MODE_BY_PLOTLINE)
+        self._mode_combo.addItem(MODE_BY_CHAPTER)
+        self._mode_combo.currentTextChanged.connect(self._on_mode_changed)
+        controls_row.addWidget(self._mode_combo)
+
+        self._filter_label = QLabel("Chapter")
+        controls_row.addWidget(self._filter_label)
+        self._filter_combo = QComboBox()
+        self._filter_combo.currentTextChanged.connect(self._on_filter_changed)
+        controls_row.addWidget(self._filter_combo)
+
+        controls_row.addStretch()
+        layout.addLayout(controls_row)
 
         # -- Table -----------------------------------------------------------
         self._table = QTableWidget()
@@ -88,26 +101,46 @@ class TimelineView(QWidget):
         actions_row.addStretch()
         layout.addLayout(actions_row)
 
-        self._refresh_chapter_filter()
+        self._refresh_filter()
+        self._reload()
+
+    # -- Mode ----------------------------------------------------------------
+
+    def _get_mode(self) -> str:
+        return self._mode_combo.currentText()
+
+    def _on_mode_changed(self) -> None:
+        self._refresh_filter()
         self._reload()
 
     # -- Filter --------------------------------------------------------------
 
-    def _refresh_chapter_filter(self) -> None:
-        combo = self._chapter_filter
+    def _refresh_filter(self) -> None:
+        if self._get_mode() == MODE_BY_PLOTLINE:
+            self._filter_label.setText("Chapter")
+            values = self._db.get_scene_chapters(self._project_id)
+        else:
+            self._filter_label.setText("Plotline")
+            values = self._db.get_scene_plotlines(self._project_id)
+
+        combo = self._filter_combo
         combo.blockSignals(True)
         current = combo.currentText()
         combo.clear()
         combo.addItem(FILTER_ALL)
-        for ch in self._db.get_scene_chapters(self._project_id):
-            combo.addItem(ch)
+        for val in values:
+            combo.addItem(val)
         idx = combo.findText(current)
         combo.setCurrentIndex(idx if idx >= 0 else 0)
         combo.blockSignals(False)
 
-    def _get_chapter_filter(self) -> str | None:
-        text = self._chapter_filter.currentText()
-        return None if text == FILTER_ALL else text
+    def _get_filter_kwargs(self) -> dict[str, str | None]:
+        text = self._filter_combo.currentText()
+        value = None if text == FILTER_ALL else text
+        if self._get_mode() == MODE_BY_PLOTLINE:
+            return {"chapter": value}
+        else:
+            return {"plotline": value}
 
     def _on_filter_changed(self) -> None:
         self._reload()
@@ -115,18 +148,22 @@ class TimelineView(QWidget):
     # -- Reload (single entry point) -----------------------------------------
 
     def _reload(self) -> None:
-        """Rebuild the grid and restore selection if the scene still exists."""
         self._load_table()
         self._reselect()
 
     def _load_table(self) -> None:
         scenes = self._db.get_all_scenes(
             self._project_id,
-            chapter=self._get_chapter_filter(),
+            **self._get_filter_kwargs(),
         )
 
-        columns = self._build_plotline_columns(scenes)
-        plotline_to_col = {name: i for i, name in enumerate(columns)}
+        mode = self._get_mode()
+        if mode == MODE_BY_PLOTLINE:
+            columns = self._build_columns(scenes, key=lambda s: s.plotline)
+        else:
+            columns = self._build_columns(scenes, key=lambda s: s.chapter)
+
+        col_to_idx = {name: i for i, name in enumerate(columns)}
 
         self._table.blockSignals(True)
         self._table.clear()
@@ -136,10 +173,13 @@ class TimelineView(QWidget):
         self._cell_scene_ids.clear()
 
         for row, scene in enumerate(scenes):
-            col_name = scene.plotline if scene.plotline else UNASSIGNED
-            col = plotline_to_col[col_name]
+            if mode == MODE_BY_PLOTLINE:
+                col_name = scene.plotline if scene.plotline else UNASSIGNED
+            else:
+                col_name = scene.chapter if scene.chapter else UNASSIGNED
+            col = col_to_idx[col_name]
 
-            item = QTableWidgetItem(self._format_cell(row + 1, scene))
+            item = QTableWidgetItem(self._format_cell(row + 1, scene, mode))
             item.setTextAlignment(
                 Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
             )
@@ -158,24 +198,27 @@ class TimelineView(QWidget):
         else:
             self._status_label.setText(f"{len(scenes)} scene(s).")
 
-    def _build_plotline_columns(self, scenes: list) -> list[str]:
-        plotlines: list[str] = []
+    def _build_columns(self, scenes: list, key: Callable) -> list[str]:
+        columns: list[str] = []
         seen: set[str] = set()
         has_unassigned = False
         for scene in scenes:
-            if not scene.plotline:
+            value = key(scene)
+            if not value:
                 has_unassigned = True
-            elif scene.plotline not in seen:
-                seen.add(scene.plotline)
-                plotlines.append(scene.plotline)
+            elif value not in seen:
+                seen.add(value)
+                columns.append(value)
         if has_unassigned:
-            plotlines.append(UNASSIGNED)
-        return plotlines
+            columns.append(UNASSIGNED)
+        return columns
 
-    def _format_cell(self, index: int, scene) -> str:
+    def _format_cell(self, index: int, scene, mode: str) -> str:
         parts = [f"#{index}  {scene.title}"]
-        if scene.chapter:
+        if mode == MODE_BY_PLOTLINE and scene.chapter:
             parts.append(scene.chapter)
+        elif mode == MODE_BY_CHAPTER and scene.plotline:
+            parts.append(scene.plotline)
         return "\n".join(parts)
 
     # -- Selection -----------------------------------------------------------
@@ -184,7 +227,6 @@ class TimelineView(QWidget):
         self._apply_selection(self._cell_scene_ids.get((row, col)))
 
     def _apply_selection(self, scene_id: int | None) -> None:
-        """Single entry point for updating selection state and action UI."""
         self._selected_scene_id = scene_id
         has_scene = scene_id is not None
         self._set_actions_enabled(has_scene)
@@ -203,7 +245,6 @@ class TimelineView(QWidget):
             self._table.setCurrentCell(-1, -1)
 
     def _reselect(self) -> None:
-        """Restore selection for _selected_scene_id after a reload."""
         if self._selected_scene_id is None:
             self._apply_selection(None)
             return
@@ -214,7 +255,6 @@ class TimelineView(QWidget):
                 self._apply_selection(sid)
                 return
 
-        # Scene no longer visible — clear cleanly
         self._apply_selection(None)
 
     def _set_actions_enabled(self, enabled: bool) -> None:
@@ -224,7 +264,6 @@ class TimelineView(QWidget):
         self._set_plotline_btn.setEnabled(enabled)
 
     def _sync_plotline_combo(self, current_plotline: str) -> None:
-        """Refill the combo with all known plotlines and select the given value."""
         combo = self._plotline_combo
         combo.blockSignals(True)
         combo.clear()
