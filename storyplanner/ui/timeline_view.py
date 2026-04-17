@@ -43,16 +43,17 @@ class TimelineView(QWidget):
         self._db = db
         self._project_id = project_id
         self._on_scene_selected = on_scene_selected
-        self._cell_scene_ids: dict[tuple[int, int], int] = {}
+
+        # Scene data: (row, col) → (scene_id, title, plotline)
+        self._cell_data: dict[tuple[int, int], tuple[int, str, str]] = {}
         self._selected_scene_id: int | None = None
         self._selected_card: QWidget | None = None
 
+        # Cached plotline list (refreshed on each table load)
+        self._plotline_values: list[str] = []
+
         # Drag state
-        self._drag_start_row: int | None = None
-        self._drag_start_col: int | None = None
-        self._drag_start_pos: QPoint | None = None
-        self._drag_scene_id: int | None = None
-        self._dragging = False
+        self._reset_drag_state()
 
         # Column-to-plotline mapping (rebuilt on each load)
         self._col_to_plotline: dict[int, str] = {}
@@ -181,6 +182,9 @@ class TimelineView(QWidget):
             **self._get_filter_kwargs(),
         )
 
+        # Cache plotline values once per table load
+        self._plotline_values = self._db.get_scene_plotlines(self._project_id)
+
         mode = self._get_mode()
         if mode == MODE_BY_PLOTLINE:
             columns = self._build_columns(scenes, key=lambda s: s.plotline)
@@ -206,7 +210,7 @@ class TimelineView(QWidget):
             headers = [f"{prefix}: {UNASSIGNED}"]
         self._table.setHorizontalHeaderLabels(headers)
         self._table.setRowCount(len(scenes))
-        self._cell_scene_ids.clear()
+        self._cell_data.clear()
 
         for row, scene in enumerate(scenes):
             if mode == MODE_BY_PLOTLINE:
@@ -218,7 +222,7 @@ class TimelineView(QWidget):
             card = self._create_card(row + 1, scene, mode)
             self._table.setCellWidget(row, col, card)
             self._table.setRowHeight(row, max(card.sizeHint().height(), 56))
-            self._cell_scene_ids[(row, col)] = scene.id
+            self._cell_data[(row, col)] = (scene.id, scene.title, scene.plotline)
 
         header = self._table.horizontalHeader()
         for i in range(self._table.columnCount()):
@@ -228,7 +232,7 @@ class TimelineView(QWidget):
         self._update_status_count()
 
     def _update_status_count(self) -> None:
-        count = len(self._cell_scene_ids)
+        count = len(self._cell_data)
         filter_text = self._filter_combo.currentText()
         is_filtered = filter_text != FILTER_ALL
 
@@ -290,6 +294,13 @@ class TimelineView(QWidget):
 
     # -- Drag-and-drop reordering --------------------------------------------
 
+    def _reset_drag_state(self) -> None:
+        self._drag_start_row: int | None = None
+        self._drag_start_col: int | None = None
+        self._drag_start_pos: QPoint | None = None
+        self._drag_scene_id: int | None = None
+        self._dragging = False
+
     def eventFilter(self, obj: object, event: QEvent) -> bool:
         if obj is not self._table.viewport():
             return super().eventFilter(obj, event)
@@ -308,20 +319,22 @@ class TimelineView(QWidget):
     def _on_drag_press(self, event) -> bool:
         if event.button() != Qt.MouseButton.LeftButton:
             return False
+
+        self._reset_drag_state()
+
         if self._is_filtered():
             return False
 
         pos = event.position().toPoint()
         row = self._table.rowAt(pos.y())
         col = self._table.columnAt(pos.x())
-        scene_id = self._cell_scene_ids.get((row, col))
+        cell_data = self._cell_data.get((row, col))
 
-        if scene_id is not None:
+        if cell_data is not None:
             self._drag_start_row = row
             self._drag_start_col = col
             self._drag_start_pos = pos
-            self._drag_scene_id = scene_id
-            self._dragging = False
+            self._drag_scene_id = cell_data[0]
 
         return False
 
@@ -345,13 +358,11 @@ class TimelineView(QWidget):
         start_row = self._drag_start_row
         start_col = self._drag_start_col
 
-        self._drag_start_row = None
-        self._drag_start_col = None
-        self._drag_start_pos = None
-        self._drag_scene_id = None
-        self._dragging = False
+        self._reset_drag_state()
 
-        if not was_dragging or drag_scene is None or start_row is None:
+        if not was_dragging or drag_scene is None:
+            return False
+        if start_row is None or start_col is None:
             return False
 
         self._table.unsetCursor()
@@ -384,7 +395,9 @@ class TimelineView(QWidget):
     # -- Selection -----------------------------------------------------------
 
     def _on_cell_clicked(self, row: int, col: int) -> None:
-        self._apply_selection(self._cell_scene_ids.get((row, col)))
+        cell_data = self._cell_data.get((row, col))
+        scene_id = cell_data[0] if cell_data else None
+        self._apply_selection(scene_id)
 
     def _apply_selection(self, scene_id: int | None) -> None:
         self._selected_scene_id = scene_id
@@ -396,11 +409,15 @@ class TimelineView(QWidget):
             self._selected_card = None
 
         if has_scene:
-            scene = self._db.get_scene_by_id(scene_id)
-            if scene:
-                self._sync_plotline_combo(scene.plotline)
-                self._status_label.setText(f"Selected: {scene.title}")
-                self._highlight_selected_card()
+            cell = self._find_scene_cell(scene_id)
+            if cell is not None:
+                _, title, plotline = self._cell_data[cell]
+                self._sync_plotline_combo(plotline)
+                self._status_label.setText(f"Selected: {title}")
+                card = self._table.cellWidget(cell[0], cell[1])
+                if card:
+                    card.setStyleSheet(CARD_SELECTED_STYLE)
+                    self._selected_card = card
             else:
                 self._selected_scene_id = None
                 self._set_actions_enabled(False)
@@ -411,29 +428,23 @@ class TimelineView(QWidget):
             self._table.setCurrentCell(-1, -1)
             self._update_status_count()
 
-    def _highlight_selected_card(self) -> None:
-        if self._selected_scene_id is None:
-            return
-        for (row, col), sid in self._cell_scene_ids.items():
-            if sid == self._selected_scene_id:
-                card = self._table.cellWidget(row, col)
-                if card:
-                    card.setStyleSheet(CARD_SELECTED_STYLE)
-                    self._selected_card = card
-                return
+    def _find_scene_cell(self, scene_id: int) -> tuple[int, int] | None:
+        for cell, data in self._cell_data.items():
+            if data[0] == scene_id:
+                return cell
+        return None
 
     def _reselect(self) -> None:
         if self._selected_scene_id is None:
             self._apply_selection(None)
             return
 
-        for (row, col), sid in self._cell_scene_ids.items():
-            if sid == self._selected_scene_id:
-                self._table.setCurrentCell(row, col)
-                self._apply_selection(sid)
-                return
-
-        self._apply_selection(None)
+        cell = self._find_scene_cell(self._selected_scene_id)
+        if cell is not None:
+            self._table.setCurrentCell(cell[0], cell[1])
+            self._apply_selection(self._selected_scene_id)
+        else:
+            self._apply_selection(None)
 
     def _set_actions_enabled(self, enabled: bool) -> None:
         self._move_up_btn.setEnabled(enabled)
@@ -446,7 +457,7 @@ class TimelineView(QWidget):
         combo.blockSignals(True)
         combo.clear()
         combo.addItem("")
-        for pl in self._db.get_scene_plotlines(self._project_id):
+        for pl in self._plotline_values:
             combo.addItem(pl)
         idx = combo.findText(current_plotline)
         if idx >= 0:
@@ -487,6 +498,6 @@ class TimelineView(QWidget):
     def _on_double_click(self, row: int, column: int) -> None:
         if self._on_scene_selected is None:
             return
-        scene_id = self._cell_scene_ids.get((row, column))
-        if scene_id is not None:
-            self._on_scene_selected(scene_id)
+        cell_data = self._cell_data.get((row, column))
+        if cell_data is not None:
+            self._on_scene_selected(cell_data[0])
