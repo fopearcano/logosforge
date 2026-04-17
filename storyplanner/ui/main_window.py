@@ -1,16 +1,21 @@
 """Main window with a sidebar and content area."""
 
+from pathlib import Path
+
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
+from storyplanner import recent_projects
 from storyplanner.db import Database
 from storyplanner.export import export_csv_scenes, export_json, export_markdown
 from storyplanner.import_data import import_json, validate_import_data
@@ -27,8 +32,12 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._db = db
         self._project_id = project_id
-        self.setWindowTitle("StoryPlanner")
+        self._current_file: str | None = None
+        self._update_title()
         self.resize(900, 600)
+
+        # -- Menu bar --------------------------------------------------------
+        self._build_menu_bar()
 
         central = QWidget()
         root_layout = QHBoxLayout(central)
@@ -137,11 +146,7 @@ class MainWindow(QMainWindow):
 
         new_project_id = import_json(self._db, data)
         self._project_id = new_project_id
-
-        self._set_content(QWidget())
-        QVBoxLayout(self.content_area).addWidget(
-            QLabel("Import complete. Select a section from the sidebar.")
-        )
+        self._reset_content("Import complete. Select a section from the sidebar.")
         QMessageBox.information(
             self, "Import", f"Project imported successfully (ID {new_project_id})."
         )
@@ -173,3 +178,104 @@ class MainWindow(QMainWindow):
             f.write(content)
 
         QMessageBox.information(self, "Export", f"Exported to {path}")
+
+    # -- Menu bar ------------------------------------------------------------
+
+    def _build_menu_bar(self) -> None:
+        menu_bar = self.menuBar()
+        file_menu = menu_bar.addMenu("File")
+
+        open_action = QAction("Open Project...", self)
+        open_action.triggered.connect(self._on_open_project)
+        file_menu.addAction(open_action)
+
+        save_as_action = QAction("Save As...", self)
+        save_as_action.triggered.connect(self._on_save_as)
+        file_menu.addAction(save_as_action)
+
+        file_menu.addSeparator()
+
+        self._recent_menu = QMenu("Recent Projects", self)
+        file_menu.addMenu(self._recent_menu)
+        self._refresh_recent_menu()
+
+    def _refresh_recent_menu(self) -> None:
+        self._recent_menu.clear()
+        paths = recent_projects.load()
+        if not paths:
+            no_recent = QAction("(no recent projects)", self)
+            no_recent.setEnabled(False)
+            self._recent_menu.addAction(no_recent)
+            return
+        for path in paths:
+            label = Path(path).name
+            action = QAction(label, self)
+            action.setToolTip(path)
+            action.triggered.connect(lambda checked, p=path: self._open_file(p))
+            self._recent_menu.addAction(action)
+
+    def _update_title(self) -> None:
+        if self._current_file:
+            name = Path(self._current_file).name
+            self.setWindowTitle(f"StoryPlanner — {name}")
+        else:
+            self.setWindowTitle("StoryPlanner")
+
+    def _on_open_project(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open Project",
+            "",
+            "JSON (*.json)",
+        )
+        if path:
+            self._open_file(path)
+
+    def _open_file(self, path: str) -> None:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                raw = f.read()
+        except OSError as e:
+            QMessageBox.warning(self, "Open Project", f"Could not read file:\n{e}")
+            return
+
+        data, error = validate_import_data(raw)
+        if data is None:
+            QMessageBox.warning(self, "Open Project", error)
+            return
+
+        new_project_id = import_json(self._db, data)
+        self._project_id = new_project_id
+        self._current_file = path
+        self._update_title()
+        recent_projects.add(path)
+        self._refresh_recent_menu()
+
+        self._reset_content("Project loaded. Select a section from the sidebar.")
+
+    def _on_save_as(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Project As",
+            "",
+            "JSON (*.json)",
+        )
+        if not path:
+            return
+        if not path.endswith(".json"):
+            path += ".json"
+
+        content = export_json(self._db, self._project_id)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        self._current_file = path
+        self._update_title()
+        recent_projects.add(path)
+        self._refresh_recent_menu()
+        QMessageBox.information(self, "Save As", f"Project saved to {path}")
+
+    def _reset_content(self, message: str) -> None:
+        widget = QWidget()
+        QVBoxLayout(widget).addWidget(QLabel(message))
+        self._set_content(widget)
