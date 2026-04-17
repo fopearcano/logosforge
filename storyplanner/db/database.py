@@ -448,3 +448,51 @@ class Database:
                 ScenePlaceLink.scene_id == scene_id
             )
             return list(session.exec(stmt).all())
+
+    # -- Search --------------------------------------------------------------
+
+    def search_project(
+        self, project_id: int, query: str
+    ) -> list[dict]:
+        query_lower = query.lower()
+        results: list[dict] = []
+
+        for char in self.get_all_characters(project_id):
+            if self._matches(query_lower, char.name, char.description):
+                results.append(
+                    {"type": "Character", "id": char.id, "label": char.name,
+                     "preview": char.description}
+                )
+
+        for place in self.get_all_places(project_id):
+            if self._matches(query_lower, place.name, place.description):
+                results.append(
+                    {"type": "Place", "id": place.id, "label": place.name,
+                     "preview": place.description}
+                )
+
+        for note in self.get_all_notes(project_id):
+            if self._matches(query_lower, note.title, note.content):
+                results.append(
+                    {"type": "Note", "id": note.id, "label": note.title,
+                     "preview": note.content}
+                )
+
+        for scene in self.get_all_scenes(project_id):
+            if self._matches(
+                query_lower, scene.title, scene.summary,
+                scene.chapter, scene.plotline,
+            ):
+                results.append(
+                    {"type": "Scene", "id": scene.id, "label": scene.title,
+                     "preview": scene.summary}
+                )
+
+        return results
+
+    @staticmethod
+    def _matches(query_lower: str, *fields: str) -> bool:
+        for field in fields:
+            if field and query_lower in field.lower():
+                return True
+        return False

@@ -121,6 +121,12 @@ class PlacesView(QWidget):
         if self._on_data_changed:
             self._on_data_changed()
 
+    def select_place(self, place_id: int) -> None:
+        for i in range(self._list.count()):
+            if self._list.item(i).data(USER_ROLE) == place_id:
+                self._list.setCurrentRow(i)
+                return
+
     def _clear_form(self) -> None:
         self._selected_id = None
         self._form_label.setText("New Place")

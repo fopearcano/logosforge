@@ -24,6 +24,7 @@ from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.outline_view import OutlineView
 from storyplanner.ui.places_view import PlacesView
 from storyplanner.ui.scenes_view import ScenesView
+from storyplanner.ui.search_view import SearchView
 from storyplanner.ui.timeline_view import TimelineView
 
 
@@ -50,7 +51,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
 
         self.sidebar_buttons: dict[str, QPushButton] = {}
-        for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline"):
+        for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline", "Search"):
             btn = QPushButton(label)
             sidebar_layout.addWidget(btn)
             self.sidebar_buttons[label] = btn
@@ -74,6 +75,7 @@ class MainWindow(QMainWindow):
         self.sidebar_buttons["Scenes"].clicked.connect(self._show_scenes)
         self.sidebar_buttons["Timeline"].clicked.connect(self._show_timeline)
         self.sidebar_buttons["Outline"].clicked.connect(self._show_outline)
+        self.sidebar_buttons["Search"].clicked.connect(self._show_search)
 
         # -- Right content area ----------------------------------------------
         self.content_area = QWidget()
@@ -126,6 +128,31 @@ class MainWindow(QMainWindow):
 
     def _show_outline(self) -> None:
         self._set_content(OutlineView(self._db, self._project_id))
+
+    def _show_search(self) -> None:
+        self._set_content(
+            SearchView(
+                self._db,
+                self._project_id,
+                on_result_selected=self._on_search_result_selected,
+            )
+        )
+
+    def _on_search_result_selected(self, entity_type: str, entity_id: int) -> None:
+        if entity_type == "Character":
+            view = CharactersView(self._db, self._project_id, on_data_changed=self._on_data_changed)
+            self._set_content(view)
+            view.select_character(entity_id)
+        elif entity_type == "Place":
+            view = PlacesView(self._db, self._project_id, on_data_changed=self._on_data_changed)
+            self._set_content(view)
+            view.select_place(entity_id)
+        elif entity_type == "Note":
+            view = NotesView(self._db, self._project_id, on_data_changed=self._on_data_changed)
+            self._set_content(view)
+            view.select_note(entity_id)
+        elif entity_type == "Scene":
+            self._open_scene_in_editor(entity_id)
 
     def _open_scene_in_editor(self, scene_id: int) -> None:
         view = ScenesView(self._db, self._project_id, on_data_changed=self._on_data_changed)
