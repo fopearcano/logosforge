@@ -211,7 +211,13 @@ class MainWindow(QMainWindow):
         )
 
     def _show_assistant(self) -> None:
-        self._set_content(AssistantView(self._db, self._project_id))
+        self._set_content(
+            AssistantView(
+                self._db,
+                self._project_id,
+                on_data_changed=self._on_data_changed,
+            )
+        )
 
     def _show_search(self) -> None:
         self._set_content(

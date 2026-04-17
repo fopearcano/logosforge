@@ -489,6 +489,30 @@ class Database:
             scene.plotline = plotline
             session.commit()
 
+    def update_scene_content(self, scene_id: int, content: str) -> None:
+        with Session(self._engine) as session:
+            scene = session.get(Scene, scene_id)
+            if scene is None:
+                return
+            scene.content = content
+            session.commit()
+
+    def update_scene_synopsis(self, scene_id: int, synopsis: str) -> None:
+        with Session(self._engine) as session:
+            scene = session.get(Scene, scene_id)
+            if scene is None:
+                return
+            scene.synopsis = synopsis
+            session.commit()
+
+    def update_scene_summary(self, scene_id: int, summary: str) -> None:
+        with Session(self._engine) as session:
+            scene = session.get(Scene, scene_id)
+            if scene is None:
+                return
+            scene.summary = summary
+            session.commit()
+
     def reorder_scene(self, scene_id: int, new_index: int) -> None:
         """Move a scene to a new position (0-based) among all project scenes."""
         with Session(self._engine) as session:

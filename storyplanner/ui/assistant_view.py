@@ -1,5 +1,7 @@
 """Writing Assistant view — local LM Studio integration for scene writing help."""
 
+from collections.abc import Callable
+
 from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtWidgets import (
     QApplication,
@@ -8,6 +10,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -48,10 +51,16 @@ class _AssistantWorker(QThread):
 
 
 class AssistantView(QWidget):
-    def __init__(self, db: Database, project_id: int) -> None:
+    def __init__(
+        self,
+        db: Database,
+        project_id: int,
+        on_data_changed: Callable[[], None] | None = None,
+    ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
+        self._on_data_changed = on_data_changed
         self._worker: _AssistantWorker | None = None
 
         layout = QVBoxLayout(self)
@@ -129,6 +138,36 @@ class AssistantView(QWidget):
             "}"
         )
         layout.addWidget(self._response_output, stretch=1)
+
+        # Apply actions
+        apply_label = QLabel("Apply to Scene")
+        apply_label.setStyleSheet("color: #9aa0a6; margin-top: 6px;")
+        layout.addWidget(apply_label)
+
+        apply_row = QHBoxLayout()
+        self._replace_content_btn = QPushButton("Replace Content")
+        self._replace_content_btn.clicked.connect(self._apply_replace_content)
+        apply_row.addWidget(self._replace_content_btn)
+
+        self._append_content_btn = QPushButton("Append to Content")
+        self._append_content_btn.clicked.connect(self._apply_append_content)
+        apply_row.addWidget(self._append_content_btn)
+
+        self._as_synopsis_btn = QPushButton("As Synopsis")
+        self._as_synopsis_btn.clicked.connect(self._apply_as_synopsis)
+        apply_row.addWidget(self._as_synopsis_btn)
+
+        self._as_summary_btn = QPushButton("As Summary")
+        self._as_summary_btn.clicked.connect(self._apply_as_summary)
+        apply_row.addWidget(self._as_summary_btn)
+        layout.addLayout(apply_row)
+
+        self._apply_buttons = [
+            self._replace_content_btn,
+            self._append_content_btn,
+            self._as_synopsis_btn,
+            self._as_summary_btn,
+        ]
 
         copy_row = QHBoxLayout()
         copy_row.addStretch()
@@ -300,8 +339,108 @@ class AssistantView(QWidget):
         self._scene_combo.setEnabled(not busy)
         for btn in self._preset_buttons:
             btn.setEnabled(not busy)
+        for btn in self._apply_buttons:
+            btn.setEnabled(not busy)
 
     def _copy_response(self) -> None:
         text = self._response_output.toPlainText()
         if text:
             QApplication.clipboard().setText(text)
+
+    # -- Apply to scene ------------------------------------------------------
+
+    def _get_response_text(self) -> str | None:
+        text = self._response_output.toPlainText().strip()
+        if not text or text == "Thinking..." or text.startswith("Error:"):
+            return None
+        return text
+
+    def _get_selected_scene_id(self) -> int | None:
+        return self._scene_combo.currentData()
+
+    def _notify_data_changed(self) -> None:
+        if self._on_data_changed:
+            self._on_data_changed()
+
+    def _apply_replace_content(self) -> None:
+        text = self._get_response_text()
+        scene_id = self._get_selected_scene_id()
+        if text is None or scene_id is None:
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Replace Content",
+            "This will replace the entire scene content.\n\n"
+            "Are you sure?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        self._db.update_scene_content(scene_id, text)
+        self._notify_data_changed()
+
+    def _apply_append_content(self) -> None:
+        text = self._get_response_text()
+        scene_id = self._get_selected_scene_id()
+        if text is None or scene_id is None:
+            return
+
+        scene = self._db.get_scene_by_id(scene_id)
+        if scene is None:
+            return
+
+        existing = scene.content or ""
+        if existing:
+            new_content = existing + "\n\n" + text
+        else:
+            new_content = text
+
+        self._db.update_scene_content(scene_id, new_content)
+        self._notify_data_changed()
+
+    def _apply_as_synopsis(self) -> None:
+        text = self._get_response_text()
+        scene_id = self._get_selected_scene_id()
+        if text is None or scene_id is None:
+            return
+
+        scene = self._db.get_scene_by_id(scene_id)
+        if scene and scene.synopsis:
+            answer = QMessageBox.question(
+                self,
+                "Replace Synopsis",
+                "This will replace the existing synopsis.\n\n"
+                "Are you sure?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+
+        self._db.update_scene_synopsis(scene_id, text)
+        self._notify_data_changed()
+
+    def _apply_as_summary(self) -> None:
+        text = self._get_response_text()
+        scene_id = self._get_selected_scene_id()
+        if text is None or scene_id is None:
+            return
+
+        scene = self._db.get_scene_by_id(scene_id)
+        if scene and scene.summary:
+            answer = QMessageBox.question(
+                self,
+                "Replace Summary",
+                "This will replace the existing summary.\n\n"
+                "Are you sure?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+
+        self._db.update_scene_summary(scene_id, text)
+        self._notify_data_changed()
