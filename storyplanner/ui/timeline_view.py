@@ -65,19 +65,23 @@ class TimelineView(QWidget):
         actions_row = QHBoxLayout()
 
         self._move_up_btn = QPushButton("Move Up")
+        self._move_up_btn.setEnabled(False)
         self._move_up_btn.clicked.connect(self._on_move_up)
         actions_row.addWidget(self._move_up_btn)
 
         self._move_down_btn = QPushButton("Move Down")
+        self._move_down_btn.setEnabled(False)
         self._move_down_btn.clicked.connect(self._on_move_down)
         actions_row.addWidget(self._move_down_btn)
 
         actions_row.addWidget(QLabel("Plotline:"))
         self._plotline_combo = QComboBox()
         self._plotline_combo.setEditable(True)
+        self._plotline_combo.setEnabled(False)
         actions_row.addWidget(self._plotline_combo)
 
         self._set_plotline_btn = QPushButton("Set Plotline")
+        self._set_plotline_btn.setEnabled(False)
         self._set_plotline_btn.clicked.connect(self._on_set_plotline)
         actions_row.addWidget(self._set_plotline_btn)
 
@@ -186,11 +190,17 @@ class TimelineView(QWidget):
         self._set_actions_enabled(has_scene)
 
         if has_scene:
-            self._sync_plotline_combo()
+            scene = self._db.get_scene_by_id(scene_id)
+            if scene:
+                self._sync_plotline_combo(scene.plotline)
+                self._status_label.setText(f"Selected: {scene.title}")
+            else:
+                self._selected_scene_id = None
+                self._set_actions_enabled(False)
+                self._clear_plotline_combo()
         else:
             self._clear_plotline_combo()
             self._table.setCurrentCell(-1, -1)
-            self._status_label.setText(self._status_label.text())
 
     def _reselect(self) -> None:
         """Restore selection for _selected_scene_id after a reload."""
@@ -213,25 +223,19 @@ class TimelineView(QWidget):
         self._plotline_combo.setEnabled(enabled)
         self._set_plotline_btn.setEnabled(enabled)
 
-    def _sync_plotline_combo(self) -> None:
-        """Refill the combo with all known plotlines and select the scene's current value."""
-        if self._selected_scene_id is None:
-            return
-        scene = self._db.get_scene_by_id(self._selected_scene_id)
-        if scene is None:
-            return
-
+    def _sync_plotline_combo(self, current_plotline: str) -> None:
+        """Refill the combo with all known plotlines and select the given value."""
         combo = self._plotline_combo
         combo.blockSignals(True)
         combo.clear()
         combo.addItem("")
         for pl in self._db.get_scene_plotlines(self._project_id):
             combo.addItem(pl)
-        idx = combo.findText(scene.plotline)
+        idx = combo.findText(current_plotline)
         if idx >= 0:
             combo.setCurrentIndex(idx)
         else:
-            combo.setCurrentText(scene.plotline)
+            combo.setCurrentText(current_plotline)
         combo.blockSignals(False)
 
     def _clear_plotline_combo(self) -> None:
