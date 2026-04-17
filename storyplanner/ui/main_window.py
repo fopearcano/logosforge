@@ -1,15 +1,18 @@
 """Main window with a sidebar and content area."""
 
 from PySide6.QtWidgets import (
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
 from storyplanner.db import Database
+from storyplanner.export import export_json, export_markdown
 from storyplanner.ui.characters_view import CharactersView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.places_view import PlacesView
@@ -42,6 +45,11 @@ class MainWindow(QMainWindow):
 
         # Push buttons to the top
         sidebar_layout.addStretch()
+
+        # Export button at bottom of sidebar
+        self._export_btn = QPushButton("Export")
+        sidebar_layout.addWidget(self._export_btn)
+        self._export_btn.clicked.connect(self._on_export)
 
         # Connect sidebar buttons
         self.sidebar_buttons["Characters"].clicked.connect(self._show_characters)
@@ -94,3 +102,27 @@ class MainWindow(QMainWindow):
         view = ScenesView(self._db, self._project_id)
         self._set_content(view)
         view.select_scene(scene_id)
+
+    def _on_export(self) -> None:
+        path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Export Project",
+            "",
+            "JSON (*.json);;Markdown (*.md)",
+        )
+        if not path:
+            return
+
+        if path.endswith(".md") or "Markdown" in selected_filter:
+            content = export_markdown(self._db, self._project_id)
+            if not path.endswith(".md"):
+                path += ".md"
+        else:
+            content = export_json(self._db, self._project_id)
+            if not path.endswith(".json"):
+                path += ".json"
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        QMessageBox.information(self, "Export", f"Exported to {path}")

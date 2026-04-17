@@ -37,6 +37,10 @@ class Database:
 
     # -- Projects ------------------------------------------------------------
 
+    def get_project_by_id(self, project_id: int) -> Project | None:
+        with Session(self._engine) as session:
+            return session.get(Project, project_id)
+
     def get_all_projects(self) -> list[Project]:
         with Session(self._engine) as session:
             return list(session.exec(select(Project)).all())
