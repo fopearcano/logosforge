@@ -112,6 +112,7 @@ class MainWindow(QMainWindow):
         )
 
         # -- Assemble --------------------------------------------------------
+        self._sidebar = sidebar
         root_layout.addWidget(sidebar)
         root_layout.addWidget(self.content_area, stretch=1)
 
@@ -159,6 +160,7 @@ class MainWindow(QMainWindow):
                 self._project_id,
                 on_data_changed=self._on_data_changed,
                 on_link_clicked=self._on_link_navigated,
+                on_focus_mode_changed=self._on_focus_mode_changed,
             )
         )
 
@@ -251,6 +253,7 @@ class MainWindow(QMainWindow):
             self._db, self._project_id,
             on_data_changed=self._on_data_changed,
             on_link_clicked=self._on_link_navigated,
+            on_focus_mode_changed=self._on_focus_mode_changed,
         )
         self._set_content(view)
         view.select_scene(scene_id)
@@ -439,6 +442,9 @@ class MainWindow(QMainWindow):
             f.write(content)
         self._dirty = False
         self._update_title()
+
+    def _on_focus_mode_changed(self, active: bool) -> None:
+        self._sidebar.setVisible(not active)
 
     def _mark_clean(self) -> None:
         self._dirty = False

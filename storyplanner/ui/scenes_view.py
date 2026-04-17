@@ -3,7 +3,7 @@
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QTextBlockFormat, QTextCursor
+from PySide6.QtGui import QFont, QKeySequence, QShortcut, QTextBlockFormat, QTextCursor
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -46,33 +46,35 @@ class ScenesView(QWidget):
         project_id: int,
         on_data_changed: Callable[[], None] | None = None,
         on_link_clicked: Callable[[str, int], None] | None = None,
+        on_focus_mode_changed: Callable[[bool], None] | None = None,
     ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
         self._on_data_changed = on_data_changed
         self._on_link_clicked = on_link_clicked
+        self._on_focus_mode_changed = on_focus_mode_changed
         self._selected_scene_id: int | None = None
+        self._focus_mode = False
 
         root = QHBoxLayout(self)
 
-        # -- Left: scene list ------------------------------------------------
-        left = QVBoxLayout()
+        # -- Left: scene list (wrapped for focus toggle) ---------------------
+        self._left_panel = QWidget()
+        left = QVBoxLayout(self._left_panel)
+        left.setContentsMargins(0, 0, 0, 0)
         left.addWidget(QLabel("Scenes"))
 
-        # Chapter filter
         left.addWidget(QLabel("Chapter filter"))
         self._chapter_filter = QComboBox()
         self._chapter_filter.currentTextChanged.connect(self._on_filter_changed)
         left.addWidget(self._chapter_filter)
 
-        # Plotline filter
         left.addWidget(QLabel("Plotline filter"))
         self._plotline_filter = QComboBox()
         self._plotline_filter.currentTextChanged.connect(self._on_filter_changed)
         left.addWidget(self._plotline_filter)
 
-        # Tag filter
         left.addWidget(QLabel("Tag filter"))
         self._tag_filter = QComboBox()
         self._tag_filter.currentTextChanged.connect(self._on_filter_changed)
@@ -82,7 +84,6 @@ class ScenesView(QWidget):
         self._list.currentItemChanged.connect(self._on_scene_selected)
         left.addWidget(self._list)
 
-        # Reorder buttons
         self._move_up_btn = QPushButton("Move Up")
         self._move_up_btn.setEnabled(False)
         self._move_up_btn.clicked.connect(self._on_move_up)
@@ -93,7 +94,7 @@ class ScenesView(QWidget):
         self._move_down_btn.clicked.connect(self._on_move_down)
         left.addWidget(self._move_down_btn)
 
-        root.addLayout(left)
+        root.addWidget(self._left_panel)
 
         # -- Right: form -----------------------------------------------------
         right = QVBoxLayout()
@@ -105,64 +106,72 @@ class ScenesView(QWidget):
         self._title_input = QLineEdit()
         right.addWidget(self._title_input)
 
-        right.addWidget(QLabel("Chapter"))
+        # -- Planning fields (hidden in focus mode) --------------------------
+        self._planning_fields = QWidget()
+        pf = QVBoxLayout(self._planning_fields)
+        pf.setContentsMargins(0, 0, 0, 0)
+
+        pf.addWidget(QLabel("Chapter"))
         self._chapter_input = QLineEdit()
         self._chapter_input.setPlaceholderText("e.g. Chapter 1")
-        right.addWidget(self._chapter_input)
+        pf.addWidget(self._chapter_input)
 
-        right.addWidget(QLabel("Plotline"))
+        pf.addWidget(QLabel("Plotline"))
         self._plotline_input = QLineEdit()
         self._plotline_input.setPlaceholderText("e.g. Main Plot")
-        right.addWidget(self._plotline_input)
+        pf.addWidget(self._plotline_input)
 
-        right.addWidget(QLabel("Act"))
+        pf.addWidget(QLabel("Act"))
         self._act_input = QComboBox()
         self._act_input.addItems(["", "Act I", "Act II", "Act III"])
-        right.addWidget(self._act_input)
+        pf.addWidget(self._act_input)
 
-        right.addWidget(QLabel("Beat"))
+        pf.addWidget(QLabel("Beat"))
         self._beat_input = QComboBox()
         self._beat_input.setEditable(True)
         self._beat_input.addItems(BEAT_OPTIONS)
         self._beat_input.lineEdit().setPlaceholderText("e.g. Catalyst")
-        right.addWidget(self._beat_input)
+        pf.addWidget(self._beat_input)
 
-        right.addWidget(QLabel("Tags"))
+        pf.addWidget(QLabel("Tags"))
         self._tags_input = QLineEdit()
         self._tags_input.setPlaceholderText("e.g. love, betrayal, redemption")
-        right.addWidget(self._tags_input)
+        pf.addWidget(self._tags_input)
 
-        right.addWidget(QLabel("Summary"))
+        pf.addWidget(QLabel("Summary"))
         self._summary_input = QPlainTextEdit()
         self._summary_input.setMaximumHeight(60)
-        right.addWidget(self._summary_input)
+        pf.addWidget(self._summary_input)
 
-        right.addWidget(QLabel("Synopsis"))
+        pf.addWidget(QLabel("Synopsis"))
         self._synopsis_input = QPlainTextEdit()
         self._synopsis_input.setMaximumHeight(60)
-        right.addWidget(self._synopsis_input)
+        pf.addWidget(self._synopsis_input)
 
-        right.addWidget(QLabel("Goal"))
+        pf.addWidget(QLabel("Goal"))
         self._goal_input = QPlainTextEdit()
         self._goal_input.setMaximumHeight(40)
-        right.addWidget(self._goal_input)
+        pf.addWidget(self._goal_input)
 
-        right.addWidget(QLabel("Conflict"))
+        pf.addWidget(QLabel("Conflict"))
         self._conflict_input = QPlainTextEdit()
         self._conflict_input.setMaximumHeight(40)
-        right.addWidget(self._conflict_input)
+        pf.addWidget(self._conflict_input)
 
-        right.addWidget(QLabel("Outcome"))
+        pf.addWidget(QLabel("Outcome"))
         self._outcome_input = QPlainTextEdit()
         self._outcome_input.setMaximumHeight(40)
-        right.addWidget(self._outcome_input)
+        pf.addWidget(self._outcome_input)
 
-        content_label = QLabel("Content")
-        content_label.setStyleSheet(
+        right.addWidget(self._planning_fields)
+
+        # -- Content (writing area) ------------------------------------------
+        self._content_label = QLabel("Content")
+        self._content_label.setStyleSheet(
             "font-weight: bold; font-size: 15px; margin-top: 12px;"
             " color: #9aa0a6;"
         )
-        right.addWidget(content_label)
+        right.addWidget(self._content_label)
 
         writing_col = QHBoxLayout()
         writing_col.addStretch()
@@ -190,25 +199,26 @@ class ScenesView(QWidget):
         writing_col.addStretch()
         right.addLayout(writing_col)
 
-        # Link preview
-        right.addWidget(QLabel("Link Preview"))
-        self._link_preview = create_link_browser(self._on_link_name_clicked)
-        right.addWidget(self._link_preview)
+        # -- Detail fields (hidden in focus mode) ----------------------------
+        self._detail_fields = QWidget()
+        df = QVBoxLayout(self._detail_fields)
+        df.setContentsMargins(0, 0, 0, 0)
 
-        # Checkable character list
-        right.addWidget(QLabel("Characters"))
+        df.addWidget(QLabel("Link Preview"))
+        self._link_preview = create_link_browser(self._on_link_name_clicked)
+        df.addWidget(self._link_preview)
+
+        df.addWidget(QLabel("Characters"))
         self._char_list = QListWidget()
         self._char_list.setMaximumHeight(100)
-        right.addWidget(self._char_list)
+        df.addWidget(self._char_list)
 
-        # Checkable place list
-        right.addWidget(QLabel("Places"))
+        df.addWidget(QLabel("Places"))
         self._place_list = QListWidget()
         self._place_list.setMaximumHeight(100)
-        right.addWidget(self._place_list)
+        df.addWidget(self._place_list)
 
-        # Character states
-        right.addWidget(QLabel("Character States"))
+        df.addWidget(QLabel("Character States"))
         state_row = QHBoxLayout()
         self._state_char_combo = QComboBox()
         state_row.addWidget(self._state_char_combo)
@@ -218,33 +228,40 @@ class ScenesView(QWidget):
         self._add_state_btn = QPushButton("Add")
         self._add_state_btn.clicked.connect(self._on_add_state)
         state_row.addWidget(self._add_state_btn)
-        right.addLayout(state_row)
+        df.addLayout(state_row)
 
         self._state_list = QListWidget()
         self._state_list.setMaximumHeight(80)
-        right.addWidget(self._state_list)
+        df.addWidget(self._state_list)
 
         self._remove_state_btn = QPushButton("Remove State")
         self._remove_state_btn.clicked.connect(self._on_remove_state)
-        right.addWidget(self._remove_state_btn)
+        df.addWidget(self._remove_state_btn)
 
         self._save_btn = QPushButton("Save")
         self._save_btn.clicked.connect(self._on_save)
-        right.addWidget(self._save_btn)
+        df.addWidget(self._save_btn)
 
         self._delete_btn = QPushButton("Delete")
         self._delete_btn.setEnabled(False)
         self._delete_btn.clicked.connect(self._on_delete)
-        right.addWidget(self._delete_btn)
+        df.addWidget(self._delete_btn)
 
-        new_btn = QPushButton("New Scene")
-        new_btn.clicked.connect(self._clear_form)
-        right.addWidget(new_btn)
+        self._new_btn = QPushButton("New Scene")
+        self._new_btn.clicked.connect(self._clear_form)
+        df.addWidget(self._new_btn)
 
         self._backlinks = BacklinksWidget(
             db, project_id, on_backlink_clicked=on_link_clicked,
         )
-        right.addWidget(self._backlinks)
+        df.addWidget(self._backlinks)
+
+        right.addWidget(self._detail_fields)
+
+        # -- Focus mode toggle -----------------------------------------------
+        self._focus_btn = QPushButton("Focus Mode")
+        self._focus_btn.clicked.connect(self.toggle_focus_mode)
+        right.addWidget(self._focus_btn)
 
         right.addStretch()
 
@@ -254,6 +271,10 @@ class ScenesView(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setWidget(right_widget)
         root.addWidget(scroll, stretch=1)
+
+        # Escape exits focus mode
+        esc = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
+        esc.activated.connect(self._exit_focus_mode)
 
         self._load_characters()
         self._load_places()
@@ -618,3 +639,21 @@ class ScenesView(QWidget):
         entity_type, entity_id = result
         if self._on_link_clicked:
             self._on_link_clicked(entity_type, entity_id)
+
+    # -- Focus mode --------------------------------------------------------------
+
+    def toggle_focus_mode(self) -> None:
+        self._focus_mode = not self._focus_mode
+        self._left_panel.setVisible(not self._focus_mode)
+        self._planning_fields.setVisible(not self._focus_mode)
+        self._detail_fields.setVisible(not self._focus_mode)
+        self._form_label.setVisible(not self._focus_mode)
+        self._content_label.setVisible(not self._focus_mode)
+        self._content_input.setMaximumWidth(800 if self._focus_mode else 720)
+        self._focus_btn.setText("Exit Focus" if self._focus_mode else "Focus Mode")
+        if self._on_focus_mode_changed:
+            self._on_focus_mode_changed(self._focus_mode)
+
+    def _exit_focus_mode(self) -> None:
+        if self._focus_mode:
+            self.toggle_focus_mode()
