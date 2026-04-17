@@ -288,6 +288,10 @@ def export_csv_scenes(db: Database, project_id: int) -> str:
     return output.getvalue()
 
 
+def _scene_body(scene: dict) -> str:
+    return scene["content"] or scene["synopsis"] or scene["summary"] or ""
+
+
 def export_screenplay(db: Database, project_id: int) -> str:
     data = _gather_project_data(db, project_id)
     lines: list[str] = []
@@ -299,29 +303,72 @@ def export_screenplay(db: Database, project_id: int) -> str:
     lines.append("")
 
     for scene in data["scenes"]:
-        heading_parts = []
-        if scene["act"]:
-            heading_parts.append(scene["act"].upper())
-        if scene["chapter"]:
-            heading_parts.append(scene["chapter"].upper())
-
-        heading = scene["title"].upper()
+        # Slug line: INT. PLACE – TITLE  or just TITLE
         if scene["places"]:
-            heading += " — " + ", ".join(scene["places"]).upper()
+            place_str = ", ".join(scene["places"]).upper()
+            slug = f"INT. {place_str} — {scene['title'].upper()}"
+        else:
+            slug = scene["title"].upper()
 
-        if heading_parts:
-            lines.append(". ".join(heading_parts))
+        lines.append(slug)
+        lines.append("")
+
+        body = _scene_body(scene)
+        if body:
+            lines.append(body)
             lines.append("")
 
-        lines.append(heading)
         lines.append("")
 
-        if scene["content"]:
-            lines.append(scene["content"])
-        elif scene["summary"]:
-            lines.append(scene["summary"])
+    return "\n".join(lines)
 
-        lines.append("")
-        lines.append("")
+
+def export_manuscript(db: Database, project_id: int) -> str:
+    data = _gather_project_data(db, project_id)
+    lines: list[str] = []
+
+    title = data["project"]["title"]
+    lines.append(title)
+    lines.append("=" * len(title))
+    lines.append("")
+
+    if not data["scenes"]:
+        lines.append("No scenes.")
+        return "\n".join(lines)
+
+    # Group scenes by chapter, preserving order
+    chapter_groups: list[tuple[str, list[dict]]] = []
+    current_chapter: str | None = None
+    current_group: list[dict] = []
+
+    for scene in data["scenes"]:
+        chapter = scene["chapter"] if scene["chapter"] else ""
+        if chapter != current_chapter:
+            if current_group:
+                chapter_groups.append((current_chapter or "", current_group))
+            current_chapter = chapter
+            current_group = [scene]
+        else:
+            current_group.append(scene)
+    if current_group:
+        chapter_groups.append((current_chapter or "", current_group))
+
+    for chapter_name, group_scenes in chapter_groups:
+        if chapter_name:
+            lines.append("")
+            lines.append(chapter_name)
+            lines.append("-" * len(chapter_name))
+            lines.append("")
+
+        for scene in group_scenes:
+            lines.append(scene["title"])
+            lines.append("")
+
+            body = _scene_body(scene)
+            if body:
+                lines.append(body)
+
+            lines.append("")
+            lines.append("")
 
     return "\n".join(lines)
