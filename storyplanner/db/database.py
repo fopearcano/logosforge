@@ -485,7 +485,8 @@ class Database:
             ):
                 results.append(
                     {"type": "Scene", "id": scene.id, "label": scene.title,
-                     "preview": scene.summary}
+                     "preview": scene.summary,
+                     "chapter": scene.chapter, "plotline": scene.plotline}
                 )
 
         return results
