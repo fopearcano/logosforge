@@ -268,6 +268,7 @@ class Database:
         beat: str = "",
         tags: str = "",
         act: str = "",
+        content: str = "",
         chapter: str = "",
         plotline: str = "",
         character_ids: list[int] | None = None,
@@ -296,6 +297,7 @@ class Database:
                 beat=beat,
                 tags=tags,
                 act=act,
+                content=content,
                 chapter=chapter,
                 plotline=plotline,
                 sort_order=next_order,
@@ -328,6 +330,7 @@ class Database:
         beat: str = "",
         tags: str = "",
         act: str = "",
+        content: str = "",
         chapter: str = "",
         plotline: str = "",
         character_ids: list[int] | None = None,
@@ -345,6 +348,7 @@ class Database:
             scene.beat = beat
             scene.tags = tags
             scene.act = act
+            scene.content = content
             scene.chapter = chapter
             scene.plotline = plotline
 

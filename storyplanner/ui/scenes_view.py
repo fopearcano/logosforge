@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -155,6 +156,12 @@ class ScenesView(QWidget):
         self._outcome_input.setMaximumHeight(40)
         right.addWidget(self._outcome_input)
 
+        right.addWidget(QLabel("Content"))
+        self._content_input = QPlainTextEdit()
+        self._content_input.setMinimumHeight(180)
+        self._content_input.setPlaceholderText("Write the full scene content here...")
+        right.addWidget(self._content_input)
+
         # Link preview
         right.addWidget(QLabel("Link Preview"))
         self._link_preview = create_link_browser(self._on_link_name_clicked)
@@ -212,7 +219,13 @@ class ScenesView(QWidget):
         right.addWidget(self._backlinks)
 
         right.addStretch()
-        root.addLayout(right)
+
+        right_widget = QWidget()
+        right_widget.setLayout(right)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(right_widget)
+        root.addWidget(scroll, stretch=1)
 
         self._load_characters()
         self._load_places()
@@ -374,6 +387,7 @@ class ScenesView(QWidget):
         self._goal_input.setPlainText(scene.goal)
         self._conflict_input.setPlainText(scene.conflict)
         self._outcome_input.setPlainText(scene.outcome)
+        self._content_input.setPlainText(scene.content)
         self._update_link_preview(scene.summary, scene.synopsis)
         self._backlinks.load(scene.title)
         self._load_character_states(scene_id)
@@ -408,6 +422,7 @@ class ScenesView(QWidget):
         goal = self._goal_input.toPlainText().strip()
         conflict = self._conflict_input.toPlainText().strip()
         outcome = self._outcome_input.toPlainText().strip()
+        content = self._content_input.toPlainText()
         beat = self._beat_input.currentText().strip()
         tags = ", ".join(
             t for t in (t.strip() for t in self._tags_input.text().split(",")) if t
@@ -431,6 +446,7 @@ class ScenesView(QWidget):
                 beat=beat,
                 tags=tags,
                 act=act,
+                content=content,
                 chapter=chapter,
                 plotline=plotline,
                 character_ids=char_ids,
@@ -449,6 +465,7 @@ class ScenesView(QWidget):
                 beat=beat,
                 tags=tags,
                 act=act,
+                content=content,
                 chapter=chapter,
                 plotline=plotline,
                 character_ids=char_ids,
@@ -523,6 +540,7 @@ class ScenesView(QWidget):
         self._goal_input.clear()
         self._conflict_input.clear()
         self._outcome_input.clear()
+        self._content_input.clear()
         self._link_preview.clear()
         self._backlinks.clear_backlinks()
         self._state_list.clear()

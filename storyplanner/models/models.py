@@ -69,6 +69,7 @@ class Scene(SQLModel, table=True):
     beat: str = ""
     tags: str = ""
     act: str = ""
+    content: str = ""
     chapter: str = ""
     plotline: str = ""
     sort_order: int = 0

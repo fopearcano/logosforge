@@ -32,6 +32,7 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
                 "goal": scene.goal,
                 "conflict": scene.conflict,
                 "outcome": scene.outcome,
+                "content": scene.content,
                 "beat": scene.beat,
                 "tags": [t.strip() for t in scene.tags.split(",") if t.strip()] if scene.tags else [],
                 "order_index": i + 1,
@@ -169,6 +170,11 @@ def export_markdown(db: Database, project_id: int) -> str:
                 lines.append("**Character States:**")
                 for cs in scene["character_states"]:
                     lines.append(f"- {cs['character']}: {cs['state']}")
+            if scene["content"]:
+                lines.append("")
+                lines.append("---")
+                lines.append("")
+                lines.append(scene["content"])
     else:
         lines.append("")
         lines.append("No scenes.")
