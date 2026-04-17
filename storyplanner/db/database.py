@@ -240,6 +240,7 @@ class Database:
         goal: str = "",
         conflict: str = "",
         outcome: str = "",
+        beat: str = "",
         chapter: str = "",
         plotline: str = "",
         character_ids: list[int] | None = None,
@@ -264,6 +265,7 @@ class Database:
                 goal=goal,
                 conflict=conflict,
                 outcome=outcome,
+                beat=beat,
                 chapter=chapter,
                 plotline=plotline,
                 sort_order=next_order,
@@ -289,6 +291,7 @@ class Database:
         goal: str = "",
         conflict: str = "",
         outcome: str = "",
+        beat: str = "",
         chapter: str = "",
         plotline: str = "",
         character_ids: list[int] | None = None,
@@ -302,6 +305,7 @@ class Database:
             scene.goal = goal
             scene.conflict = conflict
             scene.outcome = outcome
+            scene.beat = beat
             scene.chapter = chapter
             scene.plotline = plotline
 
@@ -497,7 +501,7 @@ class Database:
         for scene in self.get_all_scenes(project_id):
             if self._matches(
                 query_lower, scene.title, scene.summary,
-                scene.chapter, scene.plotline,
+                scene.chapter, scene.plotline, scene.beat,
             ):
                 results.append(
                     {"type": "Scene", "id": scene.id, "label": scene.title,

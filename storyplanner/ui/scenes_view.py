@@ -20,6 +20,20 @@ from storyplanner.db import Database
 
 USER_ROLE = Qt.ItemDataRole.UserRole
 FILTER_ALL = "All"
+BEAT_OPTIONS = [
+    "",
+    "Opening Image",
+    "Setup",
+    "Catalyst",
+    "Debate",
+    "Break into Two",
+    "Midpoint",
+    "Bad Guys Close In",
+    "All Is Lost",
+    "Break into Three",
+    "Finale",
+    "Final Image",
+]
 
 
 class ScenesView(QWidget):
@@ -89,6 +103,13 @@ class ScenesView(QWidget):
         self._plotline_input = QLineEdit()
         self._plotline_input.setPlaceholderText("e.g. Main Plot")
         right.addWidget(self._plotline_input)
+
+        right.addWidget(QLabel("Beat"))
+        self._beat_input = QComboBox()
+        self._beat_input.setEditable(True)
+        self._beat_input.addItems(BEAT_OPTIONS)
+        self._beat_input.lineEdit().setPlaceholderText("e.g. Catalyst")
+        right.addWidget(self._beat_input)
 
         right.addWidget(QLabel("Summary"))
         self._summary_input = QPlainTextEdit()
@@ -220,6 +241,8 @@ class ScenesView(QWidget):
             tags.append(scene.chapter)
         if scene.plotline:
             tags.append(scene.plotline)
+        if scene.beat:
+            tags.append(scene.beat)
         if tags:
             return f"[{' | '.join(tags)}] {scene.title}"
         return scene.title
@@ -243,6 +266,7 @@ class ScenesView(QWidget):
         self._title_input.setText(scene.title)
         self._chapter_input.setText(scene.chapter)
         self._plotline_input.setText(scene.plotline)
+        self._beat_input.setCurrentText(scene.beat)
         self._summary_input.setPlainText(scene.summary)
         self._synopsis_input.setPlainText(scene.synopsis)
         self._goal_input.setPlainText(scene.goal)
@@ -279,6 +303,7 @@ class ScenesView(QWidget):
         goal = self._goal_input.toPlainText().strip()
         conflict = self._conflict_input.toPlainText().strip()
         outcome = self._outcome_input.toPlainText().strip()
+        beat = self._beat_input.currentText().strip()
         chapter = self._chapter_input.text().strip()
         plotline = self._plotline_input.text().strip()
         char_ids = self._get_checked_ids(self._char_list)
@@ -293,6 +318,7 @@ class ScenesView(QWidget):
                 goal=goal,
                 conflict=conflict,
                 outcome=outcome,
+                beat=beat,
                 chapter=chapter,
                 plotline=plotline,
                 character_ids=char_ids,
@@ -307,6 +333,7 @@ class ScenesView(QWidget):
                 goal=goal,
                 conflict=conflict,
                 outcome=outcome,
+                beat=beat,
                 chapter=chapter,
                 plotline=plotline,
                 character_ids=char_ids,
@@ -372,6 +399,7 @@ class ScenesView(QWidget):
         self._title_input.clear()
         self._chapter_input.clear()
         self._plotline_input.clear()
+        self._beat_input.setCurrentIndex(0)
         self._summary_input.clear()
         self._synopsis_input.clear()
         self._goal_input.clear()

@@ -97,6 +97,7 @@ def import_json(db: Database, data: dict) -> int:
             goal=scene_data.get("goal", ""),
             conflict=scene_data.get("conflict", ""),
             outcome=scene_data.get("outcome", ""),
+            beat=scene_data.get("beat", ""),
             chapter=scene_data.get("chapter", ""),
             plotline=scene_data.get("plotline", ""),
             character_ids=character_ids,

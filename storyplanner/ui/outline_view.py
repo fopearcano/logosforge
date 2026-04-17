@@ -118,6 +118,8 @@ class OutlineView(QWidget):
         meta_lines: list[str] = []
         if scene.plotline:
             meta_lines.append(f"<b>Plotline:</b> {_esc(scene.plotline)}")
+        if scene.beat:
+            meta_lines.append(f"<b>Beat:</b> {_esc(scene.beat)}")
 
         char_ids = self._db.get_scene_character_ids(scene.id)
         char_names = [

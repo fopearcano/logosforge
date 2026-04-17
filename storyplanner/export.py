@@ -31,6 +31,7 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
                 "goal": scene.goal,
                 "conflict": scene.conflict,
                 "outcome": scene.outcome,
+                "beat": scene.beat,
                 "order_index": i + 1,
                 "chapter": scene.chapter,
                 "plotline": scene.plotline,
@@ -133,6 +134,8 @@ def export_markdown(db: Database, project_id: int) -> str:
                 lines.append(f"- **Chapter:** {scene['chapter']}")
             if scene["plotline"]:
                 lines.append(f"- **Plotline:** {scene['plotline']}")
+            if scene["beat"]:
+                lines.append(f"- **Beat:** {scene['beat']}")
             if scene["characters"]:
                 lines.append(f"- **Characters:** {', '.join(scene['characters'])}")
             if scene["places"]:
@@ -199,6 +202,8 @@ def export_outline_markdown(db: Database, project_id: int) -> str:
             lines.append(f"### {scene['order_index']}. {scene['title']}")
             if scene["plotline"]:
                 lines.append(f"- **Plotline:** {scene['plotline']}")
+            if scene["beat"]:
+                lines.append(f"- **Beat:** {scene['beat']}")
             if scene["characters"]:
                 lines.append(f"- **Characters:** {', '.join(scene['characters'])}")
             if scene["places"]:
@@ -227,7 +232,7 @@ def export_csv_scenes(db: Database, project_id: int) -> str:
     writer = csv.writer(output)
     writer.writerow(
         ["order_index", "title", "summary", "synopsis", "goal", "conflict", "outcome",
-         "chapter", "plotline", "characters", "places"]
+         "beat", "chapter", "plotline", "characters", "places"]
     )
     for scene in data["scenes"]:
         writer.writerow(
@@ -239,6 +244,7 @@ def export_csv_scenes(db: Database, project_id: int) -> str:
                 scene["goal"],
                 scene["conflict"],
                 scene["outcome"],
+                scene["beat"],
                 scene["chapter"],
                 scene["plotline"],
                 ", ".join(scene["characters"]),
