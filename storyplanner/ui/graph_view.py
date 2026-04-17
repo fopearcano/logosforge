@@ -26,7 +26,7 @@ TYPE_COLORS = {
 }
 NODE_RADIUS = 24
 GRAPH_RADIUS = 220
-EDGE_COLOR = QColor("#bdbdbd")
+EDGE_COLOR = QColor("#4a5568")
 
 
 class GraphView(QWidget):
@@ -123,7 +123,7 @@ class GraphView(QWidget):
         font = QFont()
         font.setPointSize(9)
         label.setFont(font)
-        label.setBrush(QBrush(QColor("#212121")))
+        label.setBrush(QBrush(QColor("#e6e6e6")))
         label_rect = label.boundingRect()
         label.setPos(x - label_rect.width() / 2, y + NODE_RADIUS + 4)
         label.setZValue(2)

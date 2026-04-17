@@ -52,8 +52,16 @@ class MainWindow(QMainWindow):
         # -- Left sidebar ----------------------------------------------------
         sidebar = QWidget()
         sidebar.setFixedWidth(160)
+        sidebar.setStyleSheet(
+            "QWidget { background-color: #0b0d10; }"
+            "QPushButton { border: none; border-radius: 0; text-align: left;"
+            "  padding: 7px 14px; background-color: transparent; color: #9aa0a6; }"
+            "QPushButton:hover { background-color: #1c2128; color: #e6e6e6; }"
+            "QPushButton:pressed { background-color: #1a3a2a; color: #00ff9c; }"
+        )
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setSpacing(1)
 
         self.sidebar_buttons: dict[str, QPushButton] = {}
         for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline", "Acts", "Beats", "Tags", "Graph", "Arcs", "Search"):

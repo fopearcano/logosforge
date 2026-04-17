@@ -23,7 +23,7 @@ def render_linked_text(plain_text: str) -> str:
         escaped = _esc(name)
         return (
             f'<a href="{LINK_SCHEME}://{encoded}"'
-            f' style="color: #1976d2;">{escaped}</a>'
+            f' style="color: #00c8ff;">{escaped}</a>'
         )
 
     escaped_text = _esc_except_links(plain_text)
@@ -48,7 +48,7 @@ def _esc_except_links(text: str) -> str:
         escaped = _esc(name)
         parts.append(
             f'<a href="{LINK_SCHEME}://{encoded}"'
-            f' style="color: #1976d2;">{escaped}</a>'
+            f' style="color: #00c8ff;">{escaped}</a>'
         )
         last_end = match.end()
     parts.append(_esc(text[last_end:]))
@@ -63,7 +63,7 @@ def create_link_browser(
     browser.setMaximumHeight(max_height)
     browser.setOpenLinks(False)
     browser.setStyleSheet(
-        "QTextBrowser { background: #f9f9f9; border: 1px solid #e0e0e0; }"
+        "QTextBrowser { background: #161a1f; border: 1px solid #2a2f36; }"
     )
 
     def _handle_click(url: QUrl) -> None:

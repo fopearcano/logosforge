@@ -24,17 +24,17 @@ UNASSIGNED = "Unassigned"
 MODE_BY_PLOTLINE = "By Plotline"
 MODE_BY_CHAPTER = "By Chapter"
 
-CARD_STYLE = "QFrame { background: #ffffff; border: 1px solid #d0d0d0; border-radius: 3px; }"
+CARD_STYLE = "QFrame { background: #1c2128; border: 1px solid #2a2f36; border-radius: 3px; }"
 CARD_BEAT_STYLE = (
-    "QFrame { background: #fafafa; border: 1px solid #d0d0d0;"
-    " border-left: 3px solid #90a4ae; border-radius: 3px; }"
+    "QFrame { background: #1a1e24; border: 1px solid #2a2f36;"
+    " border-left: 3px solid #607d8b; border-radius: 3px; }"
 )
 CARD_KEY_BEAT_STYLE = (
-    "QFrame { background: #fff8f0; border: 1px solid #d0d0d0;"
+    "QFrame { background: #1f1a14; border: 1px solid #2a2f36;"
     " border-left: 3px solid #ff9800; border-radius: 3px; }"
 )
 CARD_SELECTED_STYLE = (
-    "QFrame { background: #e3f2fd; border: 2px solid #64b5f6; border-radius: 3px; }"
+    "QFrame { background: #1a3a2a; border: 2px solid #00ff9c; border-radius: 3px; }"
 )
 
 KEY_BEATS = {"Midpoint", "All Is Lost", "Finale", "Climax", "Break into Three"}
@@ -340,25 +340,25 @@ class TimelineView(QWidget):
             meta_parts.append(scene.plotline)
 
         meta_label = QLabel(" \u00b7 ".join(meta_parts))
-        meta_label.setStyleSheet("color: #757575;")
+        meta_label.setStyleSheet("color: #9aa0a6;")
         card_layout.addWidget(meta_label)
 
         if scene.beat:
-            beat_color = "#e65100" if scene.beat in KEY_BEATS else "#607d8b"
+            beat_color = "#ff9800" if scene.beat in KEY_BEATS else "#78909c"
             beat_label = QLabel(f"[{scene.beat}]")
             beat_label.setStyleSheet(f"color: {beat_color}; font-size: 11px;")
             card_layout.addWidget(beat_label)
 
         if scene.tags:
             tags_label = QLabel(scene.tags)
-            tags_label.setStyleSheet("color: #9e9e9e; font-size: 10px;")
+            tags_label.setStyleSheet("color: #6b7280; font-size: 10px;")
             tags_label.setWordWrap(True)
             card_layout.addWidget(tags_label)
 
         if char_state:
             state_label = QLabel(f"\u2192 {char_state}")
             state_label.setStyleSheet(
-                "color: #5c6bc0; font-size: 11px; font-style: italic;"
+                "color: #00c8ff; font-size: 11px; font-style: italic;"
             )
             state_label.setWordWrap(True)
             card_layout.addWidget(state_label)

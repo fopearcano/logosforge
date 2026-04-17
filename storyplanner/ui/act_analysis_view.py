@@ -56,7 +56,7 @@ class ActAnalysisView(QWidget):
             " style='border-collapse: collapse;'>"
         )
         parts.append(
-            "<tr style='border-bottom: 2px solid #ccc;'>"
+            "<tr style='border-bottom: 2px solid #2a2f36;'>"
             "<th align='left'>Act</th>"
             "<th align='right'>Scenes</th>"
             "<th align='left'>Range</th>"
@@ -73,7 +73,7 @@ class ActAnalysisView(QWidget):
             indices = [idx for idx, _ in entries]
             range_str = f"{min(indices)}\u2013{max(indices)}" if count > 1 else str(indices[0])
             parts.append(
-                f"<tr style='border-bottom: 1px solid #eee;'>"
+                f"<tr style='border-bottom: 1px solid #1a1e24;'>"
                 f"<td>{_esc(act)}</td>"
                 f"<td align='right'>{count}</td>"
                 f"<td>{range_str}</td>"
@@ -81,7 +81,7 @@ class ActAnalysisView(QWidget):
             )
 
         parts.append(
-            f"<tr style='border-top: 2px solid #ccc;'>"
+            f"<tr style='border-top: 2px solid #2a2f36;'>"
             f"<td><b>Total</b></td>"
             f"<td align='right'><b>{total}</b></td>"
             f"<td></td>"
@@ -92,7 +92,7 @@ class ActAnalysisView(QWidget):
         unassigned_count = len(act_scenes.get(UNASSIGNED, []))
         if unassigned_count > 0:
             parts.append(
-                f"<p style='color: #757575;'>"
+                f"<p style='color: #6b7280;'>"
                 f"{unassigned_count} scene(s) without an act.</p>"
             )
 

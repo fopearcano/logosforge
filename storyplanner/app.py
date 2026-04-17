@@ -6,12 +6,14 @@ from PySide6.QtWidgets import QApplication
 
 from storyplanner.db import Database
 from storyplanner.ui.main_window import MainWindow
+from storyplanner.ui.theme import build_stylesheet
 
 DB_PATH = "storyplanner.db"
 
 
 def create_app() -> tuple[QApplication, MainWindow]:
     app = QApplication.instance() or QApplication(sys.argv)
+    app.setStyleSheet(build_stylesheet())
 
     db = Database(DB_PATH)
 
