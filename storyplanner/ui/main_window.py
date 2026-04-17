@@ -19,6 +19,7 @@ from storyplanner import recent_projects
 from storyplanner.db import Database
 from storyplanner.export import export_csv_scenes, export_json, export_markdown
 from storyplanner.import_data import import_json, validate_import_data
+from storyplanner.ui.beat_analysis_view import BeatAnalysisView
 from storyplanner.ui.characters_view import CharactersView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.outline_view import OutlineView
@@ -51,7 +52,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
 
         self.sidebar_buttons: dict[str, QPushButton] = {}
-        for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline", "Search"):
+        for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline", "Beats", "Search"):
             btn = QPushButton(label)
             sidebar_layout.addWidget(btn)
             self.sidebar_buttons[label] = btn
@@ -75,6 +76,7 @@ class MainWindow(QMainWindow):
         self.sidebar_buttons["Scenes"].clicked.connect(self._show_scenes)
         self.sidebar_buttons["Timeline"].clicked.connect(self._show_timeline)
         self.sidebar_buttons["Outline"].clicked.connect(self._show_outline)
+        self.sidebar_buttons["Beats"].clicked.connect(self._show_beats)
         self.sidebar_buttons["Search"].clicked.connect(self._show_search)
 
         # -- Right content area ----------------------------------------------
@@ -128,6 +130,9 @@ class MainWindow(QMainWindow):
 
     def _show_outline(self) -> None:
         self._set_content(OutlineView(self._db, self._project_id))
+
+    def _show_beats(self) -> None:
+        self._set_content(BeatAnalysisView(self._db, self._project_id))
 
     def _show_search(self) -> None:
         self._set_content(
