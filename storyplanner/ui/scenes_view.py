@@ -158,31 +158,37 @@ class ScenesView(QWidget):
         right.addWidget(self._outcome_input)
 
         content_label = QLabel("Content")
-        content_label.setStyleSheet("font-weight: bold; font-size: 14px; margin-top: 8px;")
+        content_label.setStyleSheet(
+            "font-weight: bold; font-size: 15px; margin-top: 12px;"
+            " color: #9aa0a6;"
+        )
         right.addWidget(content_label)
+
+        writing_col = QHBoxLayout()
+        writing_col.addStretch()
         self._content_input = QPlainTextEdit()
-        self._content_input.setMinimumHeight(300)
+        self._content_input.setMinimumHeight(400)
+        self._content_input.setMaximumWidth(720)
         self._content_input.setPlaceholderText("Write the full scene content here...")
         writing_font = QFont()
-        writing_font.setPointSize(12)
+        writing_font.setPointSize(14)
         self._content_input.setFont(writing_font)
         self._content_input.setStyleSheet(
             "QPlainTextEdit {"
             "  background-color: #12151a;"
             "  color: #d4d4d4;"
-            "  border: 1px solid #1e2228;"
+            "  border: none;"
             "  border-radius: 4px;"
-            "  padding: 12px 16px;"
+            "  padding: 20px 28px;"
             "  selection-background-color: #1a3a2a;"
             "  selection-color: #00ff9c;"
             "}"
-            "QPlainTextEdit:focus {"
-            "  border-color: #2a2f36;"
-            "}"
         )
-        self._content_input.setTabStopDistance(32.0)
+        self._content_input.setTabStopDistance(40.0)
         self._apply_line_spacing(self._content_input)
-        right.addWidget(self._content_input)
+        writing_col.addWidget(self._content_input)
+        writing_col.addStretch()
+        right.addLayout(writing_col)
 
         # Link preview
         right.addWidget(QLabel("Link Preview"))
@@ -549,7 +555,7 @@ class ScenesView(QWidget):
     @staticmethod
     def _apply_line_spacing(editor: QPlainTextEdit) -> None:
         fmt = QTextBlockFormat()
-        fmt.setLineHeight(140, 1)  # 1 = ProportionalHeight
+        fmt.setLineHeight(155, 1)  # 1 = ProportionalHeight
         cursor = editor.textCursor()
         cursor.select(QTextCursor.SelectionType.Document)
         cursor.mergeBlockFormat(fmt)
