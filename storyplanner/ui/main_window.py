@@ -32,6 +32,7 @@ from storyplanner.ui.search_view import SearchView
 from storyplanner.ui.structure_view import StructureView
 from storyplanner.ui.tag_analysis_view import TagAnalysisView
 from storyplanner.ui.timeline_view import TimelineView
+from storyplanner.ui.writer_outline_view import WriterOutlineView
 
 
 class MainWindow(QMainWindow):
@@ -65,7 +66,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.setSpacing(1)
 
         self.sidebar_buttons: dict[str, QPushButton] = {}
-        for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline", "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs", "Search"):
+        for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline", "Writer", "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs", "Search"):
             btn = QPushButton(label)
             sidebar_layout.addWidget(btn)
             self.sidebar_buttons[label] = btn
@@ -89,6 +90,7 @@ class MainWindow(QMainWindow):
         self.sidebar_buttons["Scenes"].clicked.connect(self._show_scenes)
         self.sidebar_buttons["Timeline"].clicked.connect(self._show_timeline)
         self.sidebar_buttons["Outline"].clicked.connect(self._show_outline)
+        self.sidebar_buttons["Writer"].clicked.connect(self._show_writer_outline)
         self.sidebar_buttons["Structure"].clicked.connect(self._show_structure)
         self.sidebar_buttons["Acts"].clicked.connect(self._show_acts)
         self.sidebar_buttons["Beats"].clicked.connect(self._show_beats)
@@ -166,6 +168,9 @@ class MainWindow(QMainWindow):
 
     def _show_outline(self) -> None:
         self._set_content(OutlineView(self._db, self._project_id))
+
+    def _show_writer_outline(self) -> None:
+        self._set_content(WriterOutlineView(self._db, self._project_id))
 
     def _show_structure(self) -> None:
         self._set_content(StructureView(self._db, self._project_id))
