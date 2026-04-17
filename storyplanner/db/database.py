@@ -535,6 +535,17 @@ class Database:
                 for s in session.exec(stmt).all()
             ]
 
+    def get_character_arc(
+        self, project_id: int, character_id: int
+    ) -> list[tuple[int, str, int, str]]:
+        scenes = self.get_all_scenes(project_id)
+        arc: list[tuple[int, str, int, str]] = []
+        for idx, scene in enumerate(scenes):
+            for cid, state in self.get_scene_character_states(scene.id):
+                if cid == character_id:
+                    arc.append((scene.id, scene.title, idx + 1, state))
+        return arc
+
     # -- Search --------------------------------------------------------------
 
     def search_project(

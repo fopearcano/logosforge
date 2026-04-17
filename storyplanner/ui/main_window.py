@@ -20,6 +20,7 @@ from storyplanner.db import Database
 from storyplanner.export import export_csv_scenes, export_json, export_markdown
 from storyplanner.import_data import import_json, validate_import_data
 from storyplanner.ui.beat_analysis_view import BeatAnalysisView
+from storyplanner.ui.character_arc_view import CharacterArcView
 from storyplanner.ui.characters_view import CharactersView
 from storyplanner.ui.graph_view import GraphView
 from storyplanner.ui.notes_view import NotesView
@@ -54,7 +55,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
 
         self.sidebar_buttons: dict[str, QPushButton] = {}
-        for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline", "Beats", "Tags", "Graph", "Search"):
+        for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline", "Beats", "Tags", "Graph", "Arcs", "Search"):
             btn = QPushButton(label)
             sidebar_layout.addWidget(btn)
             self.sidebar_buttons[label] = btn
@@ -81,6 +82,7 @@ class MainWindow(QMainWindow):
         self.sidebar_buttons["Beats"].clicked.connect(self._show_beats)
         self.sidebar_buttons["Tags"].clicked.connect(self._show_tags)
         self.sidebar_buttons["Graph"].clicked.connect(self._show_graph)
+        self.sidebar_buttons["Arcs"].clicked.connect(self._show_arcs)
         self.sidebar_buttons["Search"].clicked.connect(self._show_search)
 
         # -- Right content area ----------------------------------------------
@@ -164,6 +166,14 @@ class MainWindow(QMainWindow):
             GraphView(
                 self._db, self._project_id,
                 on_node_clicked=self._on_link_navigated,
+            )
+        )
+
+    def _show_arcs(self) -> None:
+        self._set_content(
+            CharacterArcView(
+                self._db, self._project_id,
+                on_scene_selected=self._open_scene_in_editor,
             )
         )
 
