@@ -144,6 +144,60 @@ def export_markdown(db: Database, project_id: int) -> str:
     return "\n".join(lines)
 
 
+def export_outline_markdown(db: Database, project_id: int) -> str:
+    data = _gather_project_data(db, project_id)
+    lines: list[str] = []
+
+    lines.append(f"# {data['project']['title']}")
+
+    scenes = data["scenes"]
+    if not scenes:
+        lines.append("")
+        lines.append("No scenes to display.")
+        lines.append("")
+        return "\n".join(lines)
+
+    # Group scenes by chapter, preserving narrative order
+    chapter_groups: list[tuple[str, list[dict]]] = []
+    current_chapter: str | None = None
+    current_group: list[dict] = []
+
+    for scene in scenes:
+        chapter = scene["chapter"] if scene["chapter"] else ""
+        if chapter != current_chapter:
+            if current_group:
+                chapter_groups.append((current_chapter or "", current_group))
+            current_chapter = chapter
+            current_group = [scene]
+        else:
+            current_group.append(scene)
+    if current_group:
+        chapter_groups.append((current_chapter or "", current_group))
+
+    for chapter_name, group_scenes in chapter_groups:
+        lines.append("")
+        if chapter_name:
+            lines.append(f"## {chapter_name}")
+        else:
+            lines.append("## Uncategorized")
+
+        for scene in group_scenes:
+            lines.append("")
+            lines.append(f"### {scene['order_index']}. {scene['title']}")
+            if scene["plotline"]:
+                lines.append(f"- **Plotline:** {scene['plotline']}")
+            if scene["characters"]:
+                lines.append(f"- **Characters:** {', '.join(scene['characters'])}")
+            if scene["places"]:
+                lines.append(f"- **Places:** {', '.join(scene['places'])}")
+            if scene["summary"]:
+                lines.append("")
+                lines.append(scene["summary"])
+
+    lines.append("")
+    return "\n".join(lines)
+
+
 def export_csv_scenes(db: Database, project_id: int) -> str:
     data = _gather_project_data(db, project_id)
 

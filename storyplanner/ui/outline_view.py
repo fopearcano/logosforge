@@ -1,8 +1,17 @@
 """Outline view — read-only narrative summary generated from project data."""
 
-from PySide6.QtWidgets import QLabel, QTextBrowser, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QTextBrowser,
+    QVBoxLayout,
+    QWidget,
+)
 
 from storyplanner.db import Database
+from storyplanner.export import export_outline_markdown
 
 
 class OutlineView(QWidget):
@@ -18,7 +27,29 @@ class OutlineView(QWidget):
         self._browser.setOpenLinks(False)
         layout.addWidget(self._browser)
 
+        self._export_btn = QPushButton("Export Outline")
+        self._export_btn.clicked.connect(self._on_export)
+        layout.addWidget(self._export_btn)
+
         self._render()
+
+    def _on_export(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Outline",
+            "",
+            "Markdown (*.md)",
+        )
+        if not path:
+            return
+        if not path.endswith(".md"):
+            path += ".md"
+
+        content = export_outline_markdown(self._db, self._project_id)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        QMessageBox.information(self, "Export", f"Outline exported to {path}")
 
     def _render(self) -> None:
         project = self._db.get_project_by_id(self._project_id)
