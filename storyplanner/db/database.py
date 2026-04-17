@@ -581,6 +581,52 @@ class Database:
 
         return results
 
+    def build_link_graph(
+        self, project_id: int
+    ) -> tuple[list[tuple[str, int, str]], list[tuple[str, str]]]:
+        import re
+        link_pat = re.compile(r"\[\[(.+?)\]\]")
+
+        entity_info: dict[str, tuple[str, int, str]] = {}
+        for char in self.get_all_characters(project_id):
+            entity_info[char.name.lower()] = ("Character", char.id, char.name)
+        for place in self.get_all_places(project_id):
+            entity_info[place.name.lower()] = ("Place", place.id, place.name)
+        for scene in self.get_all_scenes(project_id):
+            entity_info[scene.title.lower()] = ("Scene", scene.id, scene.title)
+        for note in self.get_all_notes(project_id):
+            entity_info[note.title.lower()] = ("Note", note.id, note.title)
+
+        edges: list[tuple[str, str]] = []
+        connected: set[str] = set()
+
+        def _scan(source_name: str, *fields: str) -> None:
+            for field in fields:
+                if not field:
+                    continue
+                for match in link_pat.finditer(field):
+                    target = match.group(1)
+                    if target.lower() in entity_info:
+                        edges.append((source_name, target))
+                        connected.add(source_name.lower())
+                        connected.add(target.lower())
+
+        for scene in self.get_all_scenes(project_id):
+            _scan(
+                scene.title,
+                scene.summary, scene.synopsis, scene.goal,
+                scene.conflict, scene.outcome,
+            )
+        for note in self.get_all_notes(project_id):
+            _scan(note.title, note.content)
+
+        nodes: list[tuple[str, int, str]] = []
+        for key in sorted(connected):
+            if key in entity_info:
+                nodes.append(entity_info[key])
+
+        return nodes, edges
+
     @staticmethod
     def _matches(query_lower: str, *fields: str) -> bool:
         for field in fields:

@@ -21,6 +21,7 @@ from storyplanner.export import export_csv_scenes, export_json, export_markdown
 from storyplanner.import_data import import_json, validate_import_data
 from storyplanner.ui.beat_analysis_view import BeatAnalysisView
 from storyplanner.ui.characters_view import CharactersView
+from storyplanner.ui.graph_view import GraphView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.outline_view import OutlineView
 from storyplanner.ui.places_view import PlacesView
@@ -53,7 +54,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
 
         self.sidebar_buttons: dict[str, QPushButton] = {}
-        for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline", "Beats", "Tags", "Search"):
+        for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline", "Beats", "Tags", "Graph", "Search"):
             btn = QPushButton(label)
             sidebar_layout.addWidget(btn)
             self.sidebar_buttons[label] = btn
@@ -79,6 +80,7 @@ class MainWindow(QMainWindow):
         self.sidebar_buttons["Outline"].clicked.connect(self._show_outline)
         self.sidebar_buttons["Beats"].clicked.connect(self._show_beats)
         self.sidebar_buttons["Tags"].clicked.connect(self._show_tags)
+        self.sidebar_buttons["Graph"].clicked.connect(self._show_graph)
         self.sidebar_buttons["Search"].clicked.connect(self._show_search)
 
         # -- Right content area ----------------------------------------------
@@ -156,6 +158,14 @@ class MainWindow(QMainWindow):
 
     def _show_tags(self) -> None:
         self._set_content(TagAnalysisView(self._db, self._project_id))
+
+    def _show_graph(self) -> None:
+        self._set_content(
+            GraphView(
+                self._db, self._project_id,
+                on_node_clicked=self._on_link_navigated,
+            )
+        )
 
     def _show_search(self) -> None:
         self._set_content(
