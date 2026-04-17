@@ -25,9 +25,19 @@ MODE_BY_PLOTLINE = "By Plotline"
 MODE_BY_CHAPTER = "By Chapter"
 
 CARD_STYLE = "QFrame { background: #ffffff; border: 1px solid #d0d0d0; border-radius: 3px; }"
+CARD_BEAT_STYLE = (
+    "QFrame { background: #fafafa; border: 1px solid #d0d0d0;"
+    " border-left: 3px solid #90a4ae; border-radius: 3px; }"
+)
+CARD_KEY_BEAT_STYLE = (
+    "QFrame { background: #fff8f0; border: 1px solid #d0d0d0;"
+    " border-left: 3px solid #ff9800; border-radius: 3px; }"
+)
 CARD_SELECTED_STYLE = (
     "QFrame { background: #e3f2fd; border: 2px solid #64b5f6; border-radius: 3px; }"
 )
+
+KEY_BEATS = {"Midpoint", "All Is Lost", "Finale", "Climax", "Break into Three"}
 
 DRAG_THRESHOLD = 10
 
@@ -268,8 +278,16 @@ class TimelineView(QWidget):
 
     def _create_card(self, index: int, scene, mode: str) -> QFrame:
         card = QFrame()
-        card.setStyleSheet(CARD_STYLE)
         card.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        if scene.beat and scene.beat in KEY_BEATS:
+            base_style = CARD_KEY_BEAT_STYLE
+        elif scene.beat:
+            base_style = CARD_BEAT_STYLE
+        else:
+            base_style = CARD_STYLE
+        card.setStyleSheet(base_style)
+        card.setProperty("base_style", base_style)
 
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(6, 4, 6, 4)
@@ -291,6 +309,12 @@ class TimelineView(QWidget):
         meta_label = QLabel(" \u00b7 ".join(meta_parts))
         meta_label.setStyleSheet("color: #757575;")
         card_layout.addWidget(meta_label)
+
+        if scene.beat:
+            beat_color = "#e65100" if scene.beat in KEY_BEATS else "#607d8b"
+            beat_label = QLabel(f"[{scene.beat}]")
+            beat_label.setStyleSheet(f"color: {beat_color}; font-size: 11px;")
+            card_layout.addWidget(beat_label)
 
         return card
 
@@ -409,7 +433,8 @@ class TimelineView(QWidget):
         self._set_actions_enabled(has_scene)
 
         if self._selected_card is not None:
-            self._selected_card.setStyleSheet(CARD_STYLE)
+            restore = self._selected_card.property("base_style") or CARD_STYLE
+            self._selected_card.setStyleSheet(restore)
             self._selected_card = None
 
         if has_scene:
