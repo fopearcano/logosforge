@@ -25,6 +25,7 @@ from storyplanner.export import (
     export_screenplay,
 )
 from storyplanner.import_data import import_json, validate_import_data
+from storyplanner.ui.assistant_view import AssistantView
 from storyplanner.ui.act_analysis_view import ActAnalysisView
 from storyplanner.ui.beat_analysis_view import BeatAnalysisView
 from storyplanner.ui.character_arc_view import CharacterArcView
@@ -72,7 +73,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.setSpacing(1)
 
         self.sidebar_buttons: dict[str, QPushButton] = {}
-        for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline", "Writer", "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs", "Search"):
+        for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline", "Writer", "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs", "Search", "Assistant"):
             btn = QPushButton(label)
             sidebar_layout.addWidget(btn)
             self.sidebar_buttons[label] = btn
@@ -104,6 +105,7 @@ class MainWindow(QMainWindow):
         self.sidebar_buttons["Graph"].clicked.connect(self._show_graph)
         self.sidebar_buttons["Arcs"].clicked.connect(self._show_arcs)
         self.sidebar_buttons["Search"].clicked.connect(self._show_search)
+        self.sidebar_buttons["Assistant"].clicked.connect(self._show_assistant)
 
         # -- Right content area ----------------------------------------------
         self.content_area = QWidget()
@@ -207,6 +209,9 @@ class MainWindow(QMainWindow):
                 on_scene_selected=self._open_scene_in_editor,
             )
         )
+
+    def _show_assistant(self) -> None:
+        self._set_content(AssistantView(self._db, self._project_id))
 
     def _show_search(self) -> None:
         self._set_content(
