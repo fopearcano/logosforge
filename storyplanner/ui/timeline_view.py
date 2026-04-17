@@ -124,10 +124,10 @@ class TimelineView(QWidget):
 
     def _refresh_filter(self) -> None:
         if self._get_mode() == MODE_BY_PLOTLINE:
-            self._filter_label.setText("Chapter")
+            self._filter_label.setText("Filter by Chapter")
             values = self._db.get_scene_chapters(self._project_id)
         else:
-            self._filter_label.setText("Plotline")
+            self._filter_label.setText("Filter by Plotline")
             values = self._db.get_scene_plotlines(self._project_id)
 
         combo = self._filter_combo
@@ -204,11 +204,25 @@ class TimelineView(QWidget):
             header.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
 
         self._table.blockSignals(False)
+        self._update_status_count()
 
-        if not scenes:
+    def _update_status_count(self) -> None:
+        count = len(self._cell_scene_ids)
+        filter_text = self._filter_combo.currentText()
+        is_filtered = filter_text != FILTER_ALL
+
+        if count == 0 and is_filtered:
+            self._status_label.setText(
+                f'No scenes match filter "{filter_text}".'
+            )
+        elif count == 0:
             self._status_label.setText("No scenes to display.")
+        elif is_filtered:
+            self._status_label.setText(
+                f"{count} scene(s) shown (filtered by {filter_text})."
+            )
         else:
-            self._status_label.setText(f"{len(scenes)} scene(s).")
+            self._status_label.setText(f"{count} scene(s).")
 
     def _build_columns(self, scenes: list, key: Callable) -> list[str]:
         columns: list[str] = []
@@ -277,9 +291,11 @@ class TimelineView(QWidget):
                 self._selected_scene_id = None
                 self._set_actions_enabled(False)
                 self._clear_plotline_combo()
+                self._update_status_count()
         else:
             self._clear_plotline_combo()
             self._table.setCurrentCell(-1, -1)
+            self._update_status_count()
 
     def _highlight_selected_card(self) -> None:
         if self._selected_scene_id is None:
