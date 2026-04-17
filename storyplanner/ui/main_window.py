@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 
 from storyplanner.db import Database
 from storyplanner.export import export_csv_scenes, export_json, export_markdown
+from storyplanner.import_data import import_json, validate_import_data
 from storyplanner.ui.characters_view import CharactersView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.places_view import PlacesView
@@ -46,7 +47,11 @@ class MainWindow(QMainWindow):
         # Push buttons to the top
         sidebar_layout.addStretch()
 
-        # Export button at bottom of sidebar
+        # Import / Export buttons at bottom of sidebar
+        self._import_btn = QPushButton("Import")
+        sidebar_layout.addWidget(self._import_btn)
+        self._import_btn.clicked.connect(self._on_import)
+
         self._export_btn = QPushButton("Export")
         sidebar_layout.addWidget(self._export_btn)
         self._export_btn.clicked.connect(self._on_export)
@@ -102,6 +107,39 @@ class MainWindow(QMainWindow):
         view = ScenesView(self._db, self._project_id)
         self._set_content(view)
         view.select_scene(scene_id)
+
+    def _on_import(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Project",
+            "",
+            "JSON (*.json)",
+        )
+        if not path:
+            return
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                raw = f.read()
+        except OSError as e:
+            QMessageBox.warning(self, "Import", f"Could not read file:\n{e}")
+            return
+
+        data, error = validate_import_data(raw)
+        if data is None:
+            QMessageBox.warning(self, "Import", error)
+            return
+
+        new_project_id = import_json(self._db, data)
+        self._project_id = new_project_id
+
+        self._set_content(QWidget())
+        QVBoxLayout(self.content_area).addWidget(
+            QLabel("Import complete. Select a section from the sidebar.")
+        )
+        QMessageBox.information(
+            self, "Import", f"Project imported successfully (ID {new_project_id})."
+        )
 
     def _on_export(self) -> None:
         path, selected_filter = QFileDialog.getSaveFileName(
