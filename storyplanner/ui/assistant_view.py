@@ -56,11 +56,13 @@ class AssistantView(QWidget):
         db: Database,
         project_id: int,
         on_data_changed: Callable[[], None] | None = None,
+        on_open_scene: Callable[[int], None] | None = None,
     ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
         self._on_data_changed = on_data_changed
+        self._on_open_scene = on_open_scene
         self._worker: _AssistantWorker | None = None
 
         layout = QVBoxLayout(self)
@@ -160,6 +162,10 @@ class AssistantView(QWidget):
         self._as_summary_btn = QPushButton("As Summary")
         self._as_summary_btn.clicked.connect(self._apply_as_summary)
         apply_row.addWidget(self._as_summary_btn)
+
+        self._insert_cursor_btn = QPushButton("Insert at Cursor")
+        self._insert_cursor_btn.clicked.connect(self._apply_insert_at_cursor)
+        apply_row.addWidget(self._insert_cursor_btn)
         layout.addLayout(apply_row)
 
         self._apply_buttons = [
@@ -167,6 +173,7 @@ class AssistantView(QWidget):
             self._append_content_btn,
             self._as_synopsis_btn,
             self._as_summary_btn,
+            self._insert_cursor_btn,
         ]
 
         copy_row = QHBoxLayout()
@@ -444,3 +451,19 @@ class AssistantView(QWidget):
 
         self._db.update_scene_summary(scene_id, text)
         self._notify_data_changed()
+
+    def _apply_insert_at_cursor(self) -> None:
+        text = self._get_response_text()
+        scene_id = self._get_selected_scene_id()
+        if text is None or scene_id is None:
+            return
+
+        QApplication.clipboard().setText(text)
+        QMessageBox.information(
+            self,
+            "Insert at Cursor",
+            "Text copied to clipboard.\n\n"
+            "Position your cursor in the scene editor and paste (Ctrl+V).",
+        )
+        if self._on_open_scene:
+            self._on_open_scene(scene_id)
