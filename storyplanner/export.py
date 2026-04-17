@@ -32,6 +32,7 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
                 "conflict": scene.conflict,
                 "outcome": scene.outcome,
                 "beat": scene.beat,
+                "tags": [t.strip() for t in scene.tags.split(",") if t.strip()] if scene.tags else [],
                 "order_index": i + 1,
                 "chapter": scene.chapter,
                 "plotline": scene.plotline,
@@ -136,6 +137,8 @@ def export_markdown(db: Database, project_id: int) -> str:
                 lines.append(f"- **Plotline:** {scene['plotline']}")
             if scene["beat"]:
                 lines.append(f"- **Beat:** {scene['beat']}")
+            if scene["tags"]:
+                lines.append(f"- **Tags:** {', '.join(scene['tags'])}")
             if scene["characters"]:
                 lines.append(f"- **Characters:** {', '.join(scene['characters'])}")
             if scene["places"]:
@@ -204,6 +207,8 @@ def export_outline_markdown(db: Database, project_id: int) -> str:
                 lines.append(f"- **Plotline:** {scene['plotline']}")
             if scene["beat"]:
                 lines.append(f"- **Beat:** {scene['beat']}")
+            if scene["tags"]:
+                lines.append(f"- **Tags:** {', '.join(scene['tags'])}")
             if scene["characters"]:
                 lines.append(f"- **Characters:** {', '.join(scene['characters'])}")
             if scene["places"]:
@@ -232,7 +237,7 @@ def export_csv_scenes(db: Database, project_id: int) -> str:
     writer = csv.writer(output)
     writer.writerow(
         ["order_index", "title", "summary", "synopsis", "goal", "conflict", "outcome",
-         "beat", "chapter", "plotline", "characters", "places"]
+         "beat", "tags", "chapter", "plotline", "characters", "places"]
     )
     for scene in data["scenes"]:
         writer.writerow(
@@ -245,6 +250,7 @@ def export_csv_scenes(db: Database, project_id: int) -> str:
                 scene["conflict"],
                 scene["outcome"],
                 scene["beat"],
+                ", ".join(scene["tags"]),
                 scene["chapter"],
                 scene["plotline"],
                 ", ".join(scene["characters"]),

@@ -241,6 +241,7 @@ class Database:
         conflict: str = "",
         outcome: str = "",
         beat: str = "",
+        tags: str = "",
         chapter: str = "",
         plotline: str = "",
         character_ids: list[int] | None = None,
@@ -266,6 +267,7 @@ class Database:
                 conflict=conflict,
                 outcome=outcome,
                 beat=beat,
+                tags=tags,
                 chapter=chapter,
                 plotline=plotline,
                 sort_order=next_order,
@@ -292,6 +294,7 @@ class Database:
         conflict: str = "",
         outcome: str = "",
         beat: str = "",
+        tags: str = "",
         chapter: str = "",
         plotline: str = "",
         character_ids: list[int] | None = None,
@@ -306,6 +309,7 @@ class Database:
             scene.conflict = conflict
             scene.outcome = outcome
             scene.beat = beat
+            scene.tags = tags
             scene.chapter = chapter
             scene.plotline = plotline
 

@@ -111,6 +111,11 @@ class ScenesView(QWidget):
         self._beat_input.lineEdit().setPlaceholderText("e.g. Catalyst")
         right.addWidget(self._beat_input)
 
+        right.addWidget(QLabel("Tags"))
+        self._tags_input = QLineEdit()
+        self._tags_input.setPlaceholderText("e.g. love, betrayal, redemption")
+        right.addWidget(self._tags_input)
+
         right.addWidget(QLabel("Summary"))
         self._summary_input = QPlainTextEdit()
         self._summary_input.setMaximumHeight(60)
@@ -267,6 +272,7 @@ class ScenesView(QWidget):
         self._chapter_input.setText(scene.chapter)
         self._plotline_input.setText(scene.plotline)
         self._beat_input.setCurrentText(scene.beat)
+        self._tags_input.setText(scene.tags)
         self._summary_input.setPlainText(scene.summary)
         self._synopsis_input.setPlainText(scene.synopsis)
         self._goal_input.setPlainText(scene.goal)
@@ -304,6 +310,9 @@ class ScenesView(QWidget):
         conflict = self._conflict_input.toPlainText().strip()
         outcome = self._outcome_input.toPlainText().strip()
         beat = self._beat_input.currentText().strip()
+        tags = ", ".join(
+            t for t in (t.strip() for t in self._tags_input.text().split(",")) if t
+        )
         chapter = self._chapter_input.text().strip()
         plotline = self._plotline_input.text().strip()
         char_ids = self._get_checked_ids(self._char_list)
@@ -319,6 +328,7 @@ class ScenesView(QWidget):
                 conflict=conflict,
                 outcome=outcome,
                 beat=beat,
+                tags=tags,
                 chapter=chapter,
                 plotline=plotline,
                 character_ids=char_ids,
@@ -334,6 +344,7 @@ class ScenesView(QWidget):
                 conflict=conflict,
                 outcome=outcome,
                 beat=beat,
+                tags=tags,
                 chapter=chapter,
                 plotline=plotline,
                 character_ids=char_ids,
@@ -400,6 +411,7 @@ class ScenesView(QWidget):
         self._chapter_input.clear()
         self._plotline_input.clear()
         self._beat_input.setCurrentIndex(0)
+        self._tags_input.clear()
         self._summary_input.clear()
         self._synopsis_input.clear()
         self._goal_input.clear()

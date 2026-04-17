@@ -67,6 +67,7 @@ class Scene(SQLModel, table=True):
     conflict: str = ""
     outcome: str = ""
     beat: str = ""
+    tags: str = ""
     chapter: str = ""
     plotline: str = ""
     sort_order: int = 0

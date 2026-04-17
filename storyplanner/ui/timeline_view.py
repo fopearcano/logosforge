@@ -316,6 +316,12 @@ class TimelineView(QWidget):
             beat_label.setStyleSheet(f"color: {beat_color}; font-size: 11px;")
             card_layout.addWidget(beat_label)
 
+        if scene.tags:
+            tags_label = QLabel(scene.tags)
+            tags_label.setStyleSheet("color: #9e9e9e; font-size: 10px;")
+            tags_label.setWordWrap(True)
+            card_layout.addWidget(tags_label)
+
         return card
 
     # -- Drag-and-drop reordering --------------------------------------------
