@@ -89,6 +89,16 @@ def import_json(db: Database, data: dict) -> int:
             if name in place_id_by_name
         ]
 
+        character_states = None
+        raw_states = scene_data.get("character_states", [])
+        if raw_states:
+            character_states = []
+            for cs in raw_states:
+                char_name = cs.get("character", "")
+                state = cs.get("state", "")
+                if char_name in char_id_by_name and state:
+                    character_states.append((char_id_by_name[char_name], state))
+
         db.create_scene(
             project_id,
             title=scene_title,
@@ -103,6 +113,7 @@ def import_json(db: Database, data: dict) -> int:
             plotline=scene_data.get("plotline", ""),
             character_ids=character_ids,
             place_ids=place_ids,
+            character_states=character_states,
         )
 
     return project_id

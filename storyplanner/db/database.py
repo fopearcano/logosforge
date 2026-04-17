@@ -20,6 +20,7 @@ from storyplanner.models import (
     Project,
     Scene,
     SceneCharacterLink,
+    SceneCharacterState,
     ScenePlaceLink,
 )
 
@@ -270,6 +271,7 @@ class Database:
         plotline: str = "",
         character_ids: list[int] | None = None,
         place_ids: list[int] | None = None,
+        character_states: list[tuple[int, str]] | None = None,
     ) -> Scene:
         with Session(self._engine) as session:
             # Assign next sort_order
@@ -297,12 +299,16 @@ class Database:
                 sort_order=next_order,
             )
             session.add(scene)
-            session.flush()  # get scene.id before creating links
+            session.flush()
 
             for cid in character_ids or []:
                 session.add(SceneCharacterLink(scene_id=scene.id, character_id=cid))
             for pid in place_ids or []:
                 session.add(ScenePlaceLink(scene_id=scene.id, place_id=pid))
+            for char_id, state in character_states or []:
+                session.add(SceneCharacterState(
+                    scene_id=scene.id, character_id=char_id, state=state,
+                ))
 
             session.commit()
             session.refresh(scene)
@@ -323,6 +329,7 @@ class Database:
         plotline: str = "",
         character_ids: list[int] | None = None,
         place_ids: list[int] | None = None,
+        character_states: list[tuple[int, str]] | None = None,
     ) -> Scene:
         with Session(self._engine) as session:
             scene = session.get(Scene, scene_id)
@@ -359,6 +366,19 @@ class Database:
             for pid in place_ids or []:
                 session.add(ScenePlaceLink(scene_id=scene_id, place_id=pid))
 
+            # Replace character states
+            old_states = session.exec(
+                select(SceneCharacterState).where(
+                    SceneCharacterState.scene_id == scene_id
+                )
+            ).all()
+            for st in old_states:
+                session.delete(st)
+            for char_id, state in character_states or []:
+                session.add(SceneCharacterState(
+                    scene_id=scene_id, character_id=char_id, state=state,
+                ))
+
             session.commit()
             session.refresh(scene)
             return scene
@@ -378,6 +398,12 @@ class Database:
                 )
             ).all():
                 session.delete(link)
+            for st in session.exec(
+                select(SceneCharacterState).where(
+                    SceneCharacterState.scene_id == scene_id
+                )
+            ).all():
+                session.delete(st)
 
             # Delete the scene
             scene = session.get(Scene, scene_id)
@@ -496,6 +522,18 @@ class Database:
                 ScenePlaceLink.scene_id == scene_id
             )
             return list(session.exec(stmt).all())
+
+    def get_scene_character_states(
+        self, scene_id: int
+    ) -> list[tuple[int, str]]:
+        with Session(self._engine) as session:
+            stmt = select(SceneCharacterState).where(
+                SceneCharacterState.scene_id == scene_id
+            )
+            return [
+                (s.character_id, s.state)
+                for s in session.exec(stmt).all()
+            ]
 
     # -- Search --------------------------------------------------------------
 

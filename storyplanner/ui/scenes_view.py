@@ -167,6 +167,27 @@ class ScenesView(QWidget):
         self._place_list.setMaximumHeight(100)
         right.addWidget(self._place_list)
 
+        # Character states
+        right.addWidget(QLabel("Character States"))
+        state_row = QHBoxLayout()
+        self._state_char_combo = QComboBox()
+        state_row.addWidget(self._state_char_combo)
+        self._state_text_input = QLineEdit()
+        self._state_text_input.setPlaceholderText("e.g. conflicted, hopeful")
+        state_row.addWidget(self._state_text_input)
+        self._add_state_btn = QPushButton("Add")
+        self._add_state_btn.clicked.connect(self._on_add_state)
+        state_row.addWidget(self._add_state_btn)
+        right.addLayout(state_row)
+
+        self._state_list = QListWidget()
+        self._state_list.setMaximumHeight(80)
+        right.addWidget(self._state_list)
+
+        self._remove_state_btn = QPushButton("Remove State")
+        self._remove_state_btn.clicked.connect(self._on_remove_state)
+        right.addWidget(self._remove_state_btn)
+
         self._save_btn = QPushButton("Save")
         self._save_btn.clicked.connect(self._on_save)
         right.addWidget(self._save_btn)
@@ -190,6 +211,7 @@ class ScenesView(QWidget):
 
         self._load_characters()
         self._load_places()
+        self._load_state_combo()
         self._refresh_filters()
         self._refresh_list()
 
@@ -210,6 +232,49 @@ class ScenesView(QWidget):
             item.setData(USER_ROLE, place.id)
             item.setCheckState(Qt.CheckState.Unchecked)
             self._place_list.addItem(item)
+
+    def _load_state_combo(self) -> None:
+        self._state_char_combo.clear()
+        self._char_id_by_name: dict[str, int] = {}
+        self._char_name_by_id: dict[int, str] = {}
+        for char in self._db.get_all_characters(self._project_id):
+            self._state_char_combo.addItem(char.name)
+            self._char_id_by_name[char.name] = char.id
+            self._char_name_by_id[char.id] = char.name
+
+    def _on_add_state(self) -> None:
+        name = self._state_char_combo.currentText()
+        state = self._state_text_input.text().strip()
+        if not name or not state:
+            return
+        char_id = self._char_id_by_name.get(name)
+        if char_id is None:
+            return
+        item = QListWidgetItem(f"{name}: {state}")
+        item.setData(USER_ROLE, (char_id, state))
+        self._state_list.addItem(item)
+        self._state_text_input.clear()
+
+    def _on_remove_state(self) -> None:
+        row = self._state_list.currentRow()
+        if row >= 0:
+            self._state_list.takeItem(row)
+
+    def _get_character_states(self) -> list[tuple[int, str]]:
+        states = []
+        for i in range(self._state_list.count()):
+            data = self._state_list.item(i).data(USER_ROLE)
+            if data:
+                states.append(data)
+        return states
+
+    def _load_character_states(self, scene_id: int) -> None:
+        self._state_list.clear()
+        for char_id, state in self._db.get_scene_character_states(scene_id):
+            name = self._char_name_by_id.get(char_id, f"Character {char_id}")
+            item = QListWidgetItem(f"{name}: {state}")
+            item.setData(USER_ROLE, (char_id, state))
+            self._state_list.addItem(item)
 
     # -- Filters -------------------------------------------------------------
 
@@ -304,6 +369,7 @@ class ScenesView(QWidget):
         self._outcome_input.setPlainText(scene.outcome)
         self._update_link_preview(scene.summary, scene.synopsis)
         self._backlinks.load(scene.title)
+        self._load_character_states(scene_id)
 
         # Check linked characters
         linked_char_ids = set(self._db.get_scene_character_ids(scene_id))
@@ -343,6 +409,7 @@ class ScenesView(QWidget):
         plotline = self._plotline_input.text().strip()
         char_ids = self._get_checked_ids(self._char_list)
         place_ids = self._get_checked_ids(self._place_list)
+        char_states = self._get_character_states()
 
         if self._selected_scene_id is not None:
             self._db.update_scene(
@@ -359,6 +426,7 @@ class ScenesView(QWidget):
                 plotline=plotline,
                 character_ids=char_ids,
                 place_ids=place_ids,
+                character_states=char_states,
             )
         else:
             self._db.create_scene(
@@ -375,6 +443,7 @@ class ScenesView(QWidget):
                 plotline=plotline,
                 character_ids=char_ids,
                 place_ids=place_ids,
+                character_states=char_states,
             )
 
         self._clear_form()
@@ -445,6 +514,8 @@ class ScenesView(QWidget):
         self._outcome_input.clear()
         self._link_preview.clear()
         self._backlinks.clear_backlinks()
+        self._state_list.clear()
+        self._state_text_input.clear()
         self._uncheck_all(self._char_list)
         self._uncheck_all(self._place_list)
         self._list.clearSelection()

@@ -86,3 +86,12 @@ class ScenePlaceLink(SQLModel, table=True):
 
     scene_id: int = Field(foreign_key="scene.id", primary_key=True)
     place_id: int = Field(foreign_key="place.id", primary_key=True)
+
+
+class SceneCharacterState(SQLModel, table=True):
+    """Tracks a character's narrative state within a scene."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    scene_id: int = Field(foreign_key="scene.id")
+    character_id: int = Field(foreign_key="character.id")
+    state: str = ""

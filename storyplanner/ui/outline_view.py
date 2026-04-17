@@ -160,6 +160,18 @@ class OutlineView(QWidget):
         if gco:
             parts.append("<p>" + "<br>".join(gco) + "</p>")
 
+        char_states = self._db.get_scene_character_states(scene.id)
+        if char_states:
+            state_lines = []
+            for cid, state in char_states:
+                cname = char_name_by_id.get(cid, "Unknown")
+                state_lines.append(f"{_esc(cname)}: {_esc(state)}")
+            parts.append(
+                "<p><b>Character States:</b><br>"
+                + "<br>".join(state_lines)
+                + "</p>"
+            )
+
         return "".join(parts)
 
 

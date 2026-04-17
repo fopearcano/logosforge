@@ -22,6 +22,7 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
     for i, scene in enumerate(scenes):
         char_ids = db.get_scene_character_ids(scene.id)
         place_ids = db.get_scene_place_ids(scene.id)
+        char_states = db.get_scene_character_states(scene.id)
 
         scene_list.append(
             {
@@ -45,6 +46,11 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
                     place_name_by_id[pid]
                     for pid in place_ids
                     if pid in place_name_by_id
+                ],
+                "character_states": [
+                    {"character": char_name_by_id[cid], "state": state}
+                    for cid, state in char_states
+                    if cid in char_name_by_id
                 ],
             }
         )
@@ -155,6 +161,11 @@ def export_markdown(db: Database, project_id: int) -> str:
                 lines.append(f"- **Conflict:** {scene['conflict']}")
             if scene["outcome"]:
                 lines.append(f"- **Outcome:** {scene['outcome']}")
+            if scene["character_states"]:
+                lines.append("")
+                lines.append("**Character States:**")
+                for cs in scene["character_states"]:
+                    lines.append(f"- {cs['character']}: {cs['state']}")
     else:
         lines.append("")
         lines.append("No scenes.")
@@ -225,6 +236,11 @@ def export_outline_markdown(db: Database, project_id: int) -> str:
                 lines.append(f"- **Conflict:** {scene['conflict']}")
             if scene["outcome"]:
                 lines.append(f"- **Outcome:** {scene['outcome']}")
+            if scene["character_states"]:
+                lines.append("")
+                lines.append("**Character States:**")
+                for cs in scene["character_states"]:
+                    lines.append(f"- {cs['character']}: {cs['state']}")
 
     lines.append("")
     return "\n".join(lines)
