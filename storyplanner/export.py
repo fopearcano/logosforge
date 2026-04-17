@@ -286,3 +286,42 @@ def export_csv_scenes(db: Database, project_id: int) -> str:
             ]
         )
     return output.getvalue()
+
+
+def export_screenplay(db: Database, project_id: int) -> str:
+    data = _gather_project_data(db, project_id)
+    lines: list[str] = []
+
+    title = data["project"]["title"]
+    lines.append(title.upper())
+    lines.append("=" * len(title))
+    lines.append("")
+    lines.append("")
+
+    for scene in data["scenes"]:
+        heading_parts = []
+        if scene["act"]:
+            heading_parts.append(scene["act"].upper())
+        if scene["chapter"]:
+            heading_parts.append(scene["chapter"].upper())
+
+        heading = scene["title"].upper()
+        if scene["places"]:
+            heading += " — " + ", ".join(scene["places"]).upper()
+
+        if heading_parts:
+            lines.append(". ".join(heading_parts))
+            lines.append("")
+
+        lines.append(heading)
+        lines.append("")
+
+        if scene["content"]:
+            lines.append(scene["content"])
+        elif scene["summary"]:
+            lines.append(scene["summary"])
+
+        lines.append("")
+        lines.append("")
+
+    return "\n".join(lines)

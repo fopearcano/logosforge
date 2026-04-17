@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 
 from storyplanner import recent_projects
 from storyplanner.db import Database
-from storyplanner.export import export_csv_scenes, export_json, export_markdown
+from storyplanner.export import export_csv_scenes, export_json, export_markdown, export_screenplay
 from storyplanner.import_data import import_json, validate_import_data
 from storyplanner.ui.act_analysis_view import ActAnalysisView
 from storyplanner.ui.beat_analysis_view import BeatAnalysisView
@@ -275,7 +275,7 @@ class MainWindow(QMainWindow):
             self,
             "Export Project",
             "",
-            "JSON (*.json);;Markdown (*.md);;CSV – Scenes (*.csv)",
+            "JSON (*.json);;Markdown (*.md);;Screenplay (*.txt);;CSV – Scenes (*.csv)",
         )
         if not path:
             return
@@ -284,6 +284,10 @@ class MainWindow(QMainWindow):
             content = export_csv_scenes(self._db, self._project_id)
             if not path.endswith(".csv"):
                 path += ".csv"
+        elif "Screenplay" in selected_filter:
+            content = export_screenplay(self._db, self._project_id)
+            if not path.endswith(".txt"):
+                path += ".txt"
         elif path.endswith(".md") or "Markdown" in selected_filter:
             content = export_markdown(self._db, self._project_id)
             if not path.endswith(".md"):
