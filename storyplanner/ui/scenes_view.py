@@ -3,6 +3,7 @@
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QTextBlockFormat, QTextCursor
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -156,10 +157,31 @@ class ScenesView(QWidget):
         self._outcome_input.setMaximumHeight(40)
         right.addWidget(self._outcome_input)
 
-        right.addWidget(QLabel("Content"))
+        content_label = QLabel("Content")
+        content_label.setStyleSheet("font-weight: bold; font-size: 14px; margin-top: 8px;")
+        right.addWidget(content_label)
         self._content_input = QPlainTextEdit()
-        self._content_input.setMinimumHeight(180)
+        self._content_input.setMinimumHeight(300)
         self._content_input.setPlaceholderText("Write the full scene content here...")
+        writing_font = QFont()
+        writing_font.setPointSize(12)
+        self._content_input.setFont(writing_font)
+        self._content_input.setStyleSheet(
+            "QPlainTextEdit {"
+            "  background-color: #12151a;"
+            "  color: #d4d4d4;"
+            "  border: 1px solid #1e2228;"
+            "  border-radius: 4px;"
+            "  padding: 12px 16px;"
+            "  selection-background-color: #1a3a2a;"
+            "  selection-color: #00ff9c;"
+            "}"
+            "QPlainTextEdit:focus {"
+            "  border-color: #2a2f36;"
+            "}"
+        )
+        self._content_input.setTabStopDistance(32.0)
+        self._apply_line_spacing(self._content_input)
         right.addWidget(self._content_input)
 
         # Link preview
@@ -388,6 +410,7 @@ class ScenesView(QWidget):
         self._conflict_input.setPlainText(scene.conflict)
         self._outcome_input.setPlainText(scene.outcome)
         self._content_input.setPlainText(scene.content)
+        self._apply_line_spacing(self._content_input)
         self._update_link_preview(scene.summary, scene.synopsis)
         self._backlinks.load(scene.title)
         self._load_character_states(scene_id)
@@ -523,6 +546,16 @@ class ScenesView(QWidget):
 
     # -- Helpers -------------------------------------------------------------
 
+    @staticmethod
+    def _apply_line_spacing(editor: QPlainTextEdit) -> None:
+        fmt = QTextBlockFormat()
+        fmt.setLineHeight(140, 1)  # 1 = ProportionalHeight
+        cursor = editor.textCursor()
+        cursor.select(QTextCursor.SelectionType.Document)
+        cursor.mergeBlockFormat(fmt)
+        cursor.clearSelection()
+        editor.setTextCursor(cursor)
+
     def _clear_form(self) -> None:
         self._selected_scene_id = None
         self._form_label.setText("New Scene")
@@ -541,6 +574,7 @@ class ScenesView(QWidget):
         self._conflict_input.clear()
         self._outcome_input.clear()
         self._content_input.clear()
+        self._apply_line_spacing(self._content_input)
         self._link_preview.clear()
         self._backlinks.clear_backlinks()
         self._state_list.clear()
