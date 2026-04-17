@@ -16,6 +16,7 @@ from storyplanner.export import export_csv_scenes, export_json, export_markdown
 from storyplanner.import_data import import_json, validate_import_data
 from storyplanner.ui.characters_view import CharactersView
 from storyplanner.ui.notes_view import NotesView
+from storyplanner.ui.outline_view import OutlineView
 from storyplanner.ui.places_view import PlacesView
 from storyplanner.ui.scenes_view import ScenesView
 from storyplanner.ui.timeline_view import TimelineView
@@ -39,7 +40,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
 
         self.sidebar_buttons: dict[str, QPushButton] = {}
-        for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline"):
+        for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline"):
             btn = QPushButton(label)
             sidebar_layout.addWidget(btn)
             self.sidebar_buttons[label] = btn
@@ -62,6 +63,7 @@ class MainWindow(QMainWindow):
         self.sidebar_buttons["Notes"].clicked.connect(self._show_notes)
         self.sidebar_buttons["Scenes"].clicked.connect(self._show_scenes)
         self.sidebar_buttons["Timeline"].clicked.connect(self._show_timeline)
+        self.sidebar_buttons["Outline"].clicked.connect(self._show_outline)
 
         # -- Right content area ----------------------------------------------
         self.content_area = QWidget()
@@ -102,6 +104,9 @@ class MainWindow(QMainWindow):
                 on_scene_selected=self._open_scene_in_editor,
             )
         )
+
+    def _show_outline(self) -> None:
+        self._set_content(OutlineView(self._db, self._project_id))
 
     def _open_scene_in_editor(self, scene_id: int) -> None:
         view = ScenesView(self._db, self._project_id)
