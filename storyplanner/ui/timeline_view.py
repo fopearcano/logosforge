@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QPoint, Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QComboBox,
@@ -29,6 +29,8 @@ CARD_SELECTED_STYLE = (
     "QFrame { background: #e3f2fd; border: 2px solid #64b5f6; border-radius: 3px; }"
 )
 
+DRAG_THRESHOLD = 10
+
 
 class TimelineView(QWidget):
     def __init__(
@@ -45,6 +47,12 @@ class TimelineView(QWidget):
         self._selected_scene_id: int | None = None
         self._selected_card: QWidget | None = None
 
+        # Drag state
+        self._drag_start_row: int | None = None
+        self._drag_start_pos: QPoint | None = None
+        self._drag_scene_id: int | None = None
+        self._dragging = False
+
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Timeline"))
 
@@ -58,7 +66,7 @@ class TimelineView(QWidget):
         self._mode_combo.currentTextChanged.connect(self._on_mode_changed)
         controls_row.addWidget(self._mode_combo)
 
-        self._filter_label = QLabel("Chapter")
+        self._filter_label = QLabel("Filter by Chapter")
         controls_row.addWidget(self._filter_label)
         self._filter_combo = QComboBox()
         self._filter_combo.currentTextChanged.connect(self._on_filter_changed)
@@ -75,6 +83,7 @@ class TimelineView(QWidget):
         self._table.setShowGrid(False)
         self._table.cellClicked.connect(self._on_cell_clicked)
         self._table.cellDoubleClicked.connect(self._on_double_click)
+        self._table.viewport().installEventFilter(self)
         layout.addWidget(self._table)
 
         # -- Status line -----------------------------------------------------
@@ -121,6 +130,9 @@ class TimelineView(QWidget):
         self._reload()
 
     # -- Filter --------------------------------------------------------------
+
+    def _is_filtered(self) -> bool:
+        return self._filter_combo.currentText() != FILTER_ALL
 
     def _refresh_filter(self) -> None:
         if self._get_mode() == MODE_BY_PLOTLINE:
@@ -266,6 +278,80 @@ class TimelineView(QWidget):
         card_layout.addWidget(meta_label)
 
         return card
+
+    # -- Drag-and-drop reordering --------------------------------------------
+
+    def eventFilter(self, obj: object, event: QEvent) -> bool:
+        if obj is not self._table.viewport():
+            return super().eventFilter(obj, event)
+
+        if event.type() == QEvent.Type.MouseButtonPress:
+            return self._on_drag_press(event)
+
+        if event.type() == QEvent.Type.MouseMove:
+            return self._on_drag_move(event)
+
+        if event.type() == QEvent.Type.MouseButtonRelease:
+            return self._on_drag_release(event)
+
+        return super().eventFilter(obj, event)
+
+    def _on_drag_press(self, event) -> bool:
+        if event.button() != Qt.MouseButton.LeftButton:
+            return False
+        if self._is_filtered():
+            return False
+
+        pos = event.position().toPoint()
+        row = self._table.rowAt(pos.y())
+        col = self._table.columnAt(pos.x())
+        scene_id = self._cell_scene_ids.get((row, col))
+
+        if scene_id is not None:
+            self._drag_start_row = row
+            self._drag_start_pos = pos
+            self._drag_scene_id = scene_id
+            self._dragging = False
+
+        return False
+
+    def _on_drag_move(self, event) -> bool:
+        if self._drag_start_pos is None:
+            return False
+
+        if not self._dragging:
+            distance = (
+                event.position().toPoint() - self._drag_start_pos
+            ).manhattanLength()
+            if distance > DRAG_THRESHOLD:
+                self._dragging = True
+                self._table.setCursor(Qt.CursorShape.ClosedHandCursor)
+
+        return False
+
+    def _on_drag_release(self, event) -> bool:
+        was_dragging = self._dragging
+        drag_scene = self._drag_scene_id
+        start_row = self._drag_start_row
+
+        self._drag_start_row = None
+        self._drag_start_pos = None
+        self._drag_scene_id = None
+        self._dragging = False
+
+        if not was_dragging or drag_scene is None or start_row is None:
+            return False
+
+        self._table.unsetCursor()
+
+        target_row = self._table.rowAt(event.position().toPoint().y())
+        if target_row < 0 or target_row == start_row:
+            return True
+
+        self._selected_scene_id = drag_scene
+        self._db.reorder_scene(drag_scene, target_row)
+        self._reload()
+        return True
 
     # -- Selection -----------------------------------------------------------
 

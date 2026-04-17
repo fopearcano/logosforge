@@ -403,6 +403,34 @@ class Database:
             scene.plotline = plotline
             session.commit()
 
+    def reorder_scene(self, scene_id: int, new_index: int) -> None:
+        """Move a scene to a new position (0-based) among all project scenes."""
+        with Session(self._engine) as session:
+            scene = session.get(Scene, scene_id)
+            if scene is None:
+                return
+
+            stmt = (
+                select(Scene)
+                .where(Scene.project_id == scene.project_id)
+                .order_by(Scene.sort_order, Scene.id)
+            )
+            all_scenes = list(session.exec(stmt).all())
+
+            old_index = next(
+                (i for i, s in enumerate(all_scenes) if s.id == scene_id), None
+            )
+            if old_index is None:
+                return
+
+            moved = all_scenes.pop(old_index)
+            new_index = max(0, min(new_index, len(all_scenes)))
+            all_scenes.insert(new_index, moved)
+
+            for i, s in enumerate(all_scenes):
+                s.sort_order = i
+            session.commit()
+
     def get_scene_character_ids(self, scene_id: int) -> list[int]:
         with Session(self._engine) as session:
             stmt = select(SceneCharacterLink.character_id).where(
