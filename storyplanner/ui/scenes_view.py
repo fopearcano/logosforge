@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
+from storyplanner.ui.inline_assistant import InlineAssistantPanel
 from storyplanner.ui.link_preview import BacklinksWidget, create_link_browser, render_linked_text
 
 USER_ROLE = Qt.ItemDataRole.UserRole
@@ -198,6 +199,21 @@ class ScenesView(QWidget):
         writing_col.addWidget(self._content_input)
         writing_col.addStretch()
         right.addLayout(writing_col)
+
+        # -- Inline AI assist (togglable) ------------------------------------
+        self._assist_toggle = QPushButton("AI Assist")
+        self._assist_toggle.clicked.connect(self._toggle_assist_panel)
+        right.addWidget(self._assist_toggle)
+
+        self._assist_panel = InlineAssistantPanel(
+            content_editor=self._content_input,
+            db=db,
+            project_id=project_id,
+            get_scene_id=lambda: self._selected_scene_id,
+            on_data_changed=on_data_changed,
+        )
+        self._assist_panel.setVisible(False)
+        right.addWidget(self._assist_panel)
 
         # -- Detail fields (hidden in focus mode) ----------------------------
         self._detail_fields = QWidget()
@@ -640,6 +656,13 @@ class ScenesView(QWidget):
         if self._on_link_clicked:
             self._on_link_clicked(entity_type, entity_id)
 
+    # -- Inline assistant --------------------------------------------------------
+
+    def _toggle_assist_panel(self) -> None:
+        visible = not self._assist_panel.isVisible()
+        self._assist_panel.setVisible(visible)
+        self._assist_toggle.setText("Hide AI Assist" if visible else "AI Assist")
+
     # -- Focus mode --------------------------------------------------------------
 
     def toggle_focus_mode(self) -> None:
@@ -649,6 +672,9 @@ class ScenesView(QWidget):
         self._detail_fields.setVisible(not self._focus_mode)
         self._form_label.setVisible(not self._focus_mode)
         self._content_label.setVisible(not self._focus_mode)
+        self._assist_toggle.setVisible(not self._focus_mode)
+        if self._focus_mode:
+            self._assist_panel.setVisible(False)
         self._content_input.setMaximumWidth(800 if self._focus_mode else 720)
         self._focus_btn.setText("Exit Focus" if self._focus_mode else "Focus Mode")
         if self._on_focus_mode_changed:
