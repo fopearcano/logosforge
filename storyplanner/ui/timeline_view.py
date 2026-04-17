@@ -49,9 +49,13 @@ class TimelineView(QWidget):
 
         # Drag state
         self._drag_start_row: int | None = None
+        self._drag_start_col: int | None = None
         self._drag_start_pos: QPoint | None = None
         self._drag_scene_id: int | None = None
         self._dragging = False
+
+        # Column-to-plotline mapping (rebuilt on each load)
+        self._col_to_plotline: dict[int, str] = {}
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Timeline"))
@@ -187,6 +191,11 @@ class TimelineView(QWidget):
 
         col_to_idx = {name: i for i, name in enumerate(columns)}
 
+        self._col_to_plotline.clear()
+        if mode == MODE_BY_PLOTLINE:
+            for name, idx in col_to_idx.items():
+                self._col_to_plotline[idx] = "" if name == UNASSIGNED else name
+
         self._table.blockSignals(True)
         self._table.setRowCount(0)
         self._table.setColumnCount(max(len(columns), 1))
@@ -309,6 +318,7 @@ class TimelineView(QWidget):
 
         if scene_id is not None:
             self._drag_start_row = row
+            self._drag_start_col = col
             self._drag_start_pos = pos
             self._drag_scene_id = scene_id
             self._dragging = False
@@ -333,8 +343,10 @@ class TimelineView(QWidget):
         was_dragging = self._dragging
         drag_scene = self._drag_scene_id
         start_row = self._drag_start_row
+        start_col = self._drag_start_col
 
         self._drag_start_row = None
+        self._drag_start_col = None
         self._drag_start_pos = None
         self._drag_scene_id = None
         self._dragging = False
@@ -344,12 +356,28 @@ class TimelineView(QWidget):
 
         self._table.unsetCursor()
 
-        target_row = self._table.rowAt(event.position().toPoint().y())
-        if target_row < 0 or target_row == start_row:
+        pos = event.position().toPoint()
+        target_row = self._table.rowAt(pos.y())
+        target_col = self._table.columnAt(pos.x())
+
+        if target_row < 0 or target_col < 0:
+            return True
+
+        row_changed = target_row != start_row
+        col_changed = target_col != start_col
+
+        if not row_changed and not col_changed:
             return True
 
         self._selected_scene_id = drag_scene
-        self._db.reorder_scene(drag_scene, target_row)
+
+        if col_changed and target_col in self._col_to_plotline:
+            new_plotline = self._col_to_plotline[target_col]
+            self._db.update_scene_plotline(drag_scene, new_plotline)
+
+        if row_changed:
+            self._db.reorder_scene(drag_scene, target_row)
+
         self._reload()
         return True
 
