@@ -89,6 +89,11 @@ class TimelineView(QWidget):
         self._filter_combo.currentTextChanged.connect(self._on_filter_changed)
         controls_row.addWidget(self._filter_combo)
 
+        controls_row.addWidget(QLabel("Focus Character"))
+        self._char_combo = QComboBox()
+        self._char_combo.currentIndexChanged.connect(self._on_focus_char_changed)
+        controls_row.addWidget(self._char_combo)
+
         controls_row.addStretch()
         layout.addLayout(controls_row)
 
@@ -134,7 +139,23 @@ class TimelineView(QWidget):
         actions_row.addStretch()
         layout.addLayout(actions_row)
 
+        self._focus_char_id: int | None = None
+        self._refresh_focus_characters()
         self._refresh_filter()
+        self._reload()
+
+    # -- Focus character -----------------------------------------------------
+
+    def _refresh_focus_characters(self) -> None:
+        self._char_combo.blockSignals(True)
+        self._char_combo.clear()
+        self._char_combo.addItem("None", None)
+        for char in self._db.get_all_characters(self._project_id):
+            self._char_combo.addItem(char.name, char.id)
+        self._char_combo.blockSignals(False)
+
+    def _on_focus_char_changed(self, index: int) -> None:
+        self._focus_char_id = self._char_combo.currentData()
         self._reload()
 
     # -- Mode ----------------------------------------------------------------
@@ -224,6 +245,15 @@ class TimelineView(QWidget):
         self._table.setRowCount(len(scenes))
         self._cell_data.clear()
 
+        # Pre-fetch character states for focus character
+        scene_state: dict[int, str] = {}
+        if self._focus_char_id is not None:
+            for scene in scenes:
+                for cid, state in self._db.get_scene_character_states(scene.id):
+                    if cid == self._focus_char_id:
+                        scene_state[scene.id] = state
+                        break
+
         for row, scene in enumerate(scenes):
             if mode == MODE_BY_PLOTLINE:
                 col_name = scene.plotline if scene.plotline else UNASSIGNED
@@ -231,7 +261,8 @@ class TimelineView(QWidget):
                 col_name = scene.chapter if scene.chapter else UNASSIGNED
             col = col_to_idx[col_name]
 
-            card = self._create_card(row + 1, scene, mode)
+            char_state = scene_state.get(scene.id, "")
+            card = self._create_card(row + 1, scene, mode, char_state)
             self._table.setCellWidget(row, col, card)
             self._table.setRowHeight(row, max(card.sizeHint().height(), 56))
             self._cell_data[(row, col)] = (scene.id, scene.title, scene.plotline)
@@ -276,7 +307,7 @@ class TimelineView(QWidget):
             columns.append(UNASSIGNED)
         return columns
 
-    def _create_card(self, index: int, scene, mode: str) -> QFrame:
+    def _create_card(self, index: int, scene, mode: str, char_state: str = "") -> QFrame:
         card = QFrame()
         card.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
@@ -321,6 +352,14 @@ class TimelineView(QWidget):
             tags_label.setStyleSheet("color: #9e9e9e; font-size: 10px;")
             tags_label.setWordWrap(True)
             card_layout.addWidget(tags_label)
+
+        if char_state:
+            state_label = QLabel(f"\u2192 {char_state}")
+            state_label.setStyleSheet(
+                "color: #5c6bc0; font-size: 11px; font-style: italic;"
+            )
+            state_label.setWordWrap(True)
+            card_layout.addWidget(state_label)
 
         return card
 
