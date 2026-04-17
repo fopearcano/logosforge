@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
-from storyplanner.ui.link_preview import create_link_browser, render_linked_text
+from storyplanner.ui.link_preview import BacklinksWidget, create_link_browser, render_linked_text
 
 USER_ROLE = Qt.ItemDataRole.UserRole
 FILTER_ALL = "All"
@@ -180,6 +180,11 @@ class ScenesView(QWidget):
         new_btn.clicked.connect(self._clear_form)
         right.addWidget(new_btn)
 
+        self._backlinks = BacklinksWidget(
+            db, project_id, on_backlink_clicked=on_link_clicked,
+        )
+        right.addWidget(self._backlinks)
+
         right.addStretch()
         root.addLayout(right)
 
@@ -298,6 +303,7 @@ class ScenesView(QWidget):
         self._conflict_input.setPlainText(scene.conflict)
         self._outcome_input.setPlainText(scene.outcome)
         self._update_link_preview(scene.summary, scene.synopsis)
+        self._backlinks.load(scene.title)
 
         # Check linked characters
         linked_char_ids = set(self._db.get_scene_character_ids(scene_id))
@@ -438,6 +444,7 @@ class ScenesView(QWidget):
         self._conflict_input.clear()
         self._outcome_input.clear()
         self._link_preview.clear()
+        self._backlinks.clear_backlinks()
         self._uncheck_all(self._char_list)
         self._uncheck_all(self._place_list)
         self._list.clearSelection()

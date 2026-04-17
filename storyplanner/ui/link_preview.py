@@ -4,8 +4,10 @@ import re
 from collections.abc import Callable
 from urllib.parse import quote, unquote
 
-from PySide6.QtCore import QUrl
-from PySide6.QtWidgets import QTextBrowser
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtWidgets import QLabel, QListWidget, QListWidgetItem, QTextBrowser, QVBoxLayout, QWidget
+
+from storyplanner.db import Database
 
 LINK_PATTERN = re.compile(r"\[\[(.+?)\]\]")
 LINK_SCHEME = "storylink"
@@ -71,3 +73,54 @@ def create_link_browser(
 
     browser.anchorClicked.connect(_handle_click)
     return browser
+
+
+USER_ROLE = Qt.ItemDataRole.UserRole
+
+
+class BacklinksWidget(QWidget):
+    def __init__(
+        self,
+        db: Database,
+        project_id: int,
+        on_backlink_clicked: Callable[[str, int], None] | None = None,
+    ) -> None:
+        super().__init__()
+        self._db = db
+        self._project_id = project_id
+        self._on_backlink_clicked = on_backlink_clicked
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self._label = QLabel("Referenced by")
+        layout.addWidget(self._label)
+
+        self._list = QListWidget()
+        self._list.setMaximumHeight(80)
+        self._list.itemClicked.connect(self._on_item_clicked)
+        layout.addWidget(self._list)
+
+    def load(self, entity_name: str) -> None:
+        self._list.clear()
+        backlinks = self._db.find_backlinks(self._project_id, entity_name)
+        if not backlinks:
+            self._label.setText("Referenced by (none)")
+            return
+        self._label.setText(f"Referenced by ({len(backlinks)})")
+        for entity_type, entity_id, label in backlinks:
+            item = QListWidgetItem(f"[{entity_type}] {label}")
+            item.setData(USER_ROLE, (entity_type, entity_id))
+            self._list.addItem(item)
+
+    def clear_backlinks(self) -> None:
+        self._list.clear()
+        self._label.setText("Referenced by")
+
+    def _on_item_clicked(self, item: QListWidgetItem) -> None:
+        if self._on_backlink_clicked is None:
+            return
+        data = item.data(USER_ROLE)
+        if data:
+            entity_type, entity_id = data
+            self._on_backlink_clicked(entity_type, entity_id)

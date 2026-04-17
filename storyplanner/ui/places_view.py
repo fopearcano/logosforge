@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
+from storyplanner.ui.link_preview import BacklinksWidget
 
 USER_ROLE = Qt.ItemDataRole.UserRole
 
@@ -26,11 +27,13 @@ class PlacesView(QWidget):
         db: Database,
         project_id: int,
         on_data_changed: Callable[[], None] | None = None,
+        on_link_clicked: Callable[[str, int], None] | None = None,
     ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
         self._on_data_changed = on_data_changed
+        self._on_link_clicked = on_link_clicked
         self._selected_id: int | None = None
 
         root = QHBoxLayout(self)
@@ -70,6 +73,11 @@ class PlacesView(QWidget):
         new_btn.clicked.connect(self._clear_form)
         right.addWidget(new_btn)
 
+        self._backlinks = BacklinksWidget(
+            db, project_id, on_backlink_clicked=on_link_clicked,
+        )
+        right.addWidget(self._backlinks)
+
         right.addStretch()
         root.addLayout(right)
 
@@ -95,6 +103,7 @@ class PlacesView(QWidget):
         self._delete_btn.setEnabled(True)
         self._name_input.setText(place.name)
         self._desc_input.setPlainText(place.description)
+        self._backlinks.load(place.name)
 
     def _on_save(self) -> None:
         name = self._name_input.text().strip()
@@ -133,4 +142,5 @@ class PlacesView(QWidget):
         self._delete_btn.setEnabled(False)
         self._name_input.clear()
         self._desc_input.clear()
+        self._backlinks.clear_backlinks()
         self._list.clearSelection()

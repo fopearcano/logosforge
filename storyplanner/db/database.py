@@ -558,6 +558,29 @@ class Database:
                 return ("Note", note.id)
         return None
 
+    def find_backlinks(
+        self, project_id: int, name: str
+    ) -> list[tuple[str, int, str]]:
+        import re
+        pattern = re.compile(
+            r"\[\[" + re.escape(name) + r"\]\]", re.IGNORECASE
+        )
+        results: list[tuple[str, int, str]] = []
+
+        for scene in self.get_all_scenes(project_id):
+            fields = (
+                scene.summary, scene.synopsis, scene.goal,
+                scene.conflict, scene.outcome,
+            )
+            if any(pattern.search(f) for f in fields if f):
+                results.append(("Scene", scene.id, scene.title))
+
+        for note in self.get_all_notes(project_id):
+            if note.content and pattern.search(note.content):
+                results.append(("Note", note.id, note.title))
+
+        return results
+
     @staticmethod
     def _matches(query_lower: str, *fields: str) -> bool:
         for field in fields:

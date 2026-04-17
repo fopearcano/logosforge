@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
-from storyplanner.ui.link_preview import create_link_browser, render_linked_text
+from storyplanner.ui.link_preview import BacklinksWidget, create_link_browser, render_linked_text
 
 USER_ROLE = Qt.ItemDataRole.UserRole
 
@@ -77,6 +77,11 @@ class NotesView(QWidget):
         new_btn.clicked.connect(self._clear_form)
         right.addWidget(new_btn)
 
+        self._backlinks = BacklinksWidget(
+            db, project_id, on_backlink_clicked=on_link_clicked,
+        )
+        right.addWidget(self._backlinks)
+
         right.addStretch()
         root.addLayout(right)
 
@@ -103,6 +108,7 @@ class NotesView(QWidget):
         self._title_input.setText(note.title)
         self._content_input.setPlainText(note.content)
         self._link_preview.setHtml(render_linked_text(note.content))
+        self._backlinks.load(note.title)
 
     def _on_save(self) -> None:
         title = self._title_input.text().strip()
@@ -142,6 +148,7 @@ class NotesView(QWidget):
         self._title_input.clear()
         self._content_input.clear()
         self._link_preview.clear()
+        self._backlinks.clear_backlinks()
         self._list.clearSelection()
 
     def _on_link_name_clicked(self, name: str) -> None:

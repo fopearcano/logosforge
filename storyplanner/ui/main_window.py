@@ -102,12 +102,20 @@ class MainWindow(QMainWindow):
 
     def _show_characters(self) -> None:
         self._set_content(
-            CharactersView(self._db, self._project_id, on_data_changed=self._on_data_changed)
+            CharactersView(
+                self._db, self._project_id,
+                on_data_changed=self._on_data_changed,
+                on_link_clicked=self._on_link_navigated,
+            )
         )
 
     def _show_places(self) -> None:
         self._set_content(
-            PlacesView(self._db, self._project_id, on_data_changed=self._on_data_changed)
+            PlacesView(
+                self._db, self._project_id,
+                on_data_changed=self._on_data_changed,
+                on_link_clicked=self._on_link_navigated,
+            )
         )
 
     def _show_notes(self) -> None:
@@ -163,11 +171,19 @@ class MainWindow(QMainWindow):
 
     def _on_link_navigated(self, entity_type: str, entity_id: int) -> None:
         if entity_type == "Character":
-            view = CharactersView(self._db, self._project_id, on_data_changed=self._on_data_changed)
+            view = CharactersView(
+                self._db, self._project_id,
+                on_data_changed=self._on_data_changed,
+                on_link_clicked=self._on_link_navigated,
+            )
             self._set_content(view)
             view.select_character(entity_id)
         elif entity_type == "Place":
-            view = PlacesView(self._db, self._project_id, on_data_changed=self._on_data_changed)
+            view = PlacesView(
+                self._db, self._project_id,
+                on_data_changed=self._on_data_changed,
+                on_link_clicked=self._on_link_navigated,
+            )
             self._set_content(view)
             view.select_place(entity_id)
         elif entity_type == "Note":
