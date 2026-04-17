@@ -92,8 +92,28 @@ class ScenesView(QWidget):
 
         right.addWidget(QLabel("Summary"))
         self._summary_input = QPlainTextEdit()
-        self._summary_input.setMaximumHeight(80)
+        self._summary_input.setMaximumHeight(60)
         right.addWidget(self._summary_input)
+
+        right.addWidget(QLabel("Synopsis"))
+        self._synopsis_input = QPlainTextEdit()
+        self._synopsis_input.setMaximumHeight(60)
+        right.addWidget(self._synopsis_input)
+
+        right.addWidget(QLabel("Goal"))
+        self._goal_input = QPlainTextEdit()
+        self._goal_input.setMaximumHeight(40)
+        right.addWidget(self._goal_input)
+
+        right.addWidget(QLabel("Conflict"))
+        self._conflict_input = QPlainTextEdit()
+        self._conflict_input.setMaximumHeight(40)
+        right.addWidget(self._conflict_input)
+
+        right.addWidget(QLabel("Outcome"))
+        self._outcome_input = QPlainTextEdit()
+        self._outcome_input.setMaximumHeight(40)
+        right.addWidget(self._outcome_input)
 
         # Checkable character list
         right.addWidget(QLabel("Characters"))
@@ -224,6 +244,10 @@ class ScenesView(QWidget):
         self._chapter_input.setText(scene.chapter)
         self._plotline_input.setText(scene.plotline)
         self._summary_input.setPlainText(scene.summary)
+        self._synopsis_input.setPlainText(scene.synopsis)
+        self._goal_input.setPlainText(scene.goal)
+        self._conflict_input.setPlainText(scene.conflict)
+        self._outcome_input.setPlainText(scene.outcome)
 
         # Check linked characters
         linked_char_ids = set(self._db.get_scene_character_ids(scene_id))
@@ -251,6 +275,10 @@ class ScenesView(QWidget):
             return
 
         summary = self._summary_input.toPlainText().strip()
+        synopsis = self._synopsis_input.toPlainText().strip()
+        goal = self._goal_input.toPlainText().strip()
+        conflict = self._conflict_input.toPlainText().strip()
+        outcome = self._outcome_input.toPlainText().strip()
         chapter = self._chapter_input.text().strip()
         plotline = self._plotline_input.text().strip()
         char_ids = self._get_checked_ids(self._char_list)
@@ -261,6 +289,10 @@ class ScenesView(QWidget):
                 scene_id=self._selected_scene_id,
                 title=title,
                 summary=summary,
+                synopsis=synopsis,
+                goal=goal,
+                conflict=conflict,
+                outcome=outcome,
                 chapter=chapter,
                 plotline=plotline,
                 character_ids=char_ids,
@@ -271,6 +303,10 @@ class ScenesView(QWidget):
                 project_id=self._project_id,
                 title=title,
                 summary=summary,
+                synopsis=synopsis,
+                goal=goal,
+                conflict=conflict,
+                outcome=outcome,
                 chapter=chapter,
                 plotline=plotline,
                 character_ids=char_ids,
@@ -337,6 +373,10 @@ class ScenesView(QWidget):
         self._chapter_input.clear()
         self._plotline_input.clear()
         self._summary_input.clear()
+        self._synopsis_input.clear()
+        self._goal_input.clear()
+        self._conflict_input.clear()
+        self._outcome_input.clear()
         self._uncheck_all(self._char_list)
         self._uncheck_all(self._place_list)
         self._list.clearSelection()

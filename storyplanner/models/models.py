@@ -62,6 +62,10 @@ class Scene(SQLModel, table=True):
     project_id: int = Field(foreign_key="project.id")
     title: str
     summary: str = ""
+    synopsis: str = ""
+    goal: str = ""
+    conflict: str = ""
+    outcome: str = ""
     chapter: str = ""
     plotline: str = ""
     sort_order: int = 0

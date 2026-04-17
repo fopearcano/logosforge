@@ -143,6 +143,19 @@ class OutlineView(QWidget):
         if scene.summary:
             parts.append(f"<p>{_esc(scene.summary)}</p>")
 
+        if scene.synopsis:
+            parts.append(f"<p><b>Synopsis:</b> {_esc(scene.synopsis)}</p>")
+
+        gco: list[str] = []
+        if scene.goal:
+            gco.append(f"<b>Goal:</b> {_esc(scene.goal)}")
+        if scene.conflict:
+            gco.append(f"<b>Conflict:</b> {_esc(scene.conflict)}")
+        if scene.outcome:
+            gco.append(f"<b>Outcome:</b> {_esc(scene.outcome)}")
+        if gco:
+            parts.append("<p>" + "<br>".join(gco) + "</p>")
+
         return "".join(parts)
 
 

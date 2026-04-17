@@ -236,6 +236,10 @@ class Database:
         project_id: int,
         title: str,
         summary: str = "",
+        synopsis: str = "",
+        goal: str = "",
+        conflict: str = "",
+        outcome: str = "",
         chapter: str = "",
         plotline: str = "",
         character_ids: list[int] | None = None,
@@ -256,6 +260,10 @@ class Database:
                 project_id=project_id,
                 title=title,
                 summary=summary,
+                synopsis=synopsis,
+                goal=goal,
+                conflict=conflict,
+                outcome=outcome,
                 chapter=chapter,
                 plotline=plotline,
                 sort_order=next_order,
@@ -277,6 +285,10 @@ class Database:
         scene_id: int,
         title: str,
         summary: str = "",
+        synopsis: str = "",
+        goal: str = "",
+        conflict: str = "",
+        outcome: str = "",
         chapter: str = "",
         plotline: str = "",
         character_ids: list[int] | None = None,
@@ -286,6 +298,10 @@ class Database:
             scene = session.get(Scene, scene_id)
             scene.title = title
             scene.summary = summary
+            scene.synopsis = synopsis
+            scene.goal = goal
+            scene.conflict = conflict
+            scene.outcome = outcome
             scene.chapter = chapter
             scene.plotline = plotline
 

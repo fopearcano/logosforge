@@ -27,6 +27,10 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
             {
                 "title": scene.title,
                 "summary": scene.summary,
+                "synopsis": scene.synopsis,
+                "goal": scene.goal,
+                "conflict": scene.conflict,
+                "outcome": scene.outcome,
                 "order_index": i + 1,
                 "chapter": scene.chapter,
                 "plotline": scene.plotline,
@@ -136,6 +140,15 @@ def export_markdown(db: Database, project_id: int) -> str:
             if scene["summary"]:
                 lines.append("")
                 lines.append(scene["summary"])
+            if scene["synopsis"]:
+                lines.append("")
+                lines.append(f"**Synopsis:** {scene['synopsis']}")
+            if scene["goal"]:
+                lines.append(f"- **Goal:** {scene['goal']}")
+            if scene["conflict"]:
+                lines.append(f"- **Conflict:** {scene['conflict']}")
+            if scene["outcome"]:
+                lines.append(f"- **Outcome:** {scene['outcome']}")
     else:
         lines.append("")
         lines.append("No scenes.")
@@ -193,6 +206,15 @@ def export_outline_markdown(db: Database, project_id: int) -> str:
             if scene["summary"]:
                 lines.append("")
                 lines.append(scene["summary"])
+            if scene["synopsis"]:
+                lines.append("")
+                lines.append(f"**Synopsis:** {scene['synopsis']}")
+            if scene["goal"]:
+                lines.append(f"- **Goal:** {scene['goal']}")
+            if scene["conflict"]:
+                lines.append(f"- **Conflict:** {scene['conflict']}")
+            if scene["outcome"]:
+                lines.append(f"- **Outcome:** {scene['outcome']}")
 
     lines.append("")
     return "\n".join(lines)
@@ -204,7 +226,8 @@ def export_csv_scenes(db: Database, project_id: int) -> str:
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(
-        ["order_index", "title", "summary", "chapter", "plotline", "characters", "places"]
+        ["order_index", "title", "summary", "synopsis", "goal", "conflict", "outcome",
+         "chapter", "plotline", "characters", "places"]
     )
     for scene in data["scenes"]:
         writer.writerow(
@@ -212,6 +235,10 @@ def export_csv_scenes(db: Database, project_id: int) -> str:
                 scene["order_index"],
                 scene["title"],
                 scene["summary"],
+                scene["synopsis"],
+                scene["goal"],
+                scene["conflict"],
+                scene["outcome"],
                 scene["chapter"],
                 scene["plotline"],
                 ", ".join(scene["characters"]),
