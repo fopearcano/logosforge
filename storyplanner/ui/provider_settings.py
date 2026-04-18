@@ -42,13 +42,65 @@ class ProviderSettingsWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
+        if compact:
+            self._build_compact(layout)
+        else:
+            self._build_wide(layout)
+
+        self._on_provider_changed(self._provider_combo.currentText())
+
+    def _build_compact(self, layout: QVBoxLayout) -> None:
+        layout.setSpacing(4)
+
+        self._provider_combo = QComboBox()
+        for name in PROVIDER_NAMES:
+            self._provider_combo.addItem(name)
+        self._provider_combo.currentTextChanged.connect(
+            self._on_provider_changed
+        )
+        layout.addWidget(self._provider_combo)
+
+        self._model_combo = QComboBox()
+        self._model_combo.setEditable(True)
+        layout.addWidget(self._model_combo)
+
+        self._url_input = QLineEdit()
+        self._url_input.setPlaceholderText("Base URL")
+        layout.addWidget(self._url_input)
+
+        self._key_label = QLabel()
+        self._key_label.setVisible(False)
+        self._key_input = QLineEdit()
+        self._key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self._key_input.setPlaceholderText("API key")
+        layout.addWidget(self._key_input)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(4)
+        self._defaults_btn = QPushButton("Defaults")
+        self._defaults_btn.clicked.connect(self._load_defaults)
+        btn_row.addWidget(self._defaults_btn)
+        self._test_btn = QPushButton("Test")
+        self._test_btn.clicked.connect(self._on_test)
+        btn_row.addWidget(self._test_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        self._status_label = QLabel("")
+        self._status_label.setStyleSheet("font-size: 11px;")
+        self._status_label.setWordWrap(True)
+        layout.addWidget(self._status_label)
+
+    def _build_wide(self, layout: QVBoxLayout) -> None:
         # Row 1: provider + model + defaults
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("Provider:"))
         self._provider_combo = QComboBox()
         for name in PROVIDER_NAMES:
             self._provider_combo.addItem(name)
-        self._provider_combo.currentTextChanged.connect(self._on_provider_changed)
+        self._provider_combo.currentTextChanged.connect(
+            self._on_provider_changed
+        )
         row1.addWidget(self._provider_combo)
 
         row1.addWidget(QLabel("Model:"))
@@ -89,8 +141,6 @@ class ProviderSettingsWidget(QWidget):
         row2.addWidget(self._status_label)
         row2.addStretch()
         layout.addLayout(row2)
-
-        self._on_provider_changed(self._provider_combo.currentText())
 
     def _on_provider_changed(self, name: str) -> None:
         caps = PROVIDER_CAPABILITIES.get(name)

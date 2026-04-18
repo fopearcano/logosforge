@@ -82,8 +82,8 @@ class AssistantPanel(QWidget):
         self._debounce_timer.setInterval(120)
         self._debounce_timer.timeout.connect(self._fire_request)
 
-        self.setMinimumWidth(220)
-        self.setMaximumWidth(280)
+        self.setMinimumWidth(180)
+        self.setMaximumWidth(240)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -99,8 +99,8 @@ class AssistantPanel(QWidget):
 
         container = QWidget()
         self._layout = QVBoxLayout(container)
-        self._layout.setContentsMargins(8, 6, 8, 8)
-        self._layout.setSpacing(6)
+        self._layout.setContentsMargins(6, 4, 6, 6)
+        self._layout.setSpacing(4)
         scroll.setWidget(container)
 
         self._build_ui()
@@ -246,7 +246,7 @@ class AssistantPanel(QWidget):
         )
         apply_row.addWidget(self._replace_content_btn)
 
-        self._insert_cursor_btn = QPushButton("Insert at Cursor")
+        self._insert_cursor_btn = QPushButton("Insert")
         self._insert_cursor_btn.clicked.connect(
             self._apply_insert_at_cursor
         )
