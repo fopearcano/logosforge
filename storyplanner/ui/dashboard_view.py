@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from storyplanner.analytics import compute_project_stats
 from storyplanner.context_builder import _count_scene_tags, gather_story_memory
 from storyplanner.db import Database
 
@@ -56,6 +57,7 @@ class DashboardView(QWidget):
         self._build()
 
     def _build(self) -> None:
+        self._add_writing_stats()
         self._add_act_distribution()
         self._add_beat_distribution()
         self._add_tag_summary()
@@ -78,6 +80,24 @@ class DashboardView(QWidget):
         lbl.setWordWrap(True)
         lbl.setStyleSheet("padding-left: 8px; line-height: 1.4;")
         self._layout.addWidget(lbl)
+
+    # -- Writing Stats -------------------------------------------------------
+
+    def _add_writing_stats(self) -> None:
+        self._add_section_header("Writing Stats")
+        scenes = self._db.get_all_scenes(self._project_id)
+        texts = [s.content for s in scenes if s.content]
+        stats = compute_project_stats(texts)
+        if stats["scene_count"] == 0:
+            self._add_section_body("No scenes yet.")
+            return
+        lines = [
+            f"  Scenes: {stats['scene_count']}",
+            f"  Avg words/scene: {stats['avg_words']}",
+            f"  Longest scene: {stats['longest']} words",
+            f"  Shortest scene: {stats['shortest']} words",
+        ]
+        self._add_section_body("\n".join(lines))
 
     # -- Act Distribution ----------------------------------------------------
 

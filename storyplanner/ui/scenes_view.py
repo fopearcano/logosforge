@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QKeySequence, QShortcut, QTextBlockFormat, QTextCursor
 from PySide6.QtWidgets import (
     QComboBox,
@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from storyplanner.analytics import compute_scene_stats
 
 from storyplanner.db import Database
 from storyplanner.ui.inline_assistant import InlineAssistantPanel
@@ -199,6 +201,19 @@ class ScenesView(QWidget):
         writing_col.addWidget(self._content_input)
         writing_col.addStretch()
         right.addLayout(writing_col)
+
+        # -- Scene stats (auto-updating) ------------------------------------
+        self._stats_label = QLabel("")
+        self._stats_label.setStyleSheet(
+            "color: #6e7681; font-size: 11px; padding: 2px 4px;"
+        )
+        right.addWidget(self._stats_label)
+
+        self._stats_timer = QTimer(self)
+        self._stats_timer.setSingleShot(True)
+        self._stats_timer.setInterval(300)
+        self._stats_timer.timeout.connect(self._update_scene_stats)
+        self._content_input.textChanged.connect(self._stats_timer.start)
 
         # -- Inline AI assist (togglable) ------------------------------------
         self._assist_toggle = QPushButton("AI Assist")
@@ -655,6 +670,25 @@ class ScenesView(QWidget):
         entity_type, entity_id = result
         if self._on_link_clicked:
             self._on_link_clicked(entity_type, entity_id)
+
+    # -- Scene stats -------------------------------------------------------------
+
+    def _update_scene_stats(self) -> None:
+        text = self._content_input.toPlainText()
+        stats = compute_scene_stats(text)
+        if stats["words"] == 0:
+            self._stats_label.setText("")
+            return
+        pct = round(stats["dialogue_ratio"] * 100)
+        parts = [
+            f"Words: {stats['words']}",
+            f"Paragraphs: {stats['paragraphs']}",
+            f"Sentences: ~{stats['sentences']}",
+            f"Dialogue: {pct}%",
+        ]
+        if stats["hint"]:
+            parts.append(stats["hint"])
+        self._stats_label.setText("  \u00b7  ".join(parts))
 
     # -- Inline assistant --------------------------------------------------------
 
