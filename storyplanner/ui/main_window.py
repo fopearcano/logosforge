@@ -58,8 +58,10 @@ class MainWindow(QMainWindow):
         self._project_id = project_id
         self._current_file: str | None = None
         self._dirty = False
+        self._cached_scenes_view: ScenesView | None = None
         self._update_title()
         self.resize(900, 600)
+        self.setMinimumSize(640, 400)
 
         icon_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
@@ -77,7 +79,8 @@ class MainWindow(QMainWindow):
         # -- Left sidebar ----------------------------------------------------
         sidebar = QWidget()
         sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(180)
+        sidebar.setMinimumWidth(140)
+        sidebar.setMaximumWidth(200)
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setContentsMargins(0, 8, 0, 8)
         sidebar_layout.setSpacing(0)
@@ -175,8 +178,13 @@ class MainWindow(QMainWindow):
         """Replace the content area with a new widget."""
         layout = self.centralWidget().layout()
         layout.replaceWidget(self.content_area, widget)
-        self.content_area.deleteLater()
+        old = self.content_area
+        if old is self._cached_scenes_view:
+            old.hide()
+        else:
+            old.deleteLater()
         self.content_area = widget
+        widget.show()
 
     def _build_initial_content(self) -> QWidget:
         scenes = self._db.get_all_scenes(self._project_id)
@@ -248,15 +256,17 @@ class MainWindow(QMainWindow):
         )
 
     def _show_scenes(self) -> None:
-        self._set_content(
-            ScenesView(
+        if self._cached_scenes_view is None:
+            self._cached_scenes_view = ScenesView(
                 self._db,
                 self._project_id,
                 on_data_changed=self._on_data_changed,
                 on_link_clicked=self._on_link_navigated,
                 on_focus_mode_changed=self._on_focus_mode_changed,
             )
-        )
+        if self.content_area is not self._cached_scenes_view:
+            self._set_content(self._cached_scenes_view)
+        self._cached_scenes_view.refresh()
 
     def _show_timeline(self) -> None:
         preferences.set_flag("has_seen_timeline_hint", True)
@@ -354,14 +364,17 @@ class MainWindow(QMainWindow):
             self._open_scene_in_editor(entity_id)
 
     def _open_scene_in_editor(self, scene_id: int) -> None:
-        view = ScenesView(
-            self._db, self._project_id,
-            on_data_changed=self._on_data_changed,
-            on_link_clicked=self._on_link_navigated,
-            on_focus_mode_changed=self._on_focus_mode_changed,
-        )
-        self._set_content(view)
-        view.select_scene(scene_id)
+        if self._cached_scenes_view is None:
+            self._cached_scenes_view = ScenesView(
+                self._db, self._project_id,
+                on_data_changed=self._on_data_changed,
+                on_link_clicked=self._on_link_navigated,
+                on_focus_mode_changed=self._on_focus_mode_changed,
+            )
+        if self.content_area is not self._cached_scenes_view:
+            self._set_content(self._cached_scenes_view)
+        self._cached_scenes_view.refresh()
+        self._cached_scenes_view.select_scene(scene_id)
 
     def _on_import(self) -> None:
         path, _ = QFileDialog.getOpenFileName(

@@ -212,8 +212,8 @@ class ScenesView(QWidget):
         writing_col.addStretch()
         self._content_input = QPlainTextEdit()
         self._content_input.setObjectName("contentEditor")
-        self._content_input.setMinimumHeight(400)
-        self._content_input.setMaximumWidth(720)
+        self._content_input.setMinimumHeight(200)
+        self._content_input.setMaximumWidth(800)
         self._content_input.setPlaceholderText("Write the full scene content here...")
         writing_font = QFont()
         writing_font.setPointSize(14)
@@ -354,21 +354,37 @@ class ScenesView(QWidget):
         inline_shortcut = QShortcut(QKeySequence("Ctrl+K"), self)
         inline_shortcut.activated.connect(self._inline_edit.activate)
 
-        self._load_characters()
+        self._load_characters_and_states()
         self._load_places()
-        self._load_state_combo()
         self._refresh_filters()
         self._refresh_list()
 
     # -- Populate checkable lists --------------------------------------------
 
-    def _load_characters(self) -> None:
+    def refresh(self) -> None:
+        """Refresh data without rebuilding the widget tree."""
+        self._load_characters_and_states()
+        self._load_places()
+        self._refresh_filters()
+        self._refresh_list()
+
+    def _load_characters_and_states(self) -> None:
+        chars = self._db.get_all_characters(self._project_id)
+
         self._char_list.clear()
-        for char in self._db.get_all_characters(self._project_id):
+        self._state_char_combo.clear()
+        self._char_id_by_name: dict[str, int] = {}
+        self._char_name_by_id: dict[int, str] = {}
+
+        for char in chars:
             item = QListWidgetItem(char.name)
             item.setData(USER_ROLE, char.id)
             item.setCheckState(Qt.CheckState.Unchecked)
             self._char_list.addItem(item)
+
+            self._state_char_combo.addItem(char.name)
+            self._char_id_by_name[char.name] = char.id
+            self._char_name_by_id[char.id] = char.name
 
     def _load_places(self) -> None:
         self._place_list.clear()
@@ -377,15 +393,6 @@ class ScenesView(QWidget):
             item.setData(USER_ROLE, place.id)
             item.setCheckState(Qt.CheckState.Unchecked)
             self._place_list.addItem(item)
-
-    def _load_state_combo(self) -> None:
-        self._state_char_combo.clear()
-        self._char_id_by_name: dict[str, int] = {}
-        self._char_name_by_id: dict[int, str] = {}
-        for char in self._db.get_all_characters(self._project_id):
-            self._state_char_combo.addItem(char.name)
-            self._char_id_by_name[char.name] = char.id
-            self._char_name_by_id[char.id] = char.name
 
     def _on_add_state(self) -> None:
         name = self._state_char_combo.currentText()
@@ -797,7 +804,6 @@ class ScenesView(QWidget):
             self._focus_title_label.setText(
                 self._title_input.text().strip() or "Untitled scene"
             )
-        self._content_input.setMaximumWidth(800 if self._focus_mode else 720)
         self._apply_line_spacing(
             self._content_input, 200 if self._focus_mode else 165
         )
