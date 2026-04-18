@@ -32,6 +32,7 @@ from storyplanner.export import (
 )
 from storyplanner.import_data import import_json, validate_import_data
 from storyplanner.ui.assistant_view import AssistantPanel
+from storyplanner.ui.settings_dialog import SettingsDialog
 from storyplanner.ui.act_analysis_view import ActAnalysisView
 from storyplanner.ui.beat_analysis_view import BeatAnalysisView
 from storyplanner.ui.character_arc_view import CharacterArcView
@@ -671,6 +672,13 @@ class MainWindow(QMainWindow):
         paste_action.triggered.connect(self._edit_paste)
         edit_menu.addAction(paste_action)
 
+        edit_menu.addSeparator()
+
+        prefs_action = QAction("Preferences...", self)
+        prefs_action.setShortcut(QKeySequence("Ctrl+,"))
+        prefs_action.triggered.connect(self._open_settings)
+        edit_menu.addAction(prefs_action)
+
         # -- View ---------------------------------------------------------------
         view_menu = menu_bar.addMenu("View")
 
@@ -819,6 +827,13 @@ class MainWindow(QMainWindow):
     def _menu_generate(self) -> None:
         if self._assistant_panel.isVisible():
             self._assistant_panel._send_custom()
+
+    def _open_settings(self) -> None:
+        dlg = SettingsDialog(
+            on_theme_changed=self._switch_theme,
+            parent=self,
+        )
+        dlg.exec()
 
     def _show_about(self) -> None:
         QMessageBox.about(
