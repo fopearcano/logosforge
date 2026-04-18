@@ -77,6 +77,8 @@ class MainWindow(QMainWindow):
 
         central = QWidget()
         root_layout = QHBoxLayout(central)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
         # -- Left sidebar ----------------------------------------------------
         sidebar = QWidget()

@@ -82,8 +82,11 @@ class AssistantPanel(QWidget):
         self._debounce_timer.setInterval(120)
         self._debounce_timer.timeout.connect(self._fire_request)
 
-        self.setMinimumWidth(180)
-        self.setMaximumWidth(240)
+        self.setMinimumWidth(240)
+        self.setMaximumWidth(340)
+        self.setStyleSheet(
+            f"AssistantPanel {{ border-left: 1px solid {theme.BORDER}; }}"
+        )
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -99,8 +102,8 @@ class AssistantPanel(QWidget):
 
         container = QWidget()
         self._layout = QVBoxLayout(container)
-        self._layout.setContentsMargins(6, 4, 6, 6)
-        self._layout.setSpacing(4)
+        self._layout.setContentsMargins(8, 6, 8, 8)
+        self._layout.setSpacing(6)
         scroll.setWidget(container)
 
         self._build_ui()
