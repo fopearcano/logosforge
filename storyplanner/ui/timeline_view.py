@@ -26,25 +26,40 @@ MODE_BY_PLOTLINE = "By Plotline"
 MODE_BY_CHAPTER = "By Chapter"
 
 CARD_STYLE = (
-    f"QFrame {{ background: {theme.CARD_BG}; border: 1px solid {theme.BORDER};"
-    f" border-radius: 3px; }}"
+    f"QFrame {{ background: {theme.CARD_BG}; border: 1px solid transparent;"
+    f" border-radius: 4px; }}"
+    f"QFrame:hover {{ background: {theme.BG_HOVER}; }}"
 )
 CARD_BEAT_STYLE = (
-    f"QFrame {{ background: {theme.CARD_BEAT_BG}; border: 1px solid {theme.BORDER};"
-    f" border-left: 3px solid {theme.CARD_BEAT_BORDER}; border-radius: 3px; }}"
+    f"QFrame {{ background: {theme.CARD_BEAT_BG}; border: 1px solid transparent;"
+    f" border-left: 3px solid {theme.CARD_BEAT_BORDER}; border-radius: 4px; }}"
+    f"QFrame:hover {{ background: {theme.BG_HOVER}; }}"
 )
 CARD_KEY_BEAT_STYLE = (
-    f"QFrame {{ background: {theme.CARD_KEY_BEAT_BG}; border: 1px solid {theme.BORDER};"
-    f" border-left: 3px solid {theme.CARD_KEY_BEAT_BORDER}; border-radius: 3px; }}"
+    f"QFrame {{ background: {theme.CARD_KEY_BEAT_BG}; border: 1px solid transparent;"
+    f" border-left: 3px solid {theme.CARD_KEY_BEAT_BORDER}; border-radius: 4px; }}"
+    f"QFrame:hover {{ background: {theme.BG_HOVER}; }}"
 )
 CARD_SELECTED_STYLE = (
-    f"QFrame {{ background: {theme.SELECTION_BG}; border: 2px solid {theme.ACCENT};"
-    f" border-radius: 3px; }}"
+    f"QFrame {{ background: {theme.SELECTION_BG}; border: 1px solid {theme.ACCENT};"
+    f" border-radius: 4px; }}"
 )
 
 KEY_BEATS = {"Midpoint", "All Is Lost", "Finale", "Climax", "Break into Three"}
 
 DRAG_THRESHOLD = 10
+
+TITLE_MAX_CHARS = 60
+SUMMARY_MAX_CHARS = 120
+TAGS_MAX_CHARS = 50
+CARD_MIN_HEIGHT = 88
+
+
+def _truncate(text: str, limit: int) -> str:
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "\u2026"
 
 
 class TimelineView(QWidget):
@@ -269,7 +284,7 @@ class TimelineView(QWidget):
             char_state = scene_state.get(scene.id, "")
             card = self._create_card(row + 1, scene, mode, char_state)
             self._table.setCellWidget(row, col, card)
-            self._table.setRowHeight(row, max(card.sizeHint().height(), 56))
+            self._table.setRowHeight(row, max(card.sizeHint().height(), CARD_MIN_HEIGHT))
             self._cell_data[(row, col)] = (scene.id, scene.title, scene.plotline)
 
         header = self._table.horizontalHeader()
@@ -326,15 +341,26 @@ class TimelineView(QWidget):
         card.setProperty("base_style", base_style)
 
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(6, 4, 6, 4)
-        card_layout.setSpacing(2)
+        card_layout.setContentsMargins(12, 10, 12, 10)
+        card_layout.setSpacing(5)
 
-        title_label = QLabel(scene.title)
-        bold_font = QFont()
-        bold_font.setBold(True)
-        title_label.setFont(bold_font)
+        title_label = QLabel(_truncate(scene.title, TITLE_MAX_CHARS))
+        title_font = QFont()
+        title_font.setBold(True)
+        title_font.setPointSize(title_font.pointSize() + 1)
+        title_label.setFont(title_font)
         title_label.setWordWrap(True)
+        title_label.setStyleSheet(f"color: {theme.TEXT_PRIMARY};")
         card_layout.addWidget(title_label)
+
+        summary_text = scene.summary or scene.synopsis or ""
+        if summary_text:
+            summary_label = QLabel(_truncate(summary_text, SUMMARY_MAX_CHARS))
+            summary_label.setWordWrap(True)
+            summary_label.setStyleSheet(
+                f"color: {theme.TEXT_PRIMARY}; font-size: 12px;"
+            )
+            card_layout.addWidget(summary_label)
 
         meta_parts = [f"#{index}"]
         if scene.act:
@@ -343,22 +369,17 @@ class TimelineView(QWidget):
             meta_parts.append(scene.chapter)
         elif mode == MODE_BY_CHAPTER and scene.plotline:
             meta_parts.append(scene.plotline)
+        if scene.beat:
+            meta_parts.append(scene.beat)
+        if scene.tags:
+            meta_parts.append(_truncate(scene.tags, TAGS_MAX_CHARS))
 
         meta_label = QLabel(" \u00b7 ".join(meta_parts))
-        meta_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY};")
+        meta_label.setStyleSheet(
+            f"color: {theme.TEXT_SECONDARY}; font-size: 11px;"
+        )
+        meta_label.setWordWrap(True)
         card_layout.addWidget(meta_label)
-
-        if scene.beat:
-            beat_color = "#ff9800" if scene.beat in KEY_BEATS else "#78909c"
-            beat_label = QLabel(f"[{scene.beat}]")
-            beat_label.setStyleSheet(f"color: {beat_color}; font-size: 11px;")
-            card_layout.addWidget(beat_label)
-
-        if scene.tags:
-            tags_label = QLabel(scene.tags)
-            tags_label.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 10px;")
-            tags_label.setWordWrap(True)
-            card_layout.addWidget(tags_label)
 
         if char_state:
             state_label = QLabel(f"\u2192 {char_state}")
