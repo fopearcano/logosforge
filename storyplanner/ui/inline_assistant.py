@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -21,7 +22,11 @@ from storyplanner.assistant import (
     build_messages,
     chat_completion,
 )
-from storyplanner.context_builder import gather_scene_context
+from storyplanner.context_builder import (
+    gather_outline_context,
+    gather_scene_context,
+    gather_story_memory,
+)
 from storyplanner.db import Database
 from storyplanner.prompt_router import route_prompt
 from storyplanner.providers import ProviderConfig
@@ -84,7 +89,25 @@ _RESPONSE_STYLE = (
     f"  background-color: {theme.BG_PANEL};"
     f"  color: {theme.TEXT_PRIMARY};"
     f"  border: 1px solid {theme.BORDER};"
-    f"  border-radius: 4px; padding: 8px;"
+    f"  border-radius: 4px; padding: 12px;"
+    f"}}"
+)
+
+_PRIMARY_BTN_STYLE = (
+    f"QPushButton {{"
+    f"  background-color: {theme.SELECTION_BG};"
+    f"  color: {theme.TEXT_PRIMARY};"
+    f"  border: 1px solid {theme.ACCENT_DIM};"
+    f"  border-radius: 3px; padding: 5px 20px;"
+    f"  font-weight: bold;"
+    f"}}"
+    f"QPushButton:hover {{"
+    f"  background-color: {theme.BG_HOVER};"
+    f"  border-color: {theme.ACCENT};"
+    f"}}"
+    f"QPushButton:disabled {{"
+    f"  color: {theme.TEXT_MUTED};"
+    f"  border-color: {theme.BG_INPUT};"
     f"}}"
 )
 
@@ -143,21 +166,9 @@ class InlineAssistantPanel(QWidget):
         header.setStyleSheet(f"font-weight: bold; color: {theme.TEXT_SECONDARY};")
         layout.addWidget(header)
 
-        # Selection action row
-        sel_row = QHBoxLayout()
-        sel_row.addWidget(QLabel("Selection:"))
-        self._sel_action_combo = QComboBox()
-        for label in SELECTION_ACTIONS:
-            self._sel_action_combo.addItem(label)
-        sel_row.addWidget(self._sel_action_combo, stretch=1)
-        self._sel_run_btn = QPushButton("Run on Selection")
-        self._sel_run_btn.clicked.connect(self._on_run_selection_action)
-        sel_row.addWidget(self._sel_run_btn)
-        layout.addLayout(sel_row)
-
-        # Template actions (whole scene)
+        # -- Scene template selector -----------------------------------------
         tpl_row = QHBoxLayout()
-        tpl_row.addWidget(QLabel("Template:"))
+        tpl_row.addWidget(QLabel("Scene:"))
         self._template_combo = QComboBox()
         for label in PRESET_ACTIONS:
             self._template_combo.addItem(label)
@@ -167,26 +178,123 @@ class InlineAssistantPanel(QWidget):
         tpl_row.addWidget(self._run_template_btn)
         layout.addLayout(tpl_row)
 
-        # Prompt input
+        layout.addSpacing(8)
+
+        # -- Selection quick actions -----------------------------------------
+        sel_label = QLabel("Selection")
+        sel_label.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 11px;")
+        layout.addWidget(sel_label)
+
+        sel_row = QHBoxLayout()
+        self._rewrite_btn = QPushButton("Rewrite")
+        self._rewrite_btn.clicked.connect(
+            lambda: self._run_quick_action("Rewrite"),
+        )
+        sel_row.addWidget(self._rewrite_btn)
+
+        self._expand_btn = QPushButton("Expand")
+        self._expand_btn.clicked.connect(
+            lambda: self._run_quick_action("Expand"),
+        )
+        sel_row.addWidget(self._expand_btn)
+
+        self._dialogue_btn = QPushButton("Dialogue")
+        self._dialogue_btn.clicked.connect(
+            lambda: self._run_quick_action("Dialogue"),
+        )
+        sel_row.addWidget(self._dialogue_btn)
+
+        self._sel_more_btn = QPushButton("More")
+        sel_more_menu = QMenu(self)
+        sel_more_menu.addAction(
+            "Tighten", lambda: self._run_quick_action("Tighten"),
+        )
+        sel_more_menu.addAction(
+            "Tension", lambda: self._run_quick_action("Tension"),
+        )
+        self._sel_more_btn.setMenu(sel_more_menu)
+        sel_row.addWidget(self._sel_more_btn)
+        sel_row.addStretch()
+        layout.addLayout(sel_row)
+
+        layout.addSpacing(8)
+
+        # -- Context section (collapsible, default collapsed) ----------------
+        self._ctx_header_btn = QPushButton("\u25b6 Context")
+        self._ctx_header_btn.setFlat(True)
+        self._ctx_header_btn.setStyleSheet(
+            f"text-align: left; color: {theme.TEXT_MUTED};"
+            f" font-size: 11px; padding: 2px 0;"
+        )
+        self._ctx_header_btn.clicked.connect(self._toggle_context_section)
+        layout.addWidget(self._ctx_header_btn)
+
+        self._ctx_section = QWidget()
+        ctx_layout = QVBoxLayout(self._ctx_section)
+        ctx_layout.setContentsMargins(16, 4, 0, 0)
+
+        self._include_outline = QCheckBox("Include outline")
+        ctx_layout.addWidget(self._include_outline)
+
+        self._include_story_memory = QCheckBox("Include story memory")
+        ctx_layout.addWidget(self._include_story_memory)
+
+        self._ctx_toggle = QCheckBox("Show context sent to model")
+        self._ctx_toggle.toggled.connect(self._on_ctx_toggle)
+        ctx_layout.addWidget(self._ctx_toggle)
+
+        self._ctx_viewer = QPlainTextEdit()
+        self._ctx_viewer.setReadOnly(True)
+        self._ctx_viewer.setMaximumHeight(180)
+        self._ctx_viewer.setStyleSheet(_RESPONSE_STYLE)
+        self._ctx_viewer.setPlaceholderText(
+            "Context will appear here after a request..."
+        )
+        self._ctx_viewer.hide()
+        ctx_layout.addWidget(self._ctx_viewer)
+
+        layout.addWidget(self._ctx_section)
+        self._ctx_section.hide()
+
+        layout.addSpacing(8)
+
+        # -- Instructions input ----------------------------------------------
         self._prompt = QPlainTextEdit()
         self._prompt.setMaximumHeight(60)
         self._prompt.setPlaceholderText("Ask about this scene...")
         layout.addWidget(self._prompt)
 
-        prompt_row = QHBoxLayout()
-        prompt_row.addStretch()
-        self._preview_btn = QPushButton("Preview")
-        self._preview_btn.clicked.connect(self._on_preview)
-        prompt_row.addWidget(self._preview_btn)
-        self._send_btn = QPushButton("Send")
-        self._send_btn.clicked.connect(self._on_send)
-        prompt_row.addWidget(self._send_btn)
-        layout.addLayout(prompt_row)
+        # -- Generate button (primary action) --------------------------------
+        gen_row = QHBoxLayout()
+        gen_row.addStretch()
+        self._generate_btn = QPushButton("Generate")
+        self._generate_btn.setStyleSheet(_PRIMARY_BTN_STYLE)
+        self._generate_btn.clicked.connect(self._on_send)
+        gen_row.addWidget(self._generate_btn)
+        layout.addLayout(gen_row)
 
-        # -- Response container (normal view) --------------------------------
+        layout.addSpacing(8)
+
+        # -- Response area ---------------------------------------------------
         self._response_container = QWidget()
         rc_layout = QVBoxLayout(self._response_container)
         rc_layout.setContentsMargins(0, 0, 0, 0)
+
+        resp_header = QHBoxLayout()
+        resp_label = QLabel("Response")
+        resp_label.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: 11px;"
+        )
+        resp_header.addWidget(resp_label)
+        resp_header.addStretch()
+        self._copy_btn = QPushButton("Copy")
+        self._copy_btn.setFlat(True)
+        self._copy_btn.setStyleSheet(
+            f"color: {theme.TEXT_SECONDARY}; font-size: 11px;"
+        )
+        self._copy_btn.clicked.connect(self._copy_response)
+        resp_header.addWidget(self._copy_btn)
+        rc_layout.addLayout(resp_header)
 
         self._response = QPlainTextEdit()
         self._response.setReadOnly(True)
@@ -195,8 +303,9 @@ class InlineAssistantPanel(QWidget):
         self._response.setStyleSheet(_RESPONSE_STYLE)
         rc_layout.addWidget(self._response)
 
+        # -- Apply actions ---------------------------------------------------
         action_row = QHBoxLayout()
-        self._replace_btn = QPushButton("Replace Selection")
+        self._replace_btn = QPushButton("Replace")
         self._replace_btn.clicked.connect(self._replace_selection)
         action_row.addWidget(self._replace_btn)
 
@@ -204,13 +313,11 @@ class InlineAssistantPanel(QWidget):
         self._insert_btn.clicked.connect(self._insert_at_cursor)
         action_row.addWidget(self._insert_btn)
 
-        self._compare_btn = QPushButton("Compare")
-        self._compare_btn.clicked.connect(self._show_diff)
-        action_row.addWidget(self._compare_btn)
-
-        self._copy_btn = QPushButton("Copy")
-        self._copy_btn.clicked.connect(self._copy_response)
-        action_row.addWidget(self._copy_btn)
+        self._apply_more_btn = QPushButton("More")
+        apply_more_menu = QMenu(self)
+        apply_more_menu.addAction("Compare", self._show_diff)
+        self._apply_more_btn.setMenu(apply_more_menu)
+        action_row.addWidget(self._apply_more_btn)
         action_row.addStretch()
         rc_layout.addLayout(action_row)
 
@@ -263,20 +370,7 @@ class InlineAssistantPanel(QWidget):
         layout.addWidget(self._diff_container)
         self._diff_container.hide()
 
-        # Context inspector
-        self._ctx_toggle = QCheckBox("Show context sent to model")
-        self._ctx_toggle.toggled.connect(self._on_ctx_toggle)
-        layout.addWidget(self._ctx_toggle)
-
-        self._ctx_viewer = QPlainTextEdit()
-        self._ctx_viewer.setReadOnly(True)
-        self._ctx_viewer.setMaximumHeight(180)
-        self._ctx_viewer.setStyleSheet(_RESPONSE_STYLE)
-        self._ctx_viewer.setPlaceholderText("Context will appear here after a request...")
-        self._ctx_viewer.hide()
-        layout.addWidget(self._ctx_viewer)
-
-        # Provider settings
+        # -- Provider settings -----------------------------------------------
         self._provider_widget = ProviderSettingsWidget(compact=True)
         layout.addWidget(self._provider_widget)
 
@@ -288,9 +382,10 @@ class InlineAssistantPanel(QWidget):
         layout.addLayout(mem_row)
 
         self._interactive_buttons = [
-            self._sel_run_btn, self._run_template_btn,
-            self._send_btn, self._preview_btn,
-            self._replace_btn, self._insert_btn, self._compare_btn,
+            self._rewrite_btn, self._expand_btn, self._dialogue_btn,
+            self._sel_more_btn, self._run_template_btn,
+            self._generate_btn,
+            self._replace_btn, self._insert_btn, self._apply_more_btn,
         ]
 
     # -- Scene context -------------------------------------------------------
@@ -323,6 +418,15 @@ class InlineAssistantPanel(QWidget):
     def _clear_session_memory(self) -> None:
         self._session_memory.clear()
         self._response.setPlainText("Session memory cleared.")
+
+    # -- Context section ------------------------------------------------------
+
+    def _toggle_context_section(self) -> None:
+        visible = not self._ctx_section.isVisible()
+        self._ctx_section.setVisible(visible)
+        self._ctx_header_btn.setText(
+            "\u25bc Context" if visible else "\u25b6 Context"
+        )
 
     def _on_ctx_toggle(self, checked: bool) -> None:
         self._ctx_viewer.setVisible(checked)
@@ -457,13 +561,12 @@ class InlineAssistantPanel(QWidget):
         self._diff_container.hide()
         self._response_container.show()
 
-    # -- Selection actions ---------------------------------------------------
+    # -- Quick actions (selection) -------------------------------------------
 
-    def _on_run_selection_action(self) -> None:
+    def _run_quick_action(self, key: str) -> None:
         selected = self._snapshot_selection()
         if selected is None:
             return
-        key = self._sel_action_combo.currentText()
         instruction = SELECTION_ACTIONS.get(key, "")
         if not instruction:
             return
@@ -487,15 +590,6 @@ class InlineAssistantPanel(QWidget):
         template_name, action_prompt = route_prompt(prompt)
         self._send_request(action_prompt, routed_to=template_name)
 
-    def _on_preview(self) -> None:
-        scene_ctx = self._get_scene_context()
-        if not scene_ctx:
-            self._response.setPlainText("No scene selected.")
-            return
-        self._response.setPlainText(
-            "=== Context sent to the model ===\n\n" + scene_ctx
-        )
-
     # -- Provider communication ------------------------------------------------
 
     def _send_request(
@@ -517,15 +611,34 @@ class InlineAssistantPanel(QWidget):
             return
 
         session_ctx = self._build_session_memory_context()
+
+        outline_ctx = ""
+        if self._include_outline.isChecked():
+            outline_ctx = gather_outline_context(self._db, self._project_id)
+
+        story_mem = ""
+        if self._include_story_memory.isChecked():
+            story_mem = gather_story_memory(self._db, self._project_id)
+
+        combined_memory = "\n\n".join(
+            part for part in [story_mem, session_ctx] if part
+        )
         messages = build_messages(
-            action_prompt, scene_ctx, story_memory_context=session_ctx,
+            action_prompt, scene_ctx,
+            outline_context=outline_ctx,
+            story_memory_context=combined_memory,
         )
 
-        self._ctx_viewer.setPlainText(
-            f"--- Scene Context ---\n{scene_ctx}"
-            + (f"\n\n--- Session Memory ---\n{session_ctx}" if session_ctx else "")
-            + f"\n\n--- Action ---\n{action_prompt}"
-        )
+        ctx_parts = [f"--- Scene Context ---\n{scene_ctx}"]
+        if outline_ctx:
+            ctx_parts.append(f"--- Outline ---\n{outline_ctx}")
+        if story_mem:
+            ctx_parts.append(f"--- Story Memory ---\n{story_mem}")
+        if session_ctx:
+            ctx_parts.append(f"--- Session Memory ---\n{session_ctx}")
+        ctx_parts.append(f"--- Action ---\n{action_prompt}")
+        self._ctx_viewer.setPlainText("\n\n".join(ctx_parts))
+
         self._set_busy(True)
         if routed_to:
             self._response.setPlainText(
