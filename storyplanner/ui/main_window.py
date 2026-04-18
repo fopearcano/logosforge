@@ -3,8 +3,10 @@
 import os
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -15,6 +17,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from storyplanner.ui import theme
 
 from storyplanner import preferences, recent_projects
 from storyplanner.db import Database
@@ -73,26 +77,68 @@ class MainWindow(QMainWindow):
         # -- Left sidebar ----------------------------------------------------
         sidebar = QWidget()
         sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(160)
+        sidebar.setFixedWidth(180)
         sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(0, 0, 0, 0)
-        sidebar_layout.setSpacing(1)
+        sidebar_layout.setContentsMargins(0, 8, 0, 8)
+        sidebar_layout.setSpacing(0)
+
+        _ICONS = {
+            "Projects": "\U0001F4C1",
+            "Dashboard": "\U0001F3E0",
+            "Characters": "\U0001F464",
+            "Places": "\U0001F4CD",
+            "Notes": "\U0001F4DD",
+            "Scenes": "\U0001F3AC",
+            "Timeline": "\U0001F552",
+            "Outline": "\U0001F4D1",
+            "Writer": "\u270D",
+            "Structure": "\U0001F3D7",
+            "Acts": "\U0001F3AD",
+            "Beats": "\U0001F4CC",
+            "Tags": "\U0001F3F7",
+            "Graph": "\U0001F578",
+            "Arcs": "\U0001F4C8",
+            "Search": "\U0001F50D",
+            "Assistant": "\U0001F916",
+        }
 
         self.sidebar_buttons: dict[str, QPushButton] = {}
         for label in ("Projects", "Dashboard", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline", "Writer", "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs", "Search", "Assistant"):
-            btn = QPushButton(label)
+            icon = _ICONS.get(label, "")
+            btn = QPushButton(f"{icon}  {label}")
             sidebar_layout.addWidget(btn)
             self.sidebar_buttons[label] = btn
 
-        # Push buttons to the top
         sidebar_layout.addStretch()
 
-        # Import / Export buttons at bottom of sidebar
-        self._import_btn = QPushButton("Import")
+        # -- Appearance selector ------------------------------------------------
+        app_label = QLabel("Appearance")
+        app_label.setStyleSheet(
+            "font-size: 10px; padding: 2px 14px; margin-top: 8px;"
+        )
+        sidebar_layout.addWidget(app_label)
+
+        appearance_bar = QWidget()
+        appearance_bar.setObjectName("appearanceBar")
+        ab_layout = QHBoxLayout(appearance_bar)
+        ab_layout.setContentsMargins(2, 2, 2, 2)
+        ab_layout.setSpacing(0)
+        self._appearance_btns: dict[str, QPushButton] = {}
+        for name, short in (("Dark", "Dark"), ("Light (Green)", "Green"), ("Light (Warm)", "Warm")):
+            btn = QPushButton(short)
+            btn.setCheckable(True)
+            btn.setChecked(name == theme.current_palette())
+            btn.clicked.connect(lambda _, n=name: self._switch_theme(n))
+            ab_layout.addWidget(btn)
+            self._appearance_btns[name] = btn
+        sidebar_layout.addWidget(appearance_bar)
+
+        # -- Import / Export ---------------------------------------------------
+        self._import_btn = QPushButton("\U0001F4E5  Import")
         sidebar_layout.addWidget(self._import_btn)
         self._import_btn.clicked.connect(self._on_import)
 
-        self._export_btn = QPushButton("Export")
+        self._export_btn = QPushButton("\U0001F4E4  Export")
         sidebar_layout.addWidget(self._export_btn)
         self._export_btn.clicked.connect(self._on_export)
 
@@ -517,3 +563,15 @@ class MainWindow(QMainWindow):
     def _mark_clean(self) -> None:
         self._dirty = False
         self._update_title()
+
+    # -- Theme switching -----------------------------------------------------
+
+    def _switch_theme(self, name: str) -> None:
+        theme.set_palette(name)
+        theme._rebuild_html()
+        app = QApplication.instance()
+        if app:
+            app.setStyleSheet(theme.build_stylesheet())
+        for key, btn in self._appearance_btns.items():
+            btn.setChecked(key == name)
+        preferences.set_string("appearance", name)

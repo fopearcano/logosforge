@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
+from storyplanner.ui import theme
 
 
 class BeatAnalysisView(QWidget):
@@ -57,14 +58,14 @@ class BeatAnalysisView(QWidget):
             "<table cellpadding='4' cellspacing='0' style='border-collapse: collapse;'>"
         )
         parts.append(
-            "<tr style='border-bottom: 2px solid #2a2f36;'>"
+            "<tr style='border-bottom: 2px solid {theme.BORDER};'>"
             "<th align='left'>Beat</th>"
             "<th align='right'>Count</th>"
             "</tr>"
         )
         for beat, count in sorted(beat_counts.items()):
             parts.append(
-                f"<tr style='border-bottom: 1px solid #1a1e24;'>"
+                f"<tr style='border-bottom: 1px solid {theme.BORDER};'>"
                 f"<td>{_esc(beat)}</td>"
                 f"<td align='right'>{count}</td>"
                 f"</tr>"
@@ -72,7 +73,7 @@ class BeatAnalysisView(QWidget):
         assigned = len(beat_positions)
         unassigned = total_scenes - assigned
         parts.append(
-            f"<tr style='border-top: 2px solid #2a2f36;'>"
+            f"<tr style='border-top: 2px solid {theme.BORDER};'>"
             f"<td><b>Total assigned</b></td>"
             f"<td align='right'><b>{assigned} / {total_scenes}</b></td>"
             f"</tr>"
@@ -81,7 +82,7 @@ class BeatAnalysisView(QWidget):
 
         if unassigned > 0:
             parts.append(
-                f"<p style='color: #6b7280;'>"
+                f"<p style='color: {theme.TEXT_MUTED};'>"
                 f"{unassigned} scene(s) without a beat.</p>"
             )
 
@@ -91,7 +92,7 @@ class BeatAnalysisView(QWidget):
             "<table cellpadding='4' cellspacing='0' style='border-collapse: collapse;'>"
         )
         parts.append(
-            "<tr style='border-bottom: 2px solid #2a2f36;'>"
+            "<tr style='border-bottom: 2px solid {theme.BORDER};'>"
             "<th align='left'>#</th>"
             "<th align='left'>Scene</th>"
             "<th align='left'>Beat</th>"
@@ -99,7 +100,7 @@ class BeatAnalysisView(QWidget):
         )
         for index, title, beat in beat_positions:
             parts.append(
-                f"<tr style='border-bottom: 1px solid #1a1e24;'>"
+                f"<tr style='border-bottom: 1px solid {theme.BORDER};'>"
                 f"<td>{index}</td>"
                 f"<td>{_esc(title)}</td>"
                 f"<td>{_esc(beat)}</td>"

@@ -11,8 +11,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -23,30 +21,6 @@ from storyplanner import recent_projects
 from storyplanner.ui import theme
 
 USER_ROLE = Qt.ItemDataRole.UserRole
-
-_CARD_STYLE = (
-    f"QFrame#projCard {{ background: {theme.CARD_BG};"
-    f" border: 1px solid {theme.BORDER}; border-radius: 4px; }}"
-)
-
-_PRIMARY_BTN_STYLE = (
-    f"QPushButton {{"
-    f"  background-color: {theme.SELECTION_BG};"
-    f"  color: {theme.TEXT_PRIMARY};"
-    f"  border: 1px solid {theme.ACCENT_DIM};"
-    f"  border-radius: 3px; padding: 6px 18px;"
-    f"  font-weight: bold;"
-    f"}}"
-    f"QPushButton:hover {{"
-    f"  background-color: {theme.BG_HOVER};"
-    f"  border-color: {theme.ACCENT};"
-    f"}}"
-)
-
-_EYEBROW_STYLE = (
-    f"color: {theme.TEXT_SECONDARY}; font-size: 11px;"
-    f" letter-spacing: 1px; text-transform: uppercase;"
-)
 
 
 class ProjectsView(QWidget):
@@ -94,7 +68,7 @@ class ProjectsView(QWidget):
         btn_row.setSpacing(8)
 
         open_btn = QPushButton("Open Project\u2026")
-        open_btn.setStyleSheet(_PRIMARY_BTN_STYLE)
+        open_btn.setStyleSheet(theme.primary_btn())
         open_btn.clicked.connect(self._on_browse)
         btn_row.addWidget(open_btn)
 
@@ -121,7 +95,7 @@ class ProjectsView(QWidget):
 
     def _add_section(self, title: str, paths: list[str]) -> None:
         label = QLabel(title)
-        label.setStyleSheet(_EYEBROW_STYLE)
+        label.setStyleSheet(theme.eyebrow())
         self._layout.addWidget(label)
 
         for path in paths:
@@ -131,7 +105,7 @@ class ProjectsView(QWidget):
     def _make_project_card(self, path: str) -> QFrame:
         card = QFrame()
         card.setObjectName("projCard")
-        card.setStyleSheet(_CARD_STYLE)
+        card.setStyleSheet(theme.card_style("projCard"))
 
         row = QHBoxLayout(card)
         row.setContentsMargins(16, 12, 16, 12)
@@ -166,7 +140,7 @@ class ProjectsView(QWidget):
         row.addLayout(info, stretch=1)
 
         open_btn = QPushButton("Open")
-        open_btn.setStyleSheet(_PRIMARY_BTN_STYLE)
+        open_btn.setStyleSheet(theme.primary_btn())
         open_btn.clicked.connect(lambda _, p=path: self._on_open_file(p))
         row.addWidget(open_btn)
 
@@ -175,7 +149,7 @@ class ProjectsView(QWidget):
     def _add_empty_state(self) -> None:
         card = QFrame()
         card.setObjectName("projCard")
-        card.setStyleSheet(_CARD_STYLE)
+        card.setStyleSheet(theme.card_style("projCard"))
 
         inner = QVBoxLayout(card)
         inner.setContentsMargins(24, 22, 24, 22)
@@ -198,7 +172,7 @@ class ProjectsView(QWidget):
         btn_row.setSpacing(8)
 
         open_btn = QPushButton("Open Project\u2026")
-        open_btn.setStyleSheet(_PRIMARY_BTN_STYLE)
+        open_btn.setStyleSheet(theme.primary_btn())
         open_btn.clicked.connect(self._on_browse)
         btn_row.addWidget(open_btn)
 

@@ -21,25 +21,20 @@ from storyplanner.ui import theme
 from storyplanner.ui.inline_assistant import SELECTION_ACTIONS, SLASH_COMMANDS
 from storyplanner.ui.provider_settings import ProviderSettingsWidget
 
-_BAR_STYLE = (
-    f"InlineEditBar {{ background: {theme.BG_PANEL};"
-    f" border: 1px solid {theme.BORDER}; border-radius: 4px; }}"
-)
+def _bar_style() -> str:
+    return (
+        f"InlineEditBar {{ background: {theme.BG_PANEL};"
+        f" border: 1px solid {theme.BORDER}; border-radius: 6px; }}"
+    )
 
-_SUGGESTION_STYLE = (
-    f"QPlainTextEdit {{ background: {theme.DIFF_PROPOSED_BG};"
-    f" color: {theme.DIFF_PROPOSED_TEXT};"
-    f" border: 1px solid {theme.DIFF_PROPOSED_BORDER};"
-    f" border-radius: 3px; padding: 8px; }}"
-)
 
-_SMALL_BTN = (
-    f"QPushButton {{ background: transparent; color: {theme.TEXT_SECONDARY};"
-    f" border: 1px solid {theme.BORDER}; border-radius: 3px;"
-    f" padding: 2px 8px; font-size: 11px; }}"
-    f"QPushButton:hover {{ background: {theme.BG_HOVER};"
-    f" color: {theme.TEXT_PRIMARY}; }}"
-)
+def _suggestion_style() -> str:
+    return (
+        f"QPlainTextEdit {{ background: {theme.DIFF_PROPOSED_BG};"
+        f" color: {theme.DIFF_PROPOSED_TEXT};"
+        f" border: 1px solid {theme.DIFF_PROPOSED_BORDER};"
+        f" border-radius: 5px; padding: 8px; }}"
+    )
 
 
 class _InlineWorker(QThread):
@@ -76,7 +71,7 @@ class InlineEditBar(QWidget):
         super().__init__(editor.viewport())
         self.setObjectName("InlineEditBar")
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.setStyleSheet(_BAR_STYLE)
+        self.setStyleSheet(_bar_style())
         self.setMaximumWidth(400)
 
         self._editor = editor
@@ -103,7 +98,7 @@ class InlineEditBar(QWidget):
         ar.setSpacing(4)
         for label in ("Rewrite", "Expand", "Dialogue"):
             btn = QPushButton(label)
-            btn.setStyleSheet(_SMALL_BTN)
+            btn.setStyleSheet(theme.small_btn())
             btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             btn.clicked.connect(lambda _, k=label: self._run_action(k))
             ar.addWidget(btn)
@@ -127,7 +122,7 @@ class InlineEditBar(QWidget):
         self._suggestion = QPlainTextEdit()
         self._suggestion.setReadOnly(True)
         self._suggestion.setMaximumHeight(120)
-        self._suggestion.setStyleSheet(_SUGGESTION_STYLE)
+        self._suggestion.setStyleSheet(_suggestion_style())
         self._suggestion.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         ra.addWidget(self._suggestion)
 
@@ -139,7 +134,7 @@ class InlineEditBar(QWidget):
             ("Cancel", self._dismiss),
         ):
             btn = QPushButton(label)
-            btn.setStyleSheet(_SMALL_BTN)
+            btn.setStyleSheet(theme.small_btn())
             btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             btn.clicked.connect(slot)
             btn_row.addWidget(btn)

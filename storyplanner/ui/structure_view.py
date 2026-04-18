@@ -92,7 +92,7 @@ class StructureView(QWidget):
 
         if unassigned > 0:
             parts.append(
-                f"<p style='color: #6b7280; margin-top: 12px;'>"
+                f"<p style='color: {theme.TEXT_MUTED}; margin-top: 12px;'>"
                 f"{unassigned} scene(s) without a beat.</p>"
             )
 

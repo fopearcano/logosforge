@@ -15,21 +15,6 @@ from PySide6.QtWidgets import (
 from storyplanner.ui import theme
 
 
-_PRIMARY_BTN_STYLE = (
-    f"QPushButton {{"
-    f"  background-color: {theme.SELECTION_BG};"
-    f"  color: {theme.TEXT_PRIMARY};"
-    f"  border: 1px solid {theme.ACCENT_DIM};"
-    f"  border-radius: 3px; padding: 8px 28px;"
-    f"  font-weight: bold;"
-    f"}}"
-    f"QPushButton:hover {{"
-    f"  background-color: {theme.BG_HOVER};"
-    f"  border-color: {theme.ACCENT};"
-    f"}}"
-)
-
-
 class WelcomeView(QWidget):
     """Shown on first launch when no scenes exist."""
 
@@ -59,7 +44,7 @@ class WelcomeView(QWidget):
         layout.addWidget(body)
 
         btn = QPushButton("Create Scene")
-        btn.setStyleSheet(_PRIMARY_BTN_STYLE)
+        btn.setStyleSheet(theme.primary_btn())
         btn.clicked.connect(self._on_create_scene)
 
         btn_row = QHBoxLayout()

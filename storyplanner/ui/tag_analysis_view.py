@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
+from storyplanner.ui import theme
 
 
 class TagAnalysisView(QWidget):
@@ -63,7 +64,7 @@ class TagAnalysisView(QWidget):
             "<table cellpadding='4' cellspacing='0' style='border-collapse: collapse;'>"
         )
         parts.append(
-            "<tr style='border-bottom: 2px solid #2a2f36;'>"
+            "<tr style='border-bottom: 2px solid {theme.BORDER};'>"
             "<th align='left'>Tag</th>"
             "<th align='right'>Scenes</th>"
             "</tr>"
@@ -71,13 +72,13 @@ class TagAnalysisView(QWidget):
         for tag in sorted_tags:
             count = len(tag_scenes[tag])
             parts.append(
-                f"<tr style='border-bottom: 1px solid #1a1e24;'>"
+                f"<tr style='border-bottom: 1px solid {theme.BORDER};'>"
                 f"<td>{_esc(tag)}</td>"
                 f"<td align='right'>{count}</td>"
                 f"</tr>"
             )
         parts.append(
-            f"<tr style='border-top: 2px solid #2a2f36;'>"
+            f"<tr style='border-top: 2px solid {theme.BORDER};'>"
             f"<td><b>Unique tags</b></td>"
             f"<td align='right'><b>{len(sorted_tags)}</b></td>"
             f"</tr>"
@@ -87,7 +88,7 @@ class TagAnalysisView(QWidget):
         untagged = total_scenes - tagged_count
         if untagged > 0:
             parts.append(
-                f"<p style='color: #6b7280;'>"
+                f"<p style='color: {theme.TEXT_MUTED};'>"
                 f"{untagged} scene(s) without tags.</p>"
             )
 

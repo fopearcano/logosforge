@@ -4,20 +4,25 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
+from storyplanner import preferences
 from storyplanner.db import Database
 from storyplanner.ui.main_window import MainWindow
-from storyplanner.ui.theme import build_stylesheet
+from storyplanner.ui import theme
 
 DB_PATH = "storyplanner.db"
 
 
 def create_app() -> tuple[QApplication, MainWindow]:
     app = QApplication.instance() or QApplication(sys.argv)
-    app.setStyleSheet(build_stylesheet())
+
+    saved = preferences.get_string("appearance", "Dark")
+    if saved in theme.PALETTE_NAMES:
+        theme.set_palette(saved)
+
+    app.setStyleSheet(theme.build_stylesheet())
 
     db = Database(DB_PATH)
 
-    # Use the first project, or create a default one
     projects = db.get_all_projects()
     if projects:
         project = projects[0]

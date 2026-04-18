@@ -25,25 +25,35 @@ UNASSIGNED = "Unassigned"
 MODE_BY_PLOTLINE = "By Plotline"
 MODE_BY_CHAPTER = "By Chapter"
 
-CARD_STYLE = (
-    f"QFrame {{ background: {theme.CARD_BG}; border: 1px solid transparent;"
-    f" border-radius: 4px; }}"
-    f"QFrame:hover {{ background: {theme.BG_HOVER}; }}"
-)
-CARD_BEAT_STYLE = (
-    f"QFrame {{ background: {theme.CARD_BEAT_BG}; border: 1px solid transparent;"
-    f" border-left: 3px solid {theme.CARD_BEAT_BORDER}; border-radius: 4px; }}"
-    f"QFrame:hover {{ background: {theme.BG_HOVER}; }}"
-)
-CARD_KEY_BEAT_STYLE = (
-    f"QFrame {{ background: {theme.CARD_KEY_BEAT_BG}; border: 1px solid transparent;"
-    f" border-left: 3px solid {theme.CARD_KEY_BEAT_BORDER}; border-radius: 4px; }}"
-    f"QFrame:hover {{ background: {theme.BG_HOVER}; }}"
-)
-CARD_SELECTED_STYLE = (
-    f"QFrame {{ background: {theme.SELECTION_BG}; border: 1px solid {theme.ACCENT};"
-    f" border-radius: 4px; }}"
-)
+def _card_style() -> str:
+    return (
+        f"QFrame {{ background: {theme.CARD_BG}; border: 1px solid {theme.CARD_BORDER};"
+        f" border-radius: 8px; }}"
+        f"QFrame:hover {{ background: {theme.BG_HOVER}; }}"
+    )
+
+
+def _card_beat_style() -> str:
+    return (
+        f"QFrame {{ background: {theme.CARD_BEAT_BG}; border: 1px solid {theme.CARD_BORDER};"
+        f" border-left: 3px solid {theme.CARD_BEAT_BORDER}; border-radius: 8px; }}"
+        f"QFrame:hover {{ background: {theme.BG_HOVER}; }}"
+    )
+
+
+def _card_key_beat_style() -> str:
+    return (
+        f"QFrame {{ background: {theme.CARD_KEY_BEAT_BG}; border: 1px solid {theme.CARD_BORDER};"
+        f" border-left: 3px solid {theme.CARD_KEY_BEAT_BORDER}; border-radius: 8px; }}"
+        f"QFrame:hover {{ background: {theme.BG_HOVER}; }}"
+    )
+
+
+def _card_selected_style() -> str:
+    return (
+        f"QFrame {{ background: {theme.SELECTION_BG}; border: 1px solid {theme.ACCENT};"
+        f" border-radius: 8px; }}"
+    )
 
 KEY_BEATS = {"Midpoint", "All Is Lost", "Finale", "Climax", "Break into Three"}
 
@@ -332,11 +342,11 @@ class TimelineView(QWidget):
         card.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         if scene.beat and scene.beat in KEY_BEATS:
-            base_style = CARD_KEY_BEAT_STYLE
+            base_style = _card_key_beat_style()
         elif scene.beat:
-            base_style = CARD_BEAT_STYLE
+            base_style = _card_beat_style()
         else:
-            base_style = CARD_STYLE
+            base_style = _card_style()
         card.setStyleSheet(base_style)
         card.setProperty("base_style", base_style)
 
@@ -506,7 +516,7 @@ class TimelineView(QWidget):
         self._set_actions_enabled(has_scene)
 
         if self._selected_card is not None:
-            restore = self._selected_card.property("base_style") or CARD_STYLE
+            restore = self._selected_card.property("base_style") or _card_style()
             self._selected_card.setStyleSheet(restore)
             self._selected_card = None
 
@@ -518,7 +528,7 @@ class TimelineView(QWidget):
                 self._status_label.setText(f"Selected: {title}")
                 card = self._table.cellWidget(cell[0], cell[1])
                 if card:
-                    card.setStyleSheet(CARD_SELECTED_STYLE)
+                    card.setStyleSheet(_card_selected_style())
                     self._selected_card = card
             else:
                 self._selected_scene_id = None

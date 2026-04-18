@@ -20,29 +20,6 @@ from storyplanner.db import Database
 from storyplanner.ui import theme
 
 
-_PRIMARY_BTN_STYLE = (
-    f"QPushButton {{"
-    f"  background-color: {theme.SELECTION_BG};"
-    f"  color: {theme.TEXT_PRIMARY};"
-    f"  border: 1px solid {theme.ACCENT_DIM};"
-    f"  border-radius: 3px; padding: 6px 22px;"
-    f"  font-weight: bold;"
-    f"}}"
-    f"QPushButton:hover {{"
-    f"  background-color: {theme.BG_HOVER};"
-    f"  border-color: {theme.ACCENT};"
-    f"}}"
-)
-
-_EYEBROW_STYLE = (
-    f"color: {theme.TEXT_SECONDARY}; font-size: 11px;"
-    f" letter-spacing: 1px; text-transform: uppercase;"
-)
-
-_CARD_STYLE = (
-    f"QFrame#dashCard {{ background: {theme.CARD_BG};"
-    f" border: 1px solid {theme.BORDER}; border-radius: 4px; }}"
-)
 
 
 class DashboardView(QWidget):
@@ -191,7 +168,7 @@ class DashboardView(QWidget):
         inner.addWidget(body)
 
         btn = QPushButton("Create Scene")
-        btn.setStyleSheet(_PRIMARY_BTN_STYLE)
+        btn.setStyleSheet(theme.primary_btn())
         btn.clicked.connect(lambda: self._open_section("scenes"))
 
         btn_row = QHBoxLayout()
@@ -248,13 +225,15 @@ class DashboardView(QWidget):
     def _add_current_work(self, scenes) -> None:
         latest = max(scenes, key=lambda s: s.created_at)
 
-        card = self._make_card()
+        card = QFrame()
+        card.setObjectName("heroCard")
+        card.setStyleSheet(theme.hero_card_style())
         inner = QVBoxLayout(card)
-        inner.setContentsMargins(20, 16, 20, 16)
-        inner.setSpacing(8)
+        inner.setContentsMargins(24, 20, 24, 20)
+        inner.setSpacing(10)
 
         eyebrow = QLabel("Continue writing")
-        eyebrow.setStyleSheet(_EYEBROW_STYLE)
+        eyebrow.setStyleSheet(theme.eyebrow())
         inner.addWidget(eyebrow)
 
         title = QLabel(latest.title or "Untitled scene")
@@ -273,7 +252,7 @@ class DashboardView(QWidget):
             inner.addWidget(meta)
 
         btn = QPushButton("Open Scene")
-        btn.setStyleSheet(_PRIMARY_BTN_STYLE)
+        btn.setStyleSheet(theme.primary_btn())
         btn.clicked.connect(lambda: self._navigate("Scene", latest.id))
 
         btn_row = QHBoxLayout()
@@ -287,7 +266,7 @@ class DashboardView(QWidget):
 
     def _add_quick_actions(self) -> None:
         header = QLabel("Quick actions")
-        header.setStyleSheet(_EYEBROW_STYLE)
+        header.setStyleSheet(theme.eyebrow())
         self._layout.addWidget(header)
 
         row = QHBoxLayout()
@@ -309,7 +288,7 @@ class DashboardView(QWidget):
 
     def _add_stats(self, scenes) -> None:
         header = QLabel("Stats")
-        header.setStyleSheet(_EYEBROW_STYLE)
+        header.setStyleSheet(theme.eyebrow())
         self._layout.addWidget(header)
 
         total_words = sum(len((s.content or "").split()) for s in scenes)
@@ -345,7 +324,7 @@ class DashboardView(QWidget):
     def _make_card(self) -> QFrame:
         card = QFrame()
         card.setObjectName("dashCard")
-        card.setStyleSheet(_CARD_STYLE)
+        card.setStyleSheet(theme.card_style())
         return card
 
     def _navigate(self, entity_type: str, entity_id: int) -> None:

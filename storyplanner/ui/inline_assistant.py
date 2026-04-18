@@ -66,50 +66,37 @@ SLASH_COMMANDS: dict[str, tuple[str, str]] = {
 }
 
 
-_ORIGINAL_STYLE = (
-    f"QPlainTextEdit {{"
-    f"  background-color: {theme.DIFF_ORIGINAL_BG};"
-    f"  color: {theme.DIFF_ORIGINAL_TEXT};"
-    f"  border: 1px solid {theme.DIFF_ORIGINAL_BORDER};"
-    f"  border-radius: 4px; padding: 8px;"
-    f"}}"
-)
+def _original_style() -> str:
+    return (
+        f"QPlainTextEdit {{"
+        f"  background-color: {theme.DIFF_ORIGINAL_BG};"
+        f"  color: {theme.DIFF_ORIGINAL_TEXT};"
+        f"  border: 1px solid {theme.DIFF_ORIGINAL_BORDER};"
+        f"  border-radius: 6px; padding: 8px;"
+        f"}}"
+    )
 
-_PROPOSED_STYLE = (
-    f"QPlainTextEdit {{"
-    f"  background-color: {theme.DIFF_PROPOSED_BG};"
-    f"  color: {theme.DIFF_PROPOSED_TEXT};"
-    f"  border: 1px solid {theme.DIFF_PROPOSED_BORDER};"
-    f"  border-radius: 4px; padding: 8px;"
-    f"}}"
-)
 
-_RESPONSE_STYLE = (
-    f"QPlainTextEdit {{"
-    f"  background-color: {theme.BG_PANEL};"
-    f"  color: {theme.TEXT_PRIMARY};"
-    f"  border: 1px solid {theme.BORDER};"
-    f"  border-radius: 4px; padding: 12px;"
-    f"}}"
-)
+def _proposed_style() -> str:
+    return (
+        f"QPlainTextEdit {{"
+        f"  background-color: {theme.DIFF_PROPOSED_BG};"
+        f"  color: {theme.DIFF_PROPOSED_TEXT};"
+        f"  border: 1px solid {theme.DIFF_PROPOSED_BORDER};"
+        f"  border-radius: 6px; padding: 8px;"
+        f"}}"
+    )
 
-_PRIMARY_BTN_STYLE = (
-    f"QPushButton {{"
-    f"  background-color: {theme.SELECTION_BG};"
-    f"  color: {theme.TEXT_PRIMARY};"
-    f"  border: 1px solid {theme.ACCENT_DIM};"
-    f"  border-radius: 3px; padding: 5px 20px;"
-    f"  font-weight: bold;"
-    f"}}"
-    f"QPushButton:hover {{"
-    f"  background-color: {theme.BG_HOVER};"
-    f"  border-color: {theme.ACCENT};"
-    f"}}"
-    f"QPushButton:disabled {{"
-    f"  color: {theme.TEXT_MUTED};"
-    f"  border-color: {theme.BG_INPUT};"
-    f"}}"
-)
+
+def _response_style() -> str:
+    return (
+        f"QPlainTextEdit {{"
+        f"  background-color: {theme.BG_PANEL};"
+        f"  color: {theme.TEXT_PRIMARY};"
+        f"  border: 1px solid {theme.BORDER};"
+        f"  border-radius: 6px; padding: 12px;"
+        f"}}"
+    )
 
 SESSION_MEMORY_LIMIT = 3
 SESSION_OUTPUT_PREVIEW_MAX = 100
@@ -249,7 +236,7 @@ class InlineAssistantPanel(QWidget):
         self._ctx_viewer = QPlainTextEdit()
         self._ctx_viewer.setReadOnly(True)
         self._ctx_viewer.setMaximumHeight(180)
-        self._ctx_viewer.setStyleSheet(_RESPONSE_STYLE)
+        self._ctx_viewer.setStyleSheet(_response_style())
         self._ctx_viewer.setPlaceholderText(
             "Context will appear here after a request..."
         )
@@ -271,7 +258,7 @@ class InlineAssistantPanel(QWidget):
         gen_row = QHBoxLayout()
         gen_row.addStretch()
         self._generate_btn = QPushButton("Generate")
-        self._generate_btn.setStyleSheet(_PRIMARY_BTN_STYLE)
+        self._generate_btn.setStyleSheet(theme.primary_btn())
         self._generate_btn.clicked.connect(self._on_send)
         gen_row.addWidget(self._generate_btn)
         layout.addLayout(gen_row)
@@ -303,7 +290,7 @@ class InlineAssistantPanel(QWidget):
         self._response.setReadOnly(True)
         self._response.setMaximumHeight(200)
         self._response.setPlaceholderText("Response...")
-        self._response.setStyleSheet(_RESPONSE_STYLE)
+        self._response.setStyleSheet(_response_style())
         rc_layout.addWidget(self._response)
 
         # -- Apply actions ---------------------------------------------------
@@ -340,7 +327,7 @@ class InlineAssistantPanel(QWidget):
         self._diff_original = QPlainTextEdit()
         self._diff_original.setReadOnly(True)
         self._diff_original.setMaximumHeight(140)
-        self._diff_original.setStyleSheet(_ORIGINAL_STYLE)
+        self._diff_original.setStyleSheet(_original_style())
         dc_layout.addWidget(self._diff_original)
 
         prop_label = QLabel("Proposed")
@@ -352,7 +339,7 @@ class InlineAssistantPanel(QWidget):
         self._diff_proposed = QPlainTextEdit()
         self._diff_proposed.setReadOnly(True)
         self._diff_proposed.setMaximumHeight(140)
-        self._diff_proposed.setStyleSheet(_PROPOSED_STYLE)
+        self._diff_proposed.setStyleSheet(_proposed_style())
         dc_layout.addWidget(self._diff_proposed)
 
         diff_action_row = QHBoxLayout()

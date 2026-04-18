@@ -24,7 +24,7 @@ def render_linked_text(plain_text: str) -> str:
         escaped = _esc(name)
         return (
             f'<a href="{LINK_SCHEME}://{encoded}"'
-            f' style="color: #00c8ff;">{escaped}</a>'
+            f' style="color: {theme.LINK_COLOR};">{escaped}</a>'
         )
 
     escaped_text = _esc_except_links(plain_text)
@@ -49,7 +49,7 @@ def _esc_except_links(text: str) -> str:
         escaped = _esc(name)
         parts.append(
             f'<a href="{LINK_SCHEME}://{encoded}"'
-            f' style="color: #00c8ff;">{escaped}</a>'
+            f' style="color: {theme.LINK_COLOR};">{escaped}</a>'
         )
         last_end = match.end()
     parts.append(_esc(text[last_end:]))
