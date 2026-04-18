@@ -1,17 +1,21 @@
-"""Writing Assistant view — multi-provider LLM integration for scene writing help."""
+"""Global assistant side panel — compact AI writing assistant."""
 
 from collections.abc import Callable
 
 from PySide6.QtCore import QThread, Signal, Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -53,7 +57,11 @@ class _AssistantWorker(QThread):
             self.failed.emit(str(e))
 
 
-class AssistantView(QWidget):
+class AssistantPanel(QWidget):
+    """Compact AI writing assistant — docks as a right-side panel."""
+
+    panel_closed = Signal()
+
     def __init__(
         self,
         db: Database,
@@ -68,140 +76,196 @@ class AssistantView(QWidget):
         self._on_open_scene = on_open_scene
         self._worker: _AssistantWorker | None = None
 
-        layout = QVBoxLayout(self)
+        self.setMinimumWidth(280)
+        self.setMaximumWidth(360)
 
-        layout.addWidget(QLabel("Writing Assistant"))
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        # Scene selector
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        outer.addWidget(scroll)
+
+        container = QWidget()
+        self._layout = QVBoxLayout(container)
+        self._layout.setContentsMargins(12, 8, 12, 12)
+        self._layout.setSpacing(8)
+        scroll.setWidget(container)
+
+        self._build_ui()
+
+    # -- Layout ----------------------------------------------------------------
+
+    def _build_ui(self) -> None:
+        # Header
+        header = QHBoxLayout()
+        header.setSpacing(4)
+        title = QLabel("Assistant")
+        title_font = QFont()
+        title_font.setBold(True)
+        title_font.setPointSize(title_font.pointSize() + 2)
+        title.setFont(title_font)
+        title.setStyleSheet(f"color: {theme.TEXT_PRIMARY};")
+        header.addWidget(title)
+        header.addStretch()
+        close_btn = QPushButton("\u2715")
+        close_btn.setFixedSize(24, 24)
+        close_btn.setFlat(True)
+        close_btn.setStyleSheet(
+            f"QPushButton {{ color: {theme.TEXT_MUTED}; border: none; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
+        )
+        close_btn.clicked.connect(self.panel_closed.emit)
+        header.addWidget(close_btn)
+        self._layout.addLayout(header)
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet(f"color: {theme.BORDER};")
+        self._layout.addWidget(sep)
+
+        # Scene selector + Generate
         scene_row = QHBoxLayout()
-        scene_row.addWidget(QLabel("Scene:"))
+        scene_row.setSpacing(4)
         self._scene_combo = QComboBox()
         scene_row.addWidget(self._scene_combo, stretch=1)
-        layout.addLayout(scene_row)
+        self._send_btn = QPushButton("Generate")
+        self._send_btn.setStyleSheet(theme.primary_btn())
+        self._send_btn.clicked.connect(self._send_custom)
+        scene_row.addWidget(self._send_btn)
+        self._layout.addLayout(scene_row)
 
-        # Quick action buttons
-        actions_label = QLabel("Quick Actions")
-        actions_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; margin-top: 6px;")
-        layout.addWidget(actions_label)
-
+        # Core actions
+        action_row = QHBoxLayout()
+        action_row.setSpacing(4)
         self._preset_buttons: list[QPushButton] = []
-
-        btn_row1 = QHBoxLayout()
-        for key in ("Rewrite", "Expand", "Summarize", "Dialogue"):
-            btn = QPushButton(key)
-            btn.clicked.connect(lambda checked, k=key: self._send_preset(k))
-            btn_row1.addWidget(btn)
+        for action in ("Rewrite", "Expand", "Dialogue"):
+            btn = QPushButton(action)
+            btn.clicked.connect(
+                lambda _, a=action: self._send_preset(a)
+            )
+            action_row.addWidget(btn)
             self._preset_buttons.append(btn)
-        layout.addLayout(btn_row1)
 
-        btn_row2 = QHBoxLayout()
-        for key in ("Tension", "Pacing", "Next Beat", "Alternatives"):
-            btn = QPushButton(key)
-            btn.clicked.connect(lambda checked, k=key: self._send_preset(k))
-            btn_row2.addWidget(btn)
-            self._preset_buttons.append(btn)
-        layout.addLayout(btn_row2)
-
-        # Include outline checkbox
-        self._outline_check = QCheckBox("Include story outline as context")
-        layout.addWidget(self._outline_check)
-
-        # Include global story memory checkbox
-        self._story_memory_check = QCheckBox("Include global story memory")
-        layout.addWidget(self._story_memory_check)
+        self._more_btn = QPushButton("More \u25be")
+        more_menu = QMenu(self)
+        for action in (
+            "Summarize", "Tension", "Pacing", "Next Beat", "Alternatives",
+        ):
+            more_menu.addAction(
+                action, lambda a=action: self._send_preset(a)
+            )
+        self._more_btn.setMenu(more_menu)
+        action_row.addWidget(self._more_btn)
+        self._preset_buttons.append(self._more_btn)
+        self._layout.addLayout(action_row)
 
         # Custom prompt
-        layout.addWidget(QLabel("Additional instructions"))
         self._prompt_input = QPlainTextEdit()
-        self._prompt_input.setMaximumHeight(80)
         self._prompt_input.setPlaceholderText(
-            "Add specific instructions or ask a question about the scene..."
+            "Instructions or questions about the scene..."
         )
-        layout.addWidget(self._prompt_input)
+        self._prompt_input.setMaximumHeight(60)
+        self._layout.addWidget(self._prompt_input)
 
-        send_row = QHBoxLayout()
-        send_row.addStretch()
-        self._preview_btn = QPushButton("Preview Prompt")
-        self._preview_btn.clicked.connect(self._preview_prompt)
-        send_row.addWidget(self._preview_btn)
-        self._send_btn = QPushButton("Send Custom Prompt")
-        self._send_btn.clicked.connect(self._send_custom)
-        send_row.addWidget(self._send_btn)
-        layout.addLayout(send_row)
+        # Collapsible settings
+        self._settings_btn = QPushButton("\u25b6 Settings")
+        self._settings_btn.setFlat(True)
+        self._settings_btn.setStyleSheet(
+            f"QPushButton {{ color: {theme.TEXT_SECONDARY}; border: none;"
+            f" text-align: left; padding: 2px 0; font-size: 11px; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
+        )
+        self._settings_btn.clicked.connect(self._toggle_settings)
+        self._layout.addWidget(self._settings_btn)
+
+        self._settings_container = QWidget()
+        settings_layout = QVBoxLayout(self._settings_container)
+        settings_layout.setContentsMargins(0, 0, 0, 0)
+        settings_layout.setSpacing(4)
+        self._outline_check = QCheckBox("Include story outline")
+        self._story_memory_check = QCheckBox("Include story memory")
+        settings_layout.addWidget(self._outline_check)
+        settings_layout.addWidget(self._story_memory_check)
+        self._provider_widget = ProviderSettingsWidget(compact=True)
+        settings_layout.addWidget(self._provider_widget)
+        self._settings_container.setVisible(False)
+        self._layout.addWidget(self._settings_container)
 
         # Response area
-        response_label = QLabel("Response")
-        response_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; margin-top: 6px;")
-        layout.addWidget(response_label)
+        resp_label = QLabel("Response")
+        resp_label.setStyleSheet(
+            f"color: {theme.TEXT_SECONDARY}; font-size: 11px;"
+        )
+        self._layout.addWidget(resp_label)
 
         self._response_output = QPlainTextEdit()
         self._response_output.setReadOnly(True)
         self._response_output.setPlaceholderText(
-            "Assistant response will appear here..."
+            "AI response will appear here..."
         )
+        self._response_output.setMinimumHeight(120)
         self._response_output.setStyleSheet(
             f"QPlainTextEdit {{"
             f"  background-color: {theme.BG_PANEL};"
             f"  color: {theme.TEXT_PRIMARY};"
             f"  border: 1px solid {theme.BORDER};"
-            f"  border-radius: 4px; padding: 12px;"
+            f"  border-radius: 4px; padding: 8px;"
             f"}}"
         )
-        layout.addWidget(self._response_output, stretch=1)
+        self._layout.addWidget(self._response_output, stretch=1)
 
-        # Apply actions
-        apply_label = QLabel("Apply to Scene")
-        apply_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; margin-top: 6px;")
-        layout.addWidget(apply_label)
-
+        # Apply actions: Replace | Insert at Cursor | More▾
         apply_row = QHBoxLayout()
-        self._replace_content_btn = QPushButton("Replace Content")
-        self._replace_content_btn.clicked.connect(self._apply_replace_content)
+        apply_row.setSpacing(4)
+
+        self._replace_content_btn = QPushButton("Replace")
+        self._replace_content_btn.clicked.connect(
+            self._apply_replace_content
+        )
         apply_row.addWidget(self._replace_content_btn)
 
-        self._append_content_btn = QPushButton("Append to Content")
-        self._append_content_btn.clicked.connect(self._apply_append_content)
-        apply_row.addWidget(self._append_content_btn)
-
-        self._as_synopsis_btn = QPushButton("As Synopsis")
-        self._as_synopsis_btn.clicked.connect(self._apply_as_synopsis)
-        apply_row.addWidget(self._as_synopsis_btn)
-
-        self._as_summary_btn = QPushButton("As Summary")
-        self._as_summary_btn.clicked.connect(self._apply_as_summary)
-        apply_row.addWidget(self._as_summary_btn)
-
         self._insert_cursor_btn = QPushButton("Insert at Cursor")
-        self._insert_cursor_btn.clicked.connect(self._apply_insert_at_cursor)
+        self._insert_cursor_btn.clicked.connect(
+            self._apply_insert_at_cursor
+        )
         apply_row.addWidget(self._insert_cursor_btn)
-        layout.addLayout(apply_row)
+
+        self._apply_more_btn = QPushButton("\u25be")
+        self._apply_more_btn.setFixedWidth(28)
+        apply_more_menu = QMenu(self)
+        apply_more_menu.addAction("Append", self._apply_append_content)
+        apply_more_menu.addAction("As Synopsis", self._apply_as_synopsis)
+        apply_more_menu.addAction("As Summary", self._apply_as_summary)
+        apply_more_menu.addSeparator()
+        apply_more_menu.addAction("Copy", self._copy_response)
+        self._apply_more_btn.setMenu(apply_more_menu)
+        apply_row.addWidget(self._apply_more_btn)
 
         self._apply_buttons = [
             self._replace_content_btn,
-            self._append_content_btn,
-            self._as_synopsis_btn,
-            self._as_summary_btn,
             self._insert_cursor_btn,
+            self._apply_more_btn,
         ]
-
-        copy_row = QHBoxLayout()
-        copy_row.addStretch()
-        self._copy_btn = QPushButton("Copy Response")
-        self._copy_btn.clicked.connect(self._copy_response)
-        copy_row.addWidget(self._copy_btn)
-        layout.addLayout(copy_row)
-
-        # Provider settings
-        settings_label = QLabel("Provider")
-        settings_label.setStyleSheet(f"color: {theme.TEXT_MUTED}; margin-top: 8px;")
-        layout.addWidget(settings_label)
-
-        self._provider_widget = ProviderSettingsWidget()
-        layout.addWidget(self._provider_widget)
+        self._layout.addLayout(apply_row)
 
         self._load_scenes()
 
-    # -- Data loading --------------------------------------------------------
+    # -- Settings toggle -------------------------------------------------------
+
+    def _toggle_settings(self) -> None:
+        visible = not self._settings_container.isVisible()
+        self._settings_container.setVisible(visible)
+        self._settings_btn.setText(
+            "\u25bc Settings" if visible else "\u25b6 Settings"
+        )
+
+    # -- Scene loading ---------------------------------------------------------
 
     def _load_scenes(self) -> None:
         self._scene_combo.clear()
@@ -212,7 +276,19 @@ class AssistantView(QWidget):
                 label = f"[{scene.chapter}] {label}"
             self._scene_combo.addItem(label, userData=scene.id)
 
-    # -- Sending requests ----------------------------------------------------
+    def set_active_scene(self, scene_id: int) -> None:
+        for i in range(self._scene_combo.count()):
+            if self._scene_combo.itemData(i) == scene_id:
+                self._scene_combo.setCurrentIndex(i)
+                return
+
+    def refresh_scenes(self) -> None:
+        current = self._scene_combo.currentData()
+        self._load_scenes()
+        if current is not None:
+            self.set_active_scene(current)
+
+    # -- Sending requests ------------------------------------------------------
 
     def _build_context(self, scene_id: int) -> tuple[str, str, str]:
         scene_ctx = gather_scene_context(
@@ -238,7 +314,9 @@ class AssistantView(QWidget):
             self._response_output.setPlainText("No scene selected.")
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx = self._build_context(scene_id)
+        scene_ctx, outline_ctx, story_memory_ctx = self._build_context(
+            scene_id
+        )
         if not scene_ctx:
             self._response_output.setPlainText("Could not load scene data.")
             return
@@ -265,7 +343,9 @@ class AssistantView(QWidget):
             self._response_output.setPlainText("No scene selected.")
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx = self._build_context(scene_id)
+        scene_ctx, outline_ctx, story_memory_ctx = self._build_context(
+            scene_id
+        )
         if not scene_ctx:
             self._response_output.setPlainText("Could not load scene data.")
             return
@@ -274,27 +354,6 @@ class AssistantView(QWidget):
             prompt, scene_ctx, outline_ctx, story_memory_ctx,
         )
         self._start_request(messages)
-
-    def _preview_prompt(self) -> None:
-        scene_id = self._scene_combo.currentData()
-        if scene_id is None:
-            self._response_output.setPlainText("No scene selected.")
-            return
-
-        scene_ctx, outline_ctx, story_memory_ctx = self._build_context(scene_id)
-        if not scene_ctx:
-            self._response_output.setPlainText("Could not load scene data.")
-            return
-
-        parts = ["=== Context sent to the model ===", ""]
-        if story_memory_ctx:
-            parts.append(story_memory_ctx)
-            parts.append("")
-        if outline_ctx:
-            parts.append(outline_ctx)
-            parts.append("")
-        parts.append(scene_ctx)
-        self._response_output.setPlainText("\n".join(parts))
 
     def _start_request(self, messages: list[dict]) -> None:
         error = self._provider_widget.validate()
@@ -310,7 +369,7 @@ class AssistantView(QWidget):
         self._worker.failed.connect(self._on_error)
         self._worker.start()
 
-    # -- Response handling ---------------------------------------------------
+    # -- Response handling -----------------------------------------------------
 
     def _on_response(self, text: str) -> None:
         self._response_output.setPlainText(text)
@@ -324,7 +383,6 @@ class AssistantView(QWidget):
 
     def _set_busy(self, busy: bool) -> None:
         self._send_btn.setEnabled(not busy)
-        self._preview_btn.setEnabled(not busy)
         self._scene_combo.setEnabled(not busy)
         for btn in self._preset_buttons:
             btn.setEnabled(not busy)
@@ -336,13 +394,11 @@ class AssistantView(QWidget):
         if text:
             QApplication.clipboard().setText(text)
 
-    # -- Apply to scene ------------------------------------------------------
+    # -- Apply to scene --------------------------------------------------------
 
     def _get_response_text(self) -> str | None:
         text = self._response_output.toPlainText().strip()
         if not text or text == "Thinking..." or text.startswith("Error:"):
-            return None
-        if text.startswith("=== Context sent to the model ==="):
             return None
         return text
 
@@ -405,7 +461,8 @@ class AssistantView(QWidget):
                 "Replace Synopsis",
                 "This will replace the existing synopsis.\n\n"
                 "Are you sure?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
             if answer != QMessageBox.StandardButton.Yes:
@@ -427,7 +484,8 @@ class AssistantView(QWidget):
                 "Replace Summary",
                 "This will replace the existing summary.\n\n"
                 "Are you sure?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
             if answer != QMessageBox.StandardButton.Yes:

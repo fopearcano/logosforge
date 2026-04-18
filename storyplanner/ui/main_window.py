@@ -31,7 +31,7 @@ from storyplanner.export import (
     export_screenplay,
 )
 from storyplanner.import_data import import_json, validate_import_data
-from storyplanner.ui.assistant_view import AssistantView
+from storyplanner.ui.assistant_view import AssistantPanel
 from storyplanner.ui.act_analysis_view import ActAnalysisView
 from storyplanner.ui.beat_analysis_view import BeatAnalysisView
 from storyplanner.ui.character_arc_view import CharacterArcView
@@ -162,15 +162,28 @@ class MainWindow(QMainWindow):
         self.sidebar_buttons["Graph"].clicked.connect(self._show_graph)
         self.sidebar_buttons["Arcs"].clicked.connect(self._show_arcs)
         self.sidebar_buttons["Search"].clicked.connect(self._show_search)
-        self.sidebar_buttons["Assistant"].clicked.connect(self._show_assistant)
+        self.sidebar_buttons["Assistant"].clicked.connect(
+            self._toggle_assistant
+        )
 
         # -- Right content area ----------------------------------------------
         self.content_area = self._build_initial_content()
+
+        # -- Assistant side panel --------------------------------------------
+        self._assistant_panel = AssistantPanel(
+            self._db,
+            self._project_id,
+            on_data_changed=self._on_data_changed,
+            on_open_scene=self._open_scene_in_editor,
+        )
+        self._assistant_panel.panel_closed.connect(self._hide_assistant)
+        self._assistant_panel.setVisible(False)
 
         # -- Assemble --------------------------------------------------------
         self._sidebar = sidebar
         root_layout.addWidget(sidebar)
         root_layout.addWidget(self.content_area, stretch=1)
+        root_layout.addWidget(self._assistant_panel)
 
         self.setCentralWidget(central)
 
@@ -313,15 +326,14 @@ class MainWindow(QMainWindow):
             )
         )
 
-    def _show_assistant(self) -> None:
-        self._set_content(
-            AssistantView(
-                self._db,
-                self._project_id,
-                on_data_changed=self._on_data_changed,
-                on_open_scene=self._open_scene_in_editor,
-            )
-        )
+    def _toggle_assistant(self) -> None:
+        visible = self._assistant_panel.isVisible()
+        if not visible:
+            self._assistant_panel.refresh_scenes()
+        self._assistant_panel.setVisible(not visible)
+
+    def _hide_assistant(self) -> None:
+        self._assistant_panel.setVisible(False)
 
     def _show_search(self) -> None:
         self._set_content(
@@ -375,6 +387,7 @@ class MainWindow(QMainWindow):
             self._set_content(self._cached_scenes_view)
         self._cached_scenes_view.refresh()
         self._cached_scenes_view.select_scene(scene_id)
+        self._assistant_panel.set_active_scene(scene_id)
 
     def _on_import(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -560,6 +573,7 @@ class MainWindow(QMainWindow):
         self._dirty = True
         self._update_title()
         self._auto_save()
+        self._assistant_panel.refresh_scenes()
 
     def _auto_save(self) -> None:
         if not self._current_file:
@@ -572,6 +586,8 @@ class MainWindow(QMainWindow):
 
     def _on_focus_mode_changed(self, active: bool) -> None:
         self._sidebar.setVisible(not active)
+        if active:
+            self._assistant_panel.setVisible(False)
 
     def _mark_clean(self) -> None:
         self._dirty = False
