@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from storyplanner import recent_projects
+from storyplanner import preferences, recent_projects
 from storyplanner.db import Database
 from storyplanner.export import (
     export_csv_scenes,
@@ -42,6 +42,7 @@ from storyplanner.ui.search_view import SearchView
 from storyplanner.ui.structure_view import StructureView
 from storyplanner.ui.tag_analysis_view import TagAnalysisView
 from storyplanner.ui.timeline_view import TimelineView
+from storyplanner.ui.welcome_view import WelcomeView
 from storyplanner.ui.writer_outline_view import WriterOutlineView
 
 
@@ -113,10 +114,7 @@ class MainWindow(QMainWindow):
         self.sidebar_buttons["Assistant"].clicked.connect(self._show_assistant)
 
         # -- Right content area ----------------------------------------------
-        self.content_area = QWidget()
-        QVBoxLayout(self.content_area).addWidget(
-            QLabel("Select a section from the sidebar")
-        )
+        self.content_area = self._build_initial_content()
 
         # -- Assemble --------------------------------------------------------
         self._sidebar = sidebar
@@ -131,6 +129,22 @@ class MainWindow(QMainWindow):
         layout.replaceWidget(self.content_area, widget)
         self.content_area.deleteLater()
         self.content_area = widget
+
+    def _build_initial_content(self) -> QWidget:
+        scenes = self._db.get_all_scenes(self._project_id)
+        if not scenes and not preferences.get_flag("has_seen_onboarding"):
+            return WelcomeView(on_create_scene=self._on_welcome_create_scene)
+        placeholder = QWidget()
+        QVBoxLayout(placeholder).addWidget(
+            QLabel("Select a section from the sidebar")
+        )
+        return placeholder
+
+    def _on_welcome_create_scene(self) -> None:
+        scene = self._db.create_scene(self._project_id, "Untitled Scene")
+        preferences.set_flag("has_seen_onboarding", True)
+        self._on_data_changed()
+        self._open_scene_in_editor(scene.id)
 
     def _show_dashboard(self) -> None:
         self._set_content(
@@ -189,6 +203,7 @@ class MainWindow(QMainWindow):
         )
 
     def _show_timeline(self) -> None:
+        preferences.set_flag("has_seen_timeline_hint", True)
         self._set_content(
             TimelineView(
                 self._db,

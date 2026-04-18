@@ -62,6 +62,8 @@ class _InlineWorker(QThread):
 class InlineEditBar(QWidget):
     """Floating action bar + inline suggestion for AI editing."""
 
+    ai_action_completed = Signal()
+
     def __init__(
         self,
         editor: QPlainTextEdit,
@@ -276,6 +278,7 @@ class InlineEditBar(QWidget):
     def _on_completed(self, text: str) -> None:
         self._show_result(text)
         self._worker = None
+        self.ai_action_completed.emit()
 
     def _on_failed(self, error: str) -> None:
         self._show_result(f"Error: {error}")

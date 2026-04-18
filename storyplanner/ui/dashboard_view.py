@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from storyplanner import preferences
 from storyplanner.analytics import compute_scene_stats
 from storyplanner.db import Database
 from storyplanner.ui import theme
@@ -112,9 +113,34 @@ class DashboardView(QWidget):
 
         self._add_progress(scenes)
         self._add_current_work(scenes)
+        if (
+            len(scenes) >= 3
+            and not preferences.get_flag("has_seen_timeline_hint")
+        ):
+            self._add_timeline_hint()
         self._add_quick_actions()
         self._add_stats(scenes)
         self._layout.addStretch()
+
+    def _add_timeline_hint(self) -> None:
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        tip = QLabel("Tip: open the Timeline to see your story arc.")
+        tip.setStyleSheet(
+            f"color: {theme.TEXT_SECONDARY}; font-size: 12px;"
+        )
+        row.addWidget(tip)
+        link = QPushButton("Open Timeline")
+        link.setFlat(True)
+        link.setStyleSheet(
+            f"QPushButton {{ color: {theme.LINK_COLOR};"
+            f" border: none; padding: 0 4px; font-size: 12px; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
+        )
+        link.clicked.connect(lambda: self._open_section("timeline"))
+        row.addWidget(link)
+        row.addStretch()
+        self._layout.addLayout(row)
 
     # -- Header --------------------------------------------------------------
 

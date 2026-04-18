@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from storyplanner import preferences
 from storyplanner.analytics import compute_scene_stats
 from storyplanner.ui import theme
 
@@ -201,6 +202,12 @@ class ScenesView(QWidget):
         )
         right.addWidget(self._content_label)
 
+        self._ai_hint_bar = self._build_ai_hint_bar()
+        self._ai_hint_bar.setVisible(
+            not preferences.get_flag("has_seen_ai_hint")
+        )
+        right.addWidget(self._ai_hint_bar)
+
         writing_col = QHBoxLayout()
         writing_col.addStretch()
         self._content_input = QPlainTextEdit()
@@ -256,6 +263,10 @@ class ScenesView(QWidget):
         )
         self._assist_panel.slash_completed.connect(
             self._inline_edit.show_inline_result,
+        )
+        self._inline_edit.ai_action_completed.connect(self._dismiss_ai_hint)
+        self._assist_panel.slash_completed.connect(
+            lambda _: self._dismiss_ai_hint(),
         )
 
         # -- Detail fields (hidden in focus mode) ----------------------------
@@ -639,6 +650,37 @@ class ScenesView(QWidget):
                 return
 
     # -- Helpers -------------------------------------------------------------
+
+    def _build_ai_hint_bar(self) -> QWidget:
+        bar = QWidget()
+        bar.setStyleSheet(
+            f"background: {theme.BG_PANEL};"
+            f" border: 1px solid {theme.BORDER}; border-radius: 3px;"
+        )
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(10, 6, 6, 6)
+        row.setSpacing(6)
+        hint = QLabel("Select text and press Ctrl+K to edit with AI.")
+        hint.setStyleSheet(
+            f"color: {theme.TEXT_SECONDARY}; font-size: 11px;"
+        )
+        row.addWidget(hint)
+        row.addStretch()
+        close = QPushButton("\u2715")
+        close.setFixedWidth(22)
+        close.setFlat(True)
+        close.setStyleSheet(
+            f"QPushButton {{ color: {theme.TEXT_MUTED}; border: none; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
+        )
+        close.clicked.connect(self._dismiss_ai_hint)
+        row.addWidget(close)
+        return bar
+
+    def _dismiss_ai_hint(self) -> None:
+        if self._ai_hint_bar.isVisible():
+            self._ai_hint_bar.setVisible(False)
+            preferences.set_flag("has_seen_ai_hint", True)
 
     @staticmethod
     def _apply_line_spacing(editor: QPlainTextEdit, percent: int = 165) -> None:
