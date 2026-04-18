@@ -1,22 +1,47 @@
-"""Story Dashboard — high-level narrative overview in one place."""
+"""Story Dashboard — project overview and entry points to current work."""
 
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
     QLabel,
-    QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
-from storyplanner.analytics import compute_project_stats
-from storyplanner.context_builder import _count_scene_tags, gather_story_memory
+from storyplanner.analytics import compute_scene_stats
 from storyplanner.db import Database
 from storyplanner.ui import theme
+
+
+_PRIMARY_BTN_STYLE = (
+    f"QPushButton {{"
+    f"  background-color: {theme.SELECTION_BG};"
+    f"  color: {theme.TEXT_PRIMARY};"
+    f"  border: 1px solid {theme.ACCENT_DIM};"
+    f"  border-radius: 3px; padding: 6px 22px;"
+    f"  font-weight: bold;"
+    f"}}"
+    f"QPushButton:hover {{"
+    f"  background-color: {theme.BG_HOVER};"
+    f"  border-color: {theme.ACCENT};"
+    f"}}"
+)
+
+_EYEBROW_STYLE = (
+    f"color: {theme.TEXT_SECONDARY}; font-size: 11px;"
+    f" letter-spacing: 1px; text-transform: uppercase;"
+)
+
+_CARD_STYLE = (
+    f"QFrame#dashCard {{ background: {theme.CARD_BG};"
+    f" border: 1px solid {theme.BORDER}; border-radius: 4px; }}"
+)
 
 
 class DashboardView(QWidget):
@@ -25,26 +50,27 @@ class DashboardView(QWidget):
         db: Database,
         project_id: int,
         on_navigate: Callable[[str, int], None] | None = None,
+        on_open_section: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
         self._on_navigate = on_navigate
+        self._on_open_section = on_open_section
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
-        title = QLabel("Story Dashboard")
-        title.setStyleSheet("font-size: 16px; font-weight: bold; padding: 8px;")
-        outer.addWidget(title)
-
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
         outer.addWidget(scroll)
 
         self._container = QWidget()
         self._layout = QVBoxLayout(self._container)
+        self._layout.setContentsMargins(28, 24, 28, 24)
+        self._layout.setSpacing(20)
         self._layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         scroll.setWidget(self._container)
 
@@ -53,169 +79,253 @@ class DashboardView(QWidget):
     def refresh(self) -> None:
         while self._layout.count():
             item = self._layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+            else:
+                sublayout = item.layout()
+                if sublayout is not None:
+                    self._drop_layout(sublayout)
         self._build()
 
+    def _drop_layout(self, layout) -> None:
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+            elif item.layout() is not None:
+                self._drop_layout(item.layout())
+
+    # -- Build ---------------------------------------------------------------
+
     def _build(self) -> None:
-        self._add_writing_stats()
-        self._add_act_distribution()
-        self._add_beat_distribution()
-        self._add_tag_summary()
-        self._add_character_overview()
-        self._add_story_memory()
+        project = self._db.get_project_by_id(self._project_id)
+        scenes = self._db.get_all_scenes(self._project_id)
+
+        self._add_header(project)
+
+        if not scenes:
+            self._add_empty_state()
+            self._layout.addStretch()
+            return
+
+        self._add_progress(scenes)
+        self._add_current_work(scenes)
+        self._add_quick_actions()
+        self._add_stats(scenes)
         self._layout.addStretch()
 
-    # -- Sections ------------------------------------------------------------
+    # -- Header --------------------------------------------------------------
 
-    def _add_section_header(self, text: str) -> None:
-        lbl = QLabel(text)
-        lbl.setStyleSheet(
-            f"font-size: 13px; font-weight: bold; color: {theme.TEXT_SECONDARY}; "
-            f"margin-top: 12px; margin-bottom: 4px; padding-left: 4px;"
-        )
-        self._layout.addWidget(lbl)
+    def _add_header(self, project) -> None:
+        box = QVBoxLayout()
+        box.setSpacing(2)
 
-    def _add_section_body(self, text: str) -> None:
-        lbl = QLabel(text)
-        lbl.setWordWrap(True)
-        lbl.setStyleSheet("padding-left: 8px; line-height: 1.4;")
-        self._layout.addWidget(lbl)
+        title_text = project.title if project else "Untitled Project"
+        title = QLabel(title_text)
+        title_font = QFont()
+        title_font.setBold(True)
+        title_font.setPointSize(title_font.pointSize() + 6)
+        title.setFont(title_font)
+        title.setStyleSheet(f"color: {theme.TEXT_PRIMARY};")
+        box.addWidget(title)
 
-    # -- Writing Stats -------------------------------------------------------
-
-    def _add_writing_stats(self) -> None:
-        self._add_section_header("Writing Stats")
-        scenes = self._db.get_all_scenes(self._project_id)
-        texts = [s.content for s in scenes if s.content]
-        stats = compute_project_stats(texts)
-        if stats["scene_count"] == 0:
-            self._add_section_body("No scenes yet.")
-            return
-        lines = [
-            f"  Scenes: {stats['scene_count']}",
-            f"  Avg words/scene: {stats['avg_words']}",
-            f"  Longest scene: {stats['longest']} words",
-            f"  Shortest scene: {stats['shortest']} words",
-        ]
-        self._add_section_body("\n".join(lines))
-
-    # -- Act Distribution ----------------------------------------------------
-
-    def _add_act_distribution(self) -> None:
-        self._add_section_header("Act Distribution")
-        scenes = self._db.get_all_scenes(self._project_id)
-        if not scenes:
-            self._add_section_body("No scenes yet.")
-            return
-
-        acts: dict[str, list[int]] = {}
-        for i, s in enumerate(scenes, 1):
-            act = s.act or "(unassigned)"
-            acts.setdefault(act, []).append(i)
-
-        lines: list[str] = []
-        for act, positions in acts.items():
-            first, last = positions[0], positions[-1]
-            rng = f"{first}" if first == last else f"{first}\u2013{last}"
-            lines.append(f"  {act}: {len(positions)} scenes (#{rng})")
-        self._add_section_body("\n".join(lines))
-
-    # -- Beat Distribution ---------------------------------------------------
-
-    def _add_beat_distribution(self) -> None:
-        self._add_section_header("Beat Distribution")
-        scenes = self._db.get_all_scenes(self._project_id)
-
-        beats: dict[str, int] = {}
-        for s in scenes:
-            if s.beat:
-                beats[s.beat] = beats.get(s.beat, 0) + 1
-
-        if not beats:
-            self._add_section_body("No beats assigned.")
-            return
-
-        lines = [
-            f"  {beat}: {count}" for beat, count in
-            sorted(beats.items(), key=lambda kv: (-kv[1], kv[0]))
-        ]
-        self._add_section_body("\n".join(lines))
-
-    # -- Tag / Theme Summary -------------------------------------------------
-
-    def _add_tag_summary(self) -> None:
-        self._add_section_header("Tag / Theme Summary")
-        counts = _count_scene_tags(self._db, self._project_id)
-        if not counts:
-            self._add_section_body("No tags used.")
-            return
-
-        lines = [f"  {tag}: {n}" for tag, n in counts[:10]]
-        self._add_section_body("\n".join(lines))
-
-    # -- Character Overview --------------------------------------------------
-
-    def _add_character_overview(self) -> None:
-        self._add_section_header("Character Overview")
-        characters = self._db.get_all_characters(self._project_id)
-        if not characters:
-            self._add_section_body("No characters yet.")
-            return
-
-        for char in characters:
-            arc = self._db.get_character_arc(self._project_id, char.id)
-            scene_count = len(arc)
-            last_state = arc[-1][3] if arc else None
-
-            row = QHBoxLayout()
-            btn = QPushButton(char.name)
-            btn.setFlat(True)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setStyleSheet(
-                f"text-align: left; color: {theme.LINK_COLOR}; padding: 2px 4px;"
+        if project and project.updated_at:
+            subtitle = QLabel(
+                f"Last edited {project.updated_at.strftime('%b %d, %Y')}"
             )
+            subtitle.setStyleSheet(
+                f"color: {theme.TEXT_SECONDARY}; font-size: 12px;"
+            )
+            box.addWidget(subtitle)
+
+        self._layout.addLayout(box)
+
+    # -- Empty state ---------------------------------------------------------
+
+    def _add_empty_state(self) -> None:
+        card = self._make_card()
+        inner = QVBoxLayout(card)
+        inner.setContentsMargins(24, 22, 24, 22)
+        inner.setSpacing(10)
+
+        heading = QLabel("Your story starts here")
+        heading_font = QFont()
+        heading_font.setBold(True)
+        heading_font.setPointSize(heading_font.pointSize() + 2)
+        heading.setFont(heading_font)
+        inner.addWidget(heading)
+
+        body = QLabel(
+            "No scenes yet. Create your first scene to begin outlining and writing."
+        )
+        body.setWordWrap(True)
+        body.setStyleSheet(f"color: {theme.TEXT_SECONDARY};")
+        inner.addWidget(body)
+
+        btn = QPushButton("Create Scene")
+        btn.setStyleSheet(_PRIMARY_BTN_STYLE)
+        btn.clicked.connect(lambda: self._open_section("scenes"))
+
+        btn_row = QHBoxLayout()
+        btn_row.addWidget(btn)
+        btn_row.addStretch()
+        inner.addLayout(btn_row)
+
+        self._layout.addWidget(card)
+
+    # -- Progress ------------------------------------------------------------
+
+    def _add_progress(self, scenes) -> None:
+        chapters = {s.chapter for s in scenes if s.chapter}
+        latest = max(scenes, key=lambda s: s.created_at)
+        position = next(
+            (i for i, s in enumerate(scenes, 1) if s.id == latest.id), 0
+        )
+
+        row = QHBoxLayout()
+        row.setSpacing(32)
+        row.addLayout(self._stat_block("Scenes", str(len(scenes))))
+        row.addLayout(self._stat_block("Chapters", str(len(chapters))))
+        if position:
+            row.addLayout(
+                self._stat_block(
+                    "Current position", f"#{position} of {len(scenes)}"
+                )
+            )
+        row.addStretch()
+        self._layout.addLayout(row)
+
+    def _stat_block(self, label: str, value: str) -> QVBoxLayout:
+        box = QVBoxLayout()
+        box.setSpacing(1)
+
+        value_label = QLabel(value)
+        value_font = QFont()
+        value_font.setBold(True)
+        value_font.setPointSize(value_font.pointSize() + 4)
+        value_label.setFont(value_font)
+        value_label.setStyleSheet(f"color: {theme.TEXT_PRIMARY};")
+
+        label_label = QLabel(label)
+        label_label.setStyleSheet(
+            f"color: {theme.TEXT_SECONDARY}; font-size: 11px;"
+        )
+
+        box.addWidget(value_label)
+        box.addWidget(label_label)
+        return box
+
+    # -- Current work --------------------------------------------------------
+
+    def _add_current_work(self, scenes) -> None:
+        latest = max(scenes, key=lambda s: s.created_at)
+
+        card = self._make_card()
+        inner = QVBoxLayout(card)
+        inner.setContentsMargins(20, 16, 20, 16)
+        inner.setSpacing(8)
+
+        eyebrow = QLabel("Continue writing")
+        eyebrow.setStyleSheet(_EYEBROW_STYLE)
+        inner.addWidget(eyebrow)
+
+        title = QLabel(latest.title or "Untitled scene")
+        title_font = QFont()
+        title_font.setBold(True)
+        title_font.setPointSize(title_font.pointSize() + 3)
+        title.setFont(title_font)
+        title.setWordWrap(True)
+        inner.addWidget(title)
+
+        if latest.chapter:
+            meta = QLabel(latest.chapter)
+            meta.setStyleSheet(
+                f"color: {theme.TEXT_SECONDARY}; font-size: 12px;"
+            )
+            inner.addWidget(meta)
+
+        btn = QPushButton("Open Scene")
+        btn.setStyleSheet(_PRIMARY_BTN_STYLE)
+        btn.clicked.connect(lambda: self._navigate("Scene", latest.id))
+
+        btn_row = QHBoxLayout()
+        btn_row.addWidget(btn)
+        btn_row.addStretch()
+        inner.addLayout(btn_row)
+
+        self._layout.addWidget(card)
+
+    # -- Quick actions -------------------------------------------------------
+
+    def _add_quick_actions(self) -> None:
+        header = QLabel("Quick actions")
+        header.setStyleSheet(_EYEBROW_STYLE)
+        self._layout.addWidget(header)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        for label, target in (
+            ("New Scene", "scenes"),
+            ("New Character", "characters"),
+            ("Open Timeline", "timeline"),
+        ):
+            btn = QPushButton(label)
             btn.clicked.connect(
-                lambda checked, cid=char.id: self._navigate("Character", cid)
+                lambda _=False, t=target: self._open_section(t)
             )
             row.addWidget(btn)
+        row.addStretch()
+        self._layout.addLayout(row)
 
-            detail = f"{scene_count} scene{'s' if scene_count != 1 else ''}"
-            if last_state:
-                detail += f"  \u00b7  last state: {last_state}"
-            detail_lbl = QLabel(detail)
-            detail_lbl.setStyleSheet(
-                f"color: {theme.TEXT_SECONDARY}; padding-left: 4px;"
-            )
-            row.addWidget(detail_lbl)
-            row.addStretch()
-            self._layout.addLayout(row)
+    # -- Stats ---------------------------------------------------------------
 
-    # -- Story Memory --------------------------------------------------------
+    def _add_stats(self, scenes) -> None:
+        header = QLabel("Stats")
+        header.setStyleSheet(_EYEBROW_STYLE)
+        self._layout.addWidget(header)
 
-    def _add_story_memory(self) -> None:
-        self._add_section_header("Global Story Memory")
-        memory = gather_story_memory(self._db, self._project_id)
-        if not memory:
-            self._add_section_body("Not enough data to build story memory.")
-            return
+        total_words = sum(len((s.content or "").split()) for s in scenes)
+        texts = [s.content for s in scenes if s.content and s.content.strip()]
+        if texts:
+            ratios = [compute_scene_stats(t)["dialogue_ratio"] for t in texts]
+            dialogue_pct = round(100 * sum(ratios) / len(ratios))
+        else:
+            dialogue_pct = None
 
-        display = QPlainTextEdit()
-        display.setReadOnly(True)
-        display.setPlainText(memory)
-        display.setMaximumHeight(180)
-        display.setStyleSheet(
-            f"QPlainTextEdit {{"
-            f"  background-color: {theme.BG_PANEL};"
-            f"  color: {theme.TEXT_PRIMARY};"
-            f"  border: 1px solid {theme.BORDER};"
-            f"  border-radius: 4px; padding: 8px;"
-            f"}}"
-        )
-        self._layout.addWidget(display)
+        rows = [
+            ("Total words", f"{total_words:,}"),
+            ("Scenes", str(len(scenes))),
+        ]
+        if dialogue_pct is not None:
+            rows.append(("Dialogue", f"{dialogue_pct}%"))
 
-    # -- Navigation ----------------------------------------------------------
+        for label, value in rows:
+            line = QHBoxLayout()
+            line.setSpacing(12)
+            lbl = QLabel(label)
+            lbl.setStyleSheet(f"color: {theme.TEXT_SECONDARY};")
+            lbl.setMinimumWidth(120)
+            val = QLabel(value)
+            val.setStyleSheet(f"color: {theme.TEXT_PRIMARY};")
+            line.addWidget(lbl)
+            line.addWidget(val)
+            line.addStretch()
+            self._layout.addLayout(line)
+
+    # -- Helpers -------------------------------------------------------------
+
+    def _make_card(self) -> QFrame:
+        card = QFrame()
+        card.setObjectName("dashCard")
+        card.setStyleSheet(_CARD_STYLE)
+        return card
 
     def _navigate(self, entity_type: str, entity_id: int) -> None:
         if self._on_navigate:
             self._on_navigate(entity_type, entity_id)
+
+    def _open_section(self, name: str) -> None:
+        if self._on_open_section:
+            self._on_open_section(name)

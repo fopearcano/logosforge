@@ -137,8 +137,17 @@ class MainWindow(QMainWindow):
             DashboardView(
                 self._db, self._project_id,
                 on_navigate=self._on_link_navigated,
+                on_open_section=self._open_section,
             )
         )
+
+    def _open_section(self, name: str) -> None:
+        if name == "scenes":
+            self._show_scenes()
+        elif name == "characters":
+            self._show_characters()
+        elif name == "timeline":
+            self._show_timeline()
 
     def _show_characters(self) -> None:
         self._set_content(
