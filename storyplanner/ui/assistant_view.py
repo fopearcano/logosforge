@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QThread, Signal, Qt
+from PySide6.QtCore import QThread, QTimer, Signal, Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication,
@@ -37,7 +37,7 @@ from storyplanner.ui.provider_settings import ProviderSettingsWidget
 
 
 class _AssistantWorker(QThread):
-    completed = Signal(str)
+    completed = Signal(str, bool)
     failed = Signal(str)
 
     def __init__(
@@ -49,10 +49,10 @@ class _AssistantWorker(QThread):
 
     def run(self) -> None:
         try:
-            result = chat_completion(
+            result, from_cache = chat_completion(
                 self._messages, provider=self._provider,
             )
-            self.completed.emit(result)
+            self.completed.emit(result, from_cache)
         except Exception as e:
             self.failed.emit(str(e))
 
@@ -75,6 +75,12 @@ class AssistantPanel(QWidget):
         self._on_data_changed = on_data_changed
         self._on_open_scene = on_open_scene
         self._worker: _AssistantWorker | None = None
+        self._pending_messages: list[dict] | None = None
+
+        self._debounce_timer = QTimer()
+        self._debounce_timer.setSingleShot(True)
+        self._debounce_timer.setInterval(120)
+        self._debounce_timer.timeout.connect(self._fire_request)
 
         self.setMinimumWidth(280)
         self.setMaximumWidth(360)
@@ -198,11 +204,21 @@ class AssistantPanel(QWidget):
         self._layout.addWidget(self._settings_container)
 
         # Response area
+        resp_header = QHBoxLayout()
+        resp_header.setSpacing(4)
         resp_label = QLabel("Response")
         resp_label.setStyleSheet(
             f"color: {theme.TEXT_SECONDARY}; font-size: 11px;"
         )
-        self._layout.addWidget(resp_label)
+        resp_header.addWidget(resp_label)
+        self._cache_label = QLabel("cached")
+        self._cache_label.setStyleSheet(
+            f"color: {theme.ACCENT}; font-size: 10px; font-style: italic;"
+        )
+        self._cache_label.setVisible(False)
+        resp_header.addWidget(self._cache_label)
+        resp_header.addStretch()
+        self._layout.addLayout(resp_header)
 
         self._response_output = QPlainTextEdit()
         self._response_output.setReadOnly(True)
@@ -360,7 +376,16 @@ class AssistantPanel(QWidget):
         if error:
             self._response_output.setPlainText(error)
             return
+        self._pending_messages = messages
+        self._debounce_timer.start()
+
+    def _fire_request(self) -> None:
+        if self._pending_messages is None:
+            return
+        messages = self._pending_messages
+        self._pending_messages = None
         self._set_busy(True)
+        self._cache_label.setVisible(False)
         self._response_output.setPlainText("Thinking...")
 
         provider = self._provider_widget.get_provider_config()
@@ -371,8 +396,9 @@ class AssistantPanel(QWidget):
 
     # -- Response handling -----------------------------------------------------
 
-    def _on_response(self, text: str) -> None:
+    def _on_response(self, text: str, from_cache: bool) -> None:
         self._response_output.setPlainText(text)
+        self._cache_label.setVisible(from_cache)
         self._set_busy(False)
         self._worker = None
 

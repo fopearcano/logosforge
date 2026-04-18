@@ -48,7 +48,9 @@ class _InlineWorker(QThread):
 
     def run(self) -> None:
         try:
-            result = chat_completion(self._messages, provider=self._provider)
+            result, _from_cache = chat_completion(
+                self._messages, provider=self._provider,
+            )
             self.completed.emit(result)
         except Exception as exc:
             self.failed.emit(str(exc))

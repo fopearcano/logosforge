@@ -1,14 +1,22 @@
-"""Writing assistant — HTTP client and prompt construction."""
+"""Writing assistant — HTTP client, prompt construction, and response cache."""
 
 from __future__ import annotations
 
+import hashlib
 import json
+import time
 import urllib.error
 import urllib.request
+from collections import OrderedDict
 
 from storyplanner.providers import ProviderConfig
 
 DEFAULT_BASE_URL = "http://localhost:1234/v1"
+
+_CACHE_MAX_SIZE = 128
+_CACHE_TTL_SECONDS = 300
+
+_cache: OrderedDict[str, tuple[float, str]] = OrderedDict()
 
 PRESET_ACTIONS = {
     "Rewrite": (
@@ -83,19 +91,51 @@ def build_messages(
     ]
 
 
+def _cache_key(messages: list[dict], provider: ProviderConfig) -> str:
+    raw = json.dumps(messages, sort_keys=True) + provider.base_url + provider.model
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _cache_get(key: str) -> str | None:
+    entry = _cache.get(key)
+    if entry is None:
+        return None
+    ts, value = entry
+    if time.monotonic() - ts > _CACHE_TTL_SECONDS:
+        _cache.pop(key, None)
+        return None
+    _cache.move_to_end(key)
+    return value
+
+
+def _cache_put(key: str, value: str) -> None:
+    _cache[key] = (time.monotonic(), value)
+    _cache.move_to_end(key)
+    while len(_cache) > _CACHE_MAX_SIZE:
+        _cache.popitem(last=False)
+
+
 def chat_completion(
     messages: list[dict],
     provider: ProviderConfig | None = None,
     base_url: str = "",
     model: str = "",
     timeout: int = 120,
-) -> str:
+    use_cache: bool = True,
+) -> tuple[str, bool]:
     if provider is None:
         provider = ProviderConfig(
             name="LM Studio",
             base_url=base_url or DEFAULT_BASE_URL,
             model=model,
         )
+
+    key: str | None = None
+    if use_cache:
+        key = _cache_key(messages, provider)
+        cached = _cache_get(key)
+        if cached is not None:
+            return cached, True
 
     url = f"{provider.base_url.rstrip('/')}/chat/completions"
 
@@ -122,7 +162,10 @@ def chat_completion(
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            return data["choices"][0]["message"]["content"]
+            result = data["choices"][0]["message"]["content"]
+            if key is not None:
+                _cache_put(key, result)
+            return result, False
     except urllib.error.URLError as e:
         raise ConnectionError(
             f"Cannot reach {provider.name} at {provider.base_url}.\n\n"
@@ -142,6 +185,7 @@ def test_connection(provider: ProviderConfig) -> tuple[bool, str]:
             [{"role": "user", "content": "Say OK"}],
             provider=provider,
             timeout=15,
+            use_cache=False,
         )
         return True, f"Connected to {provider.name}."
     except Exception as e:
