@@ -23,6 +23,7 @@ from storyplanner.ui import theme
 
 from storyplanner.db import Database
 from storyplanner.ui.inline_assistant import InlineAssistantPanel
+from storyplanner.ui.inline_edit_bar import InlineEditBar
 from storyplanner.ui.link_preview import BacklinksWidget, create_link_browser, render_linked_text
 
 USER_ROLE = Qt.ItemDataRole.UserRole
@@ -244,6 +245,19 @@ class ScenesView(QWidget):
         self._assist_panel.setVisible(False)
         right.addWidget(self._assist_panel)
 
+        # -- Inline edit bar (floats over editor viewport) -------------------
+        self._inline_edit = InlineEditBar(
+            editor=self._content_input,
+            db=db,
+            project_id=project_id,
+            get_scene_id=lambda: self._selected_scene_id,
+            provider_widget=self._assist_panel._provider_widget,
+            on_data_changed=on_data_changed,
+        )
+        self._assist_panel.slash_completed.connect(
+            self._inline_edit.show_inline_result,
+        )
+
         # -- Detail fields (hidden in focus mode) ----------------------------
         self._detail_fields = QWidget()
         df = QVBoxLayout(self._detail_fields)
@@ -324,6 +338,10 @@ class ScenesView(QWidget):
         # Ctrl/Cmd+Shift+F toggles focus mode
         focus_shortcut = QShortcut(QKeySequence("Ctrl+Shift+F"), self)
         focus_shortcut.activated.connect(self.toggle_focus_mode)
+
+        # Ctrl/Cmd+K triggers inline edit bar
+        inline_shortcut = QShortcut(QKeySequence("Ctrl+K"), self)
+        inline_shortcut.activated.connect(self._inline_edit.activate)
 
         self._load_characters()
         self._load_places()

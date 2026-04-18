@@ -135,6 +135,8 @@ class _Worker(QThread):
 
 
 class InlineAssistantPanel(QWidget):
+    slash_completed = Signal(str)
+
     def __init__(
         self,
         content_editor: QPlainTextEdit,
@@ -154,6 +156,7 @@ class InlineAssistantPanel(QWidget):
 
         self._session_memory: list[dict] = []
         self._pending_action: str = ""
+        self._slash_triggered: bool = False
 
         self._sel_start: int | None = None
         self._sel_end: int | None = None
@@ -461,6 +464,7 @@ class InlineAssistantPanel(QWidget):
         return True
 
     def _handle_slash_command(self, command: str) -> None:
+        self._slash_triggered = True
         mode, key = SLASH_COMMANDS[command]
 
         if mode == "scene":
@@ -658,6 +662,9 @@ class InlineAssistantPanel(QWidget):
         if self._pending_action:
             self._record_session_entry(self._pending_action, text)
             self._pending_action = ""
+        if self._slash_triggered:
+            self.slash_completed.emit(text)
+            self._slash_triggered = False
         self._set_busy(False)
         self._worker = None
 
