@@ -297,6 +297,10 @@ class AssistantView(QWidget):
         self._response_output.setPlainText("\n".join(parts))
 
     def _start_request(self, messages: list[dict]) -> None:
+        error = self._provider_widget.validate()
+        if error:
+            self._response_output.setPlainText(error)
+            return
         self._set_busy(True)
         self._response_output.setPlainText("Thinking...")
 

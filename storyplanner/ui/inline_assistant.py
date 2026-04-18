@@ -492,6 +492,11 @@ class InlineAssistantPanel(QWidget):
         self._close_diff()
         self._pending_action = action_prompt.split("\n")[0][:80]
 
+        error = self._provider_widget.validate()
+        if error:
+            self._response.setPlainText(error)
+            return
+
         session_ctx = self._build_session_memory_context()
         messages = build_messages(
             action_prompt, scene_ctx, story_memory_context=session_ctx,
