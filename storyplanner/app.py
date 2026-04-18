@@ -32,4 +32,9 @@ def create_app() -> tuple[QApplication, MainWindow]:
         project = db.create_project("My Story")
 
     window = MainWindow(db, project.id)
+
+    last_path = str(mgr.get("last_project_path") or "")
+    if last_path:
+        window.load_file_quiet(last_path)
+
     return app, window

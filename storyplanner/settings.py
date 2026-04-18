@@ -14,6 +14,7 @@ DEFAULTS: dict[str, object] = {
     "ai_model": "",
     "sidebar_collapsed": False,
     "assistant_open": False,
+    "last_project_path": "",
 }
 
 

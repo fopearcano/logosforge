@@ -892,8 +892,30 @@ class MainWindow(QMainWindow):
         self._mark_clean()
         recent_projects.add(path)
         self._refresh_recent_menu()
+        get_settings().set("last_project_path", str(Path(path).resolve()))
 
         self._reset_content("Project loaded. Select a section from the sidebar.")
+
+    def load_file_quiet(self, path: str) -> bool:
+        """Load a project file without showing dialogs on failure."""
+        if not os.path.isfile(path):
+            return False
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                raw = f.read()
+        except OSError:
+            return False
+        data, _ = validate_import_data(raw)
+        if data is None:
+            return False
+        self._project_id = import_json(self._db, data)
+        self._current_file = path
+        self._cached_scenes_view = None
+        self._mark_clean()
+        recent_projects.add(path)
+        self._refresh_recent_menu()
+        self._update_title()
+        return True
 
     def _on_save_as(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
@@ -915,6 +937,7 @@ class MainWindow(QMainWindow):
         self._mark_clean()
         recent_projects.add(path)
         self._refresh_recent_menu()
+        get_settings().set("last_project_path", str(Path(path).resolve()))
         QMessageBox.information(self, "Save As", f"Project saved to {path}")
 
     def _reset_content(self, message: str) -> None:
