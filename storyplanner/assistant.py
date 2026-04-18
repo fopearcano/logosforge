@@ -1,8 +1,12 @@
-"""Local LM Studio writing assistant — HTTP client and prompt construction."""
+"""Writing assistant — HTTP client and prompt construction."""
+
+from __future__ import annotations
 
 import json
 import urllib.error
 import urllib.request
+
+from storyplanner.providers import ProviderConfig
 
 DEFAULT_BASE_URL = "http://localhost:1234/v1"
 
@@ -81,11 +85,19 @@ def build_messages(
 
 def chat_completion(
     messages: list[dict],
-    base_url: str = DEFAULT_BASE_URL,
+    provider: ProviderConfig | None = None,
+    base_url: str = "",
     model: str = "",
     timeout: int = 120,
 ) -> str:
-    url = f"{base_url.rstrip('/')}/chat/completions"
+    if provider is None:
+        provider = ProviderConfig(
+            name="LM Studio",
+            base_url=base_url or DEFAULT_BASE_URL,
+            model=model,
+        )
+
+    url = f"{provider.base_url.rstrip('/')}/chat/completions"
 
     body: dict = {
         "messages": messages,
@@ -93,16 +105,18 @@ def chat_completion(
         "max_tokens": 2048,
         "stream": False,
     }
-    if model:
-        body["model"] = model
+    if provider.model:
+        body["model"] = provider.model
 
     payload = json.dumps(body).encode("utf-8")
 
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if provider.api_key:
+        headers["Authorization"] = f"Bearer {provider.api_key}"
+    headers.update(provider.extra_headers)
+
     req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
+        url, data=payload, headers=headers, method="POST",
     )
 
     try:
@@ -111,13 +125,24 @@ def chat_completion(
             return data["choices"][0]["message"]["content"]
     except urllib.error.URLError as e:
         raise ConnectionError(
-            f"Cannot reach LM Studio at {base_url}.\n"
-            "Make sure LM Studio is running with the local server enabled.\n\n"
+            f"Cannot reach {provider.name} at {provider.base_url}.\n\n"
             f"Details: {e}"
         ) from e
     except (KeyError, IndexError, json.JSONDecodeError) as e:
         raise RuntimeError(
-            f"Unexpected response from LM Studio:\n{e}"
+            f"Unexpected response from {provider.name}:\n{e}"
         ) from e
     except OSError as e:
         raise ConnectionError(f"Connection error: {e}") from e
+
+
+def test_connection(provider: ProviderConfig) -> tuple[bool, str]:
+    try:
+        chat_completion(
+            [{"role": "user", "content": "Say OK"}],
+            provider=provider,
+            timeout=15,
+        )
+        return True, f"Connected to {provider.name}."
+    except Exception as e:
+        return False, str(e)

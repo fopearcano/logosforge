@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -17,7 +16,6 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.assistant import (
-    DEFAULT_BASE_URL,
     PRESET_ACTIONS,
     build_messages,
     chat_completion,
@@ -25,6 +23,8 @@ from storyplanner.assistant import (
 from storyplanner.context_builder import gather_scene_context
 from storyplanner.db import Database
 from storyplanner.prompt_router import route_prompt
+from storyplanner.providers import ProviderConfig
+from storyplanner.ui.provider_settings import ProviderSettingsWidget
 
 SELECTION_ACTIONS = {
     "Rewrite": (
@@ -97,15 +97,16 @@ class _Worker(QThread):
     completed = Signal(str)
     failed = Signal(str)
 
-    def __init__(self, messages: list[dict], base_url: str, model: str) -> None:
+    def __init__(
+        self, messages: list[dict], provider: ProviderConfig,
+    ) -> None:
         super().__init__()
         self._messages = messages
-        self._base_url = base_url
-        self._model = model
+        self._provider = provider
 
     def run(self) -> None:
         try:
-            result = chat_completion(self._messages, self._base_url, self._model)
+            result = chat_completion(self._messages, provider=self._provider)
             self.completed.emit(result)
         except Exception as e:
             self.failed.emit(str(e))
@@ -259,23 +260,16 @@ class InlineAssistantPanel(QWidget):
         layout.addWidget(self._diff_container)
         self._diff_container.hide()
 
-        # Settings (compact)
-        settings_row = QHBoxLayout()
-        settings_row.addWidget(QLabel("URL:"))
-        self._url = QLineEdit()
-        self._url.setText(DEFAULT_BASE_URL)
-        self._url.setMaximumWidth(250)
-        settings_row.addWidget(self._url)
-        settings_row.addWidget(QLabel("Model:"))
-        self._model_input = QLineEdit()
-        self._model_input.setPlaceholderText("default")
-        self._model_input.setMaximumWidth(150)
-        settings_row.addWidget(self._model_input)
+        # Provider settings
+        self._provider_widget = ProviderSettingsWidget(compact=True)
+        layout.addWidget(self._provider_widget)
+
+        mem_row = QHBoxLayout()
         self._clear_memory_btn = QPushButton("Clear Memory")
         self._clear_memory_btn.clicked.connect(self._clear_session_memory)
-        settings_row.addWidget(self._clear_memory_btn)
-        settings_row.addStretch()
-        layout.addLayout(settings_row)
+        mem_row.addWidget(self._clear_memory_btn)
+        mem_row.addStretch()
+        layout.addLayout(mem_row)
 
         self._interactive_buttons = [
             self._sel_run_btn, self._run_template_btn,
@@ -483,7 +477,7 @@ class InlineAssistantPanel(QWidget):
             "=== Context sent to the model ===\n\n" + scene_ctx
         )
 
-    # -- LM Studio communication ---------------------------------------------
+    # -- Provider communication ------------------------------------------------
 
     def _send_request(
         self, action_prompt: str, routed_to: str = "",
@@ -510,10 +504,8 @@ class InlineAssistantPanel(QWidget):
         else:
             self._response.setPlainText("Thinking...")
 
-        base_url = self._url.text().strip() or DEFAULT_BASE_URL
-        model = self._model_input.text().strip()
-
-        self._worker = _Worker(messages, base_url, model)
+        provider = self._provider_widget.get_provider_config()
+        self._worker = _Worker(messages, provider)
         self._worker.completed.connect(self._on_completed)
         self._worker.failed.connect(self._on_failed)
         self._worker.start()

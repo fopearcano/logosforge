@@ -1,4 +1,4 @@
-"""Writing Assistant view — local LM Studio integration for scene writing help."""
+"""Writing Assistant view — multi-provider LLM integration for scene writing help."""
 
 from collections.abc import Callable
 
@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -18,7 +17,6 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.assistant import (
-    DEFAULT_BASE_URL,
     PRESET_ACTIONS,
     build_messages,
     chat_completion,
@@ -29,6 +27,8 @@ from storyplanner.context_builder import (
     gather_story_memory,
 )
 from storyplanner.db import Database
+from storyplanner.providers import ProviderConfig
+from storyplanner.ui.provider_settings import ProviderSettingsWidget
 
 
 class _AssistantWorker(QThread):
@@ -36,17 +36,16 @@ class _AssistantWorker(QThread):
     failed = Signal(str)
 
     def __init__(
-        self, messages: list[dict], base_url: str, model: str,
+        self, messages: list[dict], provider: ProviderConfig,
     ) -> None:
         super().__init__()
         self._messages = messages
-        self._base_url = base_url
-        self._model = model
+        self._provider = provider
 
     def run(self) -> None:
         try:
             result = chat_completion(
-                self._messages, self._base_url, self._model,
+                self._messages, provider=self._provider,
             )
             self.completed.emit(result)
         except Exception as e:
@@ -192,24 +191,13 @@ class AssistantView(QWidget):
         copy_row.addWidget(self._copy_btn)
         layout.addLayout(copy_row)
 
-        # Settings
-        settings_label = QLabel("Settings")
+        # Provider settings
+        settings_label = QLabel("Provider")
         settings_label.setStyleSheet("color: #6b7280; margin-top: 8px;")
         layout.addWidget(settings_label)
 
-        url_row = QHBoxLayout()
-        url_row.addWidget(QLabel("LM Studio URL:"))
-        self._url_input = QLineEdit()
-        self._url_input.setText(DEFAULT_BASE_URL)
-        url_row.addWidget(self._url_input)
-        layout.addLayout(url_row)
-
-        model_row = QHBoxLayout()
-        model_row.addWidget(QLabel("Model:"))
-        self._model_input = QLineEdit()
-        self._model_input.setPlaceholderText("leave empty for default")
-        model_row.addWidget(self._model_input)
-        layout.addLayout(model_row)
+        self._provider_widget = ProviderSettingsWidget()
+        layout.addWidget(self._provider_widget)
 
         self._load_scenes()
 
@@ -312,10 +300,8 @@ class AssistantView(QWidget):
         self._set_busy(True)
         self._response_output.setPlainText("Thinking...")
 
-        base_url = self._url_input.text().strip() or DEFAULT_BASE_URL
-        model = self._model_input.text().strip()
-
-        self._worker = _AssistantWorker(messages, base_url, model)
+        provider = self._provider_widget.get_provider_config()
+        self._worker = _AssistantWorker(messages, provider)
         self._worker.completed.connect(self._on_response)
         self._worker.failed.connect(self._on_error)
         self._worker.start()
