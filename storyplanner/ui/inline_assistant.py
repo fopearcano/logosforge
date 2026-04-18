@@ -48,6 +48,36 @@ SELECTION_ACTIONS = {
     ),
 }
 
+_ORIGINAL_STYLE = (
+    "QPlainTextEdit {"
+    "  background-color: #1a1215;"
+    "  color: #d4a0a0;"
+    "  border: 1px solid #3a2020;"
+    "  border-radius: 4px;"
+    "  padding: 8px;"
+    "}"
+)
+
+_PROPOSED_STYLE = (
+    "QPlainTextEdit {"
+    "  background-color: #121a15;"
+    "  color: #a0d4a0;"
+    "  border: 1px solid #203a20;"
+    "  border-radius: 4px;"
+    "  padding: 8px;"
+    "}"
+)
+
+_RESPONSE_STYLE = (
+    "QPlainTextEdit {"
+    "  background-color: #12151a;"
+    "  color: #d4d4d4;"
+    "  border: 1px solid #2a2f36;"
+    "  border-radius: 4px;"
+    "  padding: 8px;"
+    "}"
+)
+
 
 class _Worker(QThread):
     completed = Signal(str)
@@ -135,23 +165,18 @@ class InlineAssistantPanel(QWidget):
         prompt_row.addWidget(self._send_btn)
         layout.addLayout(prompt_row)
 
-        # Response
+        # -- Response container (normal view) --------------------------------
+        self._response_container = QWidget()
+        rc_layout = QVBoxLayout(self._response_container)
+        rc_layout.setContentsMargins(0, 0, 0, 0)
+
         self._response = QPlainTextEdit()
         self._response.setReadOnly(True)
         self._response.setMaximumHeight(200)
         self._response.setPlaceholderText("Response...")
-        self._response.setStyleSheet(
-            "QPlainTextEdit {"
-            "  background-color: #12151a;"
-            "  color: #d4d4d4;"
-            "  border: 1px solid #2a2f36;"
-            "  border-radius: 4px;"
-            "  padding: 8px;"
-            "}"
-        )
-        layout.addWidget(self._response)
+        self._response.setStyleSheet(_RESPONSE_STYLE)
+        rc_layout.addWidget(self._response)
 
-        # Apply actions
         action_row = QHBoxLayout()
         self._replace_btn = QPushButton("Replace Selection")
         self._replace_btn.clicked.connect(self._replace_selection)
@@ -161,11 +186,60 @@ class InlineAssistantPanel(QWidget):
         self._insert_btn.clicked.connect(self._insert_at_cursor)
         action_row.addWidget(self._insert_btn)
 
+        self._compare_btn = QPushButton("Compare")
+        self._compare_btn.clicked.connect(self._show_diff)
+        action_row.addWidget(self._compare_btn)
+
         self._copy_btn = QPushButton("Copy")
         self._copy_btn.clicked.connect(self._copy_response)
         action_row.addWidget(self._copy_btn)
         action_row.addStretch()
-        layout.addLayout(action_row)
+        rc_layout.addLayout(action_row)
+
+        layout.addWidget(self._response_container)
+
+        # -- Diff container (hidden by default) ------------------------------
+        self._diff_container = QWidget()
+        dc_layout = QVBoxLayout(self._diff_container)
+        dc_layout.setContentsMargins(0, 0, 0, 0)
+
+        orig_label = QLabel("Original")
+        orig_label.setStyleSheet("font-weight: bold; color: #d4a0a0;")
+        dc_layout.addWidget(orig_label)
+
+        self._diff_original = QPlainTextEdit()
+        self._diff_original.setReadOnly(True)
+        self._diff_original.setMaximumHeight(140)
+        self._diff_original.setStyleSheet(_ORIGINAL_STYLE)
+        dc_layout.addWidget(self._diff_original)
+
+        prop_label = QLabel("Proposed")
+        prop_label.setStyleSheet("font-weight: bold; color: #a0d4a0;")
+        dc_layout.addWidget(prop_label)
+
+        self._diff_proposed = QPlainTextEdit()
+        self._diff_proposed.setReadOnly(True)
+        self._diff_proposed.setMaximumHeight(140)
+        self._diff_proposed.setStyleSheet(_PROPOSED_STYLE)
+        dc_layout.addWidget(self._diff_proposed)
+
+        diff_action_row = QHBoxLayout()
+        diff_replace_btn = QPushButton("Replace Selection")
+        diff_replace_btn.clicked.connect(self._replace_selection)
+        diff_action_row.addWidget(diff_replace_btn)
+
+        diff_insert_btn = QPushButton("Insert at Cursor")
+        diff_insert_btn.clicked.connect(self._insert_at_cursor)
+        diff_action_row.addWidget(diff_insert_btn)
+
+        diff_close_btn = QPushButton("Close")
+        diff_close_btn.clicked.connect(self._close_diff)
+        diff_action_row.addWidget(diff_close_btn)
+        diff_action_row.addStretch()
+        dc_layout.addLayout(diff_action_row)
+
+        layout.addWidget(self._diff_container)
+        self._diff_container.hide()
 
         # Settings (compact)
         settings_row = QHBoxLayout()
@@ -185,7 +259,7 @@ class InlineAssistantPanel(QWidget):
         self._interactive_buttons = [
             self._sel_run_btn, self._run_template_btn,
             self._send_btn, self._preview_btn,
-            self._replace_btn, self._insert_btn,
+            self._replace_btn, self._insert_btn, self._compare_btn,
         ]
 
     # -- Scene context -------------------------------------------------------
@@ -229,6 +303,28 @@ class InlineAssistantPanel(QWidget):
             )
             return False
         return True
+
+    # -- Diff view -----------------------------------------------------------
+
+    def _show_diff(self) -> None:
+        proposed = self._get_response_text()
+        if proposed is None:
+            return
+        if self._sel_text is None:
+            self._response.setPlainText(
+                "No original selection recorded. "
+                "Run a selection action first to compare."
+            )
+            return
+
+        self._diff_original.setPlainText(self._sel_text)
+        self._diff_proposed.setPlainText(proposed)
+        self._response_container.hide()
+        self._diff_container.show()
+
+    def _close_diff(self) -> None:
+        self._diff_container.hide()
+        self._response_container.show()
 
     # -- Selection actions ---------------------------------------------------
 
@@ -278,6 +374,8 @@ class InlineAssistantPanel(QWidget):
             self._response.setPlainText("No scene selected.")
             return
 
+        self._close_diff()
+
         messages = build_messages(action_prompt, scene_ctx)
         self._set_busy(True)
         self._response.setPlainText("Thinking...")
@@ -316,6 +414,8 @@ class InlineAssistantPanel(QWidget):
             return None
         if text.startswith("No original selection recorded"):
             return None
+        if text.startswith("Select text in the editor first"):
+            return None
         return text
 
     def _replace_selection(self) -> None:
@@ -323,6 +423,7 @@ class InlineAssistantPanel(QWidget):
         if text is None:
             return
         if not self._verify_selection():
+            self._close_diff()
             return
 
         answer = QMessageBox.question(
@@ -346,6 +447,7 @@ class InlineAssistantPanel(QWidget):
         self._sel_end = None
         self._sel_text = None
 
+        self._close_diff()
         self._save_content()
 
     def _insert_at_cursor(self) -> None:
@@ -367,6 +469,7 @@ class InlineAssistantPanel(QWidget):
         self._editor.setTextCursor(cursor)
         self._editor.setFocus()
 
+        self._close_diff()
         self._save_content()
 
     def _copy_response(self) -> None:
