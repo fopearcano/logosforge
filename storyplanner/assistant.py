@@ -39,59 +39,6 @@ PRESET_ACTIONS = {
 }
 
 
-def build_scene_context(scene_data: dict) -> str:
-    parts: list[str] = []
-
-    if scene_data.get("title"):
-        parts.append(f"Scene Title: {scene_data['title']}")
-    if scene_data.get("act"):
-        parts.append(f"Act: {scene_data['act']}")
-    if scene_data.get("chapter"):
-        parts.append(f"Chapter: {scene_data['chapter']}")
-    if scene_data.get("plotline"):
-        parts.append(f"Plotline: {scene_data['plotline']}")
-    if scene_data.get("beat"):
-        parts.append(f"Beat: {scene_data['beat']}")
-    if scene_data.get("goal"):
-        parts.append(f"Goal: {scene_data['goal']}")
-    if scene_data.get("conflict"):
-        parts.append(f"Conflict: {scene_data['conflict']}")
-    if scene_data.get("outcome"):
-        parts.append(f"Outcome: {scene_data['outcome']}")
-    if scene_data.get("synopsis"):
-        parts.append(f"Synopsis: {scene_data['synopsis']}")
-    if scene_data.get("summary"):
-        parts.append(f"Summary: {scene_data['summary']}")
-    if scene_data.get("characters"):
-        parts.append(f"Characters: {', '.join(scene_data['characters'])}")
-    if scene_data.get("places"):
-        parts.append(f"Places: {', '.join(scene_data['places'])}")
-    if scene_data.get("character_states"):
-        states = [
-            f"  {name}: {state}"
-            for name, state in scene_data["character_states"]
-        ]
-        parts.append("Character States:\n" + "\n".join(states))
-    if scene_data.get("content"):
-        parts.append(f"\nScene Content:\n{scene_data['content']}")
-
-    return "\n".join(parts)
-
-
-def build_outline_context(scenes: list[dict]) -> str:
-    if not scenes:
-        return ""
-    lines = ["Story Outline:"]
-    for i, s in enumerate(scenes, 1):
-        line = f"  {i}. {s['title']}"
-        if s.get("chapter"):
-            line += f" [{s['chapter']}]"
-        if s.get("summary"):
-            line += f" — {s['summary'][:80]}"
-        lines.append(line)
-    return "\n".join(lines)
-
-
 def build_messages(
     action_prompt: str,
     scene_context: str,

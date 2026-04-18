@@ -17,9 +17,9 @@ from PySide6.QtWidgets import (
 from storyplanner.assistant import (
     DEFAULT_BASE_URL,
     build_messages,
-    build_scene_context,
     chat_completion,
 )
+from storyplanner.context_builder import gather_scene_context
 from storyplanner.db import Database
 
 
@@ -85,6 +85,9 @@ class InlineAssistantPanel(QWidget):
 
         prompt_row = QHBoxLayout()
         prompt_row.addStretch()
+        self._preview_btn = QPushButton("Preview")
+        self._preview_btn.clicked.connect(self._on_preview)
+        prompt_row.addWidget(self._preview_btn)
         self._send_btn = QPushButton("Send")
         self._send_btn.clicked.connect(self._on_send)
         prompt_row.addWidget(self._send_btn)
@@ -135,49 +138,16 @@ class InlineAssistantPanel(QWidget):
 
         self._interactive_buttons = [
             self._rewrite_btn, self._expand_btn,
-            self._send_btn, self._insert_btn,
+            self._send_btn, self._preview_btn, self._insert_btn,
         ]
 
     # -- Scene context -------------------------------------------------------
 
-    def _gather_scene_context(self) -> str:
+    def _get_scene_context(self) -> str:
         scene_id = self._get_scene_id()
         if scene_id is None:
             return ""
-        scene = self._db.get_scene_by_id(scene_id)
-        if scene is None:
-            return ""
-
-        char_map = {c.id: c for c in self._db.get_all_characters(self._project_id)}
-        place_map = {p.id: p for p in self._db.get_all_places(self._project_id)}
-        char_ids = self._db.get_scene_character_ids(scene_id)
-        place_ids = self._db.get_scene_place_ids(scene_id)
-        states = self._db.get_scene_character_states(scene_id)
-
-        return build_scene_context({
-            "title": scene.title,
-            "summary": scene.summary,
-            "synopsis": scene.synopsis,
-            "content": scene.content,
-            "goal": scene.goal,
-            "conflict": scene.conflict,
-            "outcome": scene.outcome,
-            "beat": scene.beat,
-            "act": scene.act,
-            "chapter": scene.chapter,
-            "plotline": scene.plotline,
-            "characters": [
-                char_map[cid].name for cid in char_ids if cid in char_map
-            ],
-            "places": [
-                place_map[pid].name for pid in place_ids if pid in place_map
-            ],
-            "character_states": [
-                (char_map[cid].name, state)
-                for cid, state in states
-                if cid in char_map
-            ],
-        })
+        return gather_scene_context(self._db, self._project_id, scene_id)
 
     # -- Selection actions ---------------------------------------------------
 
@@ -215,12 +185,21 @@ class InlineAssistantPanel(QWidget):
             return
         self._send_request(prompt)
 
+    def _on_preview(self) -> None:
+        scene_ctx = self._get_scene_context()
+        if not scene_ctx:
+            self._response.setPlainText("No scene selected.")
+            return
+        self._response.setPlainText(
+            "=== Context sent to the model ===\n\n" + scene_ctx
+        )
+
     # -- LM Studio communication ---------------------------------------------
 
     def _send_request(self, action_prompt: str) -> None:
         if self._worker is not None:
             return
-        scene_ctx = self._gather_scene_context()
+        scene_ctx = self._get_scene_context()
         if not scene_ctx:
             self._response.setPlainText("No scene selected.")
             return
@@ -256,6 +235,8 @@ class InlineAssistantPanel(QWidget):
     def _get_response_text(self) -> str | None:
         text = self._response.toPlainText().strip()
         if not text or text == "Thinking..." or text.startswith("Error:"):
+            return None
+        if text.startswith("=== Context sent to the model ==="):
             return None
         return text
 

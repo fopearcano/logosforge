@@ -21,10 +21,9 @@ from storyplanner.assistant import (
     DEFAULT_BASE_URL,
     PRESET_ACTIONS,
     build_messages,
-    build_outline_context,
-    build_scene_context,
     chat_completion,
 )
+from storyplanner.context_builder import gather_outline_context, gather_scene_context
 from storyplanner.db import Database
 
 
@@ -115,6 +114,9 @@ class AssistantView(QWidget):
 
         send_row = QHBoxLayout()
         send_row.addStretch()
+        self._preview_btn = QPushButton("Preview Prompt")
+        self._preview_btn.clicked.connect(self._preview_prompt)
+        send_row.addWidget(self._preview_btn)
         self._send_btn = QPushButton("Send Custom Prompt")
         self._send_btn.clicked.connect(self._send_custom)
         send_row.addWidget(self._send_btn)
@@ -215,55 +217,18 @@ class AssistantView(QWidget):
                 label = f"[{scene.chapter}] {label}"
             self._scene_combo.addItem(label, userData=scene.id)
 
-    def _gather_scene_data(self, scene_id: int) -> dict:
-        scene = self._db.get_scene_by_id(scene_id)
-        if scene is None:
-            return {}
-
-        char_map = {
-            c.id: c for c in self._db.get_all_characters(self._project_id)
-        }
-        place_map = {
-            p.id: p for p in self._db.get_all_places(self._project_id)
-        }
-
-        char_ids = self._db.get_scene_character_ids(scene_id)
-        place_ids = self._db.get_scene_place_ids(scene_id)
-        states = self._db.get_scene_character_states(scene_id)
-
-        return {
-            "title": scene.title,
-            "summary": scene.summary,
-            "synopsis": scene.synopsis,
-            "content": scene.content,
-            "goal": scene.goal,
-            "conflict": scene.conflict,
-            "outcome": scene.outcome,
-            "beat": scene.beat,
-            "act": scene.act,
-            "chapter": scene.chapter,
-            "plotline": scene.plotline,
-            "characters": [
-                char_map[cid].name for cid in char_ids if cid in char_map
-            ],
-            "places": [
-                place_map[pid].name for pid in place_ids if pid in place_map
-            ],
-            "character_states": [
-                (char_map[cid].name, state)
-                for cid, state in states
-                if cid in char_map
-            ],
-        }
-
-    def _gather_outline(self) -> list[dict]:
-        scenes = self._db.get_all_scenes(self._project_id)
-        return [
-            {"title": s.title, "chapter": s.chapter, "summary": s.summary}
-            for s in scenes
-        ]
-
     # -- Sending requests ----------------------------------------------------
+
+    def _build_context(self, scene_id: int) -> tuple[str, str]:
+        scene_ctx = gather_scene_context(
+            self._db, self._project_id, scene_id,
+        )
+        outline_ctx = ""
+        if self._outline_check.isChecked():
+            outline_ctx = gather_outline_context(
+                self._db, self._project_id,
+            )
+        return scene_ctx, outline_ctx
 
     def _send_preset(self, action_key: str) -> None:
         if self._worker is not None:
@@ -273,15 +238,10 @@ class AssistantView(QWidget):
             self._response_output.setPlainText("No scene selected.")
             return
 
-        scene_data = self._gather_scene_data(scene_id)
-        if not scene_data:
+        scene_ctx, outline_ctx = self._build_context(scene_id)
+        if not scene_ctx:
             self._response_output.setPlainText("Could not load scene data.")
             return
-
-        scene_ctx = build_scene_context(scene_data)
-        outline_ctx = ""
-        if self._outline_check.isChecked():
-            outline_ctx = build_outline_context(self._gather_outline())
 
         user_note = self._prompt_input.toPlainText().strip()
         action_prompt = PRESET_ACTIONS[action_key]
@@ -304,18 +264,31 @@ class AssistantView(QWidget):
             self._response_output.setPlainText("No scene selected.")
             return
 
-        scene_data = self._gather_scene_data(scene_id)
-        if not scene_data:
+        scene_ctx, outline_ctx = self._build_context(scene_id)
+        if not scene_ctx:
             self._response_output.setPlainText("Could not load scene data.")
             return
 
-        scene_ctx = build_scene_context(scene_data)
-        outline_ctx = ""
-        if self._outline_check.isChecked():
-            outline_ctx = build_outline_context(self._gather_outline())
-
         messages = build_messages(prompt, scene_ctx, outline_ctx)
         self._start_request(messages)
+
+    def _preview_prompt(self) -> None:
+        scene_id = self._scene_combo.currentData()
+        if scene_id is None:
+            self._response_output.setPlainText("No scene selected.")
+            return
+
+        scene_ctx, outline_ctx = self._build_context(scene_id)
+        if not scene_ctx:
+            self._response_output.setPlainText("Could not load scene data.")
+            return
+
+        parts = ["=== Context sent to the model ===", ""]
+        if outline_ctx:
+            parts.append(outline_ctx)
+            parts.append("")
+        parts.append(scene_ctx)
+        self._response_output.setPlainText("\n".join(parts))
 
     def _start_request(self, messages: list[dict]) -> None:
         self._set_busy(True)
@@ -343,6 +316,7 @@ class AssistantView(QWidget):
 
     def _set_busy(self, busy: bool) -> None:
         self._send_btn.setEnabled(not busy)
+        self._preview_btn.setEnabled(not busy)
         self._scene_combo.setEnabled(not busy)
         for btn in self._preset_buttons:
             btn.setEnabled(not busy)
@@ -359,6 +333,8 @@ class AssistantView(QWidget):
     def _get_response_text(self) -> str | None:
         text = self._response_output.toPlainText().strip()
         if not text or text == "Thinking..." or text.startswith("Error:"):
+            return None
+        if text.startswith("=== Context sent to the model ==="):
             return None
         return text
 
