@@ -313,7 +313,7 @@ class MainWindow(QMainWindow):
             )
         if self.content_area is not self._cached_scenes_view:
             self._set_content(self._cached_scenes_view)
-        self._cached_scenes_view.refresh()
+            self._cached_scenes_view.refresh()
 
     def _show_timeline(self) -> None:
         preferences.set_flag("has_seen_timeline_hint", True)
@@ -715,6 +715,10 @@ class MainWindow(QMainWindow):
             self._sidebar.setVisible(True)
             self._layout_tier = None
             self._apply_layout_for_width(self.width())
+        central = self.centralWidget()
+        if central:
+            central.layout().invalidate()
+            central.update()
 
     def _mark_clean(self) -> None:
         self._dirty = False

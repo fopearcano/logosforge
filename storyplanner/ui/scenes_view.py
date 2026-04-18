@@ -62,6 +62,11 @@ class ScenesView(QWidget):
         self._on_focus_mode_changed = on_focus_mode_changed
         self._selected_scene_id: int | None = None
         self._focus_mode = False
+        self._refreshing = False
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setSingleShot(True)
+        self._refresh_timer.setInterval(50)
+        self._refresh_timer.timeout.connect(self._do_refresh)
 
         root = QHBoxLayout(self)
 
@@ -362,11 +367,20 @@ class ScenesView(QWidget):
     # -- Populate checkable lists --------------------------------------------
 
     def refresh(self) -> None:
-        """Refresh data without rebuilding the widget tree."""
-        self._load_characters_and_states()
-        self._load_places()
-        self._refresh_filters()
-        self._refresh_list()
+        """Schedule a debounced data refresh."""
+        self._refresh_timer.start()
+
+    def _do_refresh(self) -> None:
+        if self._refreshing:
+            return
+        self._refreshing = True
+        try:
+            self._load_characters_and_states()
+            self._load_places()
+            self._refresh_filters()
+            self._refresh_list()
+        finally:
+            self._refreshing = False
 
     def _load_characters_and_states(self) -> None:
         chars = self._db.get_all_characters(self._project_id)
@@ -521,8 +535,12 @@ class ScenesView(QWidget):
         self._goal_input.setPlainText(scene.goal)
         self._conflict_input.setPlainText(scene.conflict)
         self._outcome_input.setPlainText(scene.outcome)
+        self._content_input.blockSignals(True)
         self._content_input.setPlainText(scene.content)
-        self._apply_line_spacing(self._content_input)
+        if scene.content:
+            self._apply_line_spacing(self._content_input)
+        self._content_input.blockSignals(False)
+        self._update_scene_stats()
         self._update_link_preview(scene.summary, scene.synopsis)
         self._backlinks.load(scene.title)
         self._load_character_states(scene_id)
@@ -717,8 +735,11 @@ class ScenesView(QWidget):
         self._goal_input.clear()
         self._conflict_input.clear()
         self._outcome_input.clear()
+        self._content_input.blockSignals(True)
         self._content_input.clear()
-        self._apply_line_spacing(self._content_input)
+        self._content_input.blockSignals(False)
+        self._stats_label.setText("")
+        self._focus_word_label.setText("")
         self._link_preview.clear()
         self._backlinks.clear_backlinks()
         self._state_list.clear()
@@ -789,25 +810,35 @@ class ScenesView(QWidget):
 
     def toggle_focus_mode(self) -> None:
         self._focus_mode = not self._focus_mode
-        self._left_panel.setVisible(not self._focus_mode)
-        self._planning_fields.setVisible(not self._focus_mode)
-        self._detail_fields.setVisible(not self._focus_mode)
-        self._form_label.setVisible(not self._focus_mode)
-        self._content_label.setVisible(not self._focus_mode)
-        self._assist_toggle.setVisible(not self._focus_mode)
-        self._title_input.setVisible(not self._focus_mode)
-        self._stats_label.setVisible(not self._focus_mode)
-        self._focus_btn.setVisible(not self._focus_mode)
+        show = not self._focus_mode
+
+        self.setUpdatesEnabled(False)
+        self._left_panel.setVisible(show)
+        self._planning_fields.setVisible(show)
+        self._detail_fields.setVisible(show)
+        self._form_label.setVisible(show)
+        self._content_label.setVisible(show)
+        self._assist_toggle.setVisible(show)
+        self._title_input.setVisible(show)
+        self._stats_label.setVisible(show)
+        self._focus_btn.setVisible(show)
         self._focus_top_bar.setVisible(self._focus_mode)
         if self._focus_mode:
             self._assist_panel.setVisible(False)
             self._focus_title_label.setText(
                 self._title_input.text().strip() or "Untitled scene"
             )
-        self._apply_line_spacing(
-            self._content_input, 200 if self._focus_mode else 165
-        )
+        self.setUpdatesEnabled(True)
+
+        if self._content_input.toPlainText():
+            self._apply_line_spacing(
+                self._content_input, 200 if self._focus_mode else 165
+            )
         self._update_scene_stats()
+
+        self.layout().invalidate()
+        self.update()
+
         if self._on_focus_mode_changed:
             self._on_focus_mode_changed(self._focus_mode)
 
