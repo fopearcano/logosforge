@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QEvent, QThread, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -47,6 +47,16 @@ SELECTION_ACTIONS = {
         "conflict, add urgency, and raise emotional pressure."
     ),
 }
+
+SLASH_COMMANDS: dict[str, tuple[str, str]] = {
+    "/rewrite": ("selection", "Rewrite"),
+    "/expand": ("selection", "Expand"),
+    "/tighten": ("selection", "Tighten"),
+    "/dialogue": ("selection", "Dialogue"),
+    "/tension": ("selection", "Tension"),
+    "/summarize": ("scene", "Summarize"),
+}
+
 
 _ORIGINAL_STYLE = (
     "QPlainTextEdit {"
@@ -108,6 +118,7 @@ class InlineAssistantPanel(QWidget):
     ) -> None:
         super().__init__()
         self._editor = content_editor
+        self._editor.installEventFilter(self)
         self._db = db
         self._project_id = project_id
         self._get_scene_id = get_scene_id
@@ -269,6 +280,80 @@ class InlineAssistantPanel(QWidget):
         if scene_id is None:
             return ""
         return gather_scene_context(self._db, self._project_id, scene_id)
+
+    # -- Slash commands -------------------------------------------------------
+
+    def eventFilter(self, obj, event):  # noqa: N802
+        if obj is not self._editor:
+            return super().eventFilter(obj, event)
+        if event.type() != QEvent.Type.KeyPress:
+            return super().eventFilter(obj, event)
+
+        from PySide6.QtCore import Qt
+        if event.key() not in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            return super().eventFilter(obj, event)
+
+        cursor = self._editor.textCursor()
+        cursor.select(cursor.SelectionType.LineUnderCursor)
+        line = cursor.selectedText().strip().lower()
+
+        if line not in SLASH_COMMANDS:
+            return super().eventFilter(obj, event)
+
+        cursor.removeSelectedText()
+        doc = self._editor.toPlainText()
+        new_cursor = self._editor.textCursor()
+        pos = new_cursor.position()
+        if pos > 0 and pos <= len(doc) and doc[pos - 1:pos] == "\n":
+            new_cursor.deletePreviousChar()
+
+        self._handle_slash_command(line)
+        return True
+
+    def _handle_slash_command(self, command: str) -> None:
+        mode, key = SLASH_COMMANDS[command]
+
+        if mode == "scene":
+            prompt = PRESET_ACTIONS.get(key, "")
+            if prompt:
+                self._send_request(prompt)
+            return
+
+        instruction = SELECTION_ACTIONS.get(key, "")
+        if not instruction:
+            return
+
+        cursor = self._editor.textCursor()
+        selected = cursor.selectedText().replace("\u2029", "\n").strip()
+        if selected:
+            self._sel_start = cursor.selectionStart()
+            self._sel_end = cursor.selectionEnd()
+            self._sel_text = selected
+            target_text = selected
+        else:
+            target_text = self._extract_preceding_paragraph()
+            if not target_text:
+                self._response.setPlainText(
+                    "No text selected and no paragraph found above."
+                )
+                return
+            self._sel_text = target_text
+            self._sel_start = None
+            self._sel_end = None
+
+        prompt = f"{instruction}\n\nText:\n{target_text}"
+        self._send_request(prompt)
+
+    def _extract_preceding_paragraph(self) -> str:
+        doc = self._editor.toPlainText()
+        cursor = self._editor.textCursor()
+        pos = cursor.position()
+        text_before = doc[:pos].rstrip()
+        if not text_before:
+            return ""
+        paragraphs = text_before.split("\n\n")
+        last = paragraphs[-1].strip()
+        return last
 
     # -- Selection snapshot ---------------------------------------------------
 
