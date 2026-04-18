@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -592,21 +592,151 @@ class MainWindow(QMainWindow):
 
     def _build_menu_bar(self) -> None:
         menu_bar = self.menuBar()
+
+        # -- File ---------------------------------------------------------------
         file_menu = menu_bar.addMenu("File")
 
+        new_action = QAction("New Project", self)
+        new_action.setShortcut(QKeySequence.StandardKey.New)
+        new_action.triggered.connect(self._on_new_project)
+        file_menu.addAction(new_action)
+
         open_action = QAction("Open Project...", self)
+        open_action.setShortcut(QKeySequence.StandardKey.Open)
         open_action.triggered.connect(self._on_open_project)
         file_menu.addAction(open_action)
 
+        file_menu.addSeparator()
+
+        save_action = QAction("Save", self)
+        save_action.setShortcut(QKeySequence.StandardKey.Save)
+        save_action.triggered.connect(self._on_save)
+        file_menu.addAction(save_action)
+
         save_as_action = QAction("Save As...", self)
+        save_as_action.setShortcut(QKeySequence.StandardKey.SaveAs)
         save_as_action.triggered.connect(self._on_save_as)
         file_menu.addAction(save_as_action)
+
+        file_menu.addSeparator()
+
+        export_action = QAction("Export...", self)
+        export_action.triggered.connect(self._on_export)
+        file_menu.addAction(export_action)
+
+        import_action = QAction("Import...", self)
+        import_action.triggered.connect(self._on_import)
+        file_menu.addAction(import_action)
 
         file_menu.addSeparator()
 
         self._recent_menu = QMenu("Recent Projects", self)
         file_menu.addMenu(self._recent_menu)
         self._refresh_recent_menu()
+
+        file_menu.addSeparator()
+
+        exit_action = QAction("Exit", self)
+        exit_action.setShortcut(QKeySequence.StandardKey.Quit)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+
+        # -- Edit ---------------------------------------------------------------
+        edit_menu = menu_bar.addMenu("Edit")
+
+        undo_action = QAction("Undo", self)
+        undo_action.setShortcut(QKeySequence.StandardKey.Undo)
+        undo_action.triggered.connect(self._edit_undo)
+        edit_menu.addAction(undo_action)
+
+        redo_action = QAction("Redo", self)
+        redo_action.setShortcut(QKeySequence.StandardKey.Redo)
+        redo_action.triggered.connect(self._edit_redo)
+        edit_menu.addAction(redo_action)
+
+        edit_menu.addSeparator()
+
+        cut_action = QAction("Cut", self)
+        cut_action.setShortcut(QKeySequence.StandardKey.Cut)
+        cut_action.triggered.connect(self._edit_cut)
+        edit_menu.addAction(cut_action)
+
+        copy_action = QAction("Copy", self)
+        copy_action.setShortcut(QKeySequence.StandardKey.Copy)
+        copy_action.triggered.connect(self._edit_copy)
+        edit_menu.addAction(copy_action)
+
+        paste_action = QAction("Paste", self)
+        paste_action.setShortcut(QKeySequence.StandardKey.Paste)
+        paste_action.triggered.connect(self._edit_paste)
+        edit_menu.addAction(paste_action)
+
+        # -- View ---------------------------------------------------------------
+        view_menu = menu_bar.addMenu("View")
+
+        toggle_sidebar_action = QAction("Toggle Sidebar", self)
+        toggle_sidebar_action.triggered.connect(self._toggle_sidebar)
+        view_menu.addAction(toggle_sidebar_action)
+
+        toggle_assistant_action = QAction("Toggle Assistant Panel", self)
+        toggle_assistant_action.triggered.connect(self._toggle_assistant)
+        view_menu.addAction(toggle_assistant_action)
+
+        focus_action = QAction("Focus Mode", self)
+        focus_action.triggered.connect(self._menu_toggle_focus)
+        view_menu.addAction(focus_action)
+
+        view_menu.addSeparator()
+
+        appearance_menu = view_menu.addMenu("Appearance")
+        for name in ("Dark", "Light (Green)", "Light (Warm)"):
+            act = QAction(name, self)
+            act.triggered.connect(
+                lambda _, n=name: self._switch_theme(n)
+            )
+            appearance_menu.addAction(act)
+
+        # -- Navigate -----------------------------------------------------------
+        nav_menu = menu_bar.addMenu("Navigate")
+        nav_items = [
+            ("Dashboard", self._show_dashboard),
+            ("Scenes", self._show_scenes),
+            ("Timeline", self._show_timeline),
+            ("Characters", self._show_characters),
+            ("Notes", self._show_notes),
+        ]
+        for label, handler in nav_items:
+            act = QAction(label, self)
+            act.triggered.connect(
+                lambda _, l=label, h=handler: (
+                    self._set_active_section(l), h()
+                )
+            )
+            nav_menu.addAction(act)
+
+        # -- AI -----------------------------------------------------------------
+        ai_menu = menu_bar.addMenu("AI")
+        for preset in ("Rewrite", "Expand", "Dialogue"):
+            act = QAction(preset, self)
+            act.triggered.connect(
+                lambda _, p=preset: self._menu_ai_preset(p)
+            )
+            ai_menu.addAction(act)
+        ai_menu.addSeparator()
+        open_assistant_action = QAction("Open Assistant", self)
+        open_assistant_action.triggered.connect(self._toggle_assistant)
+        ai_menu.addAction(open_assistant_action)
+
+        # -- Help ---------------------------------------------------------------
+        help_menu = menu_bar.addMenu("Help")
+
+        about_action = QAction("About", self)
+        about_action.triggered.connect(self._show_about)
+        help_menu.addAction(about_action)
+
+        docs_action = QAction("Documentation", self)
+        docs_action.setEnabled(False)
+        help_menu.addAction(docs_action)
 
     def _refresh_recent_menu(self) -> None:
         self._recent_menu.clear()
@@ -622,6 +752,68 @@ class MainWindow(QMainWindow):
             action.setToolTip(path)
             action.triggered.connect(lambda checked, p=path: self._open_file(p))
             self._recent_menu.addAction(action)
+
+    # -- Menu action handlers ---------------------------------------------------
+
+    def _on_new_project(self) -> None:
+        project = self._db.create_project("Untitled")
+        self._project_id = project.id
+        self._current_file = None
+        self._cached_scenes_view = None
+        self._mark_clean()
+        self._reset_content("New project created. Select a section from the sidebar.")
+
+    def _on_save(self) -> None:
+        if self._current_file:
+            self._auto_save()
+        else:
+            self._on_save_as()
+
+    def _edit_undo(self) -> None:
+        w = QApplication.focusWidget()
+        if hasattr(w, "undo"):
+            w.undo()
+
+    def _edit_redo(self) -> None:
+        w = QApplication.focusWidget()
+        if hasattr(w, "redo"):
+            w.redo()
+
+    def _edit_cut(self) -> None:
+        w = QApplication.focusWidget()
+        if hasattr(w, "cut"):
+            w.cut()
+
+    def _edit_copy(self) -> None:
+        w = QApplication.focusWidget()
+        if hasattr(w, "copy"):
+            w.copy()
+
+    def _edit_paste(self) -> None:
+        w = QApplication.focusWidget()
+        if hasattr(w, "paste"):
+            w.paste()
+
+    def _menu_toggle_focus(self) -> None:
+        if (
+            self._cached_scenes_view is not None
+            and self.content_area is self._cached_scenes_view
+        ):
+            self._cached_scenes_view.toggle_focus_mode()
+
+    def _menu_ai_preset(self, preset: str) -> None:
+        if not self._assistant_panel.isVisible():
+            self._assistant_user_visible = True
+            self._assistant_panel.refresh_scenes()
+            self._assistant_panel.setVisible(True)
+        self._assistant_panel._send_preset(preset)
+
+    def _show_about(self) -> None:
+        QMessageBox.about(
+            self,
+            "About Logosforge",
+            "Logosforge\n\nA story planning and writing application.",
+        )
 
     def _update_title(self) -> None:
         dirty_mark = " *" if self._dirty else ""
