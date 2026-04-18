@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QApplication
 
 from storyplanner import preferences
 from storyplanner.db import Database
+from storyplanner.settings import get_manager as get_settings
 from storyplanner.ui.main_window import MainWindow
 from storyplanner.ui import theme
 
@@ -15,7 +16,8 @@ DB_PATH = "storyplanner.db"
 def create_app() -> tuple[QApplication, MainWindow]:
     app = QApplication.instance() or QApplication(sys.argv)
 
-    saved = preferences.get_string("appearance", "Dark")
+    mgr = get_settings()
+    saved = str(mgr.get("appearance"))
     if saved in theme.PALETTE_NAMES:
         theme.set_palette(saved)
 

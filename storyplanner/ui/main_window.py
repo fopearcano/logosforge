@@ -22,6 +22,7 @@ from storyplanner.ui import theme
 
 from storyplanner import preferences, recent_projects
 from storyplanner.db import Database
+from storyplanner.settings import get_manager as get_settings
 from storyplanner.export import (
     export_csv_scenes,
     export_docx_manuscript,
@@ -222,6 +223,15 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(central)
 
+        # -- Restore persisted state -----------------------------------------
+        mgr = get_settings()
+        if mgr.get("sidebar_collapsed"):
+            self._set_sidebar_collapsed(True)
+        if mgr.get("assistant_open"):
+            self._assistant_user_visible = True
+            self._assistant_panel.refresh_scenes()
+            self._assistant_panel.setVisible(True)
+
     def _set_content(self, widget: QWidget) -> None:
         """Replace the content area with a new widget."""
         layout = self.centralWidget().layout()
@@ -366,10 +376,12 @@ class MainWindow(QMainWindow):
         if self._assistant_user_visible:
             self._assistant_panel.refresh_scenes()
         self._assistant_panel.setVisible(self._assistant_user_visible)
+        get_settings().set("assistant_open", self._assistant_user_visible)
 
     def _hide_assistant(self) -> None:
         self._assistant_user_visible = False
         self._assistant_panel.setVisible(False)
+        get_settings().set("assistant_open", False)
 
     # -- Sidebar collapse/expand ---------------------------------------------
 
@@ -414,6 +426,7 @@ class MainWindow(QMainWindow):
             self._appearance_bar.setVisible(True)
 
         self._refresh_sidebar_style()
+        get_settings().set("sidebar_collapsed", collapsed)
 
     def _refresh_sidebar_style(self) -> None:
         self._sidebar.style().unpolish(self._sidebar)
@@ -954,3 +967,4 @@ class MainWindow(QMainWindow):
         for key, btn in self._appearance_btns.items():
             btn.setChecked(key == name)
         preferences.set_string("appearance", name)
+        get_settings().set("appearance", name)

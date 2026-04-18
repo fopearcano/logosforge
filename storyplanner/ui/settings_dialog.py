@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
@@ -14,6 +13,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from storyplanner.settings import get_manager as get_settings
 from storyplanner.ui import theme
 from storyplanner.ui.provider_settings import ProviderSettingsWidget
 
@@ -61,6 +61,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(self._section_label("AI Provider"))
 
         self._provider_widget = ProviderSettingsWidget(compact=True)
+        self._restore_ai_settings()
         layout.addWidget(self._provider_widget)
 
         layout.addWidget(self._separator())
@@ -80,6 +81,23 @@ class SettingsDialog(QDialog):
         close_btn.clicked.connect(self.accept)
         close_row.addWidget(close_btn)
         layout.addLayout(close_row)
+
+    def _restore_ai_settings(self) -> None:
+        mgr = get_settings()
+        saved_provider = str(mgr.get("ai_provider"))
+        idx = self._provider_widget._provider_combo.findText(saved_provider)
+        if idx >= 0:
+            self._provider_widget._provider_combo.setCurrentIndex(idx)
+        saved_model = str(mgr.get("ai_model"))
+        if saved_model:
+            self._provider_widget._model_combo.setCurrentText(saved_model)
+
+    def accept(self) -> None:
+        config = self._provider_widget.get_provider_config()
+        mgr = get_settings()
+        mgr.set("ai_provider", config.name)
+        mgr.set("ai_model", config.model)
+        super().accept()
 
     def _select_theme(self, name: str) -> None:
         for key, btn in self._theme_btns.items():
