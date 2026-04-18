@@ -196,22 +196,7 @@ def export_outline_markdown(db: Database, project_id: int) -> str:
         lines.append("")
         return "\n".join(lines)
 
-    # Group scenes by chapter, preserving narrative order
-    chapter_groups: list[tuple[str, list[dict]]] = []
-    current_chapter: str | None = None
-    current_group: list[dict] = []
-
-    for scene in scenes:
-        chapter = scene["chapter"] if scene["chapter"] else ""
-        if chapter != current_chapter:
-            if current_group:
-                chapter_groups.append((current_chapter or "", current_group))
-            current_chapter = chapter
-            current_group = [scene]
-        else:
-            current_group.append(scene)
-    if current_group:
-        chapter_groups.append((current_chapter or "", current_group))
+    chapter_groups = _group_scenes_by_chapter(scenes)
 
     for chapter_name, group_scenes in chapter_groups:
         lines.append("")
@@ -288,6 +273,26 @@ def export_csv_scenes(db: Database, project_id: int) -> str:
     return output.getvalue()
 
 
+def _group_scenes_by_chapter(scenes: list[dict]) -> list[tuple[str, list[dict]]]:
+    groups: list[tuple[str, list[dict]]] = []
+    current_chapter: str | None = None
+    current_group: list[dict] = []
+
+    for scene in scenes:
+        chapter = scene["chapter"] if scene["chapter"] else ""
+        if chapter != current_chapter:
+            if current_group:
+                groups.append((current_chapter or "", current_group))
+            current_chapter = chapter
+            current_group = [scene]
+        else:
+            current_group.append(scene)
+    if current_group:
+        groups.append((current_chapter or "", current_group))
+
+    return groups
+
+
 def _scene_body(scene: dict) -> str:
     return scene["content"] or scene["synopsis"] or scene["summary"] or ""
 
@@ -354,21 +359,7 @@ def export_docx_manuscript(db: Database, project_id: int, path: str) -> None:
         doc.save(path)
         return
 
-    chapter_groups: list[tuple[str, list[dict]]] = []
-    current_chapter: str | None = None
-    current_group: list[dict] = []
-
-    for scene in data["scenes"]:
-        chapter = scene["chapter"] if scene["chapter"] else ""
-        if chapter != current_chapter:
-            if current_group:
-                chapter_groups.append((current_chapter or "", current_group))
-            current_chapter = chapter
-            current_group = [scene]
-        else:
-            current_group.append(scene)
-    if current_group:
-        chapter_groups.append((current_chapter or "", current_group))
+    chapter_groups = _group_scenes_by_chapter(data["scenes"])
 
     chapter_num = 0
     for chapter_name, group_scenes in chapter_groups:
@@ -400,8 +391,6 @@ def export_docx_manuscript(db: Database, project_id: int, path: str) -> None:
 
 
 def _add_content_paragraphs(doc, text: str) -> None:
-    from docx.shared import Pt
-
     for block in text.split("\n\n"):
         block = block.strip()
         if not block:
@@ -427,22 +416,7 @@ def export_manuscript(db: Database, project_id: int) -> str:
         lines.append("No scenes.")
         return "\n".join(lines)
 
-    # Group scenes by chapter, preserving order
-    chapter_groups: list[tuple[str, list[dict]]] = []
-    current_chapter: str | None = None
-    current_group: list[dict] = []
-
-    for scene in data["scenes"]:
-        chapter = scene["chapter"] if scene["chapter"] else ""
-        if chapter != current_chapter:
-            if current_group:
-                chapter_groups.append((current_chapter or "", current_group))
-            current_chapter = chapter
-            current_group = [scene]
-        else:
-            current_group.append(scene)
-    if current_group:
-        chapter_groups.append((current_chapter or "", current_group))
+    chapter_groups = _group_scenes_by_chapter(data["scenes"])
 
     for chapter_name, group_scenes in chapter_groups:
         if chapter_name:

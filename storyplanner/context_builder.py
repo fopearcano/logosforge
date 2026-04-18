@@ -34,7 +34,10 @@ def _scene_summary_line(scene) -> str:
     else:
         return ""
     if len(text) > SURROUNDING_SUMMARY_MAX_CHARS:
-        return text[:SURROUNDING_SUMMARY_MAX_CHARS].rsplit(" ", 1)[0] + "..."
+        truncated = text[:SURROUNDING_SUMMARY_MAX_CHARS].rsplit(" ", 1)[0]
+        if not truncated:
+            truncated = text[:SURROUNDING_SUMMARY_MAX_CHARS]
+        return truncated + "..."
     return text
 
 
