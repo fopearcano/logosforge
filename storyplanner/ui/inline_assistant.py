@@ -24,6 +24,7 @@ from storyplanner.assistant import (
 )
 from storyplanner.context_builder import gather_scene_context
 from storyplanner.db import Database
+from storyplanner.prompt_router import route_prompt
 
 SELECTION_ACTIONS = {
     "Rewrite": (
@@ -470,7 +471,8 @@ class InlineAssistantPanel(QWidget):
         if not prompt:
             self._response.setPlainText("Enter a prompt first.")
             return
-        self._send_request(prompt)
+        template_name, action_prompt = route_prompt(prompt)
+        self._send_request(action_prompt, routed_to=template_name)
 
     def _on_preview(self) -> None:
         scene_ctx = self._get_scene_context()
@@ -483,7 +485,9 @@ class InlineAssistantPanel(QWidget):
 
     # -- LM Studio communication ---------------------------------------------
 
-    def _send_request(self, action_prompt: str) -> None:
+    def _send_request(
+        self, action_prompt: str, routed_to: str = "",
+    ) -> None:
         if self._worker is not None:
             return
         scene_ctx = self._get_scene_context()
@@ -499,7 +503,12 @@ class InlineAssistantPanel(QWidget):
             action_prompt, scene_ctx, story_memory_context=session_ctx,
         )
         self._set_busy(True)
-        self._response.setPlainText("Thinking...")
+        if routed_to:
+            self._response.setPlainText(
+                f"Routed \u2192 {routed_to} | Thinking..."
+            )
+        else:
+            self._response.setPlainText("Thinking...")
 
         base_url = self._url.text().strip() or DEFAULT_BASE_URL
         model = self._model_input.text().strip()
@@ -531,6 +540,8 @@ class InlineAssistantPanel(QWidget):
     def _get_response_text(self) -> str | None:
         text = self._response.toPlainText().strip()
         if not text or text == "Thinking..." or text.startswith("Error:"):
+            return None
+        if text.startswith("Routed \u2192"):
             return None
         if text.startswith("=== Context sent to the model ==="):
             return None
