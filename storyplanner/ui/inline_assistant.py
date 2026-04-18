@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -23,6 +24,29 @@ from storyplanner.assistant import (
 )
 from storyplanner.context_builder import gather_scene_context
 from storyplanner.db import Database
+
+SELECTION_ACTIONS = {
+    "Rewrite": (
+        "Rewrite the following text, improving clarity, flow, and "
+        "prose quality while preserving the original meaning."
+    ),
+    "Expand": (
+        "Expand the following text with more detail, sensory "
+        "description, and emotional depth."
+    ),
+    "Tighten": (
+        "Tighten the following text. Remove unnecessary words, "
+        "cut filler, and make every sentence count. Preserve meaning."
+    ),
+    "Dialogue": (
+        "Improve the dialogue in the following text. Make it more "
+        "natural, concise, and character-appropriate. Sharpen subtext."
+    ),
+    "Tension": (
+        "Rewrite the following text to increase tension. Heighten "
+        "conflict, add urgency, and raise emotional pressure."
+    ),
+}
 
 
 class _Worker(QThread):
@@ -60,6 +84,10 @@ class InlineAssistantPanel(QWidget):
         self._on_data_changed = on_data_changed
         self._worker: _Worker | None = None
 
+        self._sel_start: int | None = None
+        self._sel_end: int | None = None
+        self._sel_text: str | None = None
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 8, 0, 0)
 
@@ -67,19 +95,19 @@ class InlineAssistantPanel(QWidget):
         header.setStyleSheet("font-weight: bold; color: #9aa0a6;")
         layout.addWidget(header)
 
-        # Selection actions
+        # Selection action row
         sel_row = QHBoxLayout()
-        self._rewrite_btn = QPushButton("Rewrite Selection")
-        self._rewrite_btn.clicked.connect(self._on_rewrite_selection)
-        sel_row.addWidget(self._rewrite_btn)
-
-        self._expand_btn = QPushButton("Expand Selection")
-        self._expand_btn.clicked.connect(self._on_expand_selection)
-        sel_row.addWidget(self._expand_btn)
-        sel_row.addStretch()
+        sel_row.addWidget(QLabel("Selection:"))
+        self._sel_action_combo = QComboBox()
+        for label in SELECTION_ACTIONS:
+            self._sel_action_combo.addItem(label)
+        sel_row.addWidget(self._sel_action_combo, stretch=1)
+        self._sel_run_btn = QPushButton("Run on Selection")
+        self._sel_run_btn.clicked.connect(self._on_run_selection_action)
+        sel_row.addWidget(self._sel_run_btn)
         layout.addLayout(sel_row)
 
-        # Template actions
+        # Template actions (whole scene)
         tpl_row = QHBoxLayout()
         tpl_row.addWidget(QLabel("Template:"))
         self._template_combo = QComboBox()
@@ -125,6 +153,10 @@ class InlineAssistantPanel(QWidget):
 
         # Apply actions
         action_row = QHBoxLayout()
+        self._replace_btn = QPushButton("Replace Selection")
+        self._replace_btn.clicked.connect(self._replace_selection)
+        action_row.addWidget(self._replace_btn)
+
         self._insert_btn = QPushButton("Insert at Cursor")
         self._insert_btn.clicked.connect(self._insert_at_cursor)
         action_row.addWidget(self._insert_btn)
@@ -151,8 +183,9 @@ class InlineAssistantPanel(QWidget):
         layout.addLayout(settings_row)
 
         self._interactive_buttons = [
-            self._rewrite_btn, self._expand_btn, self._run_template_btn,
-            self._send_btn, self._preview_btn, self._insert_btn,
+            self._sel_run_btn, self._run_template_btn,
+            self._send_btn, self._preview_btn,
+            self._replace_btn, self._insert_btn,
         ]
 
     # -- Scene context -------------------------------------------------------
@@ -163,34 +196,54 @@ class InlineAssistantPanel(QWidget):
             return ""
         return gather_scene_context(self._db, self._project_id, scene_id)
 
+    # -- Selection snapshot ---------------------------------------------------
+
+    def _snapshot_selection(self) -> str | None:
+        cursor = self._editor.textCursor()
+        text = cursor.selectedText().replace("\u2029", "\n")
+        if not text.strip():
+            self._response.setPlainText("Select text in the editor first.")
+            self._sel_start = None
+            self._sel_end = None
+            self._sel_text = None
+            return None
+        self._sel_start = cursor.selectionStart()
+        self._sel_end = cursor.selectionEnd()
+        self._sel_text = text
+        return text
+
+    def _verify_selection(self) -> bool:
+        if self._sel_start is None or self._sel_text is None:
+            self._response.setPlainText(
+                "No original selection recorded. "
+                "Run a selection action first."
+            )
+            return False
+        doc = self._editor.toPlainText()
+        current = doc[self._sel_start:self._sel_end]
+        if current != self._sel_text:
+            self._response.setPlainText(
+                "The original selection has changed or moved.\n"
+                "Cannot replace safely.\n\n"
+                "Use 'Insert at Cursor' or 'Copy' instead."
+            )
+            return False
+        return True
+
     # -- Selection actions ---------------------------------------------------
 
-    def _get_selection(self) -> str:
-        return self._editor.textCursor().selectedText().replace("\u2029", "\n")
-
-    def _on_rewrite_selection(self) -> None:
-        selected = self._get_selection()
-        if not selected.strip():
-            self._response.setPlainText("Select text in the editor first.")
+    def _on_run_selection_action(self) -> None:
+        selected = self._snapshot_selection()
+        if selected is None:
             return
-        prompt = (
-            "Rewrite the following text, improving clarity, flow, and "
-            "prose quality while preserving the original meaning.\n\n"
-            f"Text to rewrite:\n{selected}"
-        )
+        key = self._sel_action_combo.currentText()
+        instruction = SELECTION_ACTIONS.get(key, "")
+        if not instruction:
+            return
+        prompt = f"{instruction}\n\nText:\n{selected}"
         self._send_request(prompt)
 
-    def _on_expand_selection(self) -> None:
-        selected = self._get_selection()
-        if not selected.strip():
-            self._response.setPlainText("Select text in the editor first.")
-            return
-        prompt = (
-            "Expand the following text with more detail, sensory "
-            "description, and emotional depth.\n\n"
-            f"Text to expand:\n{selected}"
-        )
-        self._send_request(prompt)
+    # -- Template actions (whole scene) --------------------------------------
 
     def _on_run_template(self) -> None:
         key = self._template_combo.currentText()
@@ -259,7 +312,41 @@ class InlineAssistantPanel(QWidget):
             return None
         if text.startswith("=== Context sent to the model ==="):
             return None
+        if text.startswith("The original selection has changed"):
+            return None
+        if text.startswith("No original selection recorded"):
+            return None
         return text
+
+    def _replace_selection(self) -> None:
+        text = self._get_response_text()
+        if text is None:
+            return
+        if not self._verify_selection():
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Replace Selection",
+            "Replace the selected text with the assistant's output?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        cursor = self._editor.textCursor()
+        cursor.setPosition(self._sel_start)
+        cursor.setPosition(self._sel_end, cursor.MoveMode.KeepAnchor)
+        cursor.insertText(text)
+        self._editor.setTextCursor(cursor)
+        self._editor.setFocus()
+
+        self._sel_start = None
+        self._sel_end = None
+        self._sel_text = None
+
+        self._save_content()
 
     def _insert_at_cursor(self) -> None:
         text = self._get_response_text()
@@ -280,13 +367,16 @@ class InlineAssistantPanel(QWidget):
         self._editor.setTextCursor(cursor)
         self._editor.setFocus()
 
-        scene_id = self._get_scene_id()
-        if scene_id is not None:
-            self._db.update_scene_content(scene_id, self._editor.toPlainText())
-            if self._on_data_changed:
-                self._on_data_changed()
+        self._save_content()
 
     def _copy_response(self) -> None:
         text = self._get_response_text()
         if text:
             QApplication.clipboard().setText(text)
+
+    def _save_content(self) -> None:
+        scene_id = self._get_scene_id()
+        if scene_id is not None:
+            self._db.update_scene_content(scene_id, self._editor.toPlainText())
+            if self._on_data_changed:
+                self._on_data_changed()
