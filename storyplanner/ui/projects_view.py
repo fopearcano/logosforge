@@ -110,22 +110,13 @@ class ProjectsView(QWidget):
         self._layout.addLayout(btn_row)
 
         recent_paths = recent_projects.load()
-        local_paths = self._scan_local_folder()
 
-        merged = self._merge_paths(recent_paths, local_paths)
-
-        if not merged:
+        if not recent_paths:
             self._add_empty_state()
             self._layout.addStretch()
             return
 
-        if recent_paths:
-            self._add_section("Recent projects", recent_paths)
-
-        local_only = [p for p in local_paths if p not in set(recent_paths)]
-        if local_only:
-            self._add_section("Local project files", local_only)
-
+        self._add_section("Recent projects", recent_paths)
         self._layout.addStretch()
 
     def _add_section(self, title: str, paths: list[str]) -> None:
@@ -226,28 +217,6 @@ class ProjectsView(QWidget):
         )
         if path:
             self._on_open_file(path)
-
-    @staticmethod
-    def _scan_local_folder() -> list[str]:
-        cwd = Path.cwd()
-        try:
-            return sorted(
-                str(p) for p in cwd.glob("*.json") if p.is_file()
-            )
-        except OSError:
-            return []
-
-    @staticmethod
-    def _merge_paths(
-        recent: list[str], local: list[str],
-    ) -> list[str]:
-        seen: set[str] = set()
-        merged: list[str] = []
-        for p in recent + local:
-            if p not in seen:
-                seen.add(p)
-                merged.append(p)
-        return merged
 
     @staticmethod
     def _shorten_path(path: str) -> str:
