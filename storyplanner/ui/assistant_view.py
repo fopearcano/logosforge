@@ -82,8 +82,8 @@ class AssistantPanel(QWidget):
         self._debounce_timer.setInterval(120)
         self._debounce_timer.timeout.connect(self._fire_request)
 
-        self.setMinimumWidth(280)
-        self.setMaximumWidth(360)
+        self.setMinimumWidth(220)
+        self.setMaximumWidth(280)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -99,8 +99,8 @@ class AssistantPanel(QWidget):
 
         container = QWidget()
         self._layout = QVBoxLayout(container)
-        self._layout.setContentsMargins(12, 8, 12, 12)
-        self._layout.setSpacing(8)
+        self._layout.setContentsMargins(8, 6, 8, 8)
+        self._layout.setSpacing(6)
         scroll.setWidget(container)
 
         self._build_ui()
@@ -114,7 +114,7 @@ class AssistantPanel(QWidget):
         title = QLabel("Assistant")
         title_font = QFont()
         title_font.setBold(True)
-        title_font.setPointSize(title_font.pointSize() + 2)
+        title_font.setPointSize(title_font.pointSize() + 1)
         title.setFont(title_font)
         title.setStyleSheet(f"color: {theme.TEXT_PRIMARY};")
         header.addWidget(title)
@@ -176,7 +176,7 @@ class AssistantPanel(QWidget):
         self._prompt_input.setPlaceholderText(
             "Instructions or questions about the scene..."
         )
-        self._prompt_input.setMaximumHeight(60)
+        self._prompt_input.setMaximumHeight(48)
         self._layout.addWidget(self._prompt_input)
 
         # Collapsible settings
@@ -225,13 +225,13 @@ class AssistantPanel(QWidget):
         self._response_output.setPlaceholderText(
             "AI response will appear here..."
         )
-        self._response_output.setMinimumHeight(120)
+        self._response_output.setMinimumHeight(80)
         self._response_output.setStyleSheet(
             f"QPlainTextEdit {{"
             f"  background-color: {theme.BG_PANEL};"
             f"  color: {theme.TEXT_PRIMARY};"
             f"  border: 1px solid {theme.BORDER};"
-            f"  border-radius: 4px; padding: 8px;"
+            f"  border-radius: 4px; padding: 6px;"
             f"}}"
         )
         self._layout.addWidget(self._response_output, stretch=1)

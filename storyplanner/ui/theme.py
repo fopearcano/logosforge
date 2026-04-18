@@ -261,8 +261,8 @@ def build_stylesheet() -> str:
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
         border-radius: 6px;
-        padding: 6px 16px;
-        min-height: 24px;
+        padding: 4px 10px;
+        min-height: 20px;
     }}
     QPushButton:hover {{
         background-color: {BG_HOVER};
@@ -351,7 +351,7 @@ def build_stylesheet() -> str:
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
         border-radius: 6px;
-        padding: 6px 10px;
+        padding: 4px 8px;
         selection-background-color: {SELECTION_BG};
         selection-color: {SELECTION_TEXT};
     }}
@@ -369,7 +369,7 @@ def build_stylesheet() -> str:
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
         border-radius: 6px;
-        padding: 8px;
+        padding: 6px;
         selection-background-color: {SELECTION_BG};
         selection-color: {SELECTION_TEXT};
     }}
@@ -403,8 +403,8 @@ def build_stylesheet() -> str:
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
         border-radius: 6px;
-        padding: 6px 10px;
-        min-height: 24px;
+        padding: 4px 8px;
+        min-height: 20px;
     }}
     QComboBox:focus {{
         border-color: {BORDER_FOCUS};
@@ -463,7 +463,7 @@ def build_stylesheet() -> str:
         padding: 4px;
     }}
     QListWidget::item {{
-        padding: 6px 10px;
+        padding: 4px 8px;
         border-radius: 6px;
         margin: 1px 2px;
     }}
@@ -485,7 +485,7 @@ def build_stylesheet() -> str:
         outline: none;
     }}
     QTableWidget::item {{
-        padding: 6px 8px;
+        padding: 4px 6px;
     }}
     QTableWidget::item:selected {{
         background-color: {SELECTION_BG};
@@ -497,7 +497,7 @@ def build_stylesheet() -> str:
         border: none;
         border-bottom: 1px solid {BORDER};
         border-right: 1px solid {BORDER};
-        padding: 8px 10px;
+        padding: 6px 8px;
         font-weight: bold;
     }}
 
@@ -552,7 +552,7 @@ def build_stylesheet() -> str:
         padding: 2px 4px;
     }}
     QMenuBar::item {{
-        padding: 6px 12px;
+        padding: 4px 10px;
         border-radius: 6px;
         background-color: transparent;
     }}
@@ -569,7 +569,7 @@ def build_stylesheet() -> str:
         padding: 4px;
     }}
     QMenu::item {{
-        padding: 8px 24px 8px 16px;
+        padding: 6px 20px 6px 12px;
         border-radius: 6px;
         margin: 1px 4px;
     }}
@@ -694,7 +694,7 @@ def primary_btn() -> str:
         f"  background-color: {BTN_PRIMARY_BG};"
         f"  color: {BTN_PRIMARY_TEXT};"
         f"  border: 1px solid {BTN_PRIMARY_BORDER};"
-        f"  border-radius: 6px; padding: 8px 24px;"
+        f"  border-radius: 6px; padding: 5px 16px;"
         f"  font-weight: bold; font-size: 13px;"
         f"}}"
         f"QPushButton:hover {{"
