@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
+from storyplanner.ui import theme
 
 TYPE_COLORS = {
     "Character": QColor("#42a5f5"),
@@ -123,7 +124,7 @@ class GraphView(QWidget):
         font = QFont()
         font.setPointSize(9)
         label.setFont(font)
-        label.setBrush(QBrush(QColor("#e6e6e6")))
+        label.setBrush(QBrush(QColor(theme.TEXT_PRIMARY)))
         label_rect = label.boundingRect()
         label.setPos(x - label_rect.width() / 2, y + NODE_RADIUS + 4)
         label.setZValue(2)

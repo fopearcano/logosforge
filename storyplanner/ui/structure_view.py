@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
+from storyplanner.ui import theme
 
 BEAT_ORDER = [
     "Opening Image",
@@ -84,7 +85,7 @@ class StructureView(QWidget):
                 )
                 if summary:
                     parts.append(
-                        f"<br><span style='color: #9aa0a6;'>"
+                        f"<br><span style='color: {theme.TEXT_SECONDARY};'>"
                         f"{_esc(summary)}</span>"
                     )
                 parts.append("</p>")

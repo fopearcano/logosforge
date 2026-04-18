@@ -24,6 +24,7 @@ from storyplanner.context_builder import gather_scene_context
 from storyplanner.db import Database
 from storyplanner.prompt_router import route_prompt
 from storyplanner.providers import ProviderConfig
+from storyplanner.ui import theme
 from storyplanner.ui.provider_settings import ProviderSettingsWidget
 
 SELECTION_ACTIONS = {
@@ -60,33 +61,30 @@ SLASH_COMMANDS: dict[str, tuple[str, str]] = {
 
 
 _ORIGINAL_STYLE = (
-    "QPlainTextEdit {"
-    "  background-color: #1a1215;"
-    "  color: #d4a0a0;"
-    "  border: 1px solid #3a2020;"
-    "  border-radius: 4px;"
-    "  padding: 8px;"
-    "}"
+    f"QPlainTextEdit {{"
+    f"  background-color: {theme.DIFF_ORIGINAL_BG};"
+    f"  color: {theme.DIFF_ORIGINAL_TEXT};"
+    f"  border: 1px solid {theme.DIFF_ORIGINAL_BORDER};"
+    f"  border-radius: 4px; padding: 8px;"
+    f"}}"
 )
 
 _PROPOSED_STYLE = (
-    "QPlainTextEdit {"
-    "  background-color: #121a15;"
-    "  color: #a0d4a0;"
-    "  border: 1px solid #203a20;"
-    "  border-radius: 4px;"
-    "  padding: 8px;"
-    "}"
+    f"QPlainTextEdit {{"
+    f"  background-color: {theme.DIFF_PROPOSED_BG};"
+    f"  color: {theme.DIFF_PROPOSED_TEXT};"
+    f"  border: 1px solid {theme.DIFF_PROPOSED_BORDER};"
+    f"  border-radius: 4px; padding: 8px;"
+    f"}}"
 )
 
 _RESPONSE_STYLE = (
-    "QPlainTextEdit {"
-    "  background-color: #12151a;"
-    "  color: #d4d4d4;"
-    "  border: 1px solid #2a2f36;"
-    "  border-radius: 4px;"
-    "  padding: 8px;"
-    "}"
+    f"QPlainTextEdit {{"
+    f"  background-color: {theme.BG_PANEL};"
+    f"  color: {theme.TEXT_PRIMARY};"
+    f"  border: 1px solid {theme.BORDER};"
+    f"  border-radius: 4px; padding: 8px;"
+    f"}}"
 )
 
 SESSION_MEMORY_LIMIT = 3
@@ -141,7 +139,7 @@ class InlineAssistantPanel(QWidget):
         layout.setContentsMargins(0, 8, 0, 0)
 
         header = QLabel("AI Assist")
-        header.setStyleSheet("font-weight: bold; color: #9aa0a6;")
+        header.setStyleSheet(f"font-weight: bold; color: {theme.TEXT_SECONDARY};")
         layout.addWidget(header)
 
         # Selection action row
@@ -223,7 +221,9 @@ class InlineAssistantPanel(QWidget):
         dc_layout.setContentsMargins(0, 0, 0, 0)
 
         orig_label = QLabel("Original")
-        orig_label.setStyleSheet("font-weight: bold; color: #d4a0a0;")
+        orig_label.setStyleSheet(
+            f"font-weight: bold; color: {theme.DIFF_ORIGINAL_TEXT};"
+        )
         dc_layout.addWidget(orig_label)
 
         self._diff_original = QPlainTextEdit()
@@ -233,7 +233,9 @@ class InlineAssistantPanel(QWidget):
         dc_layout.addWidget(self._diff_original)
 
         prop_label = QLabel("Proposed")
-        prop_label.setStyleSheet("font-weight: bold; color: #a0d4a0;")
+        prop_label.setStyleSheet(
+            f"font-weight: bold; color: {theme.DIFF_PROPOSED_TEXT};"
+        )
         dc_layout.addWidget(prop_label)
 
         self._diff_proposed = QPlainTextEdit()

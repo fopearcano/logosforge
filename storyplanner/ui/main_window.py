@@ -1,8 +1,9 @@
 """Main window with a sidebar and content area."""
 
+import os
 from pathlib import Path
 
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -54,6 +55,13 @@ class MainWindow(QMainWindow):
         self._update_title()
         self.resize(900, 600)
 
+        icon_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "assets", "icon.svg",
+        )
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
+
         # -- Menu bar --------------------------------------------------------
         self._build_menu_bar()
 
@@ -62,14 +70,8 @@ class MainWindow(QMainWindow):
 
         # -- Left sidebar ----------------------------------------------------
         sidebar = QWidget()
+        sidebar.setObjectName("sidebar")
         sidebar.setFixedWidth(160)
-        sidebar.setStyleSheet(
-            "QWidget { background-color: #0b0d10; }"
-            "QPushButton { border: none; border-radius: 0; text-align: left;"
-            "  padding: 7px 14px; background-color: transparent; color: #9aa0a6; }"
-            "QPushButton:hover { background-color: #1c2128; color: #e6e6e6; }"
-            "QPushButton:pressed { background-color: #1a3a2a; color: #00ff9c; }"
-        )
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
         sidebar_layout.setSpacing(1)
@@ -396,9 +398,9 @@ class MainWindow(QMainWindow):
         dirty_mark = " *" if self._dirty else ""
         if self._current_file:
             name = Path(self._current_file).name
-            self.setWindowTitle(f"StoryPlanner — {name}{dirty_mark}")
+            self.setWindowTitle(f"Logosforge \u2014 {name}{dirty_mark}")
         else:
-            self.setWindowTitle(f"StoryPlanner{dirty_mark}")
+            self.setWindowTitle(f"Logosforge{dirty_mark}")
 
     def _on_open_project(self) -> None:
         path, _ = QFileDialog.getOpenFileName(

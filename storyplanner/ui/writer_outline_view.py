@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
+from storyplanner.ui import theme
 
 
 class WriterOutlineView(QWidget):
@@ -80,7 +81,7 @@ class WriterOutlineView(QWidget):
 
         if scene.synopsis:
             parts.append(
-                f"<p style='color: #9aa0a6; font-style: italic;'>"
+                f"<p style='color: {theme.TEXT_SECONDARY}; font-style: italic;'>"
                 f"{_esc(scene.synopsis)}</p>"
             )
 

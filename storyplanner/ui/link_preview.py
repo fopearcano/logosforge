@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, QUrl
 from PySide6.QtWidgets import QLabel, QListWidget, QListWidgetItem, QTextBrowser, QVBoxLayout, QWidget
 
 from storyplanner.db import Database
+from storyplanner.ui import theme
 
 LINK_PATTERN = re.compile(r"\[\[(.+?)\]\]")
 LINK_SCHEME = "storylink"
@@ -63,7 +64,8 @@ def create_link_browser(
     browser.setMaximumHeight(max_height)
     browser.setOpenLinks(False)
     browser.setStyleSheet(
-        "QTextBrowser { background: #161a1f; border: 1px solid #2a2f36; }"
+        f"QTextBrowser {{ background: {theme.BG_PANEL};"
+        f" border: 1px solid {theme.BORDER}; }}"
     )
 
     def _handle_click(url: QUrl) -> None:

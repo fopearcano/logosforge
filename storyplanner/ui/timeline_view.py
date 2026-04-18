@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
+from storyplanner.ui import theme
 
 FILTER_ALL = "All"
 UNASSIGNED = "Unassigned"
@@ -24,17 +25,21 @@ UNASSIGNED = "Unassigned"
 MODE_BY_PLOTLINE = "By Plotline"
 MODE_BY_CHAPTER = "By Chapter"
 
-CARD_STYLE = "QFrame { background: #1c2128; border: 1px solid #2a2f36; border-radius: 3px; }"
+CARD_STYLE = (
+    f"QFrame {{ background: {theme.CARD_BG}; border: 1px solid {theme.BORDER};"
+    f" border-radius: 3px; }}"
+)
 CARD_BEAT_STYLE = (
-    "QFrame { background: #1a1e24; border: 1px solid #2a2f36;"
-    " border-left: 3px solid #607d8b; border-radius: 3px; }"
+    f"QFrame {{ background: {theme.CARD_BEAT_BG}; border: 1px solid {theme.BORDER};"
+    f" border-left: 3px solid {theme.CARD_BEAT_BORDER}; border-radius: 3px; }}"
 )
 CARD_KEY_BEAT_STYLE = (
-    "QFrame { background: #1f1a14; border: 1px solid #2a2f36;"
-    " border-left: 3px solid #ff9800; border-radius: 3px; }"
+    f"QFrame {{ background: {theme.CARD_KEY_BEAT_BG}; border: 1px solid {theme.BORDER};"
+    f" border-left: 3px solid {theme.CARD_KEY_BEAT_BORDER}; border-radius: 3px; }}"
 )
 CARD_SELECTED_STYLE = (
-    "QFrame { background: #1a3a2a; border: 2px solid #00ff9c; border-radius: 3px; }"
+    f"QFrame {{ background: {theme.SELECTION_BG}; border: 2px solid {theme.ACCENT};"
+    f" border-radius: 3px; }}"
 )
 
 KEY_BEATS = {"Midpoint", "All Is Lost", "Finale", "Climax", "Break into Three"}
@@ -340,7 +345,7 @@ class TimelineView(QWidget):
             meta_parts.append(scene.plotline)
 
         meta_label = QLabel(" \u00b7 ".join(meta_parts))
-        meta_label.setStyleSheet("color: #9aa0a6;")
+        meta_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY};")
         card_layout.addWidget(meta_label)
 
         if scene.beat:
@@ -351,14 +356,14 @@ class TimelineView(QWidget):
 
         if scene.tags:
             tags_label = QLabel(scene.tags)
-            tags_label.setStyleSheet("color: #6b7280; font-size: 10px;")
+            tags_label.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 10px;")
             tags_label.setWordWrap(True)
             card_layout.addWidget(tags_label)
 
         if char_state:
             state_label = QLabel(f"\u2192 {char_state}")
             state_label.setStyleSheet(
-                "color: #00c8ff; font-size: 11px; font-style: italic;"
+                f"color: {theme.LINK_COLOR}; font-size: 11px; font-style: italic;"
             )
             state_label.setWordWrap(True)
             card_layout.addWidget(state_label)

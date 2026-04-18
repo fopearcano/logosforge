@@ -19,6 +19,7 @@ from storyplanner.providers import (
     default_config,
     validate_provider,
 )
+from storyplanner.ui import theme
 
 
 class _TestWorker(QThread):
@@ -151,14 +152,14 @@ class ProviderSettingsWidget(QWidget):
         error = self.validate()
         if error:
             self._status_label.setStyleSheet(
-                "font-size: 11px; color: #f85149;"
+                f"font-size: 11px; color: {theme.STATUS_ERR};"
             )
             self._status_label.setText(error)
             return
 
         provider = self.get_provider_config()
         self._status_label.setStyleSheet(
-            "font-size: 11px; color: #8b949e;"
+            f"font-size: 11px; color: {theme.TEXT_SECONDARY};"
         )
         self._status_label.setText("Testing...")
         self._test_btn.setEnabled(False)
@@ -170,11 +171,11 @@ class ProviderSettingsWidget(QWidget):
     def _on_test_done(self, ok: bool, msg: str) -> None:
         if ok:
             self._status_label.setStyleSheet(
-                "font-size: 11px; color: #3fb950;"
+                f"font-size: 11px; color: {theme.STATUS_OK};"
             )
         else:
             self._status_label.setStyleSheet(
-                "font-size: 11px; color: #f85149;"
+                f"font-size: 11px; color: {theme.STATUS_ERR};"
             )
         self._status_label.setText(msg[:80])
         self._test_btn.setEnabled(True)

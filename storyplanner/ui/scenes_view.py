@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.analytics import compute_scene_stats
+from storyplanner.ui import theme
 
 from storyplanner.db import Database
 from storyplanner.ui.inline_assistant import InlineAssistantPanel
@@ -171,31 +172,21 @@ class ScenesView(QWidget):
         # -- Content (writing area) ------------------------------------------
         self._content_label = QLabel("Content")
         self._content_label.setStyleSheet(
-            "font-weight: bold; font-size: 15px; margin-top: 12px;"
-            " color: #9aa0a6;"
+            f"font-weight: bold; font-size: 15px; margin-top: 12px;"
+            f" color: {theme.TEXT_SECONDARY};"
         )
         right.addWidget(self._content_label)
 
         writing_col = QHBoxLayout()
         writing_col.addStretch()
         self._content_input = QPlainTextEdit()
+        self._content_input.setObjectName("contentEditor")
         self._content_input.setMinimumHeight(400)
         self._content_input.setMaximumWidth(720)
         self._content_input.setPlaceholderText("Write the full scene content here...")
         writing_font = QFont()
         writing_font.setPointSize(14)
         self._content_input.setFont(writing_font)
-        self._content_input.setStyleSheet(
-            "QPlainTextEdit {"
-            "  background-color: #12151a;"
-            "  color: #d4d4d4;"
-            "  border: none;"
-            "  border-radius: 4px;"
-            "  padding: 20px 28px;"
-            "  selection-background-color: #1a3a2a;"
-            "  selection-color: #00ff9c;"
-            "}"
-        )
         self._content_input.setTabStopDistance(40.0)
         self._apply_line_spacing(self._content_input)
         writing_col.addWidget(self._content_input)
@@ -205,7 +196,7 @@ class ScenesView(QWidget):
         # -- Scene stats (auto-updating) ------------------------------------
         self._stats_label = QLabel("")
         self._stats_label.setStyleSheet(
-            "color: #6e7681; font-size: 11px; padding: 2px 4px;"
+            f"color: {theme.TEXT_MUTED}; font-size: 11px; padding: 2px 4px;"
         )
         right.addWidget(self._stats_label)
 
@@ -607,7 +598,8 @@ class ScenesView(QWidget):
     @staticmethod
     def _apply_line_spacing(editor: QPlainTextEdit) -> None:
         fmt = QTextBlockFormat()
-        fmt.setLineHeight(155, 1)  # 1 = ProportionalHeight
+        fmt.setLineHeight(165, 1)  # 1 = ProportionalHeight
+        fmt.setBottomMargin(4)
         cursor = editor.textCursor()
         cursor.select(QTextCursor.SelectionType.Document)
         cursor.mergeBlockFormat(fmt)

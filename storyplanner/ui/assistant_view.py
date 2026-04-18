@@ -28,6 +28,7 @@ from storyplanner.context_builder import (
 )
 from storyplanner.db import Database
 from storyplanner.providers import ProviderConfig
+from storyplanner.ui import theme
 from storyplanner.ui.provider_settings import ProviderSettingsWidget
 
 
@@ -80,7 +81,7 @@ class AssistantView(QWidget):
 
         # Quick action buttons
         actions_label = QLabel("Quick Actions")
-        actions_label.setStyleSheet("color: #9aa0a6; margin-top: 6px;")
+        actions_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; margin-top: 6px;")
         layout.addWidget(actions_label)
 
         self._preset_buttons: list[QPushButton] = []
@@ -130,7 +131,7 @@ class AssistantView(QWidget):
 
         # Response area
         response_label = QLabel("Response")
-        response_label.setStyleSheet("color: #9aa0a6; margin-top: 6px;")
+        response_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; margin-top: 6px;")
         layout.addWidget(response_label)
 
         self._response_output = QPlainTextEdit()
@@ -139,19 +140,18 @@ class AssistantView(QWidget):
             "Assistant response will appear here..."
         )
         self._response_output.setStyleSheet(
-            "QPlainTextEdit {"
-            "  background-color: #12151a;"
-            "  color: #d4d4d4;"
-            "  border: 1px solid #2a2f36;"
-            "  border-radius: 4px;"
-            "  padding: 12px;"
-            "}"
+            f"QPlainTextEdit {{"
+            f"  background-color: {theme.BG_PANEL};"
+            f"  color: {theme.TEXT_PRIMARY};"
+            f"  border: 1px solid {theme.BORDER};"
+            f"  border-radius: 4px; padding: 12px;"
+            f"}}"
         )
         layout.addWidget(self._response_output, stretch=1)
 
         # Apply actions
         apply_label = QLabel("Apply to Scene")
-        apply_label.setStyleSheet("color: #9aa0a6; margin-top: 6px;")
+        apply_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; margin-top: 6px;")
         layout.addWidget(apply_label)
 
         apply_row = QHBoxLayout()
@@ -193,7 +193,7 @@ class AssistantView(QWidget):
 
         # Provider settings
         settings_label = QLabel("Provider")
-        settings_label.setStyleSheet("color: #6b7280; margin-top: 8px;")
+        settings_label.setStyleSheet(f"color: {theme.TEXT_MUTED}; margin-top: 8px;")
         layout.addWidget(settings_label)
 
         self._provider_widget = ProviderSettingsWidget()

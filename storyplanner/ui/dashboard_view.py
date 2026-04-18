@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from storyplanner.analytics import compute_project_stats
 from storyplanner.context_builder import _count_scene_tags, gather_story_memory
 from storyplanner.db import Database
+from storyplanner.ui import theme
 
 
 class DashboardView(QWidget):
@@ -70,8 +71,8 @@ class DashboardView(QWidget):
     def _add_section_header(self, text: str) -> None:
         lbl = QLabel(text)
         lbl.setStyleSheet(
-            "font-size: 13px; font-weight: bold; color: #9aa0a6; "
-            "margin-top: 12px; margin-bottom: 4px; padding-left: 4px;"
+            f"font-size: 13px; font-weight: bold; color: {theme.TEXT_SECONDARY}; "
+            f"margin-top: 12px; margin-bottom: 4px; padding-left: 4px;"
         )
         self._layout.addWidget(lbl)
 
@@ -116,7 +117,7 @@ class DashboardView(QWidget):
         lines: list[str] = []
         for act, positions in acts.items():
             first, last = positions[0], positions[-1]
-            rng = f"{first}" if first == last else f"{first}–{last}"
+            rng = f"{first}" if first == last else f"{first}\u2013{last}"
             lines.append(f"  {act}: {len(positions)} scenes (#{rng})")
         self._add_section_body("\n".join(lines))
 
@@ -172,7 +173,7 @@ class DashboardView(QWidget):
             btn.setFlat(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setStyleSheet(
-                "text-align: left; color: #58a6ff; padding: 2px 4px;"
+                f"text-align: left; color: {theme.LINK_COLOR}; padding: 2px 4px;"
             )
             btn.clicked.connect(
                 lambda checked, cid=char.id: self._navigate("Character", cid)
@@ -181,9 +182,11 @@ class DashboardView(QWidget):
 
             detail = f"{scene_count} scene{'s' if scene_count != 1 else ''}"
             if last_state:
-                detail += f"  ·  last state: {last_state}"
+                detail += f"  \u00b7  last state: {last_state}"
             detail_lbl = QLabel(detail)
-            detail_lbl.setStyleSheet("color: #8b949e; padding-left: 4px;")
+            detail_lbl.setStyleSheet(
+                f"color: {theme.TEXT_SECONDARY}; padding-left: 4px;"
+            )
             row.addWidget(detail_lbl)
             row.addStretch()
             self._layout.addLayout(row)
@@ -202,13 +205,12 @@ class DashboardView(QWidget):
         display.setPlainText(memory)
         display.setMaximumHeight(180)
         display.setStyleSheet(
-            "QPlainTextEdit {"
-            "  background-color: #12151a;"
-            "  color: #d4d4d4;"
-            "  border: 1px solid #2a2f36;"
-            "  border-radius: 4px;"
-            "  padding: 8px;"
-            "}"
+            f"QPlainTextEdit {{"
+            f"  background-color: {theme.BG_PANEL};"
+            f"  color: {theme.TEXT_PRIMARY};"
+            f"  border: 1px solid {theme.BORDER};"
+            f"  border-radius: 4px; padding: 8px;"
+            f"}}"
         )
         self._layout.addWidget(display)
 

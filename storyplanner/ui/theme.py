@@ -1,27 +1,47 @@
-"""Dark theme stylesheet for StoryPlanner."""
+"""Logosforge — centralized dark theme."""
 
-BG_DARK = "#0f1115"
-BG_PANEL = "#161a1f"
-BG_INPUT = "#1c2128"
-BG_SIDEBAR = "#0b0d10"
-BG_HOVER = "#252b33"
-BG_PRESSED = "#1a3a2a"
+# -- Palette -----------------------------------------------------------------
 
-TEXT_PRIMARY = "#e6e6e6"
-TEXT_SECONDARY = "#9aa0a6"
+BG_DARK = "#0b0f1a"
+BG_PANEL = "#111827"
+BG_INPUT = "#151c2b"
+BG_SIDEBAR = "#080c16"
+BG_HOVER = "#1e2536"
+BG_PRESSED = "#1a2332"
+
+TEXT_PRIMARY = "#e5e7eb"
+TEXT_SECONDARY = "#9ca3af"
 TEXT_MUTED = "#6b7280"
 
-ACCENT = "#00ff9c"
-ACCENT_DIM = "#00cc7d"
-ACCENT_CYAN = "#00c8ff"
+ACCENT = "#ffffff"
+ACCENT_DIM = "#d1d5db"
 
-BORDER = "#2a2f36"
-BORDER_FOCUS = "#00ff9c"
+BORDER = "#1e2536"
+BORDER_FOCUS = "#ffffff"
 
-SELECTION_BG = "#1a3a2a"
-SELECTION_TEXT = "#00ff9c"
+SELECTION_BG = "#1e293b"
+SELECTION_TEXT = "#ffffff"
 
-TABLE_ALT_ROW = "#13161b"
+TABLE_ALT_ROW = "#0e1320"
+
+# Functional colors (not branding — keep distinct)
+STATUS_OK = "#3fb950"
+STATUS_ERR = "#f85149"
+
+DIFF_ORIGINAL_BG = "#1a1215"
+DIFF_ORIGINAL_TEXT = "#d4a0a0"
+DIFF_ORIGINAL_BORDER = "#3a2020"
+DIFF_PROPOSED_BG = "#121a15"
+DIFF_PROPOSED_TEXT = "#a0d4a0"
+DIFF_PROPOSED_BORDER = "#203a20"
+
+LINK_COLOR = "#94a3b8"
+
+CARD_BG = "#151c2b"
+CARD_BEAT_BG = "#131a27"
+CARD_KEY_BEAT_BG = "#1a1710"
+CARD_BEAT_BORDER = "#607d8b"
+CARD_KEY_BEAT_BORDER = "#ff9800"
 
 
 def build_stylesheet() -> str:
@@ -64,6 +84,35 @@ def build_stylesheet() -> str:
         color: {TEXT_MUTED};
         border-color: {BG_INPUT};
     }}
+    QPushButton:flat {{
+        border: none;
+        background-color: transparent;
+        padding: 2px 4px;
+    }}
+    QPushButton:flat:hover {{
+        background-color: {BG_HOVER};
+    }}
+
+    /* -- Sidebar -- */
+    #sidebar {{
+        background-color: {BG_SIDEBAR};
+    }}
+    #sidebar QPushButton {{
+        border: none;
+        border-radius: 0;
+        text-align: left;
+        padding: 7px 16px;
+        background-color: transparent;
+        color: {TEXT_SECONDARY};
+    }}
+    #sidebar QPushButton:hover {{
+        background-color: {BG_HOVER};
+        color: {TEXT_PRIMARY};
+    }}
+    #sidebar QPushButton:pressed {{
+        background-color: {SELECTION_BG};
+        color: {ACCENT};
+    }}
 
     /* -- Line edits -- */
     QLineEdit {{
@@ -71,12 +120,12 @@ def build_stylesheet() -> str:
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
         border-radius: 3px;
-        padding: 4px 6px;
+        padding: 4px 8px;
         selection-background-color: {SELECTION_BG};
         selection-color: {SELECTION_TEXT};
     }}
     QLineEdit:focus {{
-        border-color: {ACCENT};
+        border-color: {BORDER_FOCUS};
     }}
 
     /* -- Plain text edits -- */
@@ -90,7 +139,18 @@ def build_stylesheet() -> str:
         selection-color: {SELECTION_TEXT};
     }}
     QPlainTextEdit:focus {{
-        border-color: {ACCENT};
+        border-color: {BORDER_FOCUS};
+    }}
+
+    /* -- Content editor (scene writing area) -- */
+    #contentEditor {{
+        background-color: {BG_PANEL};
+        color: {TEXT_PRIMARY};
+        border: none;
+        border-radius: 4px;
+        padding: 24px 28px;
+        selection-background-color: {SELECTION_BG};
+        selection-color: {SELECTION_TEXT};
     }}
 
     /* -- Text browser -- */
@@ -112,7 +172,7 @@ def build_stylesheet() -> str:
         min-height: 20px;
     }}
     QComboBox:focus {{
-        border-color: {ACCENT};
+        border-color: {BORDER_FOCUS};
     }}
     QComboBox::drop-down {{
         border: none;
@@ -134,6 +194,22 @@ def build_stylesheet() -> str:
         outline: none;
     }}
 
+    /* -- Checkboxes -- */
+    QCheckBox {{
+        spacing: 6px;
+    }}
+    QCheckBox::indicator {{
+        width: 14px;
+        height: 14px;
+        border: 1px solid {BORDER};
+        border-radius: 2px;
+        background-color: {BG_INPUT};
+    }}
+    QCheckBox::indicator:checked {{
+        background-color: {SELECTION_BG};
+        border-color: {ACCENT};
+    }}
+
     /* -- List widgets -- */
     QListWidget {{
         background-color: {BG_INPUT};
@@ -143,7 +219,7 @@ def build_stylesheet() -> str:
         outline: none;
     }}
     QListWidget::item {{
-        padding: 3px 6px;
+        padding: 3px 8px;
     }}
     QListWidget::item:selected {{
         background-color: {SELECTION_BG};
@@ -178,10 +254,15 @@ def build_stylesheet() -> str:
         font-weight: bold;
     }}
 
+    /* -- Scroll area -- */
+    QScrollArea {{
+        border: none;
+    }}
+
     /* -- Scroll bars -- */
     QScrollBar:vertical {{
         background-color: {BG_DARK};
-        width: 10px;
+        width: 8px;
         border: none;
     }}
     QScrollBar::handle:vertical {{
@@ -197,7 +278,7 @@ def build_stylesheet() -> str:
     }}
     QScrollBar:horizontal {{
         background-color: {BG_DARK};
-        height: 10px;
+        height: 8px;
         border: none;
     }}
     QScrollBar::handle:horizontal {{
@@ -276,9 +357,9 @@ def build_stylesheet() -> str:
 
 
 # HTML table styles matching the dark theme
-HTML_TABLE_BORDER = "#2a2f36"
-HTML_TABLE_ALT = "#1a1e24"
-HTML_MUTED_TEXT = "#6b7280"
+HTML_TABLE_BORDER = BORDER
+HTML_TABLE_ALT = TABLE_ALT_ROW
+HTML_MUTED_TEXT = TEXT_MUTED
 
 HTML_STYLES = f"""
 <style>
@@ -288,7 +369,7 @@ HTML_STYLES = f"""
     td {{ padding: 4px 8px; }}
     tr {{ border-bottom: 1px solid {HTML_TABLE_BORDER}; }}
     h1, h2, h3 {{ color: {TEXT_PRIMARY}; }}
-    a {{ color: {ACCENT_CYAN}; }}
+    a {{ color: {LINK_COLOR}; }}
     .muted {{ color: {HTML_MUTED_TEXT}; }}
 </style>
 """
