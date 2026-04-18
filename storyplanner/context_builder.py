@@ -7,6 +7,8 @@ RECENT_STATES_LIMIT = 2
 DESCRIPTION_MAX_CHARS = 150
 SURROUNDING_SUMMARY_MAX_CHARS = 200
 PREVIOUS_SCENES_LIMIT = 2
+STORY_ARC_SUMMARY_MAX_CHARS = 200
+TOP_TAGS_LIMIT = 7
 
 
 def _truncate(text: str, max_chars: int = CONTENT_MAX_CHARS) -> str:
@@ -82,6 +84,93 @@ def gather_outline_context(db: Database, project_id: int) -> str:
             line += f" — {s.summary[:80]}"
         lines.append(line)
     return "\n".join(lines)
+
+
+def gather_story_memory(db: Database, project_id: int) -> str:
+    notes = db.get_all_notes(project_id)
+    note_by_title = {n.title.lower().strip(): n for n in notes}
+
+    themes = _resolve_themes(db, project_id, note_by_title)
+    motifs = _resolve_motifs(note_by_title)
+    arc = _build_story_arc(db, project_id)
+
+    sections: list[str] = []
+    if themes:
+        sections.append(f"Core Themes: {themes}")
+    if motifs:
+        sections.append(f"Recurring Motifs: {motifs}")
+    if arc:
+        sections.append("Story Arc:")
+        sections.append(arc)
+
+    if not sections:
+        return ""
+    return "[Global Story Memory]\n" + "\n".join(sections)
+
+
+def _resolve_themes(
+    db: Database, project_id: int, note_by_title: dict,
+) -> str:
+    note = note_by_title.get("themes")
+    if note and note.content.strip():
+        return _normalize_list(note.content)
+    counts = _count_scene_tags(db, project_id)
+    if not counts:
+        return ""
+    return ", ".join(tag for tag, _n in counts[:TOP_TAGS_LIMIT])
+
+
+def _resolve_motifs(note_by_title: dict) -> str:
+    note = note_by_title.get("motifs")
+    if note and note.content.strip():
+        return _normalize_list(note.content)
+    return ""
+
+
+def _normalize_list(text: str) -> str:
+    items: list[str] = []
+    for line in text.split("\n"):
+        for raw in line.split(","):
+            item = raw.strip(" \t-•*·")
+            if item:
+                items.append(item)
+    return ", ".join(items[:TOP_TAGS_LIMIT])
+
+
+def _count_scene_tags(db: Database, project_id: int) -> list[tuple[str, int]]:
+    counts: dict[str, int] = {}
+    for scene in db.get_all_scenes(project_id):
+        if not scene.tags:
+            continue
+        for raw in scene.tags.split(","):
+            tag = raw.strip()
+            if tag:
+                counts[tag] = counts.get(tag, 0) + 1
+    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+
+
+def _build_story_arc(db: Database, project_id: int) -> str:
+    scenes = db.get_all_scenes(project_id)
+    if not scenes:
+        return ""
+
+    lines: list[str] = []
+    lines.append(f"  Beginning: {_arc_line(scenes[0])}")
+    if len(scenes) >= 3:
+        lines.append(f"  Conflict: {_arc_line(scenes[len(scenes) // 2])}")
+    if len(scenes) >= 2:
+        lines.append(f"  Direction: {_arc_line(scenes[-1])}")
+    return "\n".join(lines)
+
+
+def _arc_line(scene) -> str:
+    text = scene.title
+    summary = scene.synopsis or scene.summary
+    if summary:
+        if len(summary) > STORY_ARC_SUMMARY_MAX_CHARS:
+            summary = summary[:STORY_ARC_SUMMARY_MAX_CHARS] + "..."
+        text += f" — {summary}"
+    return text
 
 
 def _build_scene_section(scene) -> str:

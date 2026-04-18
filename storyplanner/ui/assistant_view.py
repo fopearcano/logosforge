@@ -23,7 +23,11 @@ from storyplanner.assistant import (
     build_messages,
     chat_completion,
 )
-from storyplanner.context_builder import gather_outline_context, gather_scene_context
+from storyplanner.context_builder import (
+    gather_outline_context,
+    gather_scene_context,
+    gather_story_memory,
+)
 from storyplanner.db import Database
 
 
@@ -101,6 +105,10 @@ class AssistantView(QWidget):
         # Include outline checkbox
         self._outline_check = QCheckBox("Include story outline as context")
         layout.addWidget(self._outline_check)
+
+        # Include global story memory checkbox
+        self._story_memory_check = QCheckBox("Include global story memory")
+        layout.addWidget(self._story_memory_check)
 
         # Custom prompt
         layout.addWidget(QLabel("Additional instructions"))
@@ -218,7 +226,7 @@ class AssistantView(QWidget):
 
     # -- Sending requests ----------------------------------------------------
 
-    def _build_context(self, scene_id: int) -> tuple[str, str]:
+    def _build_context(self, scene_id: int) -> tuple[str, str, str]:
         scene_ctx = gather_scene_context(
             self._db, self._project_id, scene_id,
         )
@@ -227,7 +235,12 @@ class AssistantView(QWidget):
             outline_ctx = gather_outline_context(
                 self._db, self._project_id,
             )
-        return scene_ctx, outline_ctx
+        story_memory_ctx = ""
+        if self._story_memory_check.isChecked():
+            story_memory_ctx = gather_story_memory(
+                self._db, self._project_id,
+            )
+        return scene_ctx, outline_ctx, story_memory_ctx
 
     def _send_preset(self, action_key: str) -> None:
         if self._worker is not None:
@@ -237,7 +250,7 @@ class AssistantView(QWidget):
             self._response_output.setPlainText("No scene selected.")
             return
 
-        scene_ctx, outline_ctx = self._build_context(scene_id)
+        scene_ctx, outline_ctx, story_memory_ctx = self._build_context(scene_id)
         if not scene_ctx:
             self._response_output.setPlainText("Could not load scene data.")
             return
@@ -246,7 +259,8 @@ class AssistantView(QWidget):
         action_prompt = PRESET_ACTIONS[action_key]
 
         messages = build_messages(
-            action_prompt, scene_ctx, outline_ctx, user_note,
+            action_prompt, scene_ctx, outline_ctx,
+            story_memory_ctx, user_note,
         )
         self._start_request(messages)
 
@@ -263,12 +277,14 @@ class AssistantView(QWidget):
             self._response_output.setPlainText("No scene selected.")
             return
 
-        scene_ctx, outline_ctx = self._build_context(scene_id)
+        scene_ctx, outline_ctx, story_memory_ctx = self._build_context(scene_id)
         if not scene_ctx:
             self._response_output.setPlainText("Could not load scene data.")
             return
 
-        messages = build_messages(prompt, scene_ctx, outline_ctx)
+        messages = build_messages(
+            prompt, scene_ctx, outline_ctx, story_memory_ctx,
+        )
         self._start_request(messages)
 
     def _preview_prompt(self) -> None:
@@ -277,12 +293,15 @@ class AssistantView(QWidget):
             self._response_output.setPlainText("No scene selected.")
             return
 
-        scene_ctx, outline_ctx = self._build_context(scene_id)
+        scene_ctx, outline_ctx, story_memory_ctx = self._build_context(scene_id)
         if not scene_ctx:
             self._response_output.setPlainText("Could not load scene data.")
             return
 
         parts = ["=== Context sent to the model ===", ""]
+        if story_memory_ctx:
+            parts.append(story_memory_ctx)
+            parts.append("")
         if outline_ctx:
             parts.append(outline_ctx)
             parts.append("")
