@@ -351,12 +351,19 @@ class ScenesView(QWidget):
         esc = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
         esc.activated.connect(self._exit_focus_mode)
 
-        # Ctrl/Cmd+Shift+F toggles focus mode
+        # Ctrl/Cmd+Shift+F toggles focus mode (widget-local to avoid
+        # conflict with the global menu-bar shortcut)
         focus_shortcut = QShortcut(QKeySequence("Ctrl+Shift+F"), self)
+        focus_shortcut.setContext(
+            Qt.ShortcutContext.WidgetWithChildrenShortcut
+        )
         focus_shortcut.activated.connect(self.toggle_focus_mode)
 
         # Ctrl/Cmd+K triggers inline edit bar
         inline_shortcut = QShortcut(QKeySequence("Ctrl+K"), self)
+        inline_shortcut.setContext(
+            Qt.ShortcutContext.WidgetWithChildrenShortcut
+        )
         inline_shortcut.activated.connect(self._inline_edit.activate)
 
         self._load_characters_and_states()

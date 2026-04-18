@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QIcon, QKeySequence
+from PySide6.QtGui import QAction, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -675,14 +675,17 @@ class MainWindow(QMainWindow):
         view_menu = menu_bar.addMenu("View")
 
         toggle_sidebar_action = QAction("Toggle Sidebar", self)
+        toggle_sidebar_action.setShortcut(QKeySequence("Ctrl+B"))
         toggle_sidebar_action.triggered.connect(self._toggle_sidebar)
         view_menu.addAction(toggle_sidebar_action)
 
         toggle_assistant_action = QAction("Toggle Assistant Panel", self)
+        toggle_assistant_action.setShortcut(QKeySequence("Ctrl+\\"))
         toggle_assistant_action.triggered.connect(self._toggle_assistant)
         view_menu.addAction(toggle_assistant_action)
 
         focus_action = QAction("Focus Mode", self)
+        focus_action.setShortcut(QKeySequence("Ctrl+Shift+F"))
         focus_action.triggered.connect(self._menu_toggle_focus)
         view_menu.addAction(focus_action)
 
@@ -699,14 +702,15 @@ class MainWindow(QMainWindow):
         # -- Navigate -----------------------------------------------------------
         nav_menu = menu_bar.addMenu("Navigate")
         nav_items = [
-            ("Dashboard", self._show_dashboard),
-            ("Scenes", self._show_scenes),
-            ("Timeline", self._show_timeline),
-            ("Characters", self._show_characters),
-            ("Notes", self._show_notes),
+            ("Dashboard", self._show_dashboard, "Ctrl+1"),
+            ("Scenes", self._show_scenes, "Ctrl+2"),
+            ("Timeline", self._show_timeline, "Ctrl+3"),
+            ("Characters", self._show_characters, "Ctrl+4"),
+            ("Notes", self._show_notes, "Ctrl+5"),
         ]
-        for label, handler in nav_items:
+        for label, handler, shortcut in nav_items:
             act = QAction(label, self)
+            act.setShortcut(QKeySequence(shortcut))
             act.triggered.connect(
                 lambda _, l=label, h=handler: (
                     self._set_active_section(l), h()
@@ -737,6 +741,10 @@ class MainWindow(QMainWindow):
         docs_action = QAction("Documentation", self)
         docs_action.setEnabled(False)
         help_menu.addAction(docs_action)
+
+        # -- Global QShortcuts (no menu item) -----------------------------------
+        generate_shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
+        generate_shortcut.activated.connect(self._menu_generate)
 
     def _refresh_recent_menu(self) -> None:
         self._recent_menu.clear()
@@ -807,6 +815,10 @@ class MainWindow(QMainWindow):
             self._assistant_panel.refresh_scenes()
             self._assistant_panel.setVisible(True)
         self._assistant_panel._send_preset(preset)
+
+    def _menu_generate(self) -> None:
+        if self._assistant_panel.isVisible():
+            self._assistant_panel._send_custom()
 
     def _show_about(self) -> None:
         QMessageBox.about(
