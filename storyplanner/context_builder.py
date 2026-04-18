@@ -5,12 +5,35 @@ from storyplanner.db import Database
 CONTENT_MAX_CHARS = 2000
 RECENT_STATES_LIMIT = 2
 DESCRIPTION_MAX_CHARS = 150
+SURROUNDING_SUMMARY_MAX_CHARS = 200
+PREVIOUS_SCENES_LIMIT = 2
 
 
 def _truncate(text: str, max_chars: int = CONTENT_MAX_CHARS) -> str:
     if len(text) <= max_chars:
         return text
     return text[:max_chars] + "\n[...truncated]"
+
+
+def _find_scene_index(all_scenes: list, scene_id: int) -> int | None:
+    for i, s in enumerate(all_scenes):
+        if s.id == scene_id:
+            return i
+    return None
+
+
+def _scene_summary_line(scene) -> str:
+    if scene.synopsis:
+        text = scene.synopsis
+    elif scene.summary:
+        text = scene.summary
+    elif scene.content:
+        text = scene.content
+    else:
+        return ""
+    if len(text) > SURROUNDING_SUMMARY_MAX_CHARS:
+        return text[:SURROUNDING_SUMMARY_MAX_CHARS] + "..."
+    return text
 
 
 def gather_scene_context(
@@ -22,14 +45,20 @@ def gather_scene_context(
     if scene is None:
         return ""
 
+    all_scenes = db.get_all_scenes(project_id)
+    current_idx = _find_scene_index(all_scenes, scene_id)
+
     scene_section = _build_scene_section(scene)
+    story_section = _build_story_context_section(all_scenes, current_idx)
     memory_section = _build_character_memory_section(db, project_id, scene_id)
     places_section = _build_places_section(db, project_id, scene_id)
-    position_section = _build_position_section(db, project_id, scene_id)
+    position_section = _build_position_section(all_scenes, current_idx)
 
     sections: list[str] = []
     if scene_section:
         sections.append(f"[Scene Context]\n{scene_section}")
+    if story_section:
+        sections.append(f"[Story Context]\n{story_section}")
     if memory_section:
         sections.append(f"[Character Memory]\n{memory_section}")
     if places_section:
@@ -82,6 +111,34 @@ def _build_scene_section(scene) -> str:
     if scene.content:
         parts.append(f"\nScene Content:\n{_truncate(scene.content)}")
     return "\n".join(parts)
+
+
+def _build_story_context_section(
+    all_scenes: list, current_idx: int | None,
+) -> str:
+    if current_idx is None or len(all_scenes) < 2:
+        return ""
+
+    blocks: list[str] = []
+
+    start = max(0, current_idx - PREVIOUS_SCENES_LIMIT)
+    for i in range(start, current_idx):
+        s = all_scenes[i]
+        lines = [f"Previous Scene: {s.title}"]
+        summary = _scene_summary_line(s)
+        if summary:
+            lines.append(f"  Summary: {summary}")
+        blocks.append("\n".join(lines))
+
+    if current_idx < len(all_scenes) - 1:
+        s = all_scenes[current_idx + 1]
+        lines = [f"Next Scene: {s.title}"]
+        summary = _scene_summary_line(s)
+        if summary:
+            lines.append(f"  Summary: {summary}")
+        blocks.append("\n".join(lines))
+
+    return "\n\n".join(blocks)
 
 
 def _build_character_memory_section(
@@ -144,19 +201,9 @@ def _build_places_section(
 
 
 def _build_position_section(
-    db: Database, project_id: int, scene_id: int,
+    all_scenes: list, current_idx: int | None,
 ) -> str:
-    all_scenes = db.get_all_scenes(project_id)
-    if not all_scenes:
-        return ""
-
-    current_idx = None
-    for i, s in enumerate(all_scenes):
-        if s.id == scene_id:
-            current_idx = i
-            break
-
-    if current_idx is None:
+    if current_idx is None or not all_scenes:
         return ""
 
     scene = all_scenes[current_idx]
@@ -166,10 +213,5 @@ def _build_position_section(
         parts.append(f"Chapter: {scene.chapter}")
     if scene.plotline:
         parts.append(f"Plotline: {scene.plotline}")
-
-    if current_idx > 0:
-        parts.append(f"Previous scene: {all_scenes[current_idx - 1].title}")
-    if current_idx < len(all_scenes) - 1:
-        parts.append(f"Next scene: {all_scenes[current_idx + 1].title}")
 
     return "\n".join(parts)
