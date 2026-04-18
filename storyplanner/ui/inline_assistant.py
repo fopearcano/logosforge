@@ -5,6 +5,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QEvent, QThread, Signal
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QHBoxLayout,
     QLabel,
@@ -262,6 +263,19 @@ class InlineAssistantPanel(QWidget):
         layout.addWidget(self._diff_container)
         self._diff_container.hide()
 
+        # Context inspector
+        self._ctx_toggle = QCheckBox("Show context sent to model")
+        self._ctx_toggle.toggled.connect(self._on_ctx_toggle)
+        layout.addWidget(self._ctx_toggle)
+
+        self._ctx_viewer = QPlainTextEdit()
+        self._ctx_viewer.setReadOnly(True)
+        self._ctx_viewer.setMaximumHeight(180)
+        self._ctx_viewer.setStyleSheet(_RESPONSE_STYLE)
+        self._ctx_viewer.setPlaceholderText("Context will appear here after a request...")
+        self._ctx_viewer.hide()
+        layout.addWidget(self._ctx_viewer)
+
         # Provider settings
         self._provider_widget = ProviderSettingsWidget(compact=True)
         layout.addWidget(self._provider_widget)
@@ -309,6 +323,9 @@ class InlineAssistantPanel(QWidget):
     def _clear_session_memory(self) -> None:
         self._session_memory.clear()
         self._response.setPlainText("Session memory cleared.")
+
+    def _on_ctx_toggle(self, checked: bool) -> None:
+        self._ctx_viewer.setVisible(checked)
 
     # -- Slash commands -------------------------------------------------------
 
@@ -502,6 +519,12 @@ class InlineAssistantPanel(QWidget):
         session_ctx = self._build_session_memory_context()
         messages = build_messages(
             action_prompt, scene_ctx, story_memory_context=session_ctx,
+        )
+
+        self._ctx_viewer.setPlainText(
+            f"--- Scene Context ---\n{scene_ctx}"
+            + (f"\n\n--- Session Memory ---\n{session_ctx}" if session_ctx else "")
+            + f"\n\n--- Action ---\n{action_prompt}"
         )
         self._set_busy(True)
         if routed_to:

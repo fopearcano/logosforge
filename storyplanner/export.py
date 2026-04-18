@@ -375,12 +375,14 @@ def export_docx_manuscript(db: Database, project_id: int, path: str) -> None:
         if chapter_name:
             chapter_num += 1
             heading = f"Chapter {chapter_num}: {chapter_name}"
-            ch_para = doc.add_paragraph()
-            ch_para.paragraph_format.space_before = Pt(24)
-            ch_run = ch_para.add_run(heading)
-            ch_run.bold = True
-            ch_run.font.size = Pt(16)
-            ch_run.font.name = "Times New Roman"
+        else:
+            heading = "Scenes"
+        ch_para = doc.add_paragraph()
+        ch_para.paragraph_format.space_before = Pt(24)
+        ch_run = ch_para.add_run(heading)
+        ch_run.bold = True
+        ch_run.font.size = Pt(16)
+        ch_run.font.name = "Times New Roman"
 
         for scene in group_scenes:
             scene_para = doc.add_paragraph()

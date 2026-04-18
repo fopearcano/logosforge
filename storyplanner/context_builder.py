@@ -4,7 +4,7 @@ from storyplanner.db import Database
 
 CONTENT_MAX_CHARS = 2000
 RECENT_STATES_LIMIT = 2
-DESCRIPTION_MAX_CHARS = 150
+DESCRIPTION_MAX_CHARS = 300
 SURROUNDING_SUMMARY_MAX_CHARS = 200
 PREVIOUS_SCENES_LIMIT = 2
 STORY_ARC_SUMMARY_MAX_CHARS = 200
@@ -30,12 +30,20 @@ def _scene_summary_line(scene) -> str:
     elif scene.summary:
         text = scene.summary
     elif scene.content:
-        text = scene.content
+        text = _first_paragraph(scene.content)
     else:
         return ""
     if len(text) > SURROUNDING_SUMMARY_MAX_CHARS:
-        return text[:SURROUNDING_SUMMARY_MAX_CHARS] + "..."
+        return text[:SURROUNDING_SUMMARY_MAX_CHARS].rsplit(" ", 1)[0] + "..."
     return text
+
+
+def _first_paragraph(content: str) -> str:
+    for para in content.split("\n\n"):
+        stripped = para.strip()
+        if stripped:
+            return stripped
+    return content.strip()
 
 
 def gather_scene_context(
@@ -157,9 +165,9 @@ def _build_story_arc(db: Database, project_id: int) -> str:
     lines: list[str] = []
     lines.append(f"  Beginning: {_arc_line(scenes[0])}")
     if len(scenes) >= 3:
-        lines.append(f"  Conflict: {_arc_line(scenes[len(scenes) // 2])}")
+        lines.append(f"  Midpoint: {_arc_line(scenes[len(scenes) // 2])}")
     if len(scenes) >= 2:
-        lines.append(f"  Direction: {_arc_line(scenes[-1])}")
+        lines.append(f"  Latest: {_arc_line(scenes[-1])}")
     return "\n".join(lines)
 
 
@@ -208,10 +216,14 @@ def _build_story_context_section(
     if current_idx is None or len(all_scenes) < 2:
         return ""
 
-    blocks: list[str] = []
+    current_scene = all_scenes[current_idx]
+    current_chapter = current_scene.chapter or ""
 
-    start = max(0, current_idx - PREVIOUS_SCENES_LIMIT)
-    for i in range(start, current_idx):
+    prev_indices = _pick_previous_scenes(all_scenes, current_idx, current_chapter)
+    next_idx = _pick_next_scene(all_scenes, current_idx, current_chapter)
+
+    blocks: list[str] = []
+    for i in prev_indices:
         s = all_scenes[i]
         lines = [f"Previous Scene: {s.title}"]
         summary = _scene_summary_line(s)
@@ -219,8 +231,8 @@ def _build_story_context_section(
             lines.append(f"  Summary: {summary}")
         blocks.append("\n".join(lines))
 
-    if current_idx < len(all_scenes) - 1:
-        s = all_scenes[current_idx + 1]
+    if next_idx is not None:
+        s = all_scenes[next_idx]
         lines = [f"Next Scene: {s.title}"]
         summary = _scene_summary_line(s)
         if summary:
@@ -228,6 +240,34 @@ def _build_story_context_section(
         blocks.append("\n".join(lines))
 
     return "\n\n".join(blocks)
+
+
+def _pick_previous_scenes(
+    all_scenes: list, current_idx: int, current_chapter: str,
+) -> list[int]:
+    if current_idx == 0:
+        return []
+    if current_chapter:
+        same_ch = [
+            i for i in range(current_idx)
+            if (all_scenes[i].chapter or "") == current_chapter
+        ]
+        if same_ch:
+            return same_ch[-PREVIOUS_SCENES_LIMIT:]
+    start = max(0, current_idx - PREVIOUS_SCENES_LIMIT)
+    return list(range(start, current_idx))
+
+
+def _pick_next_scene(
+    all_scenes: list, current_idx: int, current_chapter: str,
+) -> int | None:
+    if current_idx >= len(all_scenes) - 1:
+        return None
+    if current_chapter:
+        for i in range(current_idx + 1, len(all_scenes)):
+            if (all_scenes[i].chapter or "") == current_chapter:
+                return i
+    return current_idx + 1
 
 
 def _build_character_memory_section(
@@ -239,6 +279,8 @@ def _build_character_memory_section(
 
     char_map = {c.id: c for c in db.get_all_characters(project_id)}
     current_states = dict(db.get_scene_character_states(scene_id))
+
+    all_arcs = _build_all_arcs(db, project_id, set(char_ids))
 
     blocks: list[str] = []
     for cid in char_ids:
@@ -254,7 +296,7 @@ def _build_character_memory_section(
         if current:
             block.append(f"  Current state: {current}")
 
-        prior = _recent_prior_states(db, project_id, cid, scene_id)
+        prior = _recent_prior_states(all_arcs.get(cid, []), scene_id)
         if prior:
             block.append(f"  Recent progression: {' → '.join(prior)}")
 
@@ -263,17 +305,27 @@ def _build_character_memory_section(
     return "\n\n".join(blocks)
 
 
+def _build_all_arcs(
+    db: Database, project_id: int, char_ids: set[int],
+) -> dict[int, list[tuple[int, str]]]:
+    arcs: dict[int, list[tuple[int, str]]] = {}
+    for scene in db.get_all_scenes(project_id):
+        for cid, state in db.get_scene_character_states(scene.id):
+            if cid in char_ids:
+                arcs.setdefault(cid, []).append((scene.id, state))
+    return arcs
+
+
 def _recent_prior_states(
-    db: Database, project_id: int, character_id: int, scene_id: int,
+    arc: list[tuple[int, str]], scene_id: int,
 ) -> list[str]:
-    arc = db.get_character_arc(project_id, character_id)
     current_idx = None
-    for i, (sid, *_rest) in enumerate(arc):
+    for i, (sid, _state) in enumerate(arc):
         if sid == scene_id:
             current_idx = i
             break
     prior_entries = arc[:current_idx] if current_idx is not None else arc
-    return [state for _sid, _title, _pos, state in prior_entries[-RECENT_STATES_LIMIT:]]
+    return [state for _sid, state in prior_entries[-RECENT_STATES_LIMIT:]]
 
 
 def _build_places_section(
