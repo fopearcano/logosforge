@@ -83,7 +83,7 @@ class AssistantView(QWidget):
         self._preset_buttons: list[QPushButton] = []
 
         btn_row1 = QHBoxLayout()
-        for key in ("Rewrite", "Expand", "Summarize", "Alternatives"):
+        for key in ("Rewrite", "Expand", "Summarize", "Dialogue"):
             btn = QPushButton(key)
             btn.clicked.connect(lambda checked, k=key: self._send_preset(k))
             btn_row1.addWidget(btn)
@@ -91,12 +91,11 @@ class AssistantView(QWidget):
         layout.addLayout(btn_row1)
 
         btn_row2 = QHBoxLayout()
-        for key in ("Dialogue", "Pacing", "Next Beat"):
+        for key in ("Tension", "Pacing", "Next Beat", "Alternatives"):
             btn = QPushButton(key)
             btn.clicked.connect(lambda checked, k=key: self._send_preset(k))
             btn_row2.addWidget(btn)
             self._preset_buttons.append(btn)
-        btn_row2.addStretch()
         layout.addLayout(btn_row2)
 
         # Include outline checkbox

@@ -5,6 +5,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from storyplanner.assistant import (
     DEFAULT_BASE_URL,
+    PRESET_ACTIONS,
     build_messages,
     chat_completion,
 )
@@ -77,6 +79,18 @@ class InlineAssistantPanel(QWidget):
         sel_row.addStretch()
         layout.addLayout(sel_row)
 
+        # Template actions
+        tpl_row = QHBoxLayout()
+        tpl_row.addWidget(QLabel("Template:"))
+        self._template_combo = QComboBox()
+        for label in PRESET_ACTIONS:
+            self._template_combo.addItem(label)
+        tpl_row.addWidget(self._template_combo, stretch=1)
+        self._run_template_btn = QPushButton("Run")
+        self._run_template_btn.clicked.connect(self._on_run_template)
+        tpl_row.addWidget(self._run_template_btn)
+        layout.addLayout(tpl_row)
+
         # Prompt input
         self._prompt = QPlainTextEdit()
         self._prompt.setMaximumHeight(60)
@@ -137,7 +151,7 @@ class InlineAssistantPanel(QWidget):
         layout.addLayout(settings_row)
 
         self._interactive_buttons = [
-            self._rewrite_btn, self._expand_btn,
+            self._rewrite_btn, self._expand_btn, self._run_template_btn,
             self._send_btn, self._preview_btn, self._insert_btn,
         ]
 
@@ -176,6 +190,13 @@ class InlineAssistantPanel(QWidget):
             "description, and emotional depth.\n\n"
             f"Text to expand:\n{selected}"
         )
+        self._send_request(prompt)
+
+    def _on_run_template(self) -> None:
+        key = self._template_combo.currentText()
+        prompt = PRESET_ACTIONS.get(key, "")
+        if not prompt:
+            return
         self._send_request(prompt)
 
     def _on_send(self) -> None:

@@ -19,13 +19,14 @@ PRESET_ACTIONS = {
         "Write a concise summary of this scene in 2-3 sentences, "
         "capturing the key events and emotional beats."
     ),
-    "Alternatives": (
-        "Suggest 3 alternative approaches for this scene. For each, "
-        "describe the key change and how it would affect the story."
-    ),
     "Dialogue": (
         "Rewrite the dialogue in this scene to be more natural, concise, "
         "and character-appropriate. Remove filler and sharpen subtext."
+    ),
+    "Tension": (
+        "Rewrite this scene to increase tension and stakes. Heighten "
+        "conflict, add urgency, sharpen obstacles, and raise the "
+        "emotional pressure on the characters."
     ),
     "Pacing": (
         "Analyze and rewrite this scene to improve its pacing. Speed up "
@@ -35,6 +36,10 @@ PRESET_ACTIONS = {
     "Next Beat": (
         "Based on this scene and its context, suggest 3-5 possible next "
         "beats or events that could follow naturally in the story."
+    ),
+    "Alternatives": (
+        "Suggest 3 alternative approaches for this scene. For each, "
+        "describe the key change and how it would affect the story."
     ),
 }
 
