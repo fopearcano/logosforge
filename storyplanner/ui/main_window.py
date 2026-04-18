@@ -85,7 +85,8 @@ class MainWindow(QMainWindow):
         sidebar_layout.setContentsMargins(0, 8, 0, 8)
         sidebar_layout.setSpacing(0)
 
-        _ICONS = {
+        self._sidebar_collapsed = False
+        self._sidebar_icons = {
             "Projects": "\U0001F4C1",
             "Dashboard": "\U0001F3E0",
             "Characters": "\U0001F464",
@@ -105,9 +106,19 @@ class MainWindow(QMainWindow):
             "Assistant": "\U0001F916",
         }
 
+        self._toggle_btn = QPushButton("\u00ab")
+        self._toggle_btn.clicked.connect(self._toggle_sidebar)
+        sidebar_layout.addWidget(self._toggle_btn)
+
+        _NAV_LABELS = [
+            "Projects", "Dashboard", "Characters", "Places", "Notes",
+            "Scenes", "Timeline", "Outline", "Writer", "Structure",
+            "Acts", "Beats", "Tags", "Graph", "Arcs", "Search",
+            "Assistant",
+        ]
         self.sidebar_buttons: dict[str, QPushButton] = {}
-        for label in ("Projects", "Dashboard", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline", "Writer", "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs", "Search", "Assistant"):
-            icon = _ICONS.get(label, "")
+        for label in _NAV_LABELS:
+            icon = self._sidebar_icons.get(label, "")
             btn = QPushButton(f"{icon}  {label}")
             sidebar_layout.addWidget(btn)
             self.sidebar_buttons[label] = btn
@@ -115,26 +126,30 @@ class MainWindow(QMainWindow):
         sidebar_layout.addStretch()
 
         # -- Appearance selector ------------------------------------------------
-        app_label = QLabel("Appearance")
-        app_label.setStyleSheet(
+        self._appearance_label = QLabel("Appearance")
+        self._appearance_label.setStyleSheet(
             "font-size: 10px; padding: 2px 14px; margin-top: 8px;"
         )
-        sidebar_layout.addWidget(app_label)
+        sidebar_layout.addWidget(self._appearance_label)
 
-        appearance_bar = QWidget()
-        appearance_bar.setObjectName("appearanceBar")
-        ab_layout = QHBoxLayout(appearance_bar)
+        self._appearance_bar = QWidget()
+        self._appearance_bar.setObjectName("appearanceBar")
+        ab_layout = QHBoxLayout(self._appearance_bar)
         ab_layout.setContentsMargins(2, 2, 2, 2)
         ab_layout.setSpacing(0)
         self._appearance_btns: dict[str, QPushButton] = {}
-        for name, short in (("Dark", "Dark"), ("Light (Green)", "Green"), ("Light (Warm)", "Warm")):
+        for name, short in (
+            ("Dark", "Dark"),
+            ("Light (Green)", "Green"),
+            ("Light (Warm)", "Warm"),
+        ):
             btn = QPushButton(short)
             btn.setCheckable(True)
             btn.setChecked(name == theme.current_palette())
             btn.clicked.connect(lambda _, n=name: self._switch_theme(n))
             ab_layout.addWidget(btn)
             self._appearance_btns[name] = btn
-        sidebar_layout.addWidget(appearance_bar)
+        sidebar_layout.addWidget(self._appearance_bar)
 
         # -- Import / Export ---------------------------------------------------
         self._import_btn = QPushButton("\U0001F4E5  Import")
@@ -145,23 +160,40 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self._export_btn)
         self._export_btn.clicked.connect(self._on_export)
 
-        # Connect sidebar buttons
-        self.sidebar_buttons["Projects"].clicked.connect(self._show_projects)
-        self.sidebar_buttons["Dashboard"].clicked.connect(self._show_dashboard)
-        self.sidebar_buttons["Characters"].clicked.connect(self._show_characters)
-        self.sidebar_buttons["Places"].clicked.connect(self._show_places)
-        self.sidebar_buttons["Notes"].clicked.connect(self._show_notes)
-        self.sidebar_buttons["Scenes"].clicked.connect(self._show_scenes)
-        self.sidebar_buttons["Timeline"].clicked.connect(self._show_timeline)
-        self.sidebar_buttons["Outline"].clicked.connect(self._show_outline)
-        self.sidebar_buttons["Writer"].clicked.connect(self._show_writer_outline)
-        self.sidebar_buttons["Structure"].clicked.connect(self._show_structure)
-        self.sidebar_buttons["Acts"].clicked.connect(self._show_acts)
-        self.sidebar_buttons["Beats"].clicked.connect(self._show_beats)
-        self.sidebar_buttons["Tags"].clicked.connect(self._show_tags)
-        self.sidebar_buttons["Graph"].clicked.connect(self._show_graph)
-        self.sidebar_buttons["Arcs"].clicked.connect(self._show_arcs)
-        self.sidebar_buttons["Search"].clicked.connect(self._show_search)
+        # -- Connect navigation buttons (checkable + active tracking) ----------
+        self._nav_labels = [
+            "Projects", "Dashboard", "Characters", "Places", "Notes",
+            "Scenes", "Timeline", "Outline", "Writer", "Structure",
+            "Acts", "Beats", "Tags", "Graph", "Arcs", "Search",
+        ]
+        _nav_handlers = {
+            "Projects": self._show_projects,
+            "Dashboard": self._show_dashboard,
+            "Characters": self._show_characters,
+            "Places": self._show_places,
+            "Notes": self._show_notes,
+            "Scenes": self._show_scenes,
+            "Timeline": self._show_timeline,
+            "Outline": self._show_outline,
+            "Writer": self._show_writer_outline,
+            "Structure": self._show_structure,
+            "Acts": self._show_acts,
+            "Beats": self._show_beats,
+            "Tags": self._show_tags,
+            "Graph": self._show_graph,
+            "Arcs": self._show_arcs,
+            "Search": self._show_search,
+        }
+        for label in self._nav_labels:
+            btn = self.sidebar_buttons[label]
+            btn.setCheckable(True)
+            handler = _nav_handlers[label]
+            btn.clicked.connect(
+                lambda _, l=label, h=handler: (
+                    self._set_active_section(l), h()
+                )
+            )
+
         self.sidebar_buttons["Assistant"].clicked.connect(
             self._toggle_assistant
         )
@@ -335,6 +367,67 @@ class MainWindow(QMainWindow):
     def _hide_assistant(self) -> None:
         self._assistant_panel.setVisible(False)
 
+    # -- Sidebar collapse/expand ---------------------------------------------
+
+    def _toggle_sidebar(self) -> None:
+        self._set_sidebar_collapsed(not self._sidebar_collapsed)
+
+    def _set_sidebar_collapsed(self, collapsed: bool) -> None:
+        if self._sidebar_collapsed == collapsed:
+            return
+        self._sidebar_collapsed = collapsed
+
+        if collapsed:
+            self._sidebar.setFixedWidth(56)
+            self._sidebar.setObjectName("sidebarCollapsed")
+            self._toggle_btn.setText("\u00bb")
+            self._toggle_btn.setToolTip("Expand sidebar")
+            for label, btn in self.sidebar_buttons.items():
+                icon = self._sidebar_icons.get(label, "")
+                btn.setText(icon)
+                btn.setToolTip(label)
+            self._import_btn.setText("\U0001F4E5")
+            self._import_btn.setToolTip("Import")
+            self._export_btn.setText("\U0001F4E4")
+            self._export_btn.setToolTip("Export")
+            self._appearance_label.setVisible(False)
+            self._appearance_bar.setVisible(False)
+        else:
+            self._sidebar.setMinimumWidth(140)
+            self._sidebar.setMaximumWidth(200)
+            self._sidebar.setObjectName("sidebar")
+            self._toggle_btn.setText("\u00ab")
+            self._toggle_btn.setToolTip("")
+            for label, btn in self.sidebar_buttons.items():
+                icon = self._sidebar_icons.get(label, "")
+                btn.setText(f"{icon}  {label}")
+                btn.setToolTip("")
+            self._import_btn.setText("\U0001F4E5  Import")
+            self._import_btn.setToolTip("")
+            self._export_btn.setText("\U0001F4E4  Export")
+            self._export_btn.setToolTip("")
+            self._appearance_label.setVisible(True)
+            self._appearance_bar.setVisible(True)
+
+        self._refresh_sidebar_style()
+
+    def _refresh_sidebar_style(self) -> None:
+        self._sidebar.style().unpolish(self._sidebar)
+        self._sidebar.style().polish(self._sidebar)
+        for child in self._sidebar.findChildren(QPushButton):
+            child.style().unpolish(child)
+            child.style().polish(child)
+        self._sidebar.update()
+
+    def _set_active_section(self, name: str) -> None:
+        for label in self._nav_labels:
+            self.sidebar_buttons[label].setChecked(label == name)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if event.size().width() < 750 and not self._sidebar_collapsed:
+            self._set_sidebar_collapsed(True)
+
     def _show_search(self) -> None:
         self._set_content(
             SearchView(
@@ -349,6 +442,7 @@ class MainWindow(QMainWindow):
 
     def _on_link_navigated(self, entity_type: str, entity_id: int) -> None:
         if entity_type == "Character":
+            self._set_active_section("Characters")
             view = CharactersView(
                 self._db, self._project_id,
                 on_data_changed=self._on_data_changed,
@@ -357,6 +451,7 @@ class MainWindow(QMainWindow):
             self._set_content(view)
             view.select_character(entity_id)
         elif entity_type == "Place":
+            self._set_active_section("Places")
             view = PlacesView(
                 self._db, self._project_id,
                 on_data_changed=self._on_data_changed,
@@ -365,6 +460,7 @@ class MainWindow(QMainWindow):
             self._set_content(view)
             view.select_place(entity_id)
         elif entity_type == "Note":
+            self._set_active_section("Notes")
             view = NotesView(
                 self._db, self._project_id,
                 on_data_changed=self._on_data_changed,
@@ -376,6 +472,7 @@ class MainWindow(QMainWindow):
             self._open_scene_in_editor(entity_id)
 
     def _open_scene_in_editor(self, scene_id: int) -> None:
+        self._set_active_section("Scenes")
         if self._cached_scenes_view is None:
             self._cached_scenes_view = ScenesView(
                 self._db, self._project_id,

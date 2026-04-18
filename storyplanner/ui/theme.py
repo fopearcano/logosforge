@@ -317,6 +317,34 @@ def build_stylesheet() -> str:
         font-weight: bold;
     }}
 
+    /* -- Sidebar collapsed -- */
+    #sidebarCollapsed {{
+        background-color: {BG_SIDEBAR};
+        border-right: 1px solid {BORDER};
+    }}
+    #sidebarCollapsed QPushButton {{
+        border: none;
+        border-radius: 6px;
+        text-align: center;
+        padding: 8px 0;
+        margin: 1px 4px;
+        background-color: transparent;
+        color: {TEXT_SECONDARY};
+        font-size: 15px;
+    }}
+    #sidebarCollapsed QPushButton:hover {{
+        background-color: {BG_HOVER};
+        color: {TEXT_PRIMARY};
+    }}
+    #sidebarCollapsed QPushButton:pressed {{
+        background-color: {SIDEBAR_ACTIVE_BG};
+        color: {SIDEBAR_ACTIVE_TEXT};
+    }}
+    #sidebarCollapsed QPushButton:checked {{
+        background-color: {SIDEBAR_ACTIVE_BG};
+        color: {SIDEBAR_ACTIVE_TEXT};
+    }}
+
     /* -- Line edits -- */
     QLineEdit {{
         background-color: {BG_INPUT};
