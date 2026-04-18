@@ -655,11 +655,11 @@ class ScenesView(QWidget):
         bar = QWidget()
         bar.setStyleSheet(
             f"background: {theme.BG_PANEL};"
-            f" border: 1px solid {theme.BORDER}; border-radius: 3px;"
+            f" border: 1px solid {theme.BORDER}; border-radius: 6px;"
         )
         row = QHBoxLayout(bar)
-        row.setContentsMargins(10, 6, 6, 6)
-        row.setSpacing(6)
+        row.setContentsMargins(12, 8, 8, 8)
+        row.setSpacing(8)
         hint = QLabel("Select text and press Ctrl+K to edit with AI.")
         hint.setStyleSheet(
             f"color: {theme.TEXT_SECONDARY}; font-size: 11px;"

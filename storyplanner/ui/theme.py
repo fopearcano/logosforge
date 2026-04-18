@@ -229,7 +229,14 @@ def get(key: str) -> str:
 # build_stylesheet — reads current module-level values at call time
 # ---------------------------------------------------------------------------
 
+def _is_light() -> bool:
+    return _current_palette != "Dark"
+
+
 def build_stylesheet() -> str:
+    light = _is_light()
+    disabled_opacity = "0.5" if light else "0.4"
+
     return f"""
     /* -- Base -- */
     QWidget {{
@@ -245,17 +252,17 @@ def build_stylesheet() -> str:
     /* -- Labels -- */
     QLabel {{
         background-color: transparent;
-        padding: 1px;
+        padding: 2px 0px;
     }}
 
-    /* -- Buttons -- */
+    /* -- Buttons (secondary = default) -- */
     QPushButton {{
         background-color: {BG_INPUT};
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
         border-radius: 6px;
         padding: 6px 16px;
-        min-height: 22px;
+        min-height: 24px;
     }}
     QPushButton:hover {{
         background-color: {BG_HOVER};
@@ -268,15 +275,17 @@ def build_stylesheet() -> str:
     QPushButton:disabled {{
         color: {TEXT_MUTED};
         border-color: {BG_INPUT};
+        opacity: {disabled_opacity};
     }}
+    /* -- Tertiary (flat) buttons -- */
     QPushButton:flat {{
         border: none;
         background-color: transparent;
-        padding: 2px 6px;
+        padding: 4px 8px;
     }}
     QPushButton:flat:hover {{
         background-color: {BG_HOVER};
-        border-radius: 4px;
+        border-radius: 6px;
     }}
 
     /* -- Sidebar -- */
@@ -288,7 +297,7 @@ def build_stylesheet() -> str:
         border: none;
         border-radius: 6px;
         text-align: left;
-        padding: 8px 14px;
+        padding: 8px 16px;
         margin: 1px 8px;
         background-color: transparent;
         color: {TEXT_SECONDARY};
@@ -321,6 +330,10 @@ def build_stylesheet() -> str:
     QLineEdit:focus {{
         border-color: {BORDER_FOCUS};
     }}
+    QLineEdit:disabled {{
+        color: {TEXT_MUTED};
+        opacity: {disabled_opacity};
+    }}
 
     /* -- Plain text edits -- */
     QPlainTextEdit {{
@@ -328,7 +341,7 @@ def build_stylesheet() -> str:
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
         border-radius: 6px;
-        padding: 6px;
+        padding: 8px;
         selection-background-color: {SELECTION_BG};
         selection-color: {SELECTION_TEXT};
     }}
@@ -342,7 +355,7 @@ def build_stylesheet() -> str:
         color: {TEXT_PRIMARY};
         border: none;
         border-radius: 8px;
-        padding: 28px 32px;
+        padding: 32px 32px;
         selection-background-color: {SELECTION_BG};
         selection-color: {SELECTION_TEXT};
     }}
@@ -353,7 +366,7 @@ def build_stylesheet() -> str:
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
         border-radius: 6px;
-        padding: 6px;
+        padding: 8px;
     }}
 
     /* -- Combo boxes -- */
@@ -362,28 +375,32 @@ def build_stylesheet() -> str:
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
         border-radius: 6px;
-        padding: 5px 10px;
-        min-height: 22px;
+        padding: 6px 10px;
+        min-height: 24px;
     }}
     QComboBox:focus {{
         border-color: {BORDER_FOCUS};
     }}
+    QComboBox:disabled {{
+        color: {TEXT_MUTED};
+        opacity: {disabled_opacity};
+    }}
     QComboBox::drop-down {{
         border: none;
-        width: 22px;
+        width: 24px;
     }}
     QComboBox::down-arrow {{
         image: none;
         border-left: 4px solid transparent;
         border-right: 4px solid transparent;
         border-top: 5px solid {TEXT_SECONDARY};
-        margin-right: 6px;
+        margin-right: 8px;
     }}
     QComboBox QAbstractItemView {{
         background-color: {BG_PANEL};
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
-        border-radius: 4px;
+        border-radius: 6px;
         selection-background-color: {SELECTION_BG};
         selection-color: {SELECTION_TEXT};
         outline: none;
@@ -391,7 +408,7 @@ def build_stylesheet() -> str:
 
     /* -- Checkboxes -- */
     QCheckBox {{
-        spacing: 6px;
+        spacing: 8px;
     }}
     QCheckBox::indicator {{
         width: 16px;
@@ -399,6 +416,9 @@ def build_stylesheet() -> str:
         border: 1px solid {BORDER};
         border-radius: 4px;
         background-color: {BG_INPUT};
+    }}
+    QCheckBox::indicator:hover {{
+        border-color: {ACCENT_DIM};
     }}
     QCheckBox::indicator:checked {{
         background-color: {ACCENT};
@@ -412,11 +432,11 @@ def build_stylesheet() -> str:
         border: 1px solid {BORDER};
         border-radius: 6px;
         outline: none;
-        padding: 2px;
+        padding: 4px;
     }}
     QListWidget::item {{
-        padding: 4px 10px;
-        border-radius: 4px;
+        padding: 6px 10px;
+        border-radius: 6px;
         margin: 1px 2px;
     }}
     QListWidget::item:selected {{
@@ -437,7 +457,7 @@ def build_stylesheet() -> str:
         outline: none;
     }}
     QTableWidget::item {{
-        padding: 5px;
+        padding: 6px 8px;
     }}
     QTableWidget::item:selected {{
         background-color: {SELECTION_BG};
@@ -449,7 +469,7 @@ def build_stylesheet() -> str:
         border: none;
         border-bottom: 1px solid {BORDER};
         border-right: 1px solid {BORDER};
-        padding: 6px 10px;
+        padding: 8px 10px;
         font-weight: bold;
     }}
 
@@ -467,7 +487,7 @@ def build_stylesheet() -> str:
     QScrollBar::handle:vertical {{
         background-color: {SCROLLBAR_HANDLE};
         border-radius: 4px;
-        min-height: 30px;
+        min-height: 32px;
     }}
     QScrollBar::handle:vertical:hover {{
         background-color: {SCROLLBAR_HOVER};
@@ -483,7 +503,7 @@ def build_stylesheet() -> str:
     QScrollBar::handle:horizontal {{
         background-color: {SCROLLBAR_HANDLE};
         border-radius: 4px;
-        min-width: 30px;
+        min-width: 32px;
     }}
     QScrollBar::handle:horizontal:hover {{
         background-color: {SCROLLBAR_HOVER};
@@ -501,11 +521,11 @@ def build_stylesheet() -> str:
         background-color: {BG_SIDEBAR};
         color: {TEXT_PRIMARY};
         border-bottom: 1px solid {BORDER};
-        padding: 2px;
+        padding: 2px 4px;
     }}
     QMenuBar::item {{
-        padding: 5px 12px;
-        border-radius: 4px;
+        padding: 6px 12px;
+        border-radius: 6px;
         background-color: transparent;
     }}
     QMenuBar::item:selected {{
@@ -517,12 +537,12 @@ def build_stylesheet() -> str:
         background-color: {BG_PANEL};
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
-        border-radius: 6px;
+        border-radius: 8px;
         padding: 4px;
     }}
     QMenu::item {{
-        padding: 6px 28px 6px 16px;
-        border-radius: 4px;
+        padding: 8px 24px 8px 16px;
+        border-radius: 6px;
         margin: 1px 4px;
     }}
     QMenu::item:selected {{
@@ -560,8 +580,8 @@ def build_stylesheet() -> str:
         background-color: {BG_PANEL};
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
-        border-radius: 4px;
-        padding: 5px 8px;
+        border-radius: 6px;
+        padding: 6px 10px;
     }}
 
     /* -- Frame cards -- */
@@ -584,7 +604,7 @@ def build_stylesheet() -> str:
     }}
     #appearanceBar QPushButton {{
         border: none;
-        border-radius: 4px;
+        border-radius: 6px;
         padding: 4px 8px;
         margin: 2px;
         font-size: 11px;
@@ -646,11 +666,14 @@ def primary_btn() -> str:
         f"  background-color: {BTN_PRIMARY_BG};"
         f"  color: {BTN_PRIMARY_TEXT};"
         f"  border: 1px solid {BTN_PRIMARY_BORDER};"
-        f"  border-radius: 6px; padding: 7px 22px;"
-        f"  font-weight: bold;"
+        f"  border-radius: 6px; padding: 8px 24px;"
+        f"  font-weight: bold; font-size: 13px;"
         f"}}"
         f"QPushButton:hover {{"
         f"  background-color: {BTN_PRIMARY_HOVER};"
+        f"}}"
+        f"QPushButton:disabled {{"
+        f"  opacity: 0.5;"
         f"}}"
     )
 
@@ -671,16 +694,33 @@ def hero_card_style() -> str:
 
 def eyebrow() -> str:
     return (
-        f"color: {TEXT_MUTED}; font-size: 11px;"
-        f" letter-spacing: 1px; text-transform: uppercase;"
+        f"color: {TEXT_MUTED}; font-size: 10px;"
+        f" letter-spacing: 1.5px; text-transform: uppercase;"
+        f" font-weight: bold;"
     )
 
 
 def small_btn() -> str:
     return (
         f"QPushButton {{ background: transparent; color: {TEXT_SECONDARY};"
-        f" border: 1px solid {BORDER}; border-radius: 5px;"
-        f" padding: 3px 10px; font-size: 11px; }}"
+        f" border: 1px solid {BORDER}; border-radius: 6px;"
+        f" padding: 4px 12px; font-size: 11px; }}"
         f"QPushButton:hover {{ background: {BG_HOVER};"
         f" color: {TEXT_PRIMARY}; }}"
     )
+
+
+def apply_card_shadow(widget) -> None:
+    """Apply a subtle drop shadow to a card widget."""
+    from PySide6.QtWidgets import QGraphicsDropShadowEffect
+    from PySide6.QtGui import QColor
+    effect = QGraphicsDropShadowEffect(widget)
+    if _is_light():
+        effect.setColor(QColor(0, 0, 0, 18))
+        effect.setBlurRadius(16)
+        effect.setOffset(0, 2)
+    else:
+        effect.setColor(QColor(0, 0, 0, 50))
+        effect.setBlurRadius(12)
+        effect.setOffset(0, 2)
+    widget.setGraphicsEffect(effect)

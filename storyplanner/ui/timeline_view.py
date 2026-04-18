@@ -351,8 +351,8 @@ class TimelineView(QWidget):
         card.setProperty("base_style", base_style)
 
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(12, 10, 12, 10)
-        card_layout.setSpacing(5)
+        card_layout.setContentsMargins(16, 12, 16, 12)
+        card_layout.setSpacing(6)
 
         title_label = QLabel(_truncate(scene.title, TITLE_MAX_CHARS))
         title_font = QFont()

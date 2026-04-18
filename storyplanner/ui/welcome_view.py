@@ -24,7 +24,7 @@ class WelcomeView(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(48, 48, 48, 48)
-        layout.setSpacing(12)
+        layout.setSpacing(16)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         heading = QLabel("Welcome to Logosforge")

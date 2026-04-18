@@ -46,7 +46,7 @@ class ProjectsView(QWidget):
 
         self._container = QWidget()
         self._layout = QVBoxLayout(self._container)
-        self._layout.setContentsMargins(28, 24, 28, 24)
+        self._layout.setContentsMargins(32, 32, 32, 32)
         self._layout.setSpacing(16)
         self._layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         scroll.setWidget(self._container)
@@ -106,13 +106,14 @@ class ProjectsView(QWidget):
         card = QFrame()
         card.setObjectName("projCard")
         card.setStyleSheet(theme.card_style("projCard"))
+        theme.apply_card_shadow(card)
 
         row = QHBoxLayout(card)
-        row.setContentsMargins(16, 12, 16, 12)
-        row.setSpacing(12)
+        row.setContentsMargins(16, 16, 16, 16)
+        row.setSpacing(16)
 
         info = QVBoxLayout()
-        info.setSpacing(2)
+        info.setSpacing(4)
 
         name = QLabel(Path(path).name)
         name_font = QFont()
@@ -150,10 +151,11 @@ class ProjectsView(QWidget):
         card = QFrame()
         card.setObjectName("projCard")
         card.setStyleSheet(theme.card_style("projCard"))
+        theme.apply_card_shadow(card)
 
         inner = QVBoxLayout(card)
-        inner.setContentsMargins(24, 22, 24, 22)
-        inner.setSpacing(10)
+        inner.setContentsMargins(24, 24, 24, 24)
+        inner.setSpacing(16)
 
         msg = QLabel("No projects found.")
         msg_font = QFont()

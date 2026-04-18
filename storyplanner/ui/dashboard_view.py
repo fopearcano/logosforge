@@ -47,8 +47,8 @@ class DashboardView(QWidget):
 
         self._container = QWidget()
         self._layout = QVBoxLayout(self._container)
-        self._layout.setContentsMargins(28, 24, 28, 24)
-        self._layout.setSpacing(20)
+        self._layout.setContentsMargins(32, 32, 32, 32)
+        self._layout.setSpacing(24)
         self._layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         scroll.setWidget(self._container)
 
@@ -123,7 +123,7 @@ class DashboardView(QWidget):
 
     def _add_header(self, project) -> None:
         box = QVBoxLayout()
-        box.setSpacing(2)
+        box.setSpacing(4)
 
         title_text = project.title if project else "Untitled Project"
         title = QLabel(title_text)
@@ -149,9 +149,10 @@ class DashboardView(QWidget):
 
     def _add_empty_state(self) -> None:
         card = self._make_card()
+        theme.apply_card_shadow(card)
         inner = QVBoxLayout(card)
-        inner.setContentsMargins(24, 22, 24, 22)
-        inner.setSpacing(10)
+        inner.setContentsMargins(24, 24, 24, 24)
+        inner.setSpacing(16)
 
         heading = QLabel("Your story starts here")
         heading_font = QFont()
@@ -228,9 +229,10 @@ class DashboardView(QWidget):
         card = QFrame()
         card.setObjectName("heroCard")
         card.setStyleSheet(theme.hero_card_style())
+        theme.apply_card_shadow(card)
         inner = QVBoxLayout(card)
-        inner.setContentsMargins(24, 20, 24, 20)
-        inner.setSpacing(10)
+        inner.setContentsMargins(28, 24, 28, 24)
+        inner.setSpacing(12)
 
         eyebrow = QLabel("Continue writing")
         eyebrow.setStyleSheet(theme.eyebrow())
@@ -239,7 +241,7 @@ class DashboardView(QWidget):
         title = QLabel(latest.title or "Untitled scene")
         title_font = QFont()
         title_font.setBold(True)
-        title_font.setPointSize(title_font.pointSize() + 3)
+        title_font.setPointSize(title_font.pointSize() + 4)
         title.setFont(title_font)
         title.setWordWrap(True)
         inner.addWidget(title)
@@ -325,6 +327,7 @@ class DashboardView(QWidget):
         card = QFrame()
         card.setObjectName("dashCard")
         card.setStyleSheet(theme.card_style())
+        theme.apply_card_shadow(card)
         return card
 
     def _navigate(self, entity_type: str, entity_id: int) -> None:
