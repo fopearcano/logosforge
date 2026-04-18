@@ -88,6 +88,9 @@ _RESPONSE_STYLE = (
     "}"
 )
 
+SESSION_MEMORY_LIMIT = 3
+SESSION_OUTPUT_PREVIEW_MAX = 100
+
 
 class _Worker(QThread):
     completed = Signal(str)
@@ -124,6 +127,9 @@ class InlineAssistantPanel(QWidget):
         self._get_scene_id = get_scene_id
         self._on_data_changed = on_data_changed
         self._worker: _Worker | None = None
+
+        self._session_memory: list[dict] = []
+        self._pending_action: str = ""
 
         self._sel_start: int | None = None
         self._sel_end: int | None = None
@@ -264,6 +270,9 @@ class InlineAssistantPanel(QWidget):
         self._model_input.setPlaceholderText("default")
         self._model_input.setMaximumWidth(150)
         settings_row.addWidget(self._model_input)
+        self._clear_memory_btn = QPushButton("Clear Memory")
+        self._clear_memory_btn.clicked.connect(self._clear_session_memory)
+        settings_row.addWidget(self._clear_memory_btn)
         settings_row.addStretch()
         layout.addLayout(settings_row)
 
@@ -280,6 +289,29 @@ class InlineAssistantPanel(QWidget):
         if scene_id is None:
             return ""
         return gather_scene_context(self._db, self._project_id, scene_id)
+
+    # -- Session memory -------------------------------------------------------
+
+    def _record_session_entry(self, action: str, output: str) -> None:
+        preview = output[:SESSION_OUTPUT_PREVIEW_MAX]
+        if len(output) > SESSION_OUTPUT_PREVIEW_MAX:
+            preview += "..."
+        self._session_memory.append({"action": action, "output": preview})
+        if len(self._session_memory) > SESSION_MEMORY_LIMIT:
+            self._session_memory = self._session_memory[-SESSION_MEMORY_LIMIT:]
+
+    def _build_session_memory_context(self) -> str:
+        if not self._session_memory:
+            return ""
+        lines = ["[Session Memory]"]
+        for i, entry in enumerate(self._session_memory, 1):
+            lines.append(f"{i}. Action: {entry['action']}")
+            lines.append(f"   Output: {entry['output']}")
+        return "\n".join(lines)
+
+    def _clear_session_memory(self) -> None:
+        self._session_memory.clear()
+        self._response.setPlainText("Session memory cleared.")
 
     # -- Slash commands -------------------------------------------------------
 
@@ -460,8 +492,12 @@ class InlineAssistantPanel(QWidget):
             return
 
         self._close_diff()
+        self._pending_action = action_prompt.split("\n")[0][:80]
 
-        messages = build_messages(action_prompt, scene_ctx)
+        session_ctx = self._build_session_memory_context()
+        messages = build_messages(
+            action_prompt, scene_ctx, story_memory_context=session_ctx,
+        )
         self._set_busy(True)
         self._response.setPlainText("Thinking...")
 
@@ -475,6 +511,9 @@ class InlineAssistantPanel(QWidget):
 
     def _on_completed(self, text: str) -> None:
         self._response.setPlainText(text)
+        if self._pending_action:
+            self._record_session_entry(self._pending_action, text)
+            self._pending_action = ""
         self._set_busy(False)
         self._worker = None
 
@@ -500,6 +539,8 @@ class InlineAssistantPanel(QWidget):
         if text.startswith("No original selection recorded"):
             return None
         if text.startswith("Select text in the editor first"):
+            return None
+        if text == "Session memory cleared.":
             return None
         return text
 
