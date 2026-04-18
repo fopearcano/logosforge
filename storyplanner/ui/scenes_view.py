@@ -103,6 +103,29 @@ class ScenesView(QWidget):
         # -- Right: form -----------------------------------------------------
         right = QVBoxLayout()
 
+        # -- Focus-mode top bar (hidden by default) --------------------------
+        self._focus_top_bar = QWidget()
+        ftb = QHBoxLayout(self._focus_top_bar)
+        ftb.setContentsMargins(0, 0, 0, 10)
+        self._focus_title_label = QLabel("")
+        focus_title_font = QFont()
+        focus_title_font.setBold(True)
+        focus_title_font.setPointSize(focus_title_font.pointSize() + 1)
+        self._focus_title_label.setFont(focus_title_font)
+        self._focus_title_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY};")
+        ftb.addWidget(self._focus_title_label)
+        ftb.addStretch()
+        self._focus_word_label = QLabel("")
+        self._focus_word_label.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: 11px; padding-right: 12px;"
+        )
+        ftb.addWidget(self._focus_word_label)
+        self._focus_exit_btn = QPushButton("Exit Focus")
+        self._focus_exit_btn.clicked.connect(self._exit_focus_mode)
+        ftb.addWidget(self._focus_exit_btn)
+        self._focus_top_bar.setVisible(False)
+        right.addWidget(self._focus_top_bar)
+
         self._form_label = QLabel("New Scene")
         right.addWidget(self._form_label)
 
@@ -297,6 +320,10 @@ class ScenesView(QWidget):
         # Escape exits focus mode
         esc = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
         esc.activated.connect(self._exit_focus_mode)
+
+        # Ctrl/Cmd+Shift+F toggles focus mode
+        focus_shortcut = QShortcut(QKeySequence("Ctrl+Shift+F"), self)
+        focus_shortcut.activated.connect(self.toggle_focus_mode)
 
         self._load_characters()
         self._load_places()
@@ -596,10 +623,10 @@ class ScenesView(QWidget):
     # -- Helpers -------------------------------------------------------------
 
     @staticmethod
-    def _apply_line_spacing(editor: QPlainTextEdit) -> None:
+    def _apply_line_spacing(editor: QPlainTextEdit, percent: int = 165) -> None:
         fmt = QTextBlockFormat()
-        fmt.setLineHeight(165, 1)  # 1 = ProportionalHeight
-        fmt.setBottomMargin(4)
+        fmt.setLineHeight(percent, 1)  # 1 = ProportionalHeight
+        fmt.setBottomMargin(8 if percent >= 200 else 4)
         cursor = editor.textCursor()
         cursor.select(QTextCursor.SelectionType.Document)
         cursor.mergeBlockFormat(fmt)
@@ -670,6 +697,7 @@ class ScenesView(QWidget):
         stats = compute_scene_stats(text)
         if stats["words"] == 0:
             self._stats_label.setText("")
+            self._focus_word_label.setText("")
             return
         pct = round(stats["dialogue_ratio"] * 100)
         parts = [
@@ -681,6 +709,7 @@ class ScenesView(QWidget):
         if stats["hint"]:
             parts.append(stats["hint"])
         self._stats_label.setText("  \u00b7  ".join(parts))
+        self._focus_word_label.setText(f"{stats['words']} words")
 
     # -- Inline assistant --------------------------------------------------------
 
@@ -699,10 +728,20 @@ class ScenesView(QWidget):
         self._form_label.setVisible(not self._focus_mode)
         self._content_label.setVisible(not self._focus_mode)
         self._assist_toggle.setVisible(not self._focus_mode)
+        self._title_input.setVisible(not self._focus_mode)
+        self._stats_label.setVisible(not self._focus_mode)
+        self._focus_btn.setVisible(not self._focus_mode)
+        self._focus_top_bar.setVisible(self._focus_mode)
         if self._focus_mode:
             self._assist_panel.setVisible(False)
+            self._focus_title_label.setText(
+                self._title_input.text().strip() or "Untitled scene"
+            )
         self._content_input.setMaximumWidth(800 if self._focus_mode else 720)
-        self._focus_btn.setText("Exit Focus" if self._focus_mode else "Focus Mode")
+        self._apply_line_spacing(
+            self._content_input, 200 if self._focus_mode else 165
+        )
+        self._update_scene_stats()
         if self._on_focus_mode_changed:
             self._on_focus_mode_changed(self._focus_mode)
 
