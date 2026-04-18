@@ -30,6 +30,7 @@ from storyplanner.ui.act_analysis_view import ActAnalysisView
 from storyplanner.ui.beat_analysis_view import BeatAnalysisView
 from storyplanner.ui.character_arc_view import CharacterArcView
 from storyplanner.ui.characters_view import CharactersView
+from storyplanner.ui.dashboard_view import DashboardView
 from storyplanner.ui.graph_view import GraphView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.outline_view import OutlineView
@@ -73,7 +74,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.setSpacing(1)
 
         self.sidebar_buttons: dict[str, QPushButton] = {}
-        for label in ("Projects", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline", "Writer", "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs", "Search", "Assistant"):
+        for label in ("Projects", "Dashboard", "Characters", "Places", "Notes", "Scenes", "Timeline", "Outline", "Writer", "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs", "Search", "Assistant"):
             btn = QPushButton(label)
             sidebar_layout.addWidget(btn)
             self.sidebar_buttons[label] = btn
@@ -91,6 +92,7 @@ class MainWindow(QMainWindow):
         self._export_btn.clicked.connect(self._on_export)
 
         # Connect sidebar buttons
+        self.sidebar_buttons["Dashboard"].clicked.connect(self._show_dashboard)
         self.sidebar_buttons["Characters"].clicked.connect(self._show_characters)
         self.sidebar_buttons["Places"].clicked.connect(self._show_places)
         self.sidebar_buttons["Notes"].clicked.connect(self._show_notes)
@@ -126,6 +128,14 @@ class MainWindow(QMainWindow):
         layout.replaceWidget(self.content_area, widget)
         self.content_area.deleteLater()
         self.content_area = widget
+
+    def _show_dashboard(self) -> None:
+        self._set_content(
+            DashboardView(
+                self._db, self._project_id,
+                on_navigate=self._on_link_navigated,
+            )
+        )
 
     def _show_characters(self) -> None:
         self._set_content(
