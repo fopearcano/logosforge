@@ -86,6 +86,8 @@ class MainWindow(QMainWindow):
         sidebar_layout.setSpacing(0)
 
         self._sidebar_collapsed = False
+        self._assistant_user_visible = False
+        self._layout_tier: str | None = None
         self._sidebar_icons = {
             "Projects": "\U0001F4C1",
             "Dashboard": "\U0001F3E0",
@@ -359,12 +361,13 @@ class MainWindow(QMainWindow):
         )
 
     def _toggle_assistant(self) -> None:
-        visible = self._assistant_panel.isVisible()
-        if not visible:
+        self._assistant_user_visible = not self._assistant_panel.isVisible()
+        if self._assistant_user_visible:
             self._assistant_panel.refresh_scenes()
-        self._assistant_panel.setVisible(not visible)
+        self._assistant_panel.setVisible(self._assistant_user_visible)
 
     def _hide_assistant(self) -> None:
+        self._assistant_user_visible = False
         self._assistant_panel.setVisible(False)
 
     # -- Sidebar collapse/expand ---------------------------------------------
@@ -425,8 +428,31 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        if event.size().width() < 750 and not self._sidebar_collapsed:
+        self._apply_layout_for_width(event.size().width())
+
+    def _apply_layout_for_width(self, w: int) -> None:
+        if w >= 1400:
+            tier = "wide"
+        elif w >= 1000:
+            tier = "medium"
+        else:
+            tier = "narrow"
+
+        if tier == self._layout_tier:
+            return
+        self._layout_tier = tier
+
+        if tier == "wide":
+            self._set_sidebar_collapsed(False)
+            if self._assistant_user_visible:
+                self._assistant_panel.setVisible(True)
+        elif tier == "medium":
             self._set_sidebar_collapsed(True)
+            if self._assistant_user_visible:
+                self._assistant_panel.setVisible(True)
+        else:
+            self._set_sidebar_collapsed(True)
+            self._assistant_panel.setVisible(False)
 
     def _show_search(self) -> None:
         self._set_content(
@@ -682,9 +708,13 @@ class MainWindow(QMainWindow):
         self._update_title()
 
     def _on_focus_mode_changed(self, active: bool) -> None:
-        self._sidebar.setVisible(not active)
         if active:
+            self._sidebar.setVisible(False)
             self._assistant_panel.setVisible(False)
+        else:
+            self._sidebar.setVisible(True)
+            self._layout_tier = None
+            self._apply_layout_for_width(self.width())
 
     def _mark_clean(self) -> None:
         self._dirty = False
