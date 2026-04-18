@@ -3,6 +3,8 @@
 from storyplanner.db import Database
 
 CONTENT_MAX_CHARS = 2000
+RECENT_STATES_LIMIT = 2
+DESCRIPTION_MAX_CHARS = 150
 
 
 def _truncate(text: str, max_chars: int = CONTENT_MAX_CHARS) -> str:
@@ -21,14 +23,17 @@ def gather_scene_context(
         return ""
 
     scene_section = _build_scene_section(scene)
-    char_section = _build_character_section(db, project_id, scene_id)
+    memory_section = _build_character_memory_section(db, project_id, scene_id)
+    places_section = _build_places_section(db, project_id, scene_id)
     position_section = _build_position_section(db, project_id, scene_id)
 
     sections: list[str] = []
     if scene_section:
         sections.append(f"[Scene Context]\n{scene_section}")
-    if char_section:
-        sections.append(f"[Character Context]\n{char_section}")
+    if memory_section:
+        sections.append(f"[Character Memory]\n{memory_section}")
+    if places_section:
+        sections.append(f"[Places]\n{places_section}")
     if position_section:
         sections.append(f"[Story Position]\n{position_section}")
 
@@ -79,40 +84,63 @@ def _build_scene_section(scene) -> str:
     return "\n".join(parts)
 
 
-def _build_character_section(
+def _build_character_memory_section(
     db: Database, project_id: int, scene_id: int,
 ) -> str:
-    char_map = {c.id: c for c in db.get_all_characters(project_id)}
-    place_map = {p.id: p for p in db.get_all_places(project_id)}
-
     char_ids = db.get_scene_character_ids(scene_id)
-    place_ids = db.get_scene_place_ids(scene_id)
-    states = db.get_scene_character_states(scene_id)
+    if not char_ids:
+        return ""
 
-    state_by_char: dict[int, str] = {}
-    for cid, state in states:
-        if cid in char_map:
-            state_by_char[cid] = state
+    char_map = {c.id: c for c in db.get_all_characters(project_id)}
+    current_states = dict(db.get_scene_character_states(scene_id))
 
-    parts: list[str] = []
+    blocks: list[str] = []
     for cid in char_ids:
         if cid not in char_map:
             continue
         char = char_map[cid]
-        line = char.name
+        block = [char.name]
         if char.description:
-            line += f" — {char.description[:100]}"
-        parts.append(line)
-        if cid in state_by_char:
-            parts.append(f"  State in this scene: {state_by_char[cid]}")
+            block.append(
+                f"  Description: {char.description[:DESCRIPTION_MAX_CHARS]}"
+            )
+        current = current_states.get(cid)
+        if current:
+            block.append(f"  Current state: {current}")
 
-    place_names = [
-        place_map[pid].name for pid in place_ids if pid in place_map
-    ]
-    if place_names:
-        parts.append(f"Places: {', '.join(place_names)}")
+        prior = _recent_prior_states(db, project_id, cid, scene_id)
+        if prior:
+            block.append(f"  Recent progression: {' → '.join(prior)}")
 
-    return "\n".join(parts)
+        blocks.append("\n".join(block))
+
+    return "\n\n".join(blocks)
+
+
+def _recent_prior_states(
+    db: Database, project_id: int, character_id: int, scene_id: int,
+) -> list[str]:
+    arc = db.get_character_arc(project_id, character_id)
+    current_idx = None
+    for i, (sid, *_rest) in enumerate(arc):
+        if sid == scene_id:
+            current_idx = i
+            break
+    prior_entries = arc[:current_idx] if current_idx is not None else arc
+    return [state for _sid, _title, _pos, state in prior_entries[-RECENT_STATES_LIMIT:]]
+
+
+def _build_places_section(
+    db: Database, project_id: int, scene_id: int,
+) -> str:
+    place_ids = db.get_scene_place_ids(scene_id)
+    if not place_ids:
+        return ""
+    place_map = {p.id: p for p in db.get_all_places(project_id)}
+    names = [place_map[pid].name for pid in place_ids if pid in place_map]
+    if not names:
+        return ""
+    return ", ".join(names)
 
 
 def _build_position_section(
