@@ -37,6 +37,7 @@ from storyplanner.ui.graph_view import GraphView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.outline_view import OutlineView
 from storyplanner.ui.places_view import PlacesView
+from storyplanner.ui.projects_view import ProjectsView
 from storyplanner.ui.scenes_view import ScenesView
 from storyplanner.ui.search_view import SearchView
 from storyplanner.ui.structure_view import StructureView
@@ -96,6 +97,7 @@ class MainWindow(QMainWindow):
         self._export_btn.clicked.connect(self._on_export)
 
         # Connect sidebar buttons
+        self.sidebar_buttons["Projects"].clicked.connect(self._show_projects)
         self.sidebar_buttons["Dashboard"].clicked.connect(self._show_dashboard)
         self.sidebar_buttons["Characters"].clicked.connect(self._show_characters)
         self.sidebar_buttons["Places"].clicked.connect(self._show_places)
@@ -145,6 +147,14 @@ class MainWindow(QMainWindow):
         preferences.set_flag("has_seen_onboarding", True)
         self._on_data_changed()
         self._open_scene_in_editor(scene.id)
+
+    def _show_projects(self) -> None:
+        self._set_content(
+            ProjectsView(
+                on_open_file=self._open_file,
+                on_save_as=self._on_save_as,
+            )
+        )
 
     def _show_dashboard(self) -> None:
         self._set_content(
