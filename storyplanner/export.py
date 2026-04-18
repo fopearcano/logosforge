@@ -1,4 +1,4 @@
-"""Export project data to JSON, Markdown, or CSV."""
+"""Export project data to JSON, Markdown, CSV, or DOCX."""
 
 import csv
 import io
@@ -321,6 +321,95 @@ def export_screenplay(db: Database, project_id: int) -> str:
         lines.append("")
 
     return "\n".join(lines)
+
+
+def export_docx_manuscript(db: Database, project_id: int, path: str) -> None:
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt
+
+    data = _gather_project_data(db, project_id)
+    doc = Document()
+
+    style = doc.styles["Normal"]
+    font = style.font
+    font.name = "Times New Roman"
+    font.size = Pt(12)
+    pf = style.paragraph_format
+    pf.space_after = Pt(6)
+    pf.line_spacing = 1.15
+
+    title_text = data["project"]["title"]
+    title_para = doc.add_paragraph()
+    title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    title_run = title_para.add_run(title_text)
+    title_run.bold = True
+    title_run.font.size = Pt(24)
+    title_run.font.name = "Times New Roman"
+    title_para.paragraph_format.space_after = Pt(0)
+    doc.add_page_break()
+
+    if not data["scenes"]:
+        doc.add_paragraph("No scenes.")
+        doc.save(path)
+        return
+
+    chapter_groups: list[tuple[str, list[dict]]] = []
+    current_chapter: str | None = None
+    current_group: list[dict] = []
+
+    for scene in data["scenes"]:
+        chapter = scene["chapter"] if scene["chapter"] else ""
+        if chapter != current_chapter:
+            if current_group:
+                chapter_groups.append((current_chapter or "", current_group))
+            current_chapter = chapter
+            current_group = [scene]
+        else:
+            current_group.append(scene)
+    if current_group:
+        chapter_groups.append((current_chapter or "", current_group))
+
+    chapter_num = 0
+    for chapter_name, group_scenes in chapter_groups:
+        if chapter_name:
+            chapter_num += 1
+            heading = f"Chapter {chapter_num}: {chapter_name}"
+            ch_para = doc.add_paragraph()
+            ch_para.paragraph_format.space_before = Pt(24)
+            ch_run = ch_para.add_run(heading)
+            ch_run.bold = True
+            ch_run.font.size = Pt(16)
+            ch_run.font.name = "Times New Roman"
+
+        for scene in group_scenes:
+            scene_para = doc.add_paragraph()
+            scene_para.paragraph_format.space_before = Pt(12)
+            scene_run = scene_para.add_run(scene["title"])
+            scene_run.italic = True
+            scene_run.font.size = Pt(12)
+            scene_run.font.name = "Times New Roman"
+
+            body = _scene_body(scene)
+            if body:
+                _add_content_paragraphs(doc, body)
+
+    doc.save(path)
+
+
+def _add_content_paragraphs(doc, text: str) -> None:
+    from docx.shared import Pt
+
+    for block in text.split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+        para = doc.add_paragraph()
+        lines = block.split("\n")
+        for i, line in enumerate(lines):
+            if i > 0:
+                para.add_run().add_break()
+            para.add_run(line)
 
 
 def export_manuscript(db: Database, project_id: int) -> str:

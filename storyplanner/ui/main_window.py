@@ -19,6 +19,7 @@ from storyplanner import recent_projects
 from storyplanner.db import Database
 from storyplanner.export import (
     export_csv_scenes,
+    export_docx_manuscript,
     export_json,
     export_manuscript,
     export_markdown,
@@ -316,9 +317,18 @@ class MainWindow(QMainWindow):
             self,
             "Export Project",
             "",
-            "JSON (*.json);;Markdown (*.md);;Screenplay (*.txt);;Manuscript (*.txt);;CSV – Scenes (*.csv)",
+            "JSON (*.json);;Markdown (*.md);;Screenplay (*.txt);;"
+            "Manuscript (*.txt);;DOCX Manuscript (*.docx);;"
+            "CSV – Scenes (*.csv)",
         )
         if not path:
+            return
+
+        if "DOCX" in selected_filter:
+            if not path.endswith(".docx"):
+                path += ".docx"
+            export_docx_manuscript(self._db, self._project_id, path)
+            QMessageBox.information(self, "Export", f"Exported to {path}")
             return
 
         if path.endswith(".csv") or "CSV" in selected_filter:
