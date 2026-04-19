@@ -97,3 +97,16 @@ class SceneCharacterState(SQLModel, table=True):
     scene_id: int = Field(foreign_key="scene.id")
     character_id: int = Field(foreign_key="character.id")
     state: str = ""
+
+
+class PsykeEntry(SQLModel, table=True):
+    """A Story Bible entry (PSYKE system)."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id")
+    name: str
+    entry_type: str = "other"
+    aliases: str = ""
+    notes: str = ""
+    is_global: bool = False
+    created_at: datetime = Field(default_factory=_now)

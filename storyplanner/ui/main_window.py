@@ -43,6 +43,7 @@ from storyplanner.ui.graph_view import GraphView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.outline_view import OutlineView
 from storyplanner.ui.places_view import PlacesView
+from storyplanner.ui.psyke_view import PsykeView
 from storyplanner.ui.projects_view import ProjectsView
 from storyplanner.ui.scenes_view import ScenesView
 from storyplanner.ui.search_view import SearchView
@@ -109,6 +110,7 @@ class MainWindow(QMainWindow):
             "Graph": "\U0001F578",
             "Arcs": "\U0001F4C8",
             "Search": "\U0001F50D",
+            "PSYKE": "\U0001F4D6",
             "Assistant": "\U0001F916",
         }
 
@@ -120,7 +122,7 @@ class MainWindow(QMainWindow):
             "Projects", "Dashboard", "Characters", "Places", "Notes",
             "Scenes", "Timeline", "Outline", "Writer", "Structure",
             "Acts", "Beats", "Tags", "Graph", "Arcs", "Search",
-            "Assistant",
+            "PSYKE", "Assistant",
         ]
         self.sidebar_buttons: dict[str, QPushButton] = {}
         for label in _NAV_LABELS:
@@ -171,6 +173,7 @@ class MainWindow(QMainWindow):
             "Projects", "Dashboard", "Characters", "Places", "Notes",
             "Scenes", "Timeline", "Outline", "Writer", "Structure",
             "Acts", "Beats", "Tags", "Graph", "Arcs", "Search",
+            "PSYKE",
         ]
         _nav_handlers = {
             "Projects": self._show_projects,
@@ -189,6 +192,7 @@ class MainWindow(QMainWindow):
             "Graph": self._show_graph,
             "Arcs": self._show_arcs,
             "Search": self._show_search,
+            "PSYKE": self._show_psyke,
         }
         for label in self._nav_labels:
             btn = self.sidebar_buttons[label]
@@ -470,6 +474,15 @@ class MainWindow(QMainWindow):
             self._set_sidebar_collapsed(True)
             self._assistant_panel.setVisible(False)
 
+    def _show_psyke(self) -> None:
+        self._set_content(
+            PsykeView(
+                self._db,
+                self._project_id,
+                on_data_changed=self._on_data_changed,
+            )
+        )
+
     def _show_search(self) -> None:
         self._set_content(
             SearchView(
@@ -730,6 +743,7 @@ class MainWindow(QMainWindow):
             ("Timeline", self._show_timeline, "Ctrl+3"),
             ("Characters", self._show_characters, "Ctrl+4"),
             ("Notes", self._show_notes, "Ctrl+5"),
+            ("PSYKE", self._show_psyke, "Ctrl+6"),
         ]
         for label, handler, shortcut in nav_items:
             act = QAction(label, self)

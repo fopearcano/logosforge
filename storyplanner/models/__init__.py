@@ -3,6 +3,7 @@ from storyplanner.models.models import (
     Note,
     Place,
     Project,
+    PsykeEntry,
     Scene,
     SceneCharacterLink,
     SceneCharacterState,
@@ -18,4 +19,5 @@ __all__ = [
     "SceneCharacterLink",
     "SceneCharacterState",
     "ScenePlaceLink",
+    "PsykeEntry",
 ]

@@ -1,0 +1,199 @@
+"""PSYKE Story Bible view — list with search/filter and entry editor."""
+
+from collections.abc import Callable
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QPlainTextEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+from storyplanner.db import Database
+
+USER_ROLE = Qt.ItemDataRole.UserRole
+
+ENTRY_TYPES = ["character", "place", "object", "lore", "theme", "other"]
+
+
+class PsykeView(QWidget):
+    def __init__(
+        self,
+        db: Database,
+        project_id: int,
+        on_data_changed: Callable[[], None] | None = None,
+    ) -> None:
+        super().__init__()
+        self._db = db
+        self._project_id = project_id
+        self._on_data_changed = on_data_changed
+        self._selected_id: int | None = None
+
+        root = QHBoxLayout(self)
+
+        # -- Left panel: search + filter + list ------------------------------
+        left = QVBoxLayout()
+        left.addWidget(QLabel("Story Bible"))
+
+        self._search_input = QLineEdit()
+        self._search_input.setPlaceholderText("Search entries...")
+        self._search_input.textChanged.connect(self._apply_filter)
+        left.addWidget(self._search_input)
+
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("Type:"))
+        self._type_filter = QComboBox()
+        self._type_filter.addItem("All", "")
+        for t in ENTRY_TYPES:
+            self._type_filter.addItem(t.capitalize(), t)
+        self._type_filter.currentIndexChanged.connect(self._apply_filter)
+        filter_row.addWidget(self._type_filter)
+        left.addLayout(filter_row)
+
+        self._list = QListWidget()
+        self._list.currentItemChanged.connect(self._on_selected)
+        left.addWidget(self._list)
+
+        root.addLayout(left)
+
+        # -- Right panel: editor ---------------------------------------------
+        right = QVBoxLayout()
+
+        self._form_label = QLabel("New Entry")
+        right.addWidget(self._form_label)
+
+        right.addWidget(QLabel("Name"))
+        self._name_input = QLineEdit()
+        right.addWidget(self._name_input)
+
+        right.addWidget(QLabel("Type"))
+        self._type_combo = QComboBox()
+        for t in ENTRY_TYPES:
+            self._type_combo.addItem(t.capitalize(), t)
+        right.addWidget(self._type_combo)
+
+        right.addWidget(QLabel("Aliases (comma-separated)"))
+        self._aliases_input = QLineEdit()
+        right.addWidget(self._aliases_input)
+
+        right.addWidget(QLabel("Notes"))
+        self._notes_input = QPlainTextEdit()
+        right.addWidget(self._notes_input)
+
+        self._global_check = QCheckBox("Global (visible across projects)")
+        right.addWidget(self._global_check)
+
+        save_btn = QPushButton("Save")
+        save_btn.clicked.connect(self._on_save)
+        right.addWidget(save_btn)
+
+        self._delete_btn = QPushButton("Delete")
+        self._delete_btn.setEnabled(False)
+        self._delete_btn.clicked.connect(self._on_delete)
+        right.addWidget(self._delete_btn)
+
+        new_btn = QPushButton("New Entry")
+        new_btn.clicked.connect(self._clear_form)
+        right.addWidget(new_btn)
+
+        right.addStretch()
+        root.addLayout(right)
+
+        self._refresh_list()
+
+    def _refresh_list(self) -> None:
+        self._all_entries = self._db.get_all_psyke_entries(self._project_id)
+        self._apply_filter()
+
+    def _apply_filter(self) -> None:
+        query = self._search_input.text().strip().lower()
+        type_filter = self._type_filter.currentData()
+
+        self._list.blockSignals(True)
+        self._list.clear()
+        for entry in self._all_entries:
+            if type_filter and entry.entry_type != type_filter:
+                continue
+            if query:
+                searchable = f"{entry.name} {entry.aliases} {entry.notes}".lower()
+                if query not in searchable:
+                    continue
+            label = f"[{entry.entry_type[0].upper()}] {entry.name}"
+            item = QListWidgetItem(label)
+            item.setData(USER_ROLE, entry.id)
+            self._list.addItem(item)
+        self._list.blockSignals(False)
+
+    def _on_selected(self, current: QListWidgetItem | None) -> None:
+        if current is None:
+            return
+        entry = self._db.get_psyke_entry_by_id(current.data(USER_ROLE))
+        if entry is None:
+            return
+        self._selected_id = entry.id
+        self._form_label.setText("Edit Entry")
+        self._delete_btn.setEnabled(True)
+        self._name_input.setText(entry.name)
+        idx = self._type_combo.findData(entry.entry_type)
+        if idx >= 0:
+            self._type_combo.setCurrentIndex(idx)
+        self._aliases_input.setText(entry.aliases)
+        self._notes_input.setPlainText(entry.notes)
+        self._global_check.setChecked(entry.is_global)
+
+    def _on_save(self) -> None:
+        name = self._name_input.text().strip()
+        if not name:
+            return
+        entry_type = self._type_combo.currentData() or "other"
+        aliases = self._aliases_input.text().strip()
+        notes = self._notes_input.toPlainText().strip()
+        is_global = self._global_check.isChecked()
+
+        if self._selected_id is not None:
+            self._db.update_psyke_entry(
+                self._selected_id, name, entry_type, aliases, notes, is_global
+            )
+        else:
+            self._db.create_psyke_entry(
+                self._project_id, name, entry_type, aliases, notes, is_global
+            )
+
+        self._clear_form()
+        self._refresh_list()
+        if self._on_data_changed:
+            self._on_data_changed()
+
+    def _on_delete(self) -> None:
+        if self._selected_id is None:
+            return
+        self._db.delete_psyke_entry(self._selected_id)
+        self._clear_form()
+        self._refresh_list()
+        if self._on_data_changed:
+            self._on_data_changed()
+
+    def select_entry(self, entry_id: int) -> None:
+        for i in range(self._list.count()):
+            if self._list.item(i).data(USER_ROLE) == entry_id:
+                self._list.setCurrentRow(i)
+                return
+
+    def _clear_form(self) -> None:
+        self._selected_id = None
+        self._form_label.setText("New Entry")
+        self._delete_btn.setEnabled(False)
+        self._name_input.clear()
+        self._type_combo.setCurrentIndex(0)
+        self._aliases_input.clear()
+        self._notes_input.clear()
+        self._global_check.setChecked(False)
+        self._list.clearSelection()

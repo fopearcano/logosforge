@@ -118,4 +118,18 @@ def import_json(db: Database, data: dict) -> int:
             character_states=character_states,
         )
 
+    # Create PSYKE entries
+    for entry_data in data.get("psyke_entries", []):
+        name = entry_data.get("name", "").strip()
+        if not name:
+            continue
+        db.create_psyke_entry(
+            project_id,
+            name=name,
+            entry_type=entry_data.get("entry_type", "other"),
+            aliases=entry_data.get("aliases", ""),
+            notes=entry_data.get("notes", ""),
+            is_global=entry_data.get("is_global", False),
+        )
+
     return project_id

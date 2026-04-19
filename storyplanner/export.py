@@ -57,6 +57,8 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
             }
         )
 
+    psyke_entries = db.get_all_psyke_entries(project_id)
+
     return {
         "project": {
             "title": project.title if project else "Untitled",
@@ -72,6 +74,16 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
             {"title": n.title, "content": n.content} for n in notes
         ],
         "scenes": scene_list,
+        "psyke_entries": [
+            {
+                "name": e.name,
+                "entry_type": e.entry_type,
+                "aliases": e.aliases,
+                "notes": e.notes,
+                "is_global": e.is_global,
+            }
+            for e in psyke_entries
+        ],
     }
 
 

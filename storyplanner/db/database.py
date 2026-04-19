@@ -18,6 +18,7 @@ from storyplanner.models import (
     Note,
     Place,
     Project,
+    PsykeEntry,
     Scene,
     SceneCharacterLink,
     SceneCharacterState,
@@ -578,6 +579,69 @@ class Database:
                     arc.append((scene.id, scene.title, idx + 1, state))
         return arc
 
+    # -- PSYKE (Story Bible) ------------------------------------------------
+
+    def get_psyke_entry_by_id(self, entry_id: int) -> PsykeEntry | None:
+        with Session(self._engine) as session:
+            return session.get(PsykeEntry, entry_id)
+
+    def get_all_psyke_entries(self, project_id: int) -> list[PsykeEntry]:
+        with Session(self._engine) as session:
+            stmt = select(PsykeEntry).where(
+                PsykeEntry.project_id == project_id
+            )
+            return list(session.exec(stmt).all())
+
+    def create_psyke_entry(
+        self,
+        project_id: int,
+        name: str,
+        entry_type: str = "other",
+        aliases: str = "",
+        notes: str = "",
+        is_global: bool = False,
+    ) -> PsykeEntry:
+        with Session(self._engine) as session:
+            entry = PsykeEntry(
+                project_id=project_id,
+                name=name,
+                entry_type=entry_type,
+                aliases=aliases,
+                notes=notes,
+                is_global=is_global,
+            )
+            session.add(entry)
+            session.commit()
+            session.refresh(entry)
+            return entry
+
+    def update_psyke_entry(
+        self,
+        entry_id: int,
+        name: str,
+        entry_type: str = "other",
+        aliases: str = "",
+        notes: str = "",
+        is_global: bool = False,
+    ) -> PsykeEntry:
+        with Session(self._engine) as session:
+            entry = session.get(PsykeEntry, entry_id)
+            entry.name = name
+            entry.entry_type = entry_type
+            entry.aliases = aliases
+            entry.notes = notes
+            entry.is_global = is_global
+            session.commit()
+            session.refresh(entry)
+            return entry
+
+    def delete_psyke_entry(self, entry_id: int) -> None:
+        with Session(self._engine) as session:
+            entry = session.get(PsykeEntry, entry_id)
+            if entry:
+                session.delete(entry)
+            session.commit()
+
     # -- Search --------------------------------------------------------------
 
     def search_project(
@@ -617,6 +681,13 @@ class Database:
                      "preview": scene.summary,
                      "chapter": scene.chapter, "plotline": scene.plotline,
                      "tags": scene.tags}
+                )
+
+        for entry in self.get_all_psyke_entries(project_id):
+            if self._matches(query_lower, entry.name, entry.aliases, entry.notes):
+                results.append(
+                    {"type": "PSYKE", "id": entry.id, "label": entry.name,
+                     "preview": entry.notes}
                 )
 
         return results
