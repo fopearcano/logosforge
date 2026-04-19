@@ -1,4 +1,4 @@
-"""PSYKE Story Bible view — list with search/filter and entry editor."""
+"""PSYKE Story Bible view — list with search/filter, entry editor, relations, and progressions."""
 
 from collections.abc import Callable
 
@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -64,8 +65,13 @@ class PsykeView(QWidget):
 
         root.addLayout(left)
 
-        # -- Right panel: editor ---------------------------------------------
-        right = QVBoxLayout()
+        # -- Right panel: editor (scrollable) --------------------------------
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        right_widget = QWidget()
+        right = QVBoxLayout(right_widget)
 
         self._form_label = QLabel("New Entry")
         right.addWidget(self._form_label)
@@ -86,28 +92,100 @@ class PsykeView(QWidget):
 
         right.addWidget(QLabel("Notes"))
         self._notes_input = QPlainTextEdit()
+        self._notes_input.setMaximumHeight(120)
         right.addWidget(self._notes_input)
 
         self._global_check = QCheckBox("Global (visible across projects)")
         right.addWidget(self._global_check)
 
+        btn_row = QHBoxLayout()
         save_btn = QPushButton("Save")
         save_btn.clicked.connect(self._on_save)
-        right.addWidget(save_btn)
+        btn_row.addWidget(save_btn)
 
         self._delete_btn = QPushButton("Delete")
         self._delete_btn.setEnabled(False)
         self._delete_btn.clicked.connect(self._on_delete)
-        right.addWidget(self._delete_btn)
+        btn_row.addWidget(self._delete_btn)
 
         new_btn = QPushButton("New Entry")
         new_btn.clicked.connect(self._clear_form)
-        right.addWidget(new_btn)
+        btn_row.addWidget(new_btn)
+        right.addLayout(btn_row)
+
+        # -- Related Entries section -----------------------------------------
+        self._related_section = QWidget()
+        rel_layout = QVBoxLayout(self._related_section)
+        rel_layout.setContentsMargins(0, 8, 0, 0)
+        rel_layout.addWidget(QLabel("Related Entries"))
+
+        add_rel_row = QHBoxLayout()
+        self._related_combo = QComboBox()
+        add_rel_row.addWidget(self._related_combo, stretch=1)
+        add_rel_btn = QPushButton("Add")
+        add_rel_btn.clicked.connect(self._on_add_relation)
+        add_rel_row.addWidget(add_rel_btn)
+        rel_layout.addLayout(add_rel_row)
+
+        self._related_list = QListWidget()
+        self._related_list.setMaximumHeight(100)
+        self._related_list.itemDoubleClicked.connect(self._on_related_clicked)
+        rel_layout.addWidget(self._related_list)
+
+        remove_rel_btn = QPushButton("Remove Selected")
+        remove_rel_btn.clicked.connect(self._on_remove_relation)
+        rel_layout.addWidget(remove_rel_btn)
+
+        self._related_section.setVisible(False)
+        right.addWidget(self._related_section)
+
+        # -- Progressions section --------------------------------------------
+        self._prog_section = QWidget()
+        prog_layout = QVBoxLayout(self._prog_section)
+        prog_layout.setContentsMargins(0, 8, 0, 0)
+        prog_layout.addWidget(QLabel("Progressions"))
+
+        add_prog_row = QHBoxLayout()
+        self._prog_text_input = QLineEdit()
+        self._prog_text_input.setPlaceholderText("Progression note...")
+        add_prog_row.addWidget(self._prog_text_input, stretch=1)
+        prog_layout.addLayout(add_prog_row)
+
+        scene_row = QHBoxLayout()
+        scene_row.addWidget(QLabel("Scene:"))
+        self._prog_scene_combo = QComboBox()
+        scene_row.addWidget(self._prog_scene_combo, stretch=1)
+        add_prog_btn = QPushButton("Add")
+        add_prog_btn.clicked.connect(self._on_add_progression)
+        scene_row.addWidget(add_prog_btn)
+        prog_layout.addLayout(scene_row)
+
+        self._prog_list = QListWidget()
+        self._prog_list.setMaximumHeight(140)
+        self._prog_list.currentItemChanged.connect(self._on_prog_selected)
+        prog_layout.addWidget(self._prog_list)
+
+        prog_btn_row = QHBoxLayout()
+        self._prog_update_btn = QPushButton("Update")
+        self._prog_update_btn.setEnabled(False)
+        self._prog_update_btn.clicked.connect(self._on_update_progression)
+        prog_btn_row.addWidget(self._prog_update_btn)
+        self._prog_delete_btn = QPushButton("Delete")
+        self._prog_delete_btn.setEnabled(False)
+        self._prog_delete_btn.clicked.connect(self._on_delete_progression)
+        prog_btn_row.addWidget(self._prog_delete_btn)
+        prog_layout.addLayout(prog_btn_row)
+
+        self._prog_section.setVisible(False)
+        right.addWidget(self._prog_section)
 
         right.addStretch()
-        root.addLayout(right)
+        scroll.setWidget(right_widget)
+        root.addWidget(scroll)
 
         self._refresh_list()
+
+    # -- List management -----------------------------------------------------
 
     def _refresh_list(self) -> None:
         self._all_entries = self._db.get_all_psyke_entries(self._project_id)
@@ -132,6 +210,8 @@ class PsykeView(QWidget):
             self._list.addItem(item)
         self._list.blockSignals(False)
 
+    # -- Entry selection / form ----------------------------------------------
+
     def _on_selected(self, current: QListWidgetItem | None) -> None:
         if current is None:
             return
@@ -149,6 +229,11 @@ class PsykeView(QWidget):
         self._notes_input.setPlainText(entry.notes)
         self._global_check.setChecked(entry.is_global)
 
+        self._related_section.setVisible(True)
+        self._prog_section.setVisible(True)
+        self._refresh_related()
+        self._refresh_progressions()
+
     def _on_save(self) -> None:
         name = self._name_input.text().strip()
         if not name:
@@ -163,12 +248,19 @@ class PsykeView(QWidget):
                 self._selected_id, name, entry_type, aliases, notes, is_global
             )
         else:
-            self._db.create_psyke_entry(
+            entry = self._db.create_psyke_entry(
                 self._project_id, name, entry_type, aliases, notes, is_global
             )
+            self._selected_id = entry.id
+            self._form_label.setText("Edit Entry")
+            self._delete_btn.setEnabled(True)
+            self._related_section.setVisible(True)
+            self._prog_section.setVisible(True)
+            self._refresh_related()
+            self._refresh_progressions()
 
-        self._clear_form()
         self._refresh_list()
+        self._reselect_current()
         if self._on_data_changed:
             self._on_data_changed()
 
@@ -187,6 +279,10 @@ class PsykeView(QWidget):
                 self._list.setCurrentRow(i)
                 return
 
+    def _reselect_current(self) -> None:
+        if self._selected_id is not None:
+            self.select_entry(self._selected_id)
+
     def _clear_form(self) -> None:
         self._selected_id = None
         self._form_label.setText("New Entry")
@@ -197,3 +293,138 @@ class PsykeView(QWidget):
         self._notes_input.clear()
         self._global_check.setChecked(False)
         self._list.clearSelection()
+        self._related_section.setVisible(False)
+        self._prog_section.setVisible(False)
+
+    # -- Related Entries -----------------------------------------------------
+
+    def _refresh_related(self) -> None:
+        if self._selected_id is None:
+            return
+
+        self._related_combo.clear()
+        self._related_combo.addItem("Select entry...", None)
+        related_ids = {
+            e.id for e in self._db.get_related_psyke_entries(self._selected_id)
+        }
+        for entry in self._all_entries:
+            if entry.id == self._selected_id or entry.id in related_ids:
+                continue
+            self._related_combo.addItem(
+                f"[{entry.entry_type[0].upper()}] {entry.name}", entry.id
+            )
+
+        self._related_list.clear()
+        for entry in self._db.get_related_psyke_entries(self._selected_id):
+            item = QListWidgetItem(f"[{entry.entry_type[0].upper()}] {entry.name}")
+            item.setData(USER_ROLE, entry.id)
+            self._related_list.addItem(item)
+
+    def _on_add_relation(self) -> None:
+        if self._selected_id is None:
+            return
+        related_id = self._related_combo.currentData()
+        if related_id is None:
+            return
+        self._db.add_psyke_relation(self._selected_id, related_id)
+        self._refresh_related()
+        if self._on_data_changed:
+            self._on_data_changed()
+
+    def _on_remove_relation(self) -> None:
+        if self._selected_id is None:
+            return
+        current = self._related_list.currentItem()
+        if current is None:
+            return
+        related_id = current.data(USER_ROLE)
+        self._db.remove_psyke_relation(self._selected_id, related_id)
+        self._refresh_related()
+        if self._on_data_changed:
+            self._on_data_changed()
+
+    def _on_related_clicked(self, item: QListWidgetItem) -> None:
+        entry_id = item.data(USER_ROLE)
+        self.select_entry(entry_id)
+
+    # -- Progressions --------------------------------------------------------
+
+    def _refresh_progressions(self) -> None:
+        if self._selected_id is None:
+            return
+
+        self._prog_scene_combo.clear()
+        self._prog_scene_combo.addItem("None", None)
+        for scene in self._db.get_all_scenes(self._project_id):
+            self._prog_scene_combo.addItem(scene.title, scene.id)
+
+        self._prog_list.clear()
+        for prog in self._db.get_psyke_progressions(self._selected_id):
+            label = prog.text
+            if prog.scene_id:
+                scene = self._db.get_scene_by_id(prog.scene_id)
+                if scene:
+                    label += f"  [{scene.title}]"
+            item = QListWidgetItem(label)
+            item.setData(USER_ROLE, prog.id)
+            self._prog_list.addItem(item)
+
+        self._prog_text_input.clear()
+        self._prog_scene_combo.setCurrentIndex(0)
+        self._prog_update_btn.setEnabled(False)
+        self._prog_delete_btn.setEnabled(False)
+
+    def _on_prog_selected(self, current: QListWidgetItem | None) -> None:
+        if current is None:
+            self._prog_update_btn.setEnabled(False)
+            self._prog_delete_btn.setEnabled(False)
+            return
+        prog_id = current.data(USER_ROLE)
+        prog = self._db.get_psyke_progression_by_id(prog_id)
+        if prog is None:
+            return
+        self._prog_text_input.setText(prog.text)
+        if prog.scene_id:
+            idx = self._prog_scene_combo.findData(prog.scene_id)
+            if idx >= 0:
+                self._prog_scene_combo.setCurrentIndex(idx)
+        else:
+            self._prog_scene_combo.setCurrentIndex(0)
+        self._prog_update_btn.setEnabled(True)
+        self._prog_delete_btn.setEnabled(True)
+
+    def _on_add_progression(self) -> None:
+        if self._selected_id is None:
+            return
+        text = self._prog_text_input.text().strip()
+        if not text:
+            return
+        scene_id = self._prog_scene_combo.currentData()
+        self._db.create_psyke_progression(self._selected_id, text, scene_id=scene_id)
+        self._refresh_progressions()
+        if self._on_data_changed:
+            self._on_data_changed()
+
+    def _on_update_progression(self) -> None:
+        current = self._prog_list.currentItem()
+        if current is None:
+            return
+        prog_id = current.data(USER_ROLE)
+        text = self._prog_text_input.text().strip()
+        if not text:
+            return
+        scene_id = self._prog_scene_combo.currentData()
+        self._db.update_psyke_progression(prog_id, text, scene_id=scene_id)
+        self._refresh_progressions()
+        if self._on_data_changed:
+            self._on_data_changed()
+
+    def _on_delete_progression(self) -> None:
+        current = self._prog_list.currentItem()
+        if current is None:
+            return
+        prog_id = current.data(USER_ROLE)
+        self._db.delete_psyke_progression(prog_id)
+        self._refresh_progressions()
+        if self._on_data_changed:
+            self._on_data_changed()

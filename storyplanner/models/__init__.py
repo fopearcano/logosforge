@@ -4,6 +4,8 @@ from storyplanner.models.models import (
     Place,
     Project,
     PsykeEntry,
+    PsykeProgression,
+    PsykeRelation,
     Scene,
     SceneCharacterLink,
     SceneCharacterState,
@@ -20,4 +22,6 @@ __all__ = [
     "SceneCharacterState",
     "ScenePlaceLink",
     "PsykeEntry",
+    "PsykeRelation",
+    "PsykeProgression",
 ]

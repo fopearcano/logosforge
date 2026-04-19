@@ -118,12 +118,14 @@ def import_json(db: Database, data: dict) -> int:
             character_states=character_states,
         )
 
-    # Create PSYKE entries
-    for entry_data in data.get("psyke_entries", []):
+    # Create PSYKE entries and build name → id mapping
+    psyke_id_by_name: dict[str, int] = {}
+    psyke_raw = data.get("psyke_entries", [])
+    for entry_data in psyke_raw:
         name = entry_data.get("name", "").strip()
         if not name:
             continue
-        db.create_psyke_entry(
+        entry = db.create_psyke_entry(
             project_id,
             name=name,
             entry_type=entry_data.get("entry_type", "other"),
@@ -131,5 +133,30 @@ def import_json(db: Database, data: dict) -> int:
             notes=entry_data.get("notes", ""),
             is_global=entry_data.get("is_global", False),
         )
+        psyke_id_by_name[name] = entry.id
+
+    # Build scene title → id mapping for progression linking
+    scene_id_by_title: dict[str, int] = {}
+    for scene in db.get_all_scenes(project_id):
+        scene_id_by_title[scene.title] = scene.id
+
+    # Restore PSYKE relations and progressions
+    for entry_data in psyke_raw:
+        name = entry_data.get("name", "").strip()
+        if name not in psyke_id_by_name:
+            continue
+        entry_id = psyke_id_by_name[name]
+
+        for related_name in entry_data.get("related_entries", []):
+            if related_name in psyke_id_by_name:
+                db.add_psyke_relation(entry_id, psyke_id_by_name[related_name])
+
+        for prog_data in entry_data.get("progressions", []):
+            text = prog_data.get("text", "").strip()
+            if not text:
+                continue
+            scene_title = prog_data.get("scene_title", "")
+            scene_id = scene_id_by_title.get(scene_title) if scene_title else None
+            db.create_psyke_progression(entry_id, text, scene_id=scene_id)
 
     return project_id

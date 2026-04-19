@@ -58,6 +58,33 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
         )
 
     psyke_entries = db.get_all_psyke_entries(project_id)
+    psyke_name_by_id = {e.id: e.name for e in psyke_entries}
+
+    scenes_all = db.get_all_scenes(project_id)
+    scene_title_by_id = {s.id: s.title for s in scenes_all}
+
+    psyke_list = []
+    for e in psyke_entries:
+        related = db.get_related_psyke_entries(e.id)
+        progressions = db.get_psyke_progressions(e.id)
+        psyke_list.append({
+            "name": e.name,
+            "entry_type": e.entry_type,
+            "aliases": e.aliases,
+            "notes": e.notes,
+            "is_global": e.is_global,
+            "related_entries": [r.name for r in related],
+            "progressions": [
+                {
+                    "text": p.text,
+                    "scene_title": scene_title_by_id.get(p.scene_id, "")
+                    if p.scene_id
+                    else "",
+                    "sort_order": p.sort_order,
+                }
+                for p in progressions
+            ],
+        })
 
     return {
         "project": {
@@ -74,16 +101,7 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
             {"title": n.title, "content": n.content} for n in notes
         ],
         "scenes": scene_list,
-        "psyke_entries": [
-            {
-                "name": e.name,
-                "entry_type": e.entry_type,
-                "aliases": e.aliases,
-                "notes": e.notes,
-                "is_global": e.is_global,
-            }
-            for e in psyke_entries
-        ],
+        "psyke_entries": psyke_list,
     }
 
 

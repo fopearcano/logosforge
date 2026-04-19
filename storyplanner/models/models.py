@@ -110,3 +110,20 @@ class PsykeEntry(SQLModel, table=True):
     notes: str = ""
     is_global: bool = False
     created_at: datetime = Field(default_factory=_now)
+
+
+class PsykeRelation(SQLModel, table=True):
+    """Links two PSYKE entries (bidirectional, stored both ways)."""
+
+    entry_id: int = Field(foreign_key="psykeentry.id", primary_key=True)
+    related_entry_id: int = Field(foreign_key="psykeentry.id", primary_key=True)
+
+
+class PsykeProgression(SQLModel, table=True):
+    """A progression note attached to a PSYKE entry."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    entry_id: int = Field(foreign_key="psykeentry.id")
+    text: str
+    scene_id: Optional[int] = Field(default=None, foreign_key="scene.id")
+    sort_order: int = 0

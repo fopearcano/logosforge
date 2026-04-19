@@ -19,6 +19,8 @@ from storyplanner.models import (
     Place,
     Project,
     PsykeEntry,
+    PsykeProgression,
+    PsykeRelation,
     Scene,
     SceneCharacterLink,
     SceneCharacterState,
@@ -637,9 +639,120 @@ class Database:
 
     def delete_psyke_entry(self, entry_id: int) -> None:
         with Session(self._engine) as session:
+            for rel in session.exec(
+                select(PsykeRelation).where(
+                    (PsykeRelation.entry_id == entry_id)
+                    | (PsykeRelation.related_entry_id == entry_id)
+                )
+            ).all():
+                session.delete(rel)
+            for prog in session.exec(
+                select(PsykeProgression).where(
+                    PsykeProgression.entry_id == entry_id
+                )
+            ).all():
+                session.delete(prog)
             entry = session.get(PsykeEntry, entry_id)
             if entry:
                 session.delete(entry)
+            session.commit()
+
+    # -- PSYKE Relations -----------------------------------------------------
+
+    def get_related_psyke_entries(self, entry_id: int) -> list[PsykeEntry]:
+        with Session(self._engine) as session:
+            stmt = select(PsykeRelation.related_entry_id).where(
+                PsykeRelation.entry_id == entry_id
+            )
+            related_ids = list(session.exec(stmt).all())
+            if not related_ids:
+                return []
+            return list(
+                session.exec(
+                    select(PsykeEntry).where(PsykeEntry.id.in_(related_ids))
+                ).all()
+            )
+
+    def add_psyke_relation(self, entry_id: int, related_entry_id: int) -> None:
+        if entry_id == related_entry_id:
+            return
+        with Session(self._engine) as session:
+            existing = session.get(PsykeRelation, (entry_id, related_entry_id))
+            if existing:
+                return
+            session.add(PsykeRelation(entry_id=entry_id, related_entry_id=related_entry_id))
+            session.add(PsykeRelation(entry_id=related_entry_id, related_entry_id=entry_id))
+            session.commit()
+
+    def remove_psyke_relation(self, entry_id: int, related_entry_id: int) -> None:
+        with Session(self._engine) as session:
+            for a, b in [(entry_id, related_entry_id), (related_entry_id, entry_id)]:
+                rel = session.get(PsykeRelation, (a, b))
+                if rel:
+                    session.delete(rel)
+            session.commit()
+
+    # -- PSYKE Progressions --------------------------------------------------
+
+    def get_psyke_progression_by_id(self, progression_id: int) -> PsykeProgression | None:
+        with Session(self._engine) as session:
+            return session.get(PsykeProgression, progression_id)
+
+    def get_psyke_progressions(self, entry_id: int) -> list[PsykeProgression]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(PsykeProgression)
+                .where(PsykeProgression.entry_id == entry_id)
+                .order_by(PsykeProgression.sort_order, PsykeProgression.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def create_psyke_progression(
+        self,
+        entry_id: int,
+        text: str,
+        scene_id: int | None = None,
+    ) -> PsykeProgression:
+        with Session(self._engine) as session:
+            from sqlalchemy import func
+
+            max_order = session.exec(
+                select(func.max(PsykeProgression.sort_order)).where(
+                    PsykeProgression.entry_id == entry_id
+                )
+            ).one()
+            next_order = (max_order or 0) + 1
+
+            prog = PsykeProgression(
+                entry_id=entry_id,
+                text=text,
+                scene_id=scene_id,
+                sort_order=next_order,
+            )
+            session.add(prog)
+            session.commit()
+            session.refresh(prog)
+            return prog
+
+    def update_psyke_progression(
+        self,
+        progression_id: int,
+        text: str,
+        scene_id: int | None = None,
+    ) -> PsykeProgression:
+        with Session(self._engine) as session:
+            prog = session.get(PsykeProgression, progression_id)
+            prog.text = text
+            prog.scene_id = scene_id
+            session.commit()
+            session.refresh(prog)
+            return prog
+
+    def delete_psyke_progression(self, progression_id: int) -> None:
+        with Session(self._engine) as session:
+            prog = session.get(PsykeProgression, progression_id)
+            if prog:
+                session.delete(prog)
             session.commit()
 
     # -- Search --------------------------------------------------------------
