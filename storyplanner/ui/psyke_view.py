@@ -1,4 +1,4 @@
-"""PSYKE Story Bible view — list with search/filter, entry editor, relations, and progressions."""
+"""PSYKE Story Bible view — list with search/filter, entry editor, relations, progressions, and scene references."""
 
 from collections.abc import Callable
 
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from storyplanner.context_builder import find_psyke_scene_references
 from storyplanner.db import Database
 
 USER_ROLE = Qt.ItemDataRole.UserRole
@@ -31,11 +32,13 @@ class PsykeView(QWidget):
         db: Database,
         project_id: int,
         on_data_changed: Callable[[], None] | None = None,
+        on_open_scene: Callable[[int], None] | None = None,
     ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
         self._on_data_changed = on_data_changed
+        self._on_open_scene = on_open_scene
         self._selected_id: int | None = None
 
         root = QHBoxLayout(self)
@@ -179,6 +182,20 @@ class PsykeView(QWidget):
         self._prog_section.setVisible(False)
         right.addWidget(self._prog_section)
 
+        # -- Scene References section ----------------------------------------
+        self._refs_section = QWidget()
+        refs_layout = QVBoxLayout(self._refs_section)
+        refs_layout.setContentsMargins(0, 8, 0, 0)
+        refs_layout.addWidget(QLabel("Scene References"))
+
+        self._refs_list = QListWidget()
+        self._refs_list.setMaximumHeight(100)
+        self._refs_list.itemDoubleClicked.connect(self._on_ref_clicked)
+        refs_layout.addWidget(self._refs_list)
+
+        self._refs_section.setVisible(False)
+        right.addWidget(self._refs_section)
+
         right.addStretch()
         scroll.setWidget(right_widget)
         root.addWidget(scroll)
@@ -231,8 +248,10 @@ class PsykeView(QWidget):
 
         self._related_section.setVisible(True)
         self._prog_section.setVisible(True)
+        self._refs_section.setVisible(True)
         self._refresh_related()
         self._refresh_progressions()
+        self._refresh_references()
 
     def _on_save(self) -> None:
         name = self._name_input.text().strip()
@@ -295,6 +314,7 @@ class PsykeView(QWidget):
         self._list.clearSelection()
         self._related_section.setVisible(False)
         self._prog_section.setVisible(False)
+        self._refs_section.setVisible(False)
 
     # -- Related Entries -----------------------------------------------------
 
@@ -428,3 +448,22 @@ class PsykeView(QWidget):
         self._refresh_progressions()
         if self._on_data_changed:
             self._on_data_changed()
+
+    # -- Scene References ----------------------------------------------------
+
+    def _refresh_references(self) -> None:
+        if self._selected_id is None:
+            return
+        self._refs_list.clear()
+        refs = find_psyke_scene_references(
+            self._db, self._project_id, self._selected_id,
+        )
+        for scene_id, scene_title in refs:
+            item = QListWidgetItem(scene_title)
+            item.setData(USER_ROLE, scene_id)
+            self._refs_list.addItem(item)
+
+    def _on_ref_clicked(self, item: QListWidgetItem) -> None:
+        scene_id = item.data(USER_ROLE)
+        if self._on_open_scene:
+            self._on_open_scene(scene_id)

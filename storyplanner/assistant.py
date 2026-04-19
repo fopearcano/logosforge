@@ -61,6 +61,7 @@ def build_messages(
     scene_context: str,
     outline_context: str = "",
     story_memory_context: str = "",
+    psyke_context: str = "",
     user_note: str = "",
 ) -> list[dict]:
     system = (
@@ -74,6 +75,9 @@ def build_messages(
     user_parts: list[str] = []
     if story_memory_context:
         user_parts.append(story_memory_context)
+        user_parts.append("")
+    if psyke_context:
+        user_parts.append(psyke_context)
         user_parts.append("")
     if outline_context:
         user_parts.append(outline_context)

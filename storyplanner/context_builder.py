@@ -1,5 +1,7 @@
 """Context Builder — constructs structured prompts from project data."""
 
+import re
+
 from storyplanner.db import Database
 
 CONTENT_MAX_CHARS = 2000
@@ -9,6 +11,12 @@ SURROUNDING_SUMMARY_MAX_CHARS = 200
 PREVIOUS_SCENES_LIMIT = 2
 STORY_ARC_SUMMARY_MAX_CHARS = 200
 TOP_TAGS_LIMIT = 7
+
+PSYKE_GLOBAL_NOTES_MAX = 100
+PSYKE_RELEVANT_NOTES_MAX = 150
+PSYKE_MAX_RELEVANT = 10
+
+_LINK_RE = re.compile(r"\[\[(.+?)\]\]")
 
 
 def _truncate(text: str, max_chars: int = CONTENT_MAX_CHARS) -> str:
@@ -359,3 +367,148 @@ def _build_position_section(
         parts.append(f"Plotline: {scene.plotline}")
 
     return "\n".join(parts)
+
+
+# -- PSYKE Context ----------------------------------------------------------
+
+def gather_psyke_context(
+    db: Database,
+    project_id: int,
+    scene_id: int,
+) -> str:
+    entries = db.get_all_psyke_entries(project_id)
+    if not entries:
+        return ""
+
+    scene = db.get_scene_by_id(scene_id)
+    if scene is None:
+        return ""
+
+    all_scenes = db.get_all_scenes(project_id)
+    scene_order = {s.id: s.sort_order for s in all_scenes}
+    current_order = scene_order.get(scene_id, 0)
+
+    scene_text = _scene_searchable_text(scene)
+
+    global_lines: list[str] = []
+    relevant_lines: list[str] = []
+
+    for entry in entries:
+        if entry.is_global:
+            global_lines.append(_format_psyke_entry(
+                entry, PSYKE_GLOBAL_NOTES_MAX,
+            ))
+        elif _entry_matches_scene(entry, scene_text):
+            if len(relevant_lines) < PSYKE_MAX_RELEVANT:
+                prog = _latest_progression(db, entry.id, current_order, scene_order)
+                relevant_lines.append(_format_psyke_entry(
+                    entry, PSYKE_RELEVANT_NOTES_MAX, prog,
+                ))
+
+    if not global_lines and not relevant_lines:
+        return ""
+
+    parts = ["[PSYKE Context]"]
+    if global_lines:
+        parts.append("")
+        parts.append("Global:")
+        parts.extend(global_lines)
+    if relevant_lines:
+        parts.append("")
+        parts.append("Relevant:")
+        parts.extend(relevant_lines)
+
+    return "\n".join(parts)
+
+
+def _scene_searchable_text(scene) -> str:
+    fields = [
+        scene.content or "",
+        scene.summary or "",
+        scene.synopsis or "",
+        scene.goal or "",
+        scene.conflict or "",
+        scene.outcome or "",
+    ]
+    return "\n".join(fields)
+
+
+def _entry_matches_scene(entry, scene_text: str) -> bool:
+    for match in _LINK_RE.finditer(scene_text):
+        if match.group(1).lower() == entry.name.lower():
+            return True
+
+    if _word_match(entry.name, scene_text):
+        return True
+
+    if entry.aliases:
+        for alias in entry.aliases.split(","):
+            alias = alias.strip()
+            if alias and _word_match(alias, scene_text):
+                return True
+
+    return False
+
+
+def _word_match(term: str, text: str) -> bool:
+    pattern = re.compile(r"\b" + re.escape(term) + r"\b", re.IGNORECASE)
+    return pattern.search(text) is not None
+
+
+def _latest_progression(
+    db: Database,
+    entry_id: int,
+    current_order: int,
+    scene_order: dict[int, int],
+) -> str:
+    progs = db.get_psyke_progressions(entry_id)
+    if not progs:
+        return ""
+
+    best = None
+    for p in progs:
+        if p.scene_id and p.scene_id in scene_order:
+            if scene_order[p.scene_id] <= current_order:
+                best = p
+        elif best is None:
+            best = p
+
+    if best is None:
+        best = progs[-1]
+
+    return best.text
+
+
+def _format_psyke_entry(
+    entry, max_notes: int, progression: str = "",
+) -> str:
+    line = f"- {entry.name} ({entry.entry_type})"
+    if entry.notes:
+        short = entry.notes.split("\n")[0]
+        if len(short) > max_notes:
+            short = short[:max_notes].rsplit(" ", 1)[0] + "..."
+        line += f": {short}"
+    if progression:
+        prog_short = progression
+        if len(prog_short) > 80:
+            prog_short = prog_short[:80].rsplit(" ", 1)[0] + "..."
+        line += f" | Latest: {prog_short}"
+    return line
+
+
+def find_psyke_scene_references(
+    db: Database,
+    project_id: int,
+    entry_id: int,
+) -> list[tuple[int, str]]:
+    entry = db.get_psyke_entry_by_id(entry_id)
+    if entry is None:
+        return []
+
+    results: list[tuple[int, str]] = []
+    for scene in db.get_all_scenes(project_id):
+        scene_text = _scene_searchable_text(scene)
+        if _entry_matches_scene(entry, scene_text):
+            results.append((scene.id, scene.title))
+
+    return results

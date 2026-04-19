@@ -24,6 +24,7 @@ from storyplanner.assistant import (
 )
 from storyplanner.context_builder import (
     gather_outline_context,
+    gather_psyke_context,
     gather_scene_context,
     gather_story_memory,
 )
@@ -230,6 +231,9 @@ class InlineAssistantPanel(QWidget):
 
         self._include_story_memory = QCheckBox("Include story memory")
         ctx_layout.addWidget(self._include_story_memory)
+
+        self._include_psyke = QCheckBox("Include Story Bible")
+        ctx_layout.addWidget(self._include_psyke)
 
         self._ctx_toggle = QCheckBox("Show context sent to model")
         self._ctx_toggle.toggled.connect(self._on_ctx_toggle)
@@ -613,6 +617,13 @@ class InlineAssistantPanel(QWidget):
         if self._include_story_memory.isChecked():
             story_mem = gather_story_memory(self._db, self._project_id)
 
+        psyke_ctx = ""
+        scene_id = self._get_scene_id()
+        if self._include_psyke.isChecked() and scene_id is not None:
+            psyke_ctx = gather_psyke_context(
+                self._db, self._project_id, scene_id,
+            )
+
         combined_memory = "\n\n".join(
             part for part in [story_mem, session_ctx] if part
         )
@@ -620,6 +631,7 @@ class InlineAssistantPanel(QWidget):
             action_prompt, scene_ctx,
             outline_context=outline_ctx,
             story_memory_context=combined_memory,
+            psyke_context=psyke_ctx,
         )
 
         ctx_parts = [f"--- Scene Context ---\n{scene_ctx}"]
@@ -627,6 +639,8 @@ class InlineAssistantPanel(QWidget):
             ctx_parts.append(f"--- Outline ---\n{outline_ctx}")
         if story_mem:
             ctx_parts.append(f"--- Story Memory ---\n{story_mem}")
+        if psyke_ctx:
+            ctx_parts.append(f"--- Story Bible ---\n{psyke_ctx}")
         if session_ctx:
             ctx_parts.append(f"--- Session Memory ---\n{session_ctx}")
         ctx_parts.append(f"--- Action ---\n{action_prompt}")

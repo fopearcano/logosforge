@@ -27,6 +27,7 @@ from storyplanner.assistant import (
 )
 from storyplanner.context_builder import (
     gather_outline_context,
+    gather_psyke_context,
     gather_scene_context,
     gather_story_memory,
 )
@@ -199,8 +200,32 @@ class AssistantPanel(QWidget):
         settings_layout.setSpacing(4)
         self._outline_check = QCheckBox("Include story outline")
         self._story_memory_check = QCheckBox("Include story memory")
+        self._psyke_check = QCheckBox("Include Story Bible")
         settings_layout.addWidget(self._outline_check)
         settings_layout.addWidget(self._story_memory_check)
+        settings_layout.addWidget(self._psyke_check)
+
+        self._ctx_toggle = QCheckBox("Show context sent to model")
+        self._ctx_toggle.toggled.connect(self._on_ctx_toggle)
+        settings_layout.addWidget(self._ctx_toggle)
+
+        self._ctx_viewer = QPlainTextEdit()
+        self._ctx_viewer.setReadOnly(True)
+        self._ctx_viewer.setMaximumHeight(140)
+        self._ctx_viewer.setPlaceholderText(
+            "Context will appear here after a request..."
+        )
+        self._ctx_viewer.setStyleSheet(
+            f"QPlainTextEdit {{"
+            f"  background-color: {theme.BG_PANEL};"
+            f"  color: {theme.TEXT_SECONDARY};"
+            f"  border: 1px solid {theme.BORDER};"
+            f"  font-size: 10px; padding: 4px;"
+            f"}}"
+        )
+        self._ctx_viewer.setVisible(False)
+        settings_layout.addWidget(self._ctx_viewer)
+
         self._provider_widget = ProviderSettingsWidget(compact=True)
         settings_layout.addWidget(self._provider_widget)
         self._settings_container.setVisible(False)
@@ -284,6 +309,9 @@ class AssistantPanel(QWidget):
             "\u25bc Settings" if visible else "\u25b6 Settings"
         )
 
+    def _on_ctx_toggle(self, checked: bool) -> None:
+        self._ctx_viewer.setVisible(checked)
+
     # -- Scene loading ---------------------------------------------------------
 
     def _load_scenes(self) -> None:
@@ -309,7 +337,7 @@ class AssistantPanel(QWidget):
 
     # -- Sending requests ------------------------------------------------------
 
-    def _build_context(self, scene_id: int) -> tuple[str, str, str]:
+    def _build_context(self, scene_id: int) -> tuple[str, str, str, str]:
         scene_ctx = gather_scene_context(
             self._db, self._project_id, scene_id,
         )
@@ -323,7 +351,12 @@ class AssistantPanel(QWidget):
             story_memory_ctx = gather_story_memory(
                 self._db, self._project_id,
             )
-        return scene_ctx, outline_ctx, story_memory_ctx
+        psyke_ctx = ""
+        if self._psyke_check.isChecked():
+            psyke_ctx = gather_psyke_context(
+                self._db, self._project_id, scene_id,
+            )
+        return scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx
 
     def _send_preset(self, action_key: str) -> None:
         if self._worker is not None:
@@ -333,8 +366,8 @@ class AssistantPanel(QWidget):
             self._response_output.setPlainText("No scene selected.")
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx = self._build_context(
-            scene_id
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx = (
+            self._build_context(scene_id)
         )
         if not scene_ctx:
             self._response_output.setPlainText("Could not load scene data.")
@@ -345,7 +378,10 @@ class AssistantPanel(QWidget):
 
         messages = build_messages(
             action_prompt, scene_ctx, outline_ctx,
-            story_memory_ctx, user_note,
+            story_memory_ctx, psyke_ctx, user_note,
+        )
+        self._update_ctx_viewer(
+            scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, action_prompt,
         )
         self._start_request(messages)
 
@@ -362,17 +398,34 @@ class AssistantPanel(QWidget):
             self._response_output.setPlainText("No scene selected.")
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx = self._build_context(
-            scene_id
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx = (
+            self._build_context(scene_id)
         )
         if not scene_ctx:
             self._response_output.setPlainText("Could not load scene data.")
             return
 
         messages = build_messages(
-            prompt, scene_ctx, outline_ctx, story_memory_ctx,
+            prompt, scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx,
+        )
+        self._update_ctx_viewer(
+            scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, prompt,
         )
         self._start_request(messages)
+
+    def _update_ctx_viewer(
+        self, scene_ctx: str, outline_ctx: str,
+        story_memory_ctx: str, psyke_ctx: str, action: str,
+    ) -> None:
+        parts = [f"--- Scene Context ---\n{scene_ctx}"]
+        if outline_ctx:
+            parts.append(f"--- Outline ---\n{outline_ctx}")
+        if story_memory_ctx:
+            parts.append(f"--- Story Memory ---\n{story_memory_ctx}")
+        if psyke_ctx:
+            parts.append(f"--- Story Bible ---\n{psyke_ctx}")
+        parts.append(f"--- Action ---\n{action}")
+        self._ctx_viewer.setPlainText("\n\n".join(parts))
 
     def _start_request(self, messages: list[dict]) -> None:
         error = self._provider_widget.validate()
