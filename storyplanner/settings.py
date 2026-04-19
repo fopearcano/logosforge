@@ -15,6 +15,7 @@ DEFAULTS: dict[str, object] = {
     "sidebar_collapsed": False,
     "assistant_open": False,
     "last_project_path": "",
+    "plugin_states": {},
 }
 
 

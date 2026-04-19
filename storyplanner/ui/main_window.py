@@ -32,6 +32,7 @@ from storyplanner.export import (
     export_screenplay,
 )
 from storyplanner.import_data import import_json, validate_import_data
+from storyplanner.plugin_manager import get_plugin_manager
 from storyplanner.ui.assistant_view import AssistantPanel
 from storyplanner.ui.settings_dialog import SettingsDialog
 from storyplanner.ui.act_analysis_view import ActAnalysisView
@@ -43,6 +44,7 @@ from storyplanner.ui.graph_view import GraphView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.outline_view import OutlineView
 from storyplanner.ui.places_view import PlacesView
+from storyplanner.ui.plugins_view import PluginsView
 from storyplanner.ui.psyke_view import PsykeView
 from storyplanner.ui.projects_view import ProjectsView
 from storyplanner.ui.scenes_view import ScenesView
@@ -111,6 +113,7 @@ class MainWindow(QMainWindow):
             "Arcs": "\U0001F4C8",
             "Search": "\U0001F50D",
             "PSYKE": "\U0001F4D6",
+            "Plugins": "\U0001F9E9",
             "Assistant": "\U0001F916",
         }
 
@@ -122,7 +125,7 @@ class MainWindow(QMainWindow):
             "Projects", "Dashboard", "Characters", "Places", "Notes",
             "Scenes", "Timeline", "Outline", "Writer", "Structure",
             "Acts", "Beats", "Tags", "Graph", "Arcs", "Search",
-            "PSYKE", "Assistant",
+            "PSYKE", "Plugins", "Assistant",
         ]
         self.sidebar_buttons: dict[str, QPushButton] = {}
         for label in _NAV_LABELS:
@@ -173,7 +176,7 @@ class MainWindow(QMainWindow):
             "Projects", "Dashboard", "Characters", "Places", "Notes",
             "Scenes", "Timeline", "Outline", "Writer", "Structure",
             "Acts", "Beats", "Tags", "Graph", "Arcs", "Search",
-            "PSYKE",
+            "PSYKE", "Plugins",
         ]
         _nav_handlers = {
             "Projects": self._show_projects,
@@ -193,6 +196,7 @@ class MainWindow(QMainWindow):
             "Arcs": self._show_arcs,
             "Search": self._show_search,
             "PSYKE": self._show_psyke,
+            "Plugins": self._show_plugins,
         }
         for label in self._nav_labels:
             btn = self.sidebar_buttons[label]
@@ -473,6 +477,9 @@ class MainWindow(QMainWindow):
         else:
             self._set_sidebar_collapsed(True)
             self._assistant_panel.setVisible(False)
+
+    def _show_plugins(self) -> None:
+        self._set_content(PluginsView())
 
     def _show_psyke(self) -> None:
         self._set_content(
@@ -769,6 +776,10 @@ class MainWindow(QMainWindow):
         open_assistant_action.triggered.connect(self._toggle_assistant)
         ai_menu.addAction(open_assistant_action)
 
+        # -- Plugins ------------------------------------------------------------
+        self._plugins_menu = menu_bar.addMenu("Plugins")
+        self._refresh_plugins_menu()
+
         # -- Help ---------------------------------------------------------------
         help_menu = menu_bar.addMenu("Help")
 
@@ -783,6 +794,22 @@ class MainWindow(QMainWindow):
         # -- Global QShortcuts (no menu item) -----------------------------------
         generate_shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
         generate_shortcut.activated.connect(self._menu_generate)
+
+    def _refresh_plugins_menu(self) -> None:
+        self._plugins_menu.clear()
+        pm = get_plugin_manager()
+        actions = pm.get_all_menu_actions()
+        if actions:
+            for name, callback in actions:
+                act = QAction(name, self)
+                act.triggered.connect(lambda _, cb=callback: cb())
+                self._plugins_menu.addAction(act)
+            self._plugins_menu.addSeparator()
+        manage_act = QAction("Manage Plugins...", self)
+        manage_act.triggered.connect(
+            lambda: (self._set_active_section("Plugins"), self._show_plugins())
+        )
+        self._plugins_menu.addAction(manage_act)
 
     def _refresh_recent_menu(self) -> None:
         self._recent_menu.clear()

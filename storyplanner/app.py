@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QApplication
 
 from storyplanner import preferences
 from storyplanner.db import Database
+from storyplanner.plugin_manager import get_plugin_manager
 from storyplanner.settings import get_manager as get_settings
 from storyplanner.ui.main_window import MainWindow
 from storyplanner.ui import theme
@@ -31,10 +32,17 @@ def create_app() -> tuple[QApplication, MainWindow]:
     else:
         project = db.create_project("My Story")
 
+    pm = get_plugin_manager()
+    pm.discover()
+    pm.set_app_context(db, project.id)
+    pm.load_enabled()
+
     window = MainWindow(db, project.id)
 
     last_path = str(mgr.get("last_project_path") or "")
     if last_path:
         window.load_file_quiet(last_path)
+
+    window._refresh_plugins_menu()
 
     return app, window
