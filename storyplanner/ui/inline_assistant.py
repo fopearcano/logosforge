@@ -23,6 +23,7 @@ from storyplanner.assistant import (
     chat_completion,
 )
 from storyplanner.context_builder import (
+    gather_graph_context,
     gather_outline_context,
     gather_psyke_context,
     gather_scene_context,
@@ -695,6 +696,10 @@ class InlineAssistantPanel(QWidget):
                     self._db, self._project_id, scene_id,
                 )
 
+        graph_ctx = ""
+        if scene_id is not None:
+            graph_ctx = gather_graph_context(self._db, self._project_id, scene_id)
+
         combined_memory = "\n\n".join(
             part for part in [story_mem, session_ctx] if part
         )
@@ -703,6 +708,7 @@ class InlineAssistantPanel(QWidget):
             outline_context=outline_ctx,
             story_memory_context=combined_memory,
             psyke_context=psyke_ctx,
+            graph_context=graph_ctx,
         )
 
         ctx_parts = [f"--- Scene Context ---\n{scene_ctx}"]
@@ -712,6 +718,8 @@ class InlineAssistantPanel(QWidget):
             ctx_parts.append(f"--- Story Memory ---\n{story_mem}")
         if psyke_ctx:
             ctx_parts.append(f"--- Story Bible ---\n{psyke_ctx}")
+        if graph_ctx:
+            ctx_parts.append(f"--- Graph Context ---\n{graph_ctx}")
         if orchestration_debug:
             ctx_parts.append(orchestration_debug)
         if session_ctx:

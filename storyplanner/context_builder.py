@@ -553,3 +553,178 @@ def find_psyke_scene_references(
             results.append((scene.id, scene.title))
 
     return results
+
+
+# -- Graph Context -----------------------------------------------------------
+
+GRAPH_DIRECT_MAX = 8
+GRAPH_HIGH_INFLUENCE_MAX = 3
+GRAPH_ISOLATED_MAX = 3
+
+
+def gather_graph_context(
+    db: Database,
+    project_id: int,
+    scene_id: int,
+) -> str:
+    """Build [Graph Context] from narrative graph relationships."""
+    from storyplanner.ui.focus_graph_view import build_graph_data, get_neighborhood
+
+    data = build_graph_data(db, project_id)
+    if not data.nodes:
+        return ""
+
+    scene = db.get_scene_by_id(scene_id)
+    if scene is None:
+        return ""
+
+    focal_id = f"Scene:{scene_id}"
+    if focal_id not in data.nodes:
+        return ""
+
+    direct = get_neighborhood(data, focal_id, hops=1) - {focal_id}
+
+    influence_ranked = sorted(
+        data.nodes.keys(),
+        key=lambda nid: len(data.adjacency.get(nid, set())),
+        reverse=True,
+    )
+
+    isolated = [
+        nid for nid in data.nodes
+        if len(data.adjacency.get(nid, set())) <= 1 and nid != focal_id
+    ]
+
+    char_states: dict[int, str] = {}
+    all_scenes = db.get_all_scenes(project_id)
+    for s in all_scenes:
+        if s.sort_order <= scene.sort_order:
+            for cid, state in db.get_scene_character_states(s.id):
+                char_states[cid] = state
+
+    lines = ["[Graph Context]"]
+    lines.append("")
+
+    focal_node = data.nodes[focal_id]
+    direct_names = []
+    for nid in sorted(direct)[:GRAPH_DIRECT_MAX]:
+        node = data.nodes[nid]
+        label = f"{node.name} ({node.etype.lower()})"
+        if node.etype == "Character":
+            state = char_states.get(node.entity_id)
+            if state:
+                label += f" [{state}]"
+        direct_names.append(label)
+
+    lines.append(f"Current: {focal_node.name}")
+    if direct_names:
+        lines.append(f"Connected to: {', '.join(direct_names)}")
+
+    already_shown = direct | {focal_id}
+    high_influence = []
+    for nid in influence_ranked:
+        if nid in already_shown:
+            continue
+        node = data.nodes[nid]
+        conn_count = len(data.adjacency.get(nid, set()))
+        if conn_count < 2:
+            break
+        high_influence.append(f"{node.name} ({node.etype.lower()}, {conn_count} connections)")
+        already_shown.add(nid)
+        if len(high_influence) >= GRAPH_HIGH_INFLUENCE_MAX:
+            break
+
+    if high_influence:
+        lines.append("")
+        lines.append("High influence:")
+        for item in high_influence:
+            lines.append(f"  - {item}")
+
+    iso_items = []
+    for nid in isolated[:GRAPH_ISOLATED_MAX]:
+        if nid in already_shown:
+            continue
+        node = data.nodes[nid]
+        iso_items.append(f"{node.name} ({node.etype.lower()})")
+
+    if iso_items:
+        lines.append("")
+        lines.append("Weakly connected:")
+        for item in iso_items:
+            lines.append(f"  - {item}")
+
+    return "\n".join(lines)
+
+
+def gather_graph_context_debug(
+    db: Database,
+    project_id: int,
+    scene_id: int,
+) -> list[dict[str, str]]:
+    """Return debug info about which graph nodes were included and why."""
+    from storyplanner.ui.focus_graph_view import build_graph_data, get_neighborhood
+
+    data = build_graph_data(db, project_id)
+    if not data.nodes:
+        return []
+
+    focal_id = f"Scene:{scene_id}"
+    if focal_id not in data.nodes:
+        return []
+
+    direct = get_neighborhood(data, focal_id, hops=1) - {focal_id}
+
+    influence_ranked = sorted(
+        data.nodes.keys(),
+        key=lambda nid: len(data.adjacency.get(nid, set())),
+        reverse=True,
+    )
+
+    isolated = [
+        nid for nid in data.nodes
+        if len(data.adjacency.get(nid, set())) <= 1 and nid != focal_id
+    ]
+
+    entries: list[dict[str, str]] = []
+    entries.append({
+        "node_id": focal_id,
+        "name": data.nodes[focal_id].name,
+        "reason": "focal (current scene)",
+    })
+
+    for nid in sorted(direct)[:GRAPH_DIRECT_MAX]:
+        node = data.nodes[nid]
+        entries.append({
+            "node_id": nid,
+            "name": node.name,
+            "reason": "direct connection (1-hop)",
+        })
+
+    already_shown = direct | {focal_id}
+    for nid in influence_ranked:
+        if nid in already_shown:
+            continue
+        node = data.nodes[nid]
+        conn_count = len(data.adjacency.get(nid, set()))
+        if conn_count < 2:
+            break
+        entries.append({
+            "node_id": nid,
+            "name": node.name,
+            "reason": f"high influence ({conn_count} connections)",
+        })
+        already_shown.add(nid)
+        if len([e for e in entries if "high influence" in e["reason"]]) >= GRAPH_HIGH_INFLUENCE_MAX:
+            break
+
+    for nid in isolated[:GRAPH_ISOLATED_MAX]:
+        if nid in already_shown:
+            continue
+        node = data.nodes[nid]
+        entries.append({
+            "node_id": nid,
+            "name": node.name,
+            "reason": "weakly connected (≤1 link)",
+        })
+
+    return entries
