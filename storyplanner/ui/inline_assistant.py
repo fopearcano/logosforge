@@ -29,6 +29,10 @@ from storyplanner.context_builder import (
     gather_story_memory,
 )
 from storyplanner.db import Database
+from storyplanner.narrative_suggestions import (
+    build_suggestion_messages,
+    format_suggestion_debug,
+)
 from storyplanner.orchestration import (
     format_orchestration_debug,
     orchestrate_psyke_context,
@@ -217,6 +221,19 @@ class InlineAssistantPanel(QWidget):
 
         layout.addSpacing(8)
 
+        # -- Suggest Beats button --------------------------------------------
+        suggest_row = QHBoxLayout()
+        self._suggest_beats_btn = QPushButton("Suggest Beats")
+        self._suggest_beats_btn.setToolTip(
+            "Generate structured narrative direction suggestions"
+        )
+        self._suggest_beats_btn.clicked.connect(self._on_suggest_beats)
+        suggest_row.addWidget(self._suggest_beats_btn)
+        suggest_row.addStretch()
+        layout.addLayout(suggest_row)
+
+        layout.addSpacing(8)
+
         # -- Context section (collapsible, default collapsed) ----------------
         self._ctx_header_btn = QPushButton("\u25b6 Context")
         self._ctx_header_btn.setFlat(True)
@@ -385,7 +402,7 @@ class InlineAssistantPanel(QWidget):
         self._interactive_buttons = [
             self._rewrite_btn, self._expand_btn, self._dialogue_btn,
             self._sel_more_btn, self._run_template_btn,
-            self._generate_btn,
+            self._suggest_beats_btn, self._generate_btn,
             self._replace_btn, self._insert_btn, self._apply_more_btn,
         ]
 
@@ -583,6 +600,44 @@ class InlineAssistantPanel(QWidget):
         if not prompt:
             return
         self._send_request(prompt, action_key=key)
+
+    def _on_suggest_beats(self) -> None:
+        if self._worker is not None:
+            return
+        scene_id = self._get_scene_id()
+        if scene_id is None:
+            self._response.setPlainText("No scene selected.")
+            return
+
+        error = self._provider_widget.validate()
+        if error:
+            self._response.setPlainText(error)
+            return
+
+        messages, ctx = build_suggestion_messages(
+            self._db, self._project_id, scene_id,
+        )
+        if not messages:
+            self._response.setPlainText("Could not build suggestion context.")
+            return
+
+        ctx_parts = []
+        if ctx and ctx.psyke_context:
+            ctx_parts.append(f"--- Story Bible ---\n{ctx.psyke_context}")
+        if ctx:
+            ctx_parts.append(format_suggestion_debug(ctx))
+        self._ctx_viewer.setPlainText("\n\n".join(ctx_parts))
+
+        self._close_diff()
+        self._pending_action = "Suggest Beats"
+        self._set_busy(True)
+        self._response.setPlainText("Generating narrative suggestions...")
+
+        provider = self._provider_widget.get_provider_config()
+        self._worker = _Worker(messages, provider)
+        self._worker.completed.connect(self._on_completed)
+        self._worker.failed.connect(self._on_failed)
+        self._worker.start()
 
     def _on_send(self) -> None:
         prompt = self._prompt.toPlainText().strip()

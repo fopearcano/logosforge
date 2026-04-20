@@ -32,6 +32,10 @@ from storyplanner.context_builder import (
     gather_story_memory,
 )
 from storyplanner.db import Database
+from storyplanner.narrative_suggestions import (
+    build_suggestion_messages,
+    format_suggestion_debug,
+)
 from storyplanner.orchestration import (
     format_orchestration_debug,
     orchestrate_psyke_context,
@@ -166,6 +170,14 @@ class AssistantPanel(QWidget):
             )
             action_row.addWidget(btn)
             self._preset_buttons.append(btn)
+
+        self._suggest_btn = QPushButton("Suggest Beats")
+        self._suggest_btn.setToolTip(
+            "Structured narrative direction suggestions"
+        )
+        self._suggest_btn.clicked.connect(self._on_suggest_beats)
+        action_row.addWidget(self._suggest_btn)
+        self._preset_buttons.append(self._suggest_btn)
 
         self._more_btn = QPushButton("More \u25be")
         more_menu = QMenu(self)
@@ -429,6 +441,32 @@ class AssistantPanel(QWidget):
             scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, prompt,
             orch_debug,
         )
+        self._start_request(messages)
+
+    def _on_suggest_beats(self) -> None:
+        if self._worker is not None:
+            return
+        scene_id = self._scene_combo.currentData()
+        if scene_id is None:
+            self._response_output.setPlainText("No scene selected.")
+            return
+
+        messages, ctx = build_suggestion_messages(
+            self._db, self._project_id, scene_id,
+        )
+        if not messages:
+            self._response_output.setPlainText(
+                "Could not build suggestion context."
+            )
+            return
+
+        if ctx:
+            self._update_ctx_viewer(
+                "", "", "", ctx.psyke_context,
+                "Narrative Beat Suggestions",
+                format_suggestion_debug(ctx),
+            )
+
         self._start_request(messages)
 
     def _update_ctx_viewer(
