@@ -126,62 +126,62 @@ _PALETTES: dict[str, dict[str, str]] = {
     },
 
     "Light (Warm)": {
-        "BG_DARK":       "#f0ebe4",
-        "BG_PANEL":      "#faf7f4",
-        "BG_INPUT":      "#e8e1d8",
-        "BG_SIDEBAR":    "#e3dbd0",
-        "BG_HOVER":      "#d6cbbf",
-        "BG_PRESSED":    "#c9bcad",
+        "BG_DARK":       "#F5EDDF",
+        "BG_PANEL":      "#EDE4D4",
+        "BG_INPUT":      "#E4DACC",
+        "BG_SIDEBAR":    "#E2D8C8",
+        "BG_HOVER":      "#D6CAB8",
+        "BG_PRESSED":    "#CABCA6",
 
-        "TEXT_PRIMARY":  "#1a1408",
-        "TEXT_SECONDARY": "#5a4b38",
-        "TEXT_MUTED":    "#8a7b68",
+        "TEXT_PRIMARY":  "#3A2F25",
+        "TEXT_SECONDARY": "#6B5D4D",
+        "TEXT_MUTED":    "#968878",
 
-        "ACCENT":        "#b8860b",
-        "ACCENT_DIM":    "#d4a017",
-        "ACCENT_TEXT":   "#ffffff",
+        "ACCENT":        "#BD8A24",
+        "ACCENT_DIM":    "#D09E38",
+        "ACCENT_TEXT":   "#FFFFFF",
 
-        "BORDER":        "#c9bfb0",
-        "BORDER_FOCUS":  "#b8860b",
+        "BORDER":        "#CFC0A8",
+        "BORDER_FOCUS":  "#BD8A24",
 
-        "SELECTION_BG":  "#f0deb8",
-        "SELECTION_TEXT": "#1a1408",
+        "SELECTION_BG":  "#E8D4B0",
+        "SELECTION_TEXT": "#3A2F25",
 
-        "TABLE_ALT_ROW": "#e8e1d8",
+        "TABLE_ALT_ROW": "#F0E6D6",
 
-        "STATUS_OK":     "#65a30d",
-        "STATUS_ERR":    "#dc2626",
+        "STATUS_OK":     "#6B8F30",
+        "STATUS_ERR":    "#C04030",
 
-        "DIFF_ORIGINAL_BG":     "#fef2f2",
-        "DIFF_ORIGINAL_TEXT":   "#991b1b",
-        "DIFF_ORIGINAL_BORDER": "#fecaca",
-        "DIFF_PROPOSED_BG":     "#fefce8",
-        "DIFF_PROPOSED_TEXT":   "#713f12",
-        "DIFF_PROPOSED_BORDER": "#fde68a",
+        "DIFF_ORIGINAL_BG":     "#F8EFEE",
+        "DIFF_ORIGINAL_TEXT":   "#8B3030",
+        "DIFF_ORIGINAL_BORDER": "#E4CCCC",
+        "DIFF_PROPOSED_BG":     "#F5F0E0",
+        "DIFF_PROPOSED_TEXT":   "#6B5520",
+        "DIFF_PROPOSED_BORDER": "#E4D8B8",
 
-        "LINK_COLOR":    "#9a6f08",
+        "LINK_COLOR":    "#9A7018",
 
-        "CARD_BG":       "#faf7f4",
-        "CARD_BORDER":   "#c9bfb0",
-        "CARD_HERO_BG":  "#fef3c7",
-        "CARD_HERO_BORDER": "#fde68a",
-        "CARD_BEAT_BG":  "#f5f0ea",
-        "CARD_KEY_BEAT_BG": "#fef9c3",
-        "CARD_BEAT_BORDER": "#a6937e",
-        "CARD_KEY_BEAT_BORDER": "#f59e0b",
+        "CARD_BG":       "#EBE2D2",
+        "CARD_BORDER":   "#CFC0A8",
+        "CARD_HERO_BG":  "#F2E6CC",
+        "CARD_HERO_BORDER": "#DDD0B0",
+        "CARD_BEAT_BG":  "#E6DCCC",
+        "CARD_KEY_BEAT_BG": "#F0E4C0",
+        "CARD_BEAT_BORDER": "#B0A48E",
+        "CARD_KEY_BEAT_BORDER": "#D09E38",
 
-        "SIDEBAR_ACTIVE_BG": "#f0deb8",
-        "SIDEBAR_ACTIVE_TEXT": "#7a5a00",
-        "SIDEBAR_ICON":  "#7a6b58",
+        "SIDEBAR_ACTIVE_BG": "#DDD0B4",
+        "SIDEBAR_ACTIVE_TEXT": "#7A5E14",
+        "SIDEBAR_ICON":  "#8A7C68",
 
-        "BTN_PRIMARY_BG": "#b8860b",
-        "BTN_PRIMARY_TEXT": "#ffffff",
-        "BTN_PRIMARY_HOVER": "#996e09",
-        "BTN_PRIMARY_BORDER": "#b8860b",
+        "BTN_PRIMARY_BG": "#BD8A24",
+        "BTN_PRIMARY_TEXT": "#FFFFFF",
+        "BTN_PRIMARY_HOVER": "#A57718",
+        "BTN_PRIMARY_BORDER": "#BD8A24",
 
-        "SCROLLBAR_BG":  "#f0ebe4",
-        "SCROLLBAR_HANDLE": "#bfb3a2",
-        "SCROLLBAR_HOVER": "#a09180",
+        "SCROLLBAR_BG":  "#F5EDDF",
+        "SCROLLBAR_HANDLE": "#C4B6A0",
+        "SCROLLBAR_HOVER": "#B0A28C",
     },
 }
 
@@ -739,7 +739,9 @@ def small_btn() -> str:
 
 
 def apply_card_shadow(widget) -> None:
-    """Apply a subtle drop shadow to a card widget."""
+    """Apply a subtle drop shadow to a card widget (skipped for Warm theme)."""
+    if _current_palette == "Light (Warm)":
+        return
     from PySide6.QtWidgets import QGraphicsDropShadowEffect
     from PySide6.QtGui import QColor
     effect = QGraphicsDropShadowEffect(widget)
