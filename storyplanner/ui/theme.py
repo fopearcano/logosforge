@@ -831,6 +831,26 @@ def build_stylesheet() -> str:
         font-size: 11px;
         background: transparent;
     }}
+
+    /* -- Story Flow indicators -- */
+    #gridCardType {{
+        color: {TEXT_MUTED};
+        font-size: 11px;
+        background: transparent;
+        padding: 0;
+    }}
+    #gridCharRow {{
+        background: transparent;
+    }}
+    #gridTensionBar {{
+        background: transparent;
+        border-radius: 1px;
+    }}
+    #gridSceneCardWarning {{
+        background-color: {BG_HOVER};
+        border: 1px solid {BORDER};
+        border-radius: 6px;
+    }}
     """
 
 

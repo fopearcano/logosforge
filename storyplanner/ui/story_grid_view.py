@@ -2,7 +2,8 @@
 
 Displays scenes in a grid where columns are Acts (or Chapters) and rows are
 scenes within each group. Supports drag-and-drop reordering, zoom levels,
-and color coding by plotline/tag/beat.
+color coding by plotline/tag/beat, and Story Flow indicators (tension bars,
+character dots, scene type badges, pacing warnings).
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QMimeData, QPoint, Qt, QTimer
 from PySide6.QtGui import QDrag, QMouseEvent, QPainter, QPixmap
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFrame,
     QHBoxLayout,
@@ -24,6 +26,14 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
+from storyplanner.story_flow import (
+    FlowAnalysis,
+    SceneTension,
+    SceneType,
+    analyze_flow,
+    scene_type_icon,
+    tension_color,
+)
 from storyplanner.ui import theme
 
 
@@ -47,6 +57,11 @@ class _SceneCard(QFrame):
         scene,
         zoom: int,
         color_accent: str = "",
+        flow_visible: bool = False,
+        tension: SceneTension | None = None,
+        scene_type: SceneType | None = None,
+        char_colors: list[str] | None = None,
+        pacing_warning: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -60,11 +75,26 @@ class _SceneCard(QFrame):
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(3)
 
+        # -- Title row with optional type icon --------------------------------
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(4)
+
         self._title_label = QLabel(scene.title or "Untitled")
         self._title_label.setObjectName("gridCardTitle")
         self._title_label.setWordWrap(True)
-        layout.addWidget(self._title_label)
+        title_row.addWidget(self._title_label, stretch=1)
 
+        self._type_label = QLabel()
+        self._type_label.setObjectName("gridCardType")
+        if scene_type and flow_visible:
+            icon = scene_type_icon(scene_type.primary)
+            self._type_label.setText(icon)
+            self._type_label.setToolTip(scene_type.primary.capitalize())
+        title_row.addWidget(self._type_label)
+        layout.addLayout(title_row)
+
+        # -- Summary ----------------------------------------------------------
         self._summary_label = QLabel()
         self._summary_label.setObjectName("gridCardSummary")
         self._summary_label.setWordWrap(True)
@@ -74,39 +104,87 @@ class _SceneCard(QFrame):
         self._summary_label.setText(summary_text)
         layout.addWidget(self._summary_label)
 
+        # -- Meta line --------------------------------------------------------
         self._meta_label = QLabel()
         self._meta_label.setObjectName("gridCardMeta")
         meta_parts: list[str] = []
         if scene.beat:
             meta_parts.append(scene.beat)
         if scene.tags:
-            meta_parts.append(scene.tags.split(",")[0].strip())
+            tags_clean = [t.strip() for t in scene.tags.split(",") if not t.strip().lower().startswith("tension:")]
+            if tags_clean:
+                meta_parts.append(tags_clean[0])
         if scene.plotline:
             meta_parts.append(scene.plotline)
         self._meta_label.setText(" · ".join(meta_parts) if meta_parts else "")
         layout.addWidget(self._meta_label)
 
-        self._apply_zoom(zoom)
+        # -- Character presence dots ------------------------------------------
+        self._char_row = QWidget()
+        self._char_row.setObjectName("gridCharRow")
+        char_layout = QHBoxLayout(self._char_row)
+        char_layout.setContentsMargins(0, 2, 0, 0)
+        char_layout.setSpacing(3)
+        if char_colors and flow_visible:
+            for color in char_colors[:6]:
+                dot = QLabel()
+                dot.setFixedSize(6, 6)
+                dot.setObjectName("gridCharDot")
+                dot.setStyleSheet(
+                    f"background-color: {color}; border-radius: 3px;"
+                )
+                char_layout.addWidget(dot)
+        char_layout.addStretch()
+        layout.addWidget(self._char_row)
+
+        # -- Tension bar ------------------------------------------------------
+        self._tension_bar = QWidget()
+        self._tension_bar.setObjectName("gridTensionBar")
+        self._tension_bar.setFixedHeight(3)
+        if tension and tension.value > 0 and flow_visible:
+            bar_color = tension_color(tension.value)
+            width_pct = tension.value * 10
+            self._tension_bar.setStyleSheet(
+                f"background-color: {bar_color}; border-radius: 1px;"
+                f" max-width: {width_pct}%;"
+            )
+            self._tension_bar.setToolTip(f"Tension: {tension.value}/10 ({tension.source})")
+        else:
+            self._tension_bar.hide()
+        layout.addWidget(self._tension_bar)
+
+        self._apply_zoom(zoom, flow_visible)
         self._apply_accent(color_accent)
+        self._apply_pacing_warning(pacing_warning, flow_visible)
 
         self._drag_start: QPoint | None = None
 
-    def _apply_zoom(self, zoom: int) -> None:
+    def _apply_zoom(self, zoom: int, flow_visible: bool = False) -> None:
         if zoom == 0:
             self._summary_label.hide()
             self._meta_label.hide()
+            self._char_row.hide()
+            self._type_label.hide()
         elif zoom == 1:
             self._summary_label.setVisible(bool(self._summary_label.text()))
             self._meta_label.hide()
+            self._char_row.setVisible(flow_visible)
+            self._type_label.setVisible(flow_visible)
         else:
             self._summary_label.setVisible(bool(self._summary_label.text()))
             self._meta_label.setVisible(bool(self._meta_label.text()))
+            self._char_row.setVisible(flow_visible)
+            self._type_label.setVisible(flow_visible)
 
     def _apply_accent(self, color: str) -> None:
         if color:
             self.setStyleSheet(
                 self.styleSheet() + f"\n#gridSceneCard {{ border-left: 4px solid {color}; }}"
             )
+
+    def _apply_pacing_warning(self, warning: bool, flow_visible: bool) -> None:
+        if warning and flow_visible:
+            self.setObjectName("gridSceneCardWarning")
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -256,6 +334,8 @@ class StoryGridView(QWidget):
         self._group_by = "act"  # "act" or "chapter"
         self._zoom = 1  # 0=titles, 1=title+summary, 2=full
         self._color_mode = "none"  # "none", "plotline", "tag", "beat"
+        self._flow_visible = False
+        self._flow_analysis: FlowAnalysis | None = None
         self._columns: list[_GridColumn] = []
 
         self._build_ui()
@@ -284,6 +364,11 @@ class StoryGridView(QWidget):
         self._color_combo.addItems(["None", "Plotline", "Tag", "Beat"])
         self._color_combo.currentIndexChanged.connect(self._on_color_changed)
         tb_layout.addWidget(self._color_combo)
+
+        self._flow_check = QCheckBox("Flow")
+        self._flow_check.setToolTip("Show tension, pacing, and character indicators")
+        self._flow_check.toggled.connect(self._on_flow_toggled)
+        tb_layout.addWidget(self._flow_check)
 
         tb_layout.addStretch()
 
@@ -337,6 +422,18 @@ class StoryGridView(QWidget):
 
         color_map = self._build_color_map(scenes)
 
+        if self._flow_visible:
+            self._flow_analysis = analyze_flow(self._db, self._project_id)
+            char_color_map = self._build_char_color_map(scenes)
+            warned_ids = set()
+            if self._flow_analysis:
+                for w in self._flow_analysis.pacing_warnings:
+                    warned_ids.update(w.scene_ids)
+        else:
+            self._flow_analysis = None
+            char_color_map = {}
+            warned_ids = set()
+
         if not groups:
             self._add_empty_grid_state()
             return
@@ -348,7 +445,18 @@ class StoryGridView(QWidget):
             col.scene_dropped = self._on_scene_dropped
             for scene in groups[key]:
                 accent = color_map.get(scene.id, "")
-                card = _SceneCard(scene, self._zoom, color_accent=accent)
+                tension = self._flow_analysis.tensions.get(scene.id) if self._flow_analysis else None
+                scene_type = self._flow_analysis.scene_types.get(scene.id) if self._flow_analysis else None
+                char_colors = char_color_map.get(scene.id, [])
+                card = _SceneCard(
+                    scene, self._zoom,
+                    color_accent=accent,
+                    flow_visible=self._flow_visible,
+                    tension=tension,
+                    scene_type=scene_type,
+                    char_colors=char_colors,
+                    pacing_warning=scene.id in warned_ids,
+                )
                 col.add_card(card)
             self._columns.append(col)
             self._grid_layout.addWidget(col)
@@ -486,6 +594,26 @@ class StoryGridView(QWidget):
 
     def get_zoom(self) -> int:
         return self._zoom
+
+    # -- Flow indicators -------------------------------------------------------
+
+    def _on_flow_toggled(self, checked: bool) -> None:
+        self._flow_visible = checked
+        self.refresh()
+
+    def is_flow_visible(self) -> bool:
+        return self._flow_visible
+
+    def _build_char_color_map(self, scenes) -> dict[int, list[str]]:
+        characters = self._db.get_all_characters(self._project_id)
+        char_colors: dict[int, str] = {c.id: c.color for c in characters}
+        result: dict[int, list[str]] = {}
+        for scene in scenes:
+            char_ids = self._db.get_scene_character_ids(scene.id)
+            colors = [char_colors[cid] for cid in char_ids if cid in char_colors]
+            if colors:
+                result[scene.id] = colors
+        return result
 
     # -- Group / color switching ---------------------------------------------
 
