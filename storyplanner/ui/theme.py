@@ -1187,6 +1187,61 @@ def build_stylesheet() -> str:
         font-size: 13px;
         background: transparent;
     }}
+
+    /* -- Mode Suggestions -- */
+    #modeSuggestionsView {{
+        background-color: {BG_DARK};
+    }}
+    #modeSuggestionsTitle {{
+        color: {TEXT_PRIMARY};
+        font-size: 16px;
+        font-weight: bold;
+        padding-bottom: 4px;
+        background: transparent;
+    }}
+    #modeBadge {{
+        font-size: 18px;
+        font-weight: bold;
+        background: transparent;
+    }}
+    #modeDescription {{
+        color: {TEXT_SECONDARY};
+        font-size: 12px;
+        background: transparent;
+    }}
+    #modeStageLabel {{
+        color: {TEXT_MUTED};
+        font-size: 11px;
+        background: transparent;
+    }}
+    #modeSeparator {{
+        background-color: {BORDER};
+        max-height: 1px;
+    }}
+    #modeSuggestionsHeader {{
+        color: {TEXT_SECONDARY};
+        font-size: 12px;
+        font-weight: bold;
+        padding: 4px 0;
+        background: transparent;
+    }}
+    #modeSuggestionRow {{
+        background: transparent;
+        border-radius: 4px;
+    }}
+    #modeSuggestionRow:hover {{
+        background-color: {BG_HOVER};
+    }}
+    #modeSuggestionText {{
+        color: {TEXT_SECONDARY};
+        font-size: 12px;
+        background: transparent;
+    }}
+    #modeSuggestionsEmpty {{
+        color: {TEXT_MUTED};
+        font-size: 13px;
+        background: transparent;
+    }}
     """
 
 

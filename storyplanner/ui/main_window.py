@@ -46,6 +46,7 @@ from storyplanner.ui.focus_graph_view import FocusGraphView
 from storyplanner.ui.story_health_view import StoryHealthView
 from storyplanner.ui.character_balance_view import CharacterBalanceView
 from storyplanner.ui.pacing_insights_view import PacingInsightsView
+from storyplanner.ui.mode_suggestions_view import ModeSuggestionsView
 from storyplanner.ui.graph_view import GraphView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.outline_view import OutlineView
@@ -132,6 +133,7 @@ class MainWindow(QMainWindow):
             "Health": "\U0001F49A",
             "Balance": "\u2696",
             "Pacing": "\U0001F3B5",
+            "Adapt": "\U0001F9E0",
             "Plugins": "\U0001F9E9",
             "Assistant": "\U0001F916",
         }
@@ -144,7 +146,7 @@ class MainWindow(QMainWindow):
             "Projects", "Dashboard", "Characters", "Places", "Notes",
             "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline", "Writer",
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
-            "Health", "Balance", "Pacing", "Search", "PSYKE", "Plugins", "Assistant",
+            "Health", "Balance", "Pacing", "Adapt", "Search", "PSYKE", "Plugins", "Assistant",
         ]
         self.sidebar_buttons: dict[str, QPushButton] = {}
         for label in _NAV_LABELS:
@@ -195,7 +197,7 @@ class MainWindow(QMainWindow):
             "Projects", "Dashboard", "Characters", "Places", "Notes",
             "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline", "Writer",
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
-            "Health", "Balance", "Pacing", "Search", "PSYKE", "Plugins",
+            "Health", "Balance", "Pacing", "Adapt", "Search", "PSYKE", "Plugins",
         ]
         _nav_handlers = {
             "Projects": self._show_projects,
@@ -219,6 +221,7 @@ class MainWindow(QMainWindow):
             "Health": self._show_health,
             "Balance": self._show_balance,
             "Pacing": self._show_pacing,
+            "Adapt": self._show_adapt,
             "Search": self._show_search,
             "PSYKE": self._show_psyke,
             "Plugins": self._show_plugins,
@@ -640,6 +643,9 @@ class MainWindow(QMainWindow):
 
     def _show_pacing(self) -> None:
         self._set_content(PacingInsightsView(self._db, self._project_id))
+
+    def _show_adapt(self) -> None:
+        self._set_content(ModeSuggestionsView(self._db, self._project_id))
 
     def _show_search(self) -> None:
         self._set_content(
