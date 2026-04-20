@@ -25,6 +25,10 @@ from storyplanner.assistant import (
     build_messages,
     chat_completion,
 )
+from storyplanner.counterpart import (
+    DIALOGIC_MODES,
+    build_counterpart_messages,
+)
 from storyplanner.adaptive_mode import (
     AIMode,
     HealthState,
@@ -173,6 +177,28 @@ class AssistantPanel(QWidget):
         sep.setStyleSheet(f"color: {theme.BORDER};")
         self._layout.addWidget(sep)
 
+        # Panel mode selector: Assistant | Counterpart
+        self._panel_mode = "assistant"
+        panel_mode_row = QHBoxLayout()
+        panel_mode_row.setSpacing(0)
+        self._assistant_mode_btn = QPushButton("Assistant")
+        self._counterpart_mode_btn = QPushButton("Counterpart")
+        self._assistant_mode_btn.setCheckable(True)
+        self._counterpart_mode_btn.setCheckable(True)
+        self._assistant_mode_btn.setChecked(True)
+        self._assistant_mode_btn.clicked.connect(
+            lambda: self._set_panel_mode("assistant")
+        )
+        self._counterpart_mode_btn.clicked.connect(
+            lambda: self._set_panel_mode("counterpart")
+        )
+        self._assistant_mode_btn.setStyleSheet(self._seg_btn_style(active=True))
+        self._counterpart_mode_btn.setStyleSheet(self._seg_btn_style(active=False))
+        panel_mode_row.addWidget(self._assistant_mode_btn)
+        panel_mode_row.addWidget(self._counterpart_mode_btn)
+        panel_mode_row.addStretch()
+        self._layout.addLayout(panel_mode_row)
+
         # Mode strip
         self._mode_strip = ModeStrip(
             self._db, self._project_id,
@@ -222,7 +248,33 @@ class AssistantPanel(QWidget):
         self._more_btn.setMenu(more_menu)
         action_row.addWidget(self._more_btn)
         self._preset_buttons.append(self._more_btn)
+        self._assistant_actions_layout = action_row
         self._layout.addLayout(action_row)
+
+        # Counterpart actions (hidden by default)
+        self._counterpart_row = QWidget()
+        cp_layout = QHBoxLayout(self._counterpart_row)
+        cp_layout.setContentsMargins(0, 0, 0, 0)
+        cp_layout.setSpacing(4)
+        self._counterpart_buttons: list[QPushButton] = []
+        for mode_name in ("Feedback", "Critique", "Interpret"):
+            btn = QPushButton(mode_name)
+            btn.clicked.connect(
+                lambda _, m=mode_name: self._send_counterpart(m)
+            )
+            cp_layout.addWidget(btn)
+            self._counterpart_buttons.append(btn)
+        cp_more_btn = QPushButton("More ▾")
+        cp_more_menu = QMenu(self)
+        for mode_name in ("Ask Back", "Compare"):
+            cp_more_menu.addAction(
+                mode_name, lambda m=mode_name: self._send_counterpart(m)
+            )
+        cp_more_btn.setMenu(cp_more_menu)
+        cp_layout.addWidget(cp_more_btn)
+        self._counterpart_buttons.append(cp_more_btn)
+        self._counterpart_row.setVisible(False)
+        self._layout.addWidget(self._counterpart_row)
 
         # Custom prompt
         self._prompt_input = QPlainTextEdit()
@@ -354,6 +406,54 @@ class AssistantPanel(QWidget):
     def _on_mode_override(self, mode: AIMode | None) -> None:
         pass  # Mode is read from strip at context-build time
 
+    # -- Panel mode (Assistant / Counterpart) ----------------------------------
+
+    def _seg_btn_style(self, active: bool) -> str:
+        if active:
+            return (
+                f"QPushButton {{ background-color: {theme.ACCENT};"
+                f" color: #ffffff; border: none; border-radius: 4px;"
+                f" padding: 3px 10px; font-size: 11px; font-weight: bold; }}"
+            )
+        return (
+            f"QPushButton {{ background-color: transparent;"
+            f" color: {theme.TEXT_MUTED}; border: 1px solid {theme.BORDER};"
+            f" border-radius: 4px; padding: 3px 10px; font-size: 11px; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
+        )
+
+    def _set_panel_mode(self, mode: str) -> None:
+        self._panel_mode = mode
+        is_assistant = mode == "assistant"
+        self._assistant_mode_btn.setChecked(is_assistant)
+        self._counterpart_mode_btn.setChecked(not is_assistant)
+        self._assistant_mode_btn.setStyleSheet(self._seg_btn_style(is_assistant))
+        self._counterpart_mode_btn.setStyleSheet(self._seg_btn_style(not is_assistant))
+
+        # Toggle action rows
+        for btn in self._preset_buttons:
+            btn.setVisible(is_assistant)
+        self._counterpart_row.setVisible(not is_assistant)
+
+        # Toggle apply buttons (Counterpart never mutates content)
+        self._replace_content_btn.setVisible(is_assistant)
+        self._insert_cursor_btn.setVisible(is_assistant)
+        # Keep the ▾ apply button but replace with Copy-only in counterpart
+        self._apply_more_btn.setVisible(is_assistant)
+
+        # Mode strip only relevant for assistant
+        self._mode_strip.setVisible(is_assistant)
+
+        # Update placeholder
+        if is_assistant:
+            self._prompt_input.setPlaceholderText(
+                "Instructions or questions about the scene..."
+            )
+        else:
+            self._prompt_input.setPlaceholderText(
+                "Ask about your scene, request feedback, or reflect..."
+            )
+
     # -- Settings toggle -------------------------------------------------------
 
     def _toggle_settings(self) -> None:
@@ -476,6 +576,8 @@ class AssistantPanel(QWidget):
         self._start_request(messages)
 
     def _send_custom(self) -> None:
+        if self._panel_mode == "counterpart":
+            return self._send_counterpart_custom()
         if self._worker is not None:
             return
         prompt = self._prompt_input.toPlainText().strip()
@@ -506,6 +608,73 @@ class AssistantPanel(QWidget):
         self._update_ctx_viewer(
             scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, prompt,
             orch_debug, graph_ctx, mode_ctx,
+        )
+        self._start_request(messages)
+
+    def _send_counterpart(self, mode_key: str) -> None:
+        if self._worker is not None:
+            return
+        scene_id = self._scene_combo.currentData()
+        if scene_id is None:
+            self._response_output.setPlainText("No scene selected.")
+            return
+
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, _mode_ctx = (
+            self._build_context(scene_id)
+        )
+        if not scene_ctx:
+            self._response_output.setPlainText("Could not load scene data.")
+            return
+
+        mode_prompt = DIALOGIC_MODES[mode_key]
+        user_note = self._prompt_input.toPlainText().strip()
+
+        messages = build_counterpart_messages(
+            mode_prompt, scene_ctx,
+            outline_context=outline_ctx,
+            story_memory_context=story_memory_ctx,
+            psyke_context=psyke_ctx,
+            graph_context=graph_ctx,
+            user_note=user_note,
+        )
+        self._update_ctx_viewer(
+            scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx,
+            f"[COUNTERPART: {mode_key}] {mode_prompt}",
+            orch_debug, graph_ctx,
+        )
+        self._start_request(messages)
+
+    def _send_counterpart_custom(self) -> None:
+        if self._worker is not None:
+            return
+        prompt = self._prompt_input.toPlainText().strip()
+        if not prompt:
+            self._response_output.setPlainText("Enter a prompt first.")
+            return
+
+        scene_id = self._scene_combo.currentData()
+        if scene_id is None:
+            self._response_output.setPlainText("No scene selected.")
+            return
+
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, _mode_ctx = (
+            self._build_context(scene_id)
+        )
+        if not scene_ctx:
+            self._response_output.setPlainText("Could not load scene data.")
+            return
+
+        messages = build_counterpart_messages(
+            prompt, scene_ctx,
+            outline_context=outline_ctx,
+            story_memory_context=story_memory_ctx,
+            psyke_context=psyke_ctx,
+            graph_context=graph_ctx,
+        )
+        self._update_ctx_viewer(
+            scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx,
+            f"[COUNTERPART: Custom] {prompt}",
+            orch_debug, graph_ctx,
         )
         self._start_request(messages)
 
