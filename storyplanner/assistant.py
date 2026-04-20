@@ -63,6 +63,7 @@ def build_messages(
     story_memory_context: str = "",
     psyke_context: str = "",
     graph_context: str = "",
+    mode_context: str = "",
     user_note: str = "",
 ) -> list[dict]:
     system = (
@@ -74,6 +75,9 @@ def build_messages(
     )
 
     user_parts: list[str] = []
+    if mode_context:
+        user_parts.append(mode_context)
+        user_parts.append("")
     if story_memory_context:
         user_parts.append(story_memory_context)
         user_parts.append("")

@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from storyplanner.adaptive_mode import compute_mode, mode_context_block
 from storyplanner.assistant import (
     PRESET_ACTIONS,
     build_messages,
@@ -700,6 +701,9 @@ class InlineAssistantPanel(QWidget):
         if scene_id is not None:
             graph_ctx = gather_graph_context(self._db, self._project_id, scene_id)
 
+        mode_result = compute_mode(self._db, self._project_id)
+        mode_ctx = mode_context_block(mode_result)
+
         combined_memory = "\n\n".join(
             part for part in [story_mem, session_ctx] if part
         )
@@ -709,9 +713,11 @@ class InlineAssistantPanel(QWidget):
             story_memory_context=combined_memory,
             psyke_context=psyke_ctx,
             graph_context=graph_ctx,
+            mode_context=mode_ctx,
         )
 
-        ctx_parts = [f"--- Scene Context ---\n{scene_ctx}"]
+        ctx_parts = [f"--- AI Mode ---\n{mode_ctx}"]
+        ctx_parts.append(f"--- Scene Context ---\n{scene_ctx}")
         if outline_ctx:
             ctx_parts.append(f"--- Outline ---\n{outline_ctx}")
         if story_mem:

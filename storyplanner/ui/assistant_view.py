@@ -25,6 +25,7 @@ from storyplanner.assistant import (
     build_messages,
     chat_completion,
 )
+from storyplanner.adaptive_mode import compute_mode, mode_context_block
 from storyplanner.context_builder import (
     gather_graph_context,
     gather_outline_context,
@@ -370,7 +371,7 @@ class AssistantPanel(QWidget):
 
     def _build_context(
         self, scene_id: int, action_key: str = "",
-    ) -> tuple[str, str, str, str, str, str]:
+    ) -> tuple[str, str, str, str, str, str, str]:
         scene_ctx = gather_scene_context(
             self._db, self._project_id, scene_id,
         )
@@ -399,7 +400,9 @@ class AssistantPanel(QWidget):
                     self._db, self._project_id, scene_id,
                 )
         graph_ctx = gather_graph_context(self._db, self._project_id, scene_id)
-        return scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orchestration_debug, graph_ctx
+        mode_result = compute_mode(self._db, self._project_id)
+        mode_ctx = mode_context_block(mode_result)
+        return scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orchestration_debug, graph_ctx, mode_ctx
 
     def _send_preset(self, action_key: str) -> None:
         if self._worker is not None:
@@ -409,7 +412,7 @@ class AssistantPanel(QWidget):
             self._response_output.setPlainText("No scene selected.")
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx = (
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, mode_ctx = (
             self._build_context(scene_id, action_key=action_key)
         )
         if not scene_ctx:
@@ -425,11 +428,12 @@ class AssistantPanel(QWidget):
             story_memory_context=story_memory_ctx,
             psyke_context=psyke_ctx,
             graph_context=graph_ctx,
+            mode_context=mode_ctx,
             user_note=user_note,
         )
         self._update_ctx_viewer(
             scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, action_prompt,
-            orch_debug, graph_ctx,
+            orch_debug, graph_ctx, mode_ctx,
         )
         self._start_request(messages)
 
@@ -446,7 +450,7 @@ class AssistantPanel(QWidget):
             self._response_output.setPlainText("No scene selected.")
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx = (
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, mode_ctx = (
             self._build_context(scene_id)
         )
         if not scene_ctx:
@@ -459,10 +463,11 @@ class AssistantPanel(QWidget):
             story_memory_context=story_memory_ctx,
             psyke_context=psyke_ctx,
             graph_context=graph_ctx,
+            mode_context=mode_ctx,
         )
         self._update_ctx_viewer(
             scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, prompt,
-            orch_debug, graph_ctx,
+            orch_debug, graph_ctx, mode_ctx,
         )
         self._start_request(messages)
 
@@ -496,8 +501,12 @@ class AssistantPanel(QWidget):
         self, scene_ctx: str, outline_ctx: str,
         story_memory_ctx: str, psyke_ctx: str, action: str,
         orchestration_debug: str = "", graph_ctx: str = "",
+        mode_ctx: str = "",
     ) -> None:
-        parts = [f"--- Scene Context ---\n{scene_ctx}"]
+        parts = []
+        if mode_ctx:
+            parts.append(f"--- AI Mode ---\n{mode_ctx}")
+        parts.append(f"--- Scene Context ---\n{scene_ctx}")
         if outline_ctx:
             parts.append(f"--- Outline ---\n{outline_ctx}")
         if story_memory_ctx:
