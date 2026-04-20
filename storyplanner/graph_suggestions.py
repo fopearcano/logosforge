@@ -46,6 +46,7 @@ class GraphSuggestion:
     category: str
     text: str
     reason: str
+    trace_nodes: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -170,6 +171,8 @@ def _suggest_escalation(
     current_state = char_states.get(dominant_char_id, "")
     next_state = _STATE_ESCALATION.get(current_state.lower(), "challenged")
 
+    trace = [f"Character:{dominant_char_id}"]
+
     if current_state:
         text = f"{char_name}'s {current_state} state escalates to {next_state}"
         reason = f"dominant character ({max_conn} connections), state: {current_state}"
@@ -177,7 +180,7 @@ def _suggest_escalation(
         text = f"{char_name} faces direct consequence of their central role"
         reason = f"dominant character ({max_conn} connections), no tracked state"
 
-    return GraphSuggestion("Escalation", text, reason)
+    return GraphSuggestion("Escalation", text, reason, trace)
 
 
 def _suggest_reversal(
@@ -195,15 +198,17 @@ def _suggest_reversal(
         reversal_state = _STATE_REVERSAL.get(state.lower())
         if reversal_state:
             char_name = _char_name(cid, char_nodes)
-            text = f"{char_name}'s {state} is disrupted — shifts to {reversal_state}"
+            text = f"{char_name}'s {state} is disrupted \u2014 shifts to {reversal_state}"
             reason = f"state reversal from {state}"
-            return GraphSuggestion("Reversal", text, reason)
+            trace = [f"Character:{cid}"]
+            return GraphSuggestion("Reversal", text, reason, trace)
 
     if scene_chars:
         char_name = _char_name(scene_chars[0], char_nodes)
         text = f"An unexpected revelation upends {char_name}'s assumptions"
         reason = "no tracked state for reversal, generic suggestion"
-        return GraphSuggestion("Reversal", text, reason)
+        trace = [f"Character:{scene_chars[0]}"]
+        return GraphSuggestion("Reversal", text, reason, trace)
 
     return None
 
@@ -228,7 +233,8 @@ def _suggest_expansion(
                         f"narrative web but have never shared a scene"
                     )
                     reason = f"missing interaction: 2-hop neighbor, no shared scene"
-                    return GraphSuggestion("Expansion", text, reason)
+                    trace = [f"Character:{cid}", nid]
+                    return GraphSuggestion("Expansion", text, reason, trace)
 
     isolated = [
         nid for nid, node in data.nodes.items()
@@ -238,9 +244,10 @@ def _suggest_expansion(
     ]
     if isolated:
         node = data.nodes[isolated[0]]
-        text = f"{node.name} has been isolated — bring them into the current thread"
-        reason = f"isolated character (≤1 connection)"
-        return GraphSuggestion("Expansion", text, reason)
+        text = f"{node.name} has been isolated \u2014 bring them into the current thread"
+        reason = f"isolated character (\u22641 connection)"
+        trace = [isolated[0]]
+        return GraphSuggestion("Expansion", text, reason, trace)
 
     return None
 
@@ -267,6 +274,7 @@ def _suggest_internal_shift(
         cid = stagnant_chars[0]
         char_name = _char_name(cid, char_nodes)
         state = char_states.get(cid, "")
+        trace = [f"Character:{cid}"]
         if state:
             text = (
                 f"{char_name} has been {state} for multiple scenes "
@@ -276,7 +284,7 @@ def _suggest_internal_shift(
         else:
             text = f"{char_name} lacks emotional arc \u2014 introduce a moment of self-awareness"
             reason = "no tracked state progression"
-        return GraphSuggestion("Internal shift", text, reason)
+        return GraphSuggestion("Internal shift", text, reason, trace)
 
     if scene_chars:
         cid = scene_chars[0]
@@ -284,7 +292,8 @@ def _suggest_internal_shift(
         state = char_states.get(cid, "unknown")
         text = f"{char_name} pauses to process what {state} means for their path forward"
         reason = "character reflection opportunity"
-        return GraphSuggestion("Internal shift", text, reason)
+        trace = [f"Character:{cid}"]
+        return GraphSuggestion("Internal shift", text, reason, trace)
 
     return None
 

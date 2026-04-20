@@ -1032,6 +1032,43 @@ def build_stylesheet() -> str:
         background-color: {BG_DARK};
         border: none;
     }}
+
+    /* -- Suggestion panel -- */
+    #suggestPanel {{
+        background-color: {BG_PANEL};
+        border-left: 1px solid {BORDER};
+    }}
+    #suggestHeader {{
+        color: {TEXT_PRIMARY};
+        font-size: 12px;
+        font-weight: bold;
+        padding: 4px 0;
+        background: transparent;
+    }}
+    #suggestBtn {{
+        color: {ACCENT};
+        font-size: 12px;
+        font-weight: bold;
+        text-align: left;
+        padding: 4px 6px;
+        background: transparent;
+        border: none;
+    }}
+    #suggestBtn:hover {{
+        background-color: {BG_HOVER};
+        border-radius: 4px;
+    }}
+    #suggestDesc {{
+        color: {TEXT_SECONDARY};
+        font-size: 11px;
+        padding: 0 6px 6px 6px;
+        background: transparent;
+    }}
+    #suggestHint {{
+        color: {TEXT_MUTED};
+        font-size: 12px;
+        background: transparent;
+    }}
     """
 
 

@@ -16,6 +16,7 @@ from PySide6.QtGui import QBrush, QColor, QFont, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFrame,
     QGraphicsEllipseItem,
     QGraphicsLineItem,
     QGraphicsPolygonItem,
@@ -249,6 +250,9 @@ class FocusGraphView(QWidget):
         self._show_future = False
         self._meaning_enabled = False
         self._meaning_data: MeaningData | None = None
+        self._suggestions_visible = False
+        self._suggestions = None  # GraphSuggestions | None
+        self._trace_highlight: list[str] = []
 
         self._node_items: dict[str, _FocusNode] = {}
         self._label_items: dict[str, QGraphicsSimpleTextItem] = {}
@@ -315,15 +319,39 @@ class FocusGraphView(QWidget):
         self._meaning_check.toggled.connect(self._on_meaning_toggled)
         tb.addWidget(self._meaning_check)
 
+        tb.addSpacing(12)
+
+        self._suggest_check = QCheckBox("Suggestions")
+        self._suggest_check.setToolTip("Show graph-driven narrative suggestions")
+        self._suggest_check.toggled.connect(self._on_suggestions_toggled)
+        tb.addWidget(self._suggest_check)
+
         tb.addStretch()
         outer.addWidget(toolbar)
 
-        # -- Graphics view ---------------------------------------------------
+        # -- Main area: graph + suggestion panel -----------------------------
+        content_area = QWidget()
+        content_layout = QHBoxLayout(content_area)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+
         self._gscene = QGraphicsScene()
         self._gview = QGraphicsView(self._gscene)
         self._gview.setObjectName("focusGraphView")
         self._gview.setRenderHints(self._gview.renderHints())
-        outer.addWidget(self._gview)
+        content_layout.addWidget(self._gview, stretch=3)
+
+        self._suggest_panel = QFrame()
+        self._suggest_panel.setObjectName("suggestPanel")
+        self._suggest_panel.setMaximumWidth(280)
+        self._suggest_panel.setMinimumWidth(200)
+        sp_layout = QVBoxLayout(self._suggest_panel)
+        sp_layout.setContentsMargins(8, 8, 8, 8)
+        sp_layout.setSpacing(4)
+        self._suggest_panel.hide()
+        content_layout.addWidget(self._suggest_panel, stretch=1)
+
+        outer.addWidget(content_area)
 
     # -- Data loading --------------------------------------------------------
 
@@ -592,6 +620,8 @@ class FocusGraphView(QWidget):
     def focus_on(self, node_id: str) -> None:
         self._focus_node = node_id
         self._rebuild_view()
+        if self._suggestions_visible:
+            self._refresh_suggestions()
         if self._on_node_selected and self._graph_data:
             node = self._graph_data.nodes.get(node_id)
             if node:
@@ -600,6 +630,8 @@ class FocusGraphView(QWidget):
     def clear_focus(self) -> None:
         self._focus_node = None
         self._rebuild_view()
+        if self._suggestions_visible:
+            self._refresh_suggestions()
 
     def get_focus_node(self) -> str | None:
         return self._focus_node
@@ -639,10 +671,125 @@ class FocusGraphView(QWidget):
         self._meaning_enabled = checked
         self._rebuild_view()
 
+    def _on_suggestions_toggled(self, checked: bool) -> None:
+        self._suggestions_visible = checked
+        if checked:
+            self._suggest_panel.show()
+            self._refresh_suggestions()
+        else:
+            self._suggest_panel.hide()
+            self._suggestions = None
+            self.clear_trace()
+
     def set_temporal_max_order(self, order: int) -> None:
         self._temporal_max_order = order
         if self._temporal_enabled:
             self._rebuild_view()
+
+    # -- Suggestion panel ----------------------------------------------------
+
+    def _refresh_suggestions(self) -> None:
+        """Regenerate suggestions based on current focus/context."""
+        layout = self._suggest_panel.layout()
+        while layout.count():
+            child = layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        scene_id = self._get_focal_scene_id()
+        if scene_id is None:
+            lbl = QLabel("Focus on a scene node to see suggestions.")
+            lbl.setObjectName("suggestHint")
+            lbl.setWordWrap(True)
+            layout.addWidget(lbl)
+            layout.addStretch()
+            self._suggestions = None
+            return
+
+        from storyplanner.graph_suggestions import generate_graph_suggestions
+        self._suggestions = generate_graph_suggestions(
+            self._db, self._project_id, scene_id,
+        )
+
+        if not self._suggestions.suggestions:
+            lbl = QLabel("No suggestions for this scene.")
+            lbl.setObjectName("suggestHint")
+            lbl.setWordWrap(True)
+            layout.addWidget(lbl)
+            layout.addStretch()
+            return
+
+        header = QLabel("Next Narrative Possibilities")
+        header.setObjectName("suggestHeader")
+        layout.addWidget(header)
+
+        for idx, suggestion in enumerate(self._suggestions.suggestions):
+            btn = QPushButton(f"{suggestion.category}")
+            btn.setObjectName("suggestBtn")
+            btn.setToolTip(
+                f"{suggestion.text}\n\nTrace: {', '.join(suggestion.trace_nodes)}\n"
+                f"Reason: {suggestion.reason}"
+            )
+            btn.setFlat(True)
+            btn.clicked.connect(lambda _=False, s=suggestion: self._on_suggestion_clicked(s))
+            layout.addWidget(btn)
+
+            desc = QLabel(f"\u2192 {suggestion.text}")
+            desc.setObjectName("suggestDesc")
+            desc.setWordWrap(True)
+            layout.addWidget(desc)
+
+        layout.addStretch()
+
+    def _on_suggestion_clicked(self, suggestion) -> None:
+        """Focus graph on suggestion's trace nodes."""
+        self.clear_trace()
+        if suggestion.trace_nodes:
+            primary = suggestion.trace_nodes[0]
+            if primary in (self._graph_data.nodes if self._graph_data else {}):
+                self.focus_on(primary)
+            self.highlight_trace(suggestion.trace_nodes)
+
+    def highlight_trace(self, node_ids: list[str]) -> None:
+        """Highlight specific nodes as suggestion trace."""
+        self._trace_highlight = list(node_ids)
+        accent = QColor(_EDGE_HIGHLIGHT)
+        for nid in node_ids:
+            item = self._node_items.get(nid)
+            if item:
+                item.setPen(QPen(accent, 3))
+                item.setZValue(5)
+            label = self._label_items.get(nid)
+            if label:
+                label.setBrush(QBrush(accent))
+
+    def clear_trace(self) -> None:
+        """Remove trace highlights."""
+        for nid in self._trace_highlight:
+            item = self._node_items.get(nid)
+            if item and self._graph_data:
+                node = self._graph_data.nodes.get(nid)
+                if node:
+                    color_hex = _TYPE_COLORS.get(node.etype, "#9e9e9e")
+                    item.setPen(QPen(QColor(color_hex).darker(120), 2))
+                    item.setZValue(1)
+            label = self._label_items.get(nid)
+            if label:
+                label.setBrush(QBrush(QColor(theme.TEXT_PRIMARY)))
+        self._trace_highlight = []
+
+    def _get_focal_scene_id(self) -> int | None:
+        """Get a scene ID for suggestion context."""
+        if self._focus_node and self._focus_node.startswith("Scene:"):
+            try:
+                return int(self._focus_node.split(":")[1])
+            except (ValueError, IndexError):
+                pass
+        if self._graph_data:
+            for nid, node in self._graph_data.nodes.items():
+                if node.etype == "Scene":
+                    return node.entity_id
+        return None
 
     # -- Public API ----------------------------------------------------------
 
@@ -660,3 +807,12 @@ class FocusGraphView(QWidget):
 
     def get_meaning_data(self) -> MeaningData | None:
         return self._meaning_data
+
+    def is_suggestions_visible(self) -> bool:
+        return self._suggestions_visible
+
+    def get_suggestions(self):
+        return self._suggestions
+
+    def get_trace_highlight(self) -> list[str]:
+        return list(self._trace_highlight)
