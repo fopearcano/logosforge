@@ -15,6 +15,7 @@ TOP_TAGS_LIMIT = 7
 PSYKE_GLOBAL_NOTES_MAX = 100
 PSYKE_RELEVANT_NOTES_MAX = 150
 PSYKE_MAX_RELEVANT = 10
+PSYKE_RELATION_DEPTH = 2
 
 _LINK_RE = re.compile(r"\[\[(.+?)\]\]")
 
@@ -389,9 +390,11 @@ def gather_psyke_context(
     current_order = scene_order.get(scene_id, 0)
 
     scene_text = _scene_searchable_text(scene)
+    entry_by_id = {e.id: e for e in entries}
 
     global_lines: list[str] = []
     relevant_lines: list[str] = []
+    relevant_ids: set[int] = set()
 
     for entry in entries:
         if entry.is_global:
@@ -404,6 +407,26 @@ def gather_psyke_context(
                 relevant_lines.append(_format_psyke_entry(
                     entry, PSYKE_RELEVANT_NOTES_MAX, prog,
                 ))
+                relevant_ids.add(entry.id)
+
+    related_lines: list[str] = []
+    if relevant_ids:
+        visited = set(relevant_ids)
+        frontier = set(relevant_ids)
+        for _ in range(PSYKE_RELATION_DEPTH):
+            next_frontier: set[int] = set()
+            for eid in frontier:
+                for rel in db.get_related_psyke_entries(eid):
+                    if rel.id not in visited and not rel.is_global:
+                        visited.add(rel.id)
+                        next_frontier.add(rel.id)
+                        if rel.id in entry_by_id:
+                            related_lines.append(_format_psyke_entry(
+                                entry_by_id[rel.id], PSYKE_GLOBAL_NOTES_MAX,
+                            ))
+            frontier = next_frontier
+            if not frontier:
+                break
 
     if not global_lines and not relevant_lines:
         return ""
@@ -417,6 +440,10 @@ def gather_psyke_context(
         parts.append("")
         parts.append("Relevant:")
         parts.extend(relevant_lines)
+    if related_lines:
+        parts.append("")
+        parts.append("Related:")
+        parts.extend(related_lines)
 
     return "\n".join(parts)
 
@@ -482,12 +509,26 @@ def _latest_progression(
 def _format_psyke_entry(
     entry, max_notes: int, progression: str = "",
 ) -> str:
+    import json
     line = f"- {entry.name} ({entry.entry_type})"
     if entry.notes:
         short = entry.notes.split("\n")[0]
         if len(short) > max_notes:
             short = short[:max_notes].rsplit(" ", 1)[0] + "..."
         line += f": {short}"
+    details = {}
+    try:
+        if entry.details_json:
+            details = json.loads(entry.details_json)
+    except (json.JSONDecodeError, TypeError):
+        pass
+    if details:
+        detail_parts = [f"{k}={v}" for k, v in details.items() if v]
+        if detail_parts:
+            detail_str = "; ".join(detail_parts)
+            if len(detail_str) > max_notes:
+                detail_str = detail_str[:max_notes].rsplit(" ", 1)[0] + "..."
+            line += f" [{detail_str}]"
     if progression:
         prog_short = progression
         if len(prog_short) > 80:

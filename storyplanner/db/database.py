@@ -38,6 +38,18 @@ class Database:
 
         self._engine = create_engine(url, echo=False)
         SQLModel.metadata.create_all(self._engine)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        from sqlalchemy import text
+        with self._engine.connect() as conn:
+            rows = conn.execute(text("PRAGMA table_info(psykeentry)")).fetchall()
+            columns = {row[1] for row in rows}
+            if rows and "details_json" not in columns:
+                conn.execute(
+                    text("ALTER TABLE psykeentry ADD COLUMN details_json TEXT DEFAULT ''")
+                )
+                conn.commit()
 
     # -- Projects ------------------------------------------------------------
 
@@ -602,7 +614,9 @@ class Database:
         aliases: str = "",
         notes: str = "",
         is_global: bool = False,
+        details: dict | None = None,
     ) -> PsykeEntry:
+        import json
         with Session(self._engine) as session:
             entry = PsykeEntry(
                 project_id=project_id,
@@ -611,6 +625,7 @@ class Database:
                 aliases=aliases,
                 notes=notes,
                 is_global=is_global,
+                details_json=json.dumps(details) if details else "",
             )
             session.add(entry)
             session.commit()
@@ -625,7 +640,9 @@ class Database:
         aliases: str = "",
         notes: str = "",
         is_global: bool = False,
+        details: dict | None = None,
     ) -> PsykeEntry:
+        import json
         with Session(self._engine) as session:
             entry = session.get(PsykeEntry, entry_id)
             entry.name = name
@@ -633,9 +650,21 @@ class Database:
             entry.aliases = aliases
             entry.notes = notes
             entry.is_global = is_global
+            if details is not None:
+                entry.details_json = json.dumps(details)
             session.commit()
             session.refresh(entry)
             return entry
+
+    def get_psyke_entry_details(self, entry_id: int) -> dict:
+        import json
+        entry = self.get_psyke_entry_by_id(entry_id)
+        if entry is None:
+            return {}
+        try:
+            return json.loads(entry.details_json) if entry.details_json else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
 
     def delete_psyke_entry(self, entry_id: int) -> None:
         with Session(self._engine) as session:

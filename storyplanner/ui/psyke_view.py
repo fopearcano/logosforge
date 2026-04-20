@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from storyplanner.context_builder import find_psyke_scene_references
 from storyplanner.db import Database
+from storyplanner.models.psyke_details import FieldSpec, get_detail_schema
 
 USER_ROLE = Qt.ItemDataRole.UserRole
 
@@ -115,6 +116,18 @@ class PsykeView(QWidget):
         new_btn.clicked.connect(self._clear_form)
         btn_row.addWidget(new_btn)
         right.addLayout(btn_row)
+
+        # -- Details section (dynamic per entry type) -----------------------
+        self._details_section = QWidget()
+        self._details_layout = QVBoxLayout(self._details_section)
+        self._details_layout.setContentsMargins(0, 8, 0, 0)
+        self._details_label = QLabel("Details")
+        self._details_layout.addWidget(self._details_label)
+        self._detail_widgets: dict[str, QLineEdit | QPlainTextEdit] = {}
+        self._details_section.setVisible(False)
+        right.addWidget(self._details_section)
+
+        self._type_combo.currentIndexChanged.connect(self._on_type_changed)
 
         # -- Related Entries section -----------------------------------------
         self._related_section = QWidget()
@@ -246,6 +259,10 @@ class PsykeView(QWidget):
         self._notes_input.setPlainText(entry.notes)
         self._global_check.setChecked(entry.is_global)
 
+        self._rebuild_detail_fields(entry.entry_type)
+        details = self._db.get_psyke_entry_details(entry.id)
+        self._load_details(details)
+
         self._related_section.setVisible(True)
         self._prog_section.setVisible(True)
         self._refs_section.setVisible(True)
@@ -262,13 +279,17 @@ class PsykeView(QWidget):
         notes = self._notes_input.toPlainText().strip()
         is_global = self._global_check.isChecked()
 
+        details = self._collect_details()
+
         if self._selected_id is not None:
             self._db.update_psyke_entry(
-                self._selected_id, name, entry_type, aliases, notes, is_global
+                self._selected_id, name, entry_type, aliases, notes, is_global,
+                details=details,
             )
         else:
             entry = self._db.create_psyke_entry(
-                self._project_id, name, entry_type, aliases, notes, is_global
+                self._project_id, name, entry_type, aliases, notes, is_global,
+                details=details,
             )
             self._selected_id = entry.id
             self._form_label.setText("Edit Entry")
@@ -312,6 +333,7 @@ class PsykeView(QWidget):
         self._notes_input.clear()
         self._global_check.setChecked(False)
         self._list.clearSelection()
+        self._details_section.setVisible(False)
         self._related_section.setVisible(False)
         self._prog_section.setVisible(False)
         self._refs_section.setVisible(False)
@@ -467,3 +489,76 @@ class PsykeView(QWidget):
         scene_id = item.data(USER_ROLE)
         if self._on_open_scene:
             self._on_open_scene(scene_id)
+
+    # -- Detail fields -------------------------------------------------------
+
+    def _on_type_changed(self) -> None:
+        entry_type = self._type_combo.currentData() or "other"
+        self._rebuild_detail_fields(entry_type)
+
+    def _rebuild_detail_fields(self, entry_type: str) -> None:
+        for w in self._detail_widgets.values():
+            w.setParent(None)
+            w.deleteLater()
+        self._detail_widgets.clear()
+
+        # Remove old labels (everything after self._details_label)
+        layout = self._details_layout
+        while layout.count() > 1:
+            item = layout.takeAt(1)
+            w = item.widget()
+            if w:
+                w.setParent(None)
+                w.deleteLater()
+
+        schema = get_detail_schema(entry_type)
+        if not schema:
+            self._details_section.setVisible(False)
+            return
+
+        for spec in schema:
+            label = QLabel(spec.label)
+            layout.addWidget(label)
+            if spec.widget == "line":
+                widget = QLineEdit()
+                widget.setMaxLength(spec.max_chars)
+                layout.addWidget(widget)
+            else:
+                widget = QPlainTextEdit()
+                widget.setMaximumHeight(80)
+                widget.textChanged.connect(
+                    lambda w=widget, m=spec.max_chars: self._enforce_max(w, m)
+                )
+                layout.addWidget(widget)
+            self._detail_widgets[spec.key] = widget
+
+        self._details_section.setVisible(True)
+
+    def _enforce_max(self, widget: QPlainTextEdit, max_chars: int) -> None:
+        text = widget.toPlainText()
+        if len(text) > max_chars:
+            widget.blockSignals(True)
+            widget.setPlainText(text[:max_chars])
+            cursor = widget.textCursor()
+            cursor.movePosition(cursor.MoveOperation.End)
+            widget.setTextCursor(cursor)
+            widget.blockSignals(False)
+
+    def _collect_details(self) -> dict:
+        result: dict[str, str] = {}
+        for key, widget in self._detail_widgets.items():
+            if isinstance(widget, QLineEdit):
+                val = widget.text().strip()
+            else:
+                val = widget.toPlainText().strip()
+            if val:
+                result[key] = val
+        return result
+
+    def _load_details(self, details: dict) -> None:
+        for key, widget in self._detail_widgets.items():
+            val = details.get(key, "")
+            if isinstance(widget, QLineEdit):
+                widget.setText(val)
+            else:
+                widget.setPlainText(val)

@@ -125,6 +125,8 @@ def import_json(db: Database, data: dict) -> int:
         name = entry_data.get("name", "").strip()
         if not name:
             continue
+        details_raw = entry_data.get("details")
+        details = details_raw if isinstance(details_raw, dict) else None
         entry = db.create_psyke_entry(
             project_id,
             name=name,
@@ -132,6 +134,7 @@ def import_json(db: Database, data: dict) -> int:
             aliases=entry_data.get("aliases", ""),
             notes=entry_data.get("notes", ""),
             is_global=entry_data.get("is_global", False),
+            details=details,
         )
         psyke_id_by_name[name] = entry.id
 

@@ -331,6 +331,7 @@ class MainWindow(QMainWindow):
                 on_data_changed=self._on_data_changed,
                 on_link_clicked=self._on_link_navigated,
                 on_focus_mode_changed=self._on_focus_mode_changed,
+                on_open_psyke_entry=self._open_psyke_entry,
             )
         if self.content_area is not self._cached_scenes_view:
             self._set_content(self._cached_scenes_view)
@@ -477,6 +478,17 @@ class MainWindow(QMainWindow):
         else:
             self._set_sidebar_collapsed(True)
             self._assistant_panel.setVisible(False)
+
+    def _open_psyke_entry(self, entry_id: int) -> None:
+        self._set_active_section("PSYKE")
+        view = PsykeView(
+            self._db,
+            self._project_id,
+            on_data_changed=self._on_data_changed,
+            on_open_scene=self._open_scene_in_editor,
+        )
+        self._set_content(view)
+        view.select_entry(entry_id)
 
     def _show_plugins(self) -> None:
         self._set_content(PluginsView())

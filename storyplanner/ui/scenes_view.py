@@ -26,6 +26,8 @@ from storyplanner.db import Database
 from storyplanner.ui.inline_assistant import InlineAssistantPanel
 from storyplanner.ui.inline_edit_bar import InlineEditBar
 from storyplanner.ui.link_preview import BacklinksWidget, create_link_browser, render_linked_text
+from storyplanner.ui.psyke_highlighter import PsykeClickHandler, PsykeHighlighter
+from storyplanner.ui.psyke_quick_create import PsykeQuickCreateDialog
 
 USER_ROLE = Qt.ItemDataRole.UserRole
 FILTER_ALL = "All"
@@ -53,6 +55,7 @@ class ScenesView(QWidget):
         on_data_changed: Callable[[], None] | None = None,
         on_link_clicked: Callable[[str, int], None] | None = None,
         on_focus_mode_changed: Callable[[bool], None] | None = None,
+        on_open_psyke_entry: Callable[[int], None] | None = None,
     ) -> None:
         super().__init__()
         self._db = db
@@ -60,6 +63,7 @@ class ScenesView(QWidget):
         self._on_data_changed = on_data_changed
         self._on_link_clicked = on_link_clicked
         self._on_focus_mode_changed = on_focus_mode_changed
+        self._on_open_psyke_entry = on_open_psyke_entry
         self._selected_scene_id: int | None = None
         self._focus_mode = False
         self._refreshing = False
@@ -274,6 +278,21 @@ class ScenesView(QWidget):
             lambda _: self._dismiss_ai_hint(),
         )
 
+        # -- PSYKE highlighter + click-to-jump --------------------------------
+        self._psyke_highlighter = PsykeHighlighter(self._content_input.document())
+        self._psyke_click_handler = PsykeClickHandler(
+            self._content_input,
+            self._psyke_highlighter,
+            on_jump=self._on_psyke_jump,
+        )
+        self._content_input.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self._content_input.customContextMenuRequested.connect(
+            self._show_editor_context_menu
+        )
+        self._refresh_psyke_terms()
+
         # -- Detail fields (hidden in focus mode) ----------------------------
         self._detail_fields = QWidget()
         df = QVBoxLayout(self._detail_fields)
@@ -366,6 +385,12 @@ class ScenesView(QWidget):
         )
         inline_shortcut.activated.connect(self._inline_edit.activate)
 
+        psyke_create_shortcut = QShortcut(QKeySequence("Ctrl+Shift+K"), self)
+        psyke_create_shortcut.setContext(
+            Qt.ShortcutContext.WidgetWithChildrenShortcut
+        )
+        psyke_create_shortcut.activated.connect(self._quick_create_psyke)
+
         self._load_characters_and_states()
         self._load_places()
         self._refresh_filters()
@@ -386,6 +411,7 @@ class ScenesView(QWidget):
             self._load_places()
             self._refresh_filters()
             self._refresh_list()
+            self._refresh_psyke_terms()
         finally:
             self._refreshing = False
 
@@ -805,6 +831,58 @@ class ScenesView(QWidget):
             parts.append(stats["hint"])
         self._stats_label.setText("  \u00b7  ".join(parts))
         self._focus_word_label.setText(f"{stats['words']} words")
+
+    # -- PSYKE highlighting and quick create ------------------------------------
+
+    def _refresh_psyke_terms(self) -> None:
+        entries = self._db.get_all_psyke_entries(self._project_id)
+        terms: list[str] = []
+        term_map: dict[str, int] = {}
+        for e in entries:
+            if e.name.strip():
+                terms.append(e.name)
+                term_map[e.name.lower()] = e.id
+            if e.aliases:
+                for alias in e.aliases.split(","):
+                    alias = alias.strip()
+                    if alias:
+                        terms.append(alias)
+                        term_map[alias.lower()] = e.id
+        self._psyke_highlighter.refresh_patterns(terms)
+        self._psyke_click_handler.set_term_map(term_map)
+
+    def _on_psyke_jump(self, entry_id: int) -> None:
+        if self._on_open_psyke_entry:
+            self._on_open_psyke_entry(entry_id)
+
+    def _show_editor_context_menu(self, pos) -> None:
+        menu = self._content_input.createStandardContextMenu()
+        selection = self._content_input.textCursor().selectedText().strip()
+        menu.addSeparator()
+        action = menu.addAction("Create PSYKE entry from selection")
+        action.setEnabled(bool(selection))
+        action.triggered.connect(self._quick_create_psyke)
+        menu.exec(self._content_input.mapToGlobal(pos))
+
+    def _quick_create_psyke(self) -> None:
+        selection = self._content_input.textCursor().selectedText().strip()
+        dlg = PsykeQuickCreateDialog(self, initial_name=selection)
+        if dlg.exec() != PsykeQuickCreateDialog.DialogCode.Accepted:
+            return
+        vals = dlg.get_values()
+        if not vals["name"]:
+            return
+        self._db.create_psyke_entry(
+            self._project_id,
+            name=vals["name"],
+            entry_type=vals["entry_type"],
+            aliases=vals["aliases"],
+            notes=vals["notes"],
+            is_global=vals["is_global"],
+        )
+        self._refresh_psyke_terms()
+        if self._on_data_changed:
+            self._on_data_changed()
 
     # -- Inline assistant --------------------------------------------------------
 

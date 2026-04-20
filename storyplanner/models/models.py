@@ -108,6 +108,7 @@ class PsykeEntry(SQLModel, table=True):
     entry_type: str = "other"
     aliases: str = ""
     notes: str = ""
+    details_json: str = ""
     is_global: bool = False
     created_at: datetime = Field(default_factory=_now)
 

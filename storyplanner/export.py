@@ -73,6 +73,7 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
             "aliases": e.aliases,
             "notes": e.notes,
             "is_global": e.is_global,
+            "details": db.get_psyke_entry_details(e.id),
             "related_entries": [r.name for r in related],
             "progressions": [
                 {
