@@ -42,6 +42,7 @@ from storyplanner.ui.beat_analysis_view import BeatAnalysisView
 from storyplanner.ui.character_arc_view import CharacterArcView
 from storyplanner.ui.characters_view import CharactersView
 from storyplanner.ui.dashboard_view import DashboardView
+from storyplanner.ui.focus_graph_view import FocusGraphView
 from storyplanner.ui.graph_view import GraphView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.outline_view import OutlineView
@@ -419,9 +420,9 @@ class MainWindow(QMainWindow):
 
     def _show_graph(self) -> None:
         self._set_content(
-            GraphView(
+            FocusGraphView(
                 self._db, self._project_id,
-                on_node_clicked=self._on_link_navigated,
+                on_node_selected=self._on_link_navigated,
             )
         )
 

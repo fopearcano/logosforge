@@ -993,6 +993,45 @@ def build_stylesheet() -> str:
         font-size: 13px;
         background: transparent;
     }}
+
+    /* -- Graph Focus System -- */
+    #graphToolbar {{
+        background-color: {BG_PANEL};
+        border-bottom: 1px solid {BORDER};
+    }}
+    #graphToolbar QLabel {{
+        color: {TEXT_SECONDARY};
+        font-size: 12px;
+    }}
+    #graphToolbar QLineEdit {{
+        background-color: {BG_INPUT};
+        border: 1px solid {BORDER};
+        border-radius: 4px;
+        padding: 3px 6px;
+        color: {TEXT_PRIMARY};
+        font-size: 12px;
+    }}
+    #graphToolbar QLineEdit:focus {{
+        border-color: {ACCENT};
+    }}
+    #graphToolbar QCheckBox {{
+        color: {TEXT_SECONDARY};
+        font-size: 12px;
+        spacing: 4px;
+    }}
+    #graphToolbar QComboBox {{
+        background-color: {BG_INPUT};
+        border: 1px solid {BORDER};
+        border-radius: 4px;
+        padding: 3px 6px;
+        color: {TEXT_PRIMARY};
+        font-size: 12px;
+        min-width: 80px;
+    }}
+    #focusGraphView {{
+        background-color: {BG_DARK};
+        border: none;
+    }}
     """
 
 
