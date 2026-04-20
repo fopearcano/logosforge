@@ -649,6 +649,71 @@ def build_stylesheet() -> str:
         color: {SIDEBAR_ACTIVE_TEXT};
         font-weight: bold;
     }}
+
+    /* -- Writing Core -- */
+    #writingCanvas {{
+        background-color: {BG_DARK};
+    }}
+    #writingScroll {{
+        background-color: {BG_DARK};
+        border: none;
+    }}
+    #writingTopBar {{
+        background-color: {BG_PANEL};
+        border-bottom: 1px solid {BORDER};
+    }}
+    #writingCoreEditor {{
+        background-color: transparent;
+        color: {TEXT_PRIMARY};
+        border: none;
+        padding: 0;
+        font-size: 18px;
+        selection-background-color: {SELECTION_BG};
+        selection-color: {SELECTION_TEXT};
+    }}
+    #writingActHeader {{
+        color: {TEXT_MUTED};
+        font-size: 11px;
+        font-weight: bold;
+        letter-spacing: 2.5px;
+        background: transparent;
+    }}
+    #writingChapterHeader {{
+        color: {TEXT_PRIMARY};
+        font-size: 22px;
+        font-weight: bold;
+        background: transparent;
+    }}
+    #writingSceneTitle {{
+        color: {TEXT_SECONDARY};
+        font-size: 15px;
+        font-weight: 600;
+        background: transparent;
+    }}
+    #writingSceneSep {{
+        background-color: {BORDER};
+        max-height: 1px;
+    }}
+    #writingSceneBlock {{
+        background: transparent;
+        border: none;
+    }}
+    #writingInlineAction {{
+        color: {TEXT_MUTED};
+        font-size: 12px;
+        background: transparent;
+        border: none;
+        padding: 2px 0;
+        text-align: left;
+    }}
+    #writingInlineAction:hover {{
+        color: {ACCENT};
+    }}
+    #writingEmptyState {{
+        color: {TEXT_MUTED};
+        font-size: 15px;
+        background: transparent;
+    }}
     """
 
 

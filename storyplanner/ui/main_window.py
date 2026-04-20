@@ -54,6 +54,7 @@ from storyplanner.ui.tag_analysis_view import TagAnalysisView
 from storyplanner.ui.timeline_view import TimelineView
 from storyplanner.ui.welcome_view import WelcomeView
 from storyplanner.ui.writer_outline_view import WriterOutlineView
+from storyplanner.ui.writing_core_view import WritingCoreView
 
 
 class MainWindow(QMainWindow):
@@ -102,6 +103,7 @@ class MainWindow(QMainWindow):
             "Places": "\U0001F4CD",
             "Notes": "\U0001F4DD",
             "Scenes": "\U0001F3AC",
+            "Manuscript": "\u2712",
             "Timeline": "\U0001F552",
             "Outline": "\U0001F4D1",
             "Writer": "\u270D",
@@ -123,9 +125,9 @@ class MainWindow(QMainWindow):
 
         _NAV_LABELS = [
             "Projects", "Dashboard", "Characters", "Places", "Notes",
-            "Scenes", "Timeline", "Outline", "Writer", "Structure",
-            "Acts", "Beats", "Tags", "Graph", "Arcs", "Search",
-            "PSYKE", "Plugins", "Assistant",
+            "Scenes", "Manuscript", "Timeline", "Outline", "Writer",
+            "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
+            "Search", "PSYKE", "Plugins", "Assistant",
         ]
         self.sidebar_buttons: dict[str, QPushButton] = {}
         for label in _NAV_LABELS:
@@ -174,9 +176,9 @@ class MainWindow(QMainWindow):
         # -- Connect navigation buttons (checkable + active tracking) ----------
         self._nav_labels = [
             "Projects", "Dashboard", "Characters", "Places", "Notes",
-            "Scenes", "Timeline", "Outline", "Writer", "Structure",
-            "Acts", "Beats", "Tags", "Graph", "Arcs", "Search",
-            "PSYKE", "Plugins",
+            "Scenes", "Manuscript", "Timeline", "Outline", "Writer",
+            "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
+            "Search", "PSYKE", "Plugins",
         ]
         _nav_handlers = {
             "Projects": self._show_projects,
@@ -185,6 +187,7 @@ class MainWindow(QMainWindow):
             "Places": self._show_places,
             "Notes": self._show_notes,
             "Scenes": self._show_scenes,
+            "Manuscript": self._show_manuscript,
             "Timeline": self._show_timeline,
             "Outline": self._show_outline,
             "Writer": self._show_writer_outline,
@@ -336,6 +339,16 @@ class MainWindow(QMainWindow):
         if self.content_area is not self._cached_scenes_view:
             self._set_content(self._cached_scenes_view)
             self._cached_scenes_view.refresh()
+
+    def _show_manuscript(self) -> None:
+        self._set_content(
+            WritingCoreView(
+                self._db,
+                self._project_id,
+                on_data_changed=self._on_data_changed,
+                on_focus_mode_changed=self._on_focus_mode_changed,
+            )
+        )
 
     def _show_timeline(self) -> None:
         preferences.set_flag("has_seen_timeline_hint", True)
@@ -760,10 +773,11 @@ class MainWindow(QMainWindow):
         nav_items = [
             ("Dashboard", self._show_dashboard, "Ctrl+1"),
             ("Scenes", self._show_scenes, "Ctrl+2"),
-            ("Timeline", self._show_timeline, "Ctrl+3"),
-            ("Characters", self._show_characters, "Ctrl+4"),
-            ("Notes", self._show_notes, "Ctrl+5"),
-            ("PSYKE", self._show_psyke, "Ctrl+6"),
+            ("Manuscript", self._show_manuscript, "Ctrl+3"),
+            ("Timeline", self._show_timeline, "Ctrl+4"),
+            ("Characters", self._show_characters, "Ctrl+5"),
+            ("Notes", self._show_notes, "Ctrl+6"),
+            ("PSYKE", self._show_psyke, "Ctrl+7"),
         ]
         for label, handler, shortcut in nav_items:
             act = QAction(label, self)
