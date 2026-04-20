@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QGraphicsEllipseItem,
     QGraphicsLineItem,
+    QGraphicsPolygonItem,
     QGraphicsScene,
     QGraphicsSimpleTextItem,
     QGraphicsView,
@@ -28,8 +29,17 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from PySide6.QtGui import QPolygonF
+from PySide6.QtCore import QPointF
 
 from storyplanner.db import Database
+from storyplanner.graph_meaning import (
+    MeaningData,
+    NodeMeaning,
+    compute_meaning,
+    importance_radius_delta,
+    state_color,
+)
 from storyplanner.ui import theme
 
 
@@ -47,6 +57,13 @@ _GRAPH_RADIUS = 200
 _EDGE_COLOR = "#4a5568"
 _EDGE_HIGHLIGHT = "#4ade80"
 _DIM_OPACITY = 0.25
+
+_ARC_PALETTE = ["#42a5f5", "#ab47bc", "#ef5350", "#26a69a", "#ffa726", "#78909c"]
+
+
+def _arc_color(plotline: str) -> str:
+    idx = hash(plotline) % len(_ARC_PALETTE)
+    return _ARC_PALETTE[idx]
 
 
 @dataclass
@@ -230,6 +247,8 @@ class FocusGraphView(QWidget):
         self._temporal_enabled = False
         self._temporal_max_order: int = 9999
         self._show_future = False
+        self._meaning_enabled = False
+        self._meaning_data: MeaningData | None = None
 
         self._node_items: dict[str, _FocusNode] = {}
         self._label_items: dict[str, QGraphicsSimpleTextItem] = {}
@@ -289,6 +308,13 @@ class FocusGraphView(QWidget):
         self._future_check.setEnabled(False)
         tb.addWidget(self._future_check)
 
+        tb.addSpacing(12)
+
+        self._meaning_check = QCheckBox("Meaning")
+        self._meaning_check.setToolTip("Show narrative insight: state, importance, arcs")
+        self._meaning_check.toggled.connect(self._on_meaning_toggled)
+        tb.addWidget(self._meaning_check)
+
         tb.addStretch()
         outer.addWidget(toolbar)
 
@@ -328,7 +354,19 @@ class FocusGraphView(QWidget):
                 self._db, self._project_id, self._graph_data, self._temporal_max_order,
             )
 
+        if self._meaning_enabled:
+            self._meaning_data = compute_meaning(self._db, self._project_id, visible)
+        else:
+            self._meaning_data = None
+
         positions = self._layout_nodes(visible)
+
+        if self._meaning_data:
+            for arc_link in self._meaning_data.arc_links:
+                src_pos = positions.get(arc_link.source_id)
+                tgt_pos = positions.get(arc_link.target_id)
+                if src_pos and tgt_pos:
+                    self._draw_arc_link(src_pos, tgt_pos, arc_link.plotline)
 
         for edge in self._graph_data.edges:
             if edge.source_id in visible and edge.target_id in visible:
@@ -336,6 +374,13 @@ class FocusGraphView(QWidget):
                 tgt_pos = positions.get(edge.target_id)
                 if src_pos and tgt_pos:
                     self._draw_edge(src_pos, tgt_pos, edge)
+
+        if self._meaning_data:
+            for src_id, tgt_id in self._meaning_data.flow_pairs:
+                src_pos = positions.get(src_id)
+                tgt_pos = positions.get(tgt_id)
+                if src_pos and tgt_pos:
+                    self._draw_flow_arrow(src_pos, tgt_pos)
 
         for nid in visible:
             pos = positions[nid]
@@ -346,7 +391,10 @@ class FocusGraphView(QWidget):
                 and nid not in temporal_active
                 and self._show_future
             )
-            self._draw_node(pos[0], pos[1], node, is_focal, is_dimmed)
+            node_meaning = (
+                self._meaning_data.node_meanings.get(nid) if self._meaning_data else None
+            )
+            self._draw_node(pos[0], pos[1], node, is_focal, is_dimmed, node_meaning)
 
     def _compute_visible_nodes(self) -> set[str]:
         if not self._graph_data:
@@ -401,10 +449,22 @@ class FocusGraphView(QWidget):
     def _draw_node(
         self, x: float, y: float, node: GraphNode,
         is_focal: bool, is_dimmed: bool,
+        meaning: NodeMeaning | None = None,
     ) -> None:
         radius = _FOCUS_RADIUS if is_focal else _NODE_RADIUS
         color_hex = _TYPE_COLORS.get(node.etype, "#9e9e9e")
+
+        if meaning:
+            radius += importance_radius_delta(meaning.importance)
+            if meaning.state_warmth != "neutral" and node.etype == "Character":
+                color_hex = state_color(meaning.state_warmth)
+            if meaning.psyke_glow and node.etype == "PSYKE":
+                color_hex = QColor(color_hex).lighter(130).name()
+
         color = QColor(color_hex)
+
+        if meaning and meaning.is_dead_zone:
+            color.setHsvF(color.hueF(), color.saturationF() * 0.5, color.valueF())
 
         if is_dimmed:
             color.setAlphaF(_DIM_OPACITY)
@@ -417,7 +477,11 @@ class FocusGraphView(QWidget):
         ellipse.setBrush(QBrush(color))
         pen_color = color.darker(120) if not is_dimmed else QColor(color_hex)
         pen_color.setAlphaF(0.4 if is_dimmed else 1.0)
-        ellipse.setPen(QPen(pen_color, 2 if not is_focal else 3))
+        pen_width = 3 if is_focal else 2
+        if meaning and meaning.state_warmth != "neutral" and node.etype == "Character":
+            pen_color = QColor(state_color(meaning.state_warmth))
+            pen_width = 3
+        ellipse.setPen(QPen(pen_color, pen_width))
         ellipse.setZValue(2 if is_focal else 1)
         self._gscene.addItem(ellipse)
         self._node_items[node.node_id] = ellipse
@@ -453,6 +517,49 @@ class FocusGraphView(QWidget):
         line.setZValue(0)
         self._gscene.addItem(line)
         self._edge_items.append(line)
+
+    def _draw_arc_link(
+        self, src: tuple[float, float], tgt: tuple[float, float], plotline: str,
+    ) -> None:
+        color = QColor(_arc_color(plotline))
+        color.setAlphaF(0.3)
+        pen = QPen(color, 1.5, Qt.PenStyle.DashLine)
+        line = QGraphicsLineItem(src[0], src[1], tgt[0], tgt[1])
+        line.setPen(pen)
+        line.setZValue(-1)
+        self._gscene.addItem(line)
+
+    def _draw_flow_arrow(
+        self, src: tuple[float, float], tgt: tuple[float, float],
+    ) -> None:
+        dx = tgt[0] - src[0]
+        dy = tgt[1] - src[1]
+        length = math.sqrt(dx * dx + dy * dy)
+        if length < 1:
+            return
+        ux, uy = dx / length, dy / length
+        mid_x = (src[0] + tgt[0]) / 2
+        mid_y = (src[1] + tgt[1]) / 2
+
+        arrow_size = 4.0
+        tip = QPointF(mid_x + ux * arrow_size, mid_y + uy * arrow_size)
+        left = QPointF(
+            mid_x - ux * arrow_size + uy * arrow_size * 0.6,
+            mid_y - uy * arrow_size - ux * arrow_size * 0.6,
+        )
+        right = QPointF(
+            mid_x - ux * arrow_size - uy * arrow_size * 0.6,
+            mid_y - uy * arrow_size + ux * arrow_size * 0.6,
+        )
+
+        polygon = QPolygonF([tip, left, right])
+        arrow = QGraphicsPolygonItem(polygon)
+        color = QColor(theme.TEXT_MUTED)
+        color.setAlphaF(0.4)
+        arrow.setBrush(QBrush(color))
+        arrow.setPen(QPen(Qt.PenStyle.NoPen))
+        arrow.setZValue(-1)
+        self._gscene.addItem(arrow)
 
     # -- Interaction ---------------------------------------------------------
 
@@ -528,6 +635,10 @@ class FocusGraphView(QWidget):
         self._show_future = checked
         self._rebuild_view()
 
+    def _on_meaning_toggled(self, checked: bool) -> None:
+        self._meaning_enabled = checked
+        self._rebuild_view()
+
     def set_temporal_max_order(self, order: int) -> None:
         self._temporal_max_order = order
         if self._temporal_enabled:
@@ -543,3 +654,9 @@ class FocusGraphView(QWidget):
 
     def is_temporal_enabled(self) -> bool:
         return self._temporal_enabled
+
+    def is_meaning_enabled(self) -> bool:
+        return self._meaning_enabled
+
+    def get_meaning_data(self) -> MeaningData | None:
+        return self._meaning_data
