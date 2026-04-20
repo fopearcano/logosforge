@@ -851,6 +851,148 @@ def build_stylesheet() -> str:
         border: 1px solid {BORDER};
         border-radius: 6px;
     }}
+
+    /* -- Multi-Plot views -- */
+    #multiPlotToolbar {{
+        background-color: {BG_PANEL};
+        border-bottom: 1px solid {BORDER};
+    }}
+    #multiPlotModeBtn {{
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 12px;
+    }}
+    #multiPlotModeBtn:checked {{
+        background-color: {SIDEBAR_ACTIVE_BG};
+        color: {SIDEBAR_ACTIVE_TEXT};
+        font-weight: bold;
+    }}
+
+    /* Timeline strip */
+    #timelineScroll {{
+        background-color: {BG_DARK};
+        border: none;
+    }}
+    #timelineContainer {{
+        background-color: {BG_DARK};
+    }}
+    #timelineGroupHeader {{
+        color: {TEXT_MUTED};
+        font-size: 11px;
+        font-weight: bold;
+        letter-spacing: 1px;
+        background: transparent;
+        padding: 4px 8px;
+    }}
+    #timelineCard {{
+        background-color: {BG_INPUT};
+        border: 1px solid {BORDER};
+        border-radius: 6px;
+    }}
+    #timelineCard:hover {{
+        border-color: {ACCENT_DIM};
+    }}
+    #timelineCardTitle {{
+        color: {TEXT_PRIMARY};
+        font-size: 11px;
+        font-weight: 600;
+        background: transparent;
+    }}
+    #timelineCardSummary {{
+        color: {TEXT_SECONDARY};
+        font-size: 10px;
+        background: transparent;
+    }}
+    #timelineEmpty {{
+        color: {TEXT_MUTED};
+        font-size: 13px;
+        background: transparent;
+    }}
+
+    /* Arc lanes */
+    #arcScroll {{
+        background-color: {BG_DARK};
+        border: none;
+    }}
+    #arcContainer {{
+        background-color: {BG_DARK};
+    }}
+    #arcLane {{
+        background-color: {BG_PANEL};
+        border: 1px solid {BORDER};
+        border-radius: 8px;
+    }}
+    #arcLaneHeader {{
+        color: {TEXT_PRIMARY};
+        font-size: 13px;
+        font-weight: bold;
+        background: transparent;
+    }}
+    #arcCard {{
+        background-color: {BG_INPUT};
+        border: 1px solid {BORDER};
+        border-radius: 5px;
+    }}
+    #arcCardTitle {{
+        color: {TEXT_PRIMARY};
+        font-size: 11px;
+        background: transparent;
+    }}
+    #arcCardBeat {{
+        color: {TEXT_MUTED};
+        font-size: 10px;
+        background: transparent;
+    }}
+    #arcEmpty {{
+        color: {TEXT_MUTED};
+        font-size: 13px;
+        background: transparent;
+    }}
+
+    /* Character lanes */
+    #charScroll {{
+        background-color: {BG_DARK};
+        border: none;
+    }}
+    #charContainer {{
+        background-color: {BG_DARK};
+    }}
+    #charLane {{
+        background-color: {BG_PANEL};
+        border: 1px solid {BORDER};
+        border-radius: 8px;
+    }}
+    #charLaneHeader {{
+        color: {TEXT_PRIMARY};
+        font-size: 13px;
+        font-weight: bold;
+        background: transparent;
+    }}
+    #charLaneCount {{
+        color: {TEXT_MUTED};
+        font-size: 10px;
+        background: transparent;
+    }}
+    #charCard {{
+        background-color: {BG_INPUT};
+        border: 1px solid {BORDER};
+        border-radius: 5px;
+    }}
+    #charCardTitle {{
+        color: {TEXT_PRIMARY};
+        font-size: 11px;
+        background: transparent;
+    }}
+    #charCardChapter {{
+        color: {TEXT_MUTED};
+        font-size: 10px;
+        background: transparent;
+    }}
+    #charEmpty {{
+        color: {TEXT_MUTED};
+        font-size: 13px;
+        background: transparent;
+    }}
     """
 
 

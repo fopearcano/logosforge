@@ -1,0 +1,589 @@
+"""Multi-View Plotting — dynamic story perspectives.
+
+Container widget that offers four view modes (Grid, Timeline, Arc, Character)
+over the same story data, with unified filtering by character/tag/plotline.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass, field
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+
+from storyplanner.db import Database
+from storyplanner.ui import theme
+from storyplanner.ui.story_grid_view import StoryGridView
+
+
+@dataclass
+class PlotFilters:
+    """Active filter state for all plot views."""
+
+    character_id: int | None = None
+    tag: str = ""
+    plotline: str = ""
+
+
+# =============================================================================
+# Timeline Strip — horizontal left-to-right scene flow
+# =============================================================================
+
+class _TimelineStrip(QWidget):
+    """Horizontal timeline: scenes as cards flowing left to right."""
+
+    def __init__(self, db: Database, project_id: int) -> None:
+        super().__init__()
+        self._db = db
+        self._project_id = project_id
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._scroll.setObjectName("timelineScroll")
+        outer.addWidget(self._scroll)
+
+        self._container = QWidget()
+        self._container.setObjectName("timelineContainer")
+        self._layout = QHBoxLayout(self._container)
+        self._layout.setContentsMargins(16, 16, 16, 16)
+        self._layout.setSpacing(0)
+        self._layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self._scroll.setWidget(self._container)
+
+        self._cards: list[QFrame] = []
+
+    def refresh(self, filters: PlotFilters | None = None) -> None:
+        self._clear()
+        scenes = self._filtered_scenes(filters)
+
+        current_group = None
+        for scene in scenes:
+            group = (scene.act or scene.chapter or "").strip()
+            if group and group != current_group:
+                current_group = group
+                self._add_group_header(group)
+
+            self._add_scene_card(scene)
+
+        if not scenes:
+            self._add_empty()
+
+        self._layout.addStretch()
+
+    def _filtered_scenes(self, filters: PlotFilters | None):
+        scenes = self._db.get_all_scenes(self._project_id)
+        if not filters:
+            return scenes
+        return _apply_filters(self._db, scenes, filters)
+
+    def _clear(self) -> None:
+        self._cards.clear()
+        while self._layout.count():
+            item = self._layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+    def _add_group_header(self, text: str) -> None:
+        header = QLabel(text)
+        header.setObjectName("timelineGroupHeader")
+        header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._layout.addWidget(header)
+        self._layout.addSpacing(8)
+
+    def _add_scene_card(self, scene) -> None:
+        card = QFrame()
+        card.setObjectName("timelineCard")
+        card.setFixedWidth(160)
+        card.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
+
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(2)
+
+        title = QLabel(scene.title or "Untitled")
+        title.setObjectName("timelineCardTitle")
+        title.setWordWrap(True)
+        layout.addWidget(title)
+
+        summary = scene.summary or scene.synopsis or ""
+        if summary:
+            if len(summary) > 60:
+                summary = summary[:57] + "..."
+            lbl = QLabel(summary)
+            lbl.setObjectName("timelineCardSummary")
+            lbl.setWordWrap(True)
+            layout.addWidget(lbl)
+
+        self._layout.addWidget(card)
+        self._layout.addSpacing(4)
+        self._cards.append(card)
+
+    def _add_empty(self) -> None:
+        lbl = QLabel("No scenes match the current filters.")
+        lbl.setObjectName("timelineEmpty")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._layout.addWidget(lbl)
+
+    def card_count(self) -> int:
+        return len(self._cards)
+
+
+# =============================================================================
+# Arc Lanes — one row per plotline
+# =============================================================================
+
+class _ArcLanes(QWidget):
+    """Arc view: one horizontal lane per plotline."""
+
+    def __init__(self, db: Database, project_id: int) -> None:
+        super().__init__()
+        self._db = db
+        self._project_id = project_id
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setObjectName("arcScroll")
+        outer.addWidget(self._scroll)
+
+        self._container = QWidget()
+        self._container.setObjectName("arcContainer")
+        self._lanes_layout = QVBoxLayout(self._container)
+        self._lanes_layout.setContentsMargins(16, 16, 16, 16)
+        self._lanes_layout.setSpacing(12)
+        self._scroll.setWidget(self._container)
+
+        self._lane_count = 0
+
+    def refresh(self, filters: PlotFilters | None = None) -> None:
+        self._clear()
+        scenes = self._filtered_scenes(filters)
+
+        arcs: dict[str, list] = {}
+        for scene in scenes:
+            plotline = (scene.plotline or "").strip()
+            if not plotline:
+                plotline = "Unassigned"
+            arcs.setdefault(plotline, []).append(scene)
+
+        if not arcs:
+            self._add_empty()
+            return
+
+        for arc_name in sorted(arcs.keys(), key=lambda k: (k == "Unassigned", k)):
+            self._add_lane(arc_name, arcs[arc_name])
+
+    def _filtered_scenes(self, filters: PlotFilters | None):
+        scenes = self._db.get_all_scenes(self._project_id)
+        if not filters:
+            return scenes
+        return _apply_filters(self._db, scenes, filters)
+
+    def _clear(self) -> None:
+        self._lane_count = 0
+        while self._lanes_layout.count():
+            item = self._lanes_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+    def _add_lane(self, arc_name: str, scenes: list) -> None:
+        lane = QFrame()
+        lane.setObjectName("arcLane")
+        lane_layout = QVBoxLayout(lane)
+        lane_layout.setContentsMargins(8, 6, 8, 6)
+        lane_layout.setSpacing(4)
+
+        header = QLabel(arc_name)
+        header.setObjectName("arcLaneHeader")
+        lane_layout.addWidget(header)
+
+        cards_row = QHBoxLayout()
+        cards_row.setSpacing(6)
+        for scene in scenes:
+            card = self._make_card(scene)
+            cards_row.addWidget(card)
+        cards_row.addStretch()
+        lane_layout.addLayout(cards_row)
+
+        self._lanes_layout.addWidget(lane)
+        self._lane_count += 1
+
+    def _make_card(self, scene) -> QFrame:
+        card = QFrame()
+        card.setObjectName("arcCard")
+        card.setFixedWidth(140)
+
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(2)
+
+        title = QLabel(scene.title or "Untitled")
+        title.setObjectName("arcCardTitle")
+        title.setWordWrap(True)
+        layout.addWidget(title)
+
+        if scene.beat:
+            beat = QLabel(scene.beat)
+            beat.setObjectName("arcCardBeat")
+            layout.addWidget(beat)
+
+        return card
+
+    def _add_empty(self) -> None:
+        lbl = QLabel("No arcs found. Assign plotlines to scenes.")
+        lbl.setObjectName("arcEmpty")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._lanes_layout.addWidget(lbl)
+
+    def lane_count(self) -> int:
+        return self._lane_count
+
+
+# =============================================================================
+# Character Lanes — one row per character
+# =============================================================================
+
+class _CharLanes(QWidget):
+    """Character view: one horizontal lane per character."""
+
+    def __init__(self, db: Database, project_id: int) -> None:
+        super().__init__()
+        self._db = db
+        self._project_id = project_id
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setObjectName("charScroll")
+        outer.addWidget(self._scroll)
+
+        self._container = QWidget()
+        self._container.setObjectName("charContainer")
+        self._lanes_layout = QVBoxLayout(self._container)
+        self._lanes_layout.setContentsMargins(16, 16, 16, 16)
+        self._lanes_layout.setSpacing(12)
+        self._scroll.setWidget(self._container)
+
+        self._lane_count = 0
+
+    def refresh(self, filters: PlotFilters | None = None) -> None:
+        self._clear()
+        scenes = self._filtered_scenes(filters)
+        characters = self._db.get_all_characters(self._project_id)
+
+        char_scenes: dict[int, list] = {c.id: [] for c in characters}
+        for scene in scenes:
+            char_ids = self._db.get_scene_character_ids(scene.id)
+            for cid in char_ids:
+                if cid in char_scenes:
+                    char_scenes[cid].append(scene)
+
+        if not any(char_scenes.values()):
+            self._add_empty()
+            return
+
+        for char in characters:
+            if char_scenes[char.id]:
+                self._add_lane(char, char_scenes[char.id])
+
+    def _filtered_scenes(self, filters: PlotFilters | None):
+        scenes = self._db.get_all_scenes(self._project_id)
+        if not filters:
+            return scenes
+        return _apply_filters(self._db, scenes, filters)
+
+    def _clear(self) -> None:
+        self._lane_count = 0
+        while self._lanes_layout.count():
+            item = self._lanes_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+    def _add_lane(self, character, scenes: list) -> None:
+        lane = QFrame()
+        lane.setObjectName("charLane")
+        lane_layout = QVBoxLayout(lane)
+        lane_layout.setContentsMargins(8, 6, 8, 6)
+        lane_layout.setSpacing(4)
+
+        header_row = QHBoxLayout()
+        header_row.setSpacing(6)
+
+        dot = QLabel()
+        dot.setFixedSize(10, 10)
+        dot.setStyleSheet(
+            f"background-color: {character.color}; border-radius: 5px;"
+        )
+        header_row.addWidget(dot)
+
+        name = QLabel(character.name)
+        name.setObjectName("charLaneHeader")
+        header_row.addWidget(name)
+        header_row.addStretch()
+
+        count = QLabel(f"{len(scenes)} scenes")
+        count.setObjectName("charLaneCount")
+        header_row.addWidget(count)
+        lane_layout.addLayout(header_row)
+
+        cards_row = QHBoxLayout()
+        cards_row.setSpacing(6)
+        for scene in scenes:
+            card = self._make_card(scene)
+            cards_row.addWidget(card)
+        cards_row.addStretch()
+        lane_layout.addLayout(cards_row)
+
+        self._lanes_layout.addWidget(lane)
+        self._lane_count += 1
+
+    def _make_card(self, scene) -> QFrame:
+        card = QFrame()
+        card.setObjectName("charCard")
+        card.setFixedWidth(130)
+
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(1)
+
+        title = QLabel(scene.title or "Untitled")
+        title.setObjectName("charCardTitle")
+        title.setWordWrap(True)
+        layout.addWidget(title)
+
+        chapter = (scene.chapter or scene.act or "").strip()
+        if chapter:
+            ch_lbl = QLabel(chapter)
+            ch_lbl.setObjectName("charCardChapter")
+            layout.addWidget(ch_lbl)
+
+        return card
+
+    def _add_empty(self) -> None:
+        lbl = QLabel("No characters linked to scenes.\nLink characters in the Scenes view.")
+        lbl.setObjectName("charEmpty")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl.setWordWrap(True)
+        self._lanes_layout.addWidget(lbl)
+
+    def lane_count(self) -> int:
+        return self._lane_count
+
+
+# =============================================================================
+# Shared filter logic
+# =============================================================================
+
+def _apply_filters(db: Database, scenes: list, filters: PlotFilters) -> list:
+    result = scenes
+
+    if filters.character_id:
+        char_scene_ids: set[int] = set()
+        for s in scenes:
+            if filters.character_id in db.get_scene_character_ids(s.id):
+                char_scene_ids.add(s.id)
+        result = [s for s in result if s.id in char_scene_ids]
+
+    if filters.tag:
+        tag_lower = filters.tag.lower()
+        result = [
+            s for s in result
+            if tag_lower in (s.tags or "").lower()
+        ]
+
+    if filters.plotline:
+        result = [
+            s for s in result
+            if (s.plotline or "").strip().lower() == filters.plotline.lower()
+        ]
+
+    return result
+
+
+# =============================================================================
+# Main container
+# =============================================================================
+
+_VIEW_MODES = ["Grid", "Timeline", "Arc", "Character"]
+
+
+class MultiPlotView(QWidget):
+    """Multi-view plotting — switch between Grid, Timeline, Arc, Character."""
+
+    def __init__(
+        self,
+        db: Database,
+        project_id: int,
+        on_data_changed: Callable[[], None] | None = None,
+        on_open_scene: Callable[[int], None] | None = None,
+    ) -> None:
+        super().__init__()
+        self._db = db
+        self._project_id = project_id
+        self._on_data_changed = on_data_changed
+        self._on_open_scene = on_open_scene
+
+        self._active_mode = "Grid"
+        self._filters = PlotFilters()
+
+        self._build_ui()
+        self._activate_view("Grid")
+
+    def _build_ui(self) -> None:
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # -- Toolbar ---------------------------------------------------------
+        toolbar = QWidget()
+        toolbar.setObjectName("multiPlotToolbar")
+        tb_layout = QHBoxLayout(toolbar)
+        tb_layout.setContentsMargins(12, 6, 12, 6)
+        tb_layout.setSpacing(6)
+
+        self._mode_buttons: dict[str, QPushButton] = {}
+        for mode in _VIEW_MODES:
+            btn = QPushButton(mode)
+            btn.setCheckable(True)
+            btn.setChecked(mode == "Grid")
+            btn.clicked.connect(lambda _, m=mode: self._switch_mode(m))
+            btn.setObjectName("multiPlotModeBtn")
+            tb_layout.addWidget(btn)
+            self._mode_buttons[mode] = btn
+
+        tb_layout.addSpacing(16)
+
+        tb_layout.addWidget(QLabel("Filter:"))
+
+        self._char_filter = QComboBox()
+        self._char_filter.setMinimumWidth(100)
+        self._char_filter.addItem("All Characters", userData=None)
+        for char in self._db.get_all_characters(self._project_id):
+            self._char_filter.addItem(char.name, userData=char.id)
+        self._char_filter.currentIndexChanged.connect(self._on_filter_changed)
+        tb_layout.addWidget(self._char_filter)
+
+        self._tag_filter = QComboBox()
+        self._tag_filter.setMinimumWidth(80)
+        self._tag_filter.addItem("All Tags")
+        for tag in self._db.get_scene_tags(self._project_id):
+            self._tag_filter.addItem(tag)
+        self._tag_filter.currentIndexChanged.connect(self._on_filter_changed)
+        tb_layout.addWidget(self._tag_filter)
+
+        self._arc_filter = QComboBox()
+        self._arc_filter.setMinimumWidth(80)
+        self._arc_filter.addItem("All Arcs")
+        for pl in self._db.get_scene_plotlines(self._project_id):
+            self._arc_filter.addItem(pl)
+        self._arc_filter.currentIndexChanged.connect(self._on_filter_changed)
+        tb_layout.addWidget(self._arc_filter)
+
+        tb_layout.addStretch()
+        outer.addWidget(toolbar)
+
+        # -- Content area ----------------------------------------------------
+        self._content = QVBoxLayout()
+        self._content.setContentsMargins(0, 0, 0, 0)
+        self._content.setSpacing(0)
+        outer.addLayout(self._content, stretch=1)
+
+        # -- Create sub-views ------------------------------------------------
+        self._grid_view = StoryGridView(
+            self._db, self._project_id,
+            on_data_changed=self._on_data_changed,
+            on_open_scene=self._on_open_scene,
+        )
+        self._timeline_view = _TimelineStrip(self._db, self._project_id)
+        self._arc_view = _ArcLanes(self._db, self._project_id)
+        self._char_view = _CharLanes(self._db, self._project_id)
+
+        self._views: dict[str, QWidget] = {
+            "Grid": self._grid_view,
+            "Timeline": self._timeline_view,
+            "Arc": self._arc_view,
+            "Character": self._char_view,
+        }
+
+        for view in self._views.values():
+            view.setVisible(False)
+            self._content.addWidget(view)
+
+    # -- Mode switching -------------------------------------------------------
+
+    def _switch_mode(self, mode: str) -> None:
+        if mode == self._active_mode:
+            return
+        self._activate_view(mode)
+
+    def _activate_view(self, mode: str) -> None:
+        self._active_mode = mode
+        for name, btn in self._mode_buttons.items():
+            btn.setChecked(name == mode)
+        for name, view in self._views.items():
+            view.setVisible(name == mode)
+        self._refresh_active()
+
+    def _refresh_active(self) -> None:
+        view = self._views[self._active_mode]
+        if self._active_mode == "Grid":
+            self._grid_view.refresh()
+        elif self._active_mode == "Timeline":
+            self._timeline_view.refresh(self._filters)
+        elif self._active_mode == "Arc":
+            self._arc_view.refresh(self._filters)
+        elif self._active_mode == "Character":
+            self._char_view.refresh(self._filters)
+
+    # -- Filters --------------------------------------------------------------
+
+    def _on_filter_changed(self) -> None:
+        char_data = self._char_filter.currentData()
+        self._filters.character_id = char_data if char_data else None
+
+        tag_text = self._tag_filter.currentText()
+        self._filters.tag = "" if tag_text == "All Tags" else tag_text
+
+        arc_text = self._arc_filter.currentText()
+        self._filters.plotline = "" if arc_text == "All Arcs" else arc_text
+
+        self._refresh_active()
+
+    def get_filters(self) -> PlotFilters:
+        return self._filters
+
+    # -- Public API -----------------------------------------------------------
+
+    def get_active_mode(self) -> str:
+        return self._active_mode
+
+    def get_view(self, mode: str) -> QWidget | None:
+        return self._views.get(mode)
