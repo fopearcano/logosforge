@@ -720,6 +720,46 @@ def build_stylesheet() -> str:
         font-size: 15px;
         background: transparent;
     }}
+
+    /* -- Creative Layer -- */
+    #writingHintRow {{
+        background: transparent;
+    }}
+    #writingHint {{
+        color: {TEXT_MUTED};
+        font-size: 11px;
+        font-style: italic;
+        background: transparent;
+        padding: 0 4px;
+    }}
+    #writingRhythmRow {{
+        background: transparent;
+    }}
+    #rhythmDotShort {{
+        background-color: {ACCENT};
+        border-radius: 4px;
+    }}
+    #rhythmDotMedium {{
+        background-color: {TEXT_MUTED};
+        border-radius: 4px;
+    }}
+    #rhythmDotLong {{
+        background-color: {STATUS_ERR};
+        border-radius: 4px;
+    }}
+    #reviewOverlay {{
+        background-color: {BG_PANEL};
+        border: 1px solid {BORDER};
+        border-radius: 8px;
+        color: {TEXT_SECONDARY};
+        font-size: 11px;
+    }}
+    #reviewOverlayTitle {{
+        color: {TEXT_PRIMARY};
+        font-size: 12px;
+        font-weight: bold;
+        background: transparent;
+    }}
     """
 
 

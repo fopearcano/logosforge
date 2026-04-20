@@ -1,7 +1,8 @@
 """Writing Core — immersive, continuous manuscript writing experience.
 
 Presents all scenes as a flowing vertical document with typographic hierarchy,
-inline micro-interactions, command palette, and focus mode.
+inline micro-interactions, command palette, focus mode, and creative layer
+(context hints, rhythm dots, PSYKE highlighting, review mode).
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -30,9 +32,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from storyplanner.creative_layer import (
+    analyze_paragraph_rhythm,
+    generate_scene_hints,
+    compute_review_metrics,
+)
 from storyplanner.db import Database
 from storyplanner.ui import theme
 from storyplanner.ui.command_palette import CommandPalette
+from storyplanner.ui.psyke_highlighter import PsykeHighlighter
 
 
 _CANVAS_MAX_WIDTH = 780
@@ -121,6 +129,13 @@ class WritingCoreView(QWidget):
         self._editors: dict[int, _SceneEditor] = {}
         self._save_timers: dict[int, QTimer] = {}
         self._scene_widgets: list[QWidget] = []
+        self._header_widgets: list[QWidget] = []
+        self._hint_containers: dict[int, QWidget] = {}
+        self._rhythm_containers: dict[int, QWidget] = {}
+        self._highlighters: dict[int, PsykeHighlighter] = {}
+        self._flow_mode = False
+        self._review_mode = False
+        self._review_overlay: QWidget | None = None
 
         self._command_palette: CommandPalette | None = None
         self._palette_source_editor: _SceneEditor | None = None
@@ -157,6 +172,26 @@ class WritingCoreView(QWidget):
         )
         self._font_toggle.clicked.connect(self._toggle_font)
         tb_layout.addWidget(self._font_toggle)
+
+        self._flow_btn = QPushButton("Flow")
+        self._flow_btn.setFlat(True)
+        self._flow_btn.setToolTip("Hide structural headers")
+        self._flow_btn.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: 11px;"
+            " background: transparent; padding: 2px 8px;"
+        )
+        self._flow_btn.clicked.connect(self.toggle_flow_mode)
+        tb_layout.addWidget(self._flow_btn)
+
+        self._review_btn = QPushButton("Review")
+        self._review_btn.setFlat(True)
+        self._review_btn.setToolTip("Show review metrics overlay")
+        self._review_btn.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: 11px;"
+            " background: transparent; padding: 2px 8px;"
+        )
+        self._review_btn.clicked.connect(self.toggle_review_mode)
+        tb_layout.addWidget(self._review_btn)
 
         self._focus_btn = QPushButton("Focus")
         self._focus_btn.setFlat(True)
@@ -266,11 +301,20 @@ class WritingCoreView(QWidget):
 
         self._update_word_count()
         self._apply_typography()
+        self.refresh_psyke_terms()
+
+        if self._flow_mode:
+            for w in self._header_widgets:
+                w.setVisible(False)
 
     def _clear_canvas(self) -> None:
         self._editors.clear()
         self._save_timers.clear()
         self._scene_widgets.clear()
+        self._header_widgets.clear()
+        self._hint_containers.clear()
+        self._rhythm_containers.clear()
+        self._highlighters.clear()
         while self._inner_layout.count():
             item = self._inner_layout.takeAt(0)
             w = item.widget()
@@ -287,6 +331,7 @@ class WritingCoreView(QWidget):
         self._inner_layout.addWidget(label)
         self._inner_layout.addSpacing(12)
         self._scene_widgets.append(label)
+        self._header_widgets.append(label)
 
     def _add_chapter_header(self, chapter: str) -> None:
         label = QLabel(chapter)
@@ -296,6 +341,7 @@ class WritingCoreView(QWidget):
         self._inner_layout.addWidget(label)
         self._inner_layout.addSpacing(16)
         self._scene_widgets.append(label)
+        self._header_widgets.append(label)
 
     def _add_scene_block(self, scene) -> None:
         container = QWidget()
@@ -309,6 +355,7 @@ class WritingCoreView(QWidget):
             title.setObjectName("writingSceneTitle")
             title.setAlignment(Qt.AlignmentFlag.AlignLeft)
             block_layout.addWidget(title)
+            self._header_widgets.append(title)
 
         sep = QWidget()
         sep.setFixedHeight(1)
@@ -324,6 +371,17 @@ class WritingCoreView(QWidget):
             lambda sid=scene.id: self._schedule_save(sid)
         )
         block_layout.addWidget(editor)
+
+        highlighter = PsykeHighlighter(editor.document())
+        self._highlighters[scene.id] = highlighter
+
+        hint_container = self._build_hint_row(scene)
+        block_layout.addWidget(hint_container)
+        self._hint_containers[scene.id] = hint_container
+
+        rhythm_container = self._build_rhythm_row(scene)
+        block_layout.addWidget(rhythm_container)
+        self._rhythm_containers[scene.id] = rhythm_container
 
         self._editors[scene.id] = editor
         self._inner_layout.addWidget(container)
@@ -354,6 +412,149 @@ class WritingCoreView(QWidget):
         self._inner_layout.addWidget(
             btn, alignment=Qt.AlignmentFlag.AlignCenter,
         )
+
+    # -- Hints -----------------------------------------------------------------
+
+    def _build_hint_row(self, scene) -> QWidget:
+        container = QWidget()
+        container.setObjectName("writingHintRow")
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 2, 0, 2)
+        layout.setSpacing(8)
+
+        hints = generate_scene_hints(self._db, self._project_id, scene.id)
+        for hint in hints:
+            lbl = QLabel(hint.message)
+            lbl.setObjectName("writingHint")
+            layout.addWidget(lbl)
+        layout.addStretch()
+
+        if not hints:
+            container.hide()
+
+        return container
+
+    # -- Rhythm dots -----------------------------------------------------------
+
+    def _build_rhythm_row(self, scene) -> QWidget:
+        container = QWidget()
+        container.setObjectName("writingRhythmRow")
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 2, 0, 0)
+        layout.setSpacing(3)
+
+        content = scene.content or ""
+        rhythm = analyze_paragraph_rhythm(content, scene.id)
+
+        for dot in rhythm.dots:
+            d = QLabel()
+            d.setFixedSize(8, 8)
+            if dot.length == "short":
+                d.setObjectName("rhythmDotShort")
+            elif dot.length == "long":
+                d.setObjectName("rhythmDotLong")
+            else:
+                d.setObjectName("rhythmDotMedium")
+            d.setToolTip(f"{dot.word_count} words")
+            layout.addWidget(d)
+        layout.addStretch()
+
+        if not rhythm.dots:
+            container.hide()
+
+        return container
+
+    # -- PSYKE highlighting ----------------------------------------------------
+
+    def refresh_psyke_terms(self) -> None:
+        entries = self._db.get_all_psyke_entries(self._project_id)
+        terms: list[str] = []
+        for e in entries:
+            terms.append(e.name)
+            if e.aliases:
+                for alias in e.aliases.split(","):
+                    alias = alias.strip()
+                    if alias:
+                        terms.append(alias)
+        for highlighter in self._highlighters.values():
+            highlighter.refresh_patterns(terms)
+
+    # -- Flow mode (hide headers) ----------------------------------------------
+
+    def toggle_flow_mode(self) -> None:
+        self._flow_mode = not self._flow_mode
+        for w in self._header_widgets:
+            w.setVisible(not self._flow_mode)
+        self._flow_btn.setText("Structure" if self._flow_mode else "Flow")
+
+    def is_flow_mode(self) -> bool:
+        return self._flow_mode
+
+    # -- Review mode -----------------------------------------------------------
+
+    def toggle_review_mode(self) -> None:
+        self._review_mode = not self._review_mode
+        if self._review_mode:
+            self._show_review_overlay()
+        else:
+            self._hide_review_overlay()
+        self._review_btn.setText("Close Review" if self._review_mode else "Review")
+
+    def is_review_mode(self) -> bool:
+        return self._review_mode
+
+    def _show_review_overlay(self) -> None:
+        if self._review_overlay is not None:
+            self._review_overlay.deleteLater()
+
+        metrics = compute_review_metrics(self._db, self._project_id)
+        overlay = QFrame(self._scroll)
+        overlay.setObjectName("reviewOverlay")
+        overlay.setFixedWidth(260)
+
+        lay = QVBoxLayout(overlay)
+        lay.setContentsMargins(12, 10, 12, 10)
+        lay.setSpacing(4)
+
+        title = QLabel("Review")
+        title.setObjectName("reviewOverlayTitle")
+        lay.addWidget(title)
+
+        lay.addWidget(QLabel(f"Words: {metrics.total_words:,}"))
+        lay.addWidget(QLabel(f"Scenes: {metrics.total_scenes}"))
+        lay.addWidget(QLabel(f"Avg scene: {metrics.avg_scene_words} words"))
+
+        if metrics.total_scenes > 0:
+            sid_s, wc_s = metrics.shortest_scene
+            sid_l, wc_l = metrics.longest_scene
+            lay.addWidget(QLabel(f"Shortest: scene {sid_s} ({wc_s}w)"))
+            lay.addWidget(QLabel(f"Longest: scene {sid_l} ({wc_l}w)"))
+
+        pb = metrics.pacing_balance
+        lay.addWidget(QLabel(
+            f"Pacing: {pb['short']}S / {pb['medium']}M / {pb['long']}L"
+        ))
+
+        if metrics.flagged_scenes:
+            sep = QFrame()
+            sep.setFrameShape(QFrame.Shape.HLine)
+            sep.setStyleSheet(f"color: {theme.BORDER};")
+            lay.addWidget(sep)
+            flags_label = QLabel(f"Flags ({len(metrics.flagged_scenes)})")
+            flags_label.setObjectName("reviewOverlayTitle")
+            lay.addWidget(flags_label)
+            for hint in metrics.flagged_scenes[:8]:
+                lay.addWidget(QLabel(f"  {hint.message}"))
+
+        overlay.adjustSize()
+        overlay.move(self._scroll.width() - overlay.width() - 16, 12)
+        overlay.show()
+        self._review_overlay = overlay
+
+    def _hide_review_overlay(self) -> None:
+        if self._review_overlay is not None:
+            self._review_overlay.deleteLater()
+            self._review_overlay = None
 
     # -- Scene CRUD -----------------------------------------------------------
 
@@ -572,10 +773,58 @@ class WritingCoreView(QWidget):
                 f"}}"
             )
 
+        hint_style = (
+            f"#writingHintRow {{"
+            f"  background: transparent;"
+            f"}}"
+            f"#writingHint {{"
+            f"  color: {theme.TEXT_MUTED};"
+            f"  font-size: 11px;"
+            f"  font-style: italic;"
+            f"  background: transparent;"
+            f"  padding: 0 4px;"
+            f"}}"
+        )
+
+        rhythm_style = (
+            f"#writingRhythmRow {{"
+            f"  background: transparent;"
+            f"}}"
+            f"#rhythmDotShort {{"
+            f"  background-color: {theme.ACCENT};"
+            f"  border-radius: 4px;"
+            f"}}"
+            f"#rhythmDotMedium {{"
+            f"  background-color: {theme.TEXT_MUTED};"
+            f"  border-radius: 4px;"
+            f"}}"
+            f"#rhythmDotLong {{"
+            f"  background-color: {theme.STATUS_ERR};"
+            f"  border-radius: 4px;"
+            f"}}"
+        )
+
+        review_style = (
+            f"#reviewOverlay {{"
+            f"  background-color: {theme.BG_PANEL};"
+            f"  border: 1px solid {theme.BORDER};"
+            f"  border-radius: 8px;"
+            f"  color: {theme.TEXT_SECONDARY};"
+            f"  font-size: 11px;"
+            f"}}"
+            f"#reviewOverlayTitle {{"
+            f"  color: {theme.TEXT_PRIMARY};"
+            f"  font-size: 12px;"
+            f"  font-weight: bold;"
+            f"  background: transparent;"
+            f"}}"
+        )
+
         full_style = (
             editor_style + act_style + chapter_style + scene_title_style
             + sep_style + scene_block_style + inline_action_style
             + canvas_style + scroll_style + empty_style + focus_dim
+            + hint_style + rhythm_style + review_style
         )
         self.setStyleSheet(full_style)
 
