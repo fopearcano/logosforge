@@ -1158,6 +1158,35 @@ def build_stylesheet() -> str:
         font-size: 13px;
         background: transparent;
     }}
+
+    /* -- Pacing Insights -- */
+    #pacingInsightsView {{
+        background-color: {BG_DARK};
+    }}
+    #insightsTitle {{
+        color: {TEXT_PRIMARY};
+        font-size: 16px;
+        font-weight: bold;
+        padding-bottom: 8px;
+        background: transparent;
+    }}
+    #insightRow {{
+        background: transparent;
+        border-radius: 4px;
+    }}
+    #insightRow:hover {{
+        background-color: {BG_HOVER};
+    }}
+    #insightText {{
+        color: {TEXT_SECONDARY};
+        font-size: 12px;
+        background: transparent;
+    }}
+    #insightsEmpty {{
+        color: {TEXT_MUTED};
+        font-size: 13px;
+        background: transparent;
+    }}
     """
 
 
