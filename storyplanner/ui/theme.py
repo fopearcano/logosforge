@@ -760,6 +760,77 @@ def build_stylesheet() -> str:
         font-weight: bold;
         background: transparent;
     }}
+
+    /* -- Story Grid -- */
+    #gridToolbar {{
+        background-color: {BG_PANEL};
+        border-bottom: 1px solid {BORDER};
+    }}
+    #gridScrollArea {{
+        background-color: {BG_DARK};
+        border: none;
+    }}
+    #gridContainer {{
+        background-color: {BG_DARK};
+    }}
+    #gridColumn {{
+        background-color: {BG_PANEL};
+        border: 1px solid {BORDER};
+        border-radius: 8px;
+    }}
+    #gridColumnHeader {{
+        color: {TEXT_PRIMARY};
+        font-size: 13px;
+        font-weight: bold;
+        background: transparent;
+        padding: 4px 0;
+    }}
+    #gridSceneCard {{
+        background-color: {BG_INPUT};
+        border: 1px solid {BORDER};
+        border-radius: 6px;
+    }}
+    #gridSceneCard:hover {{
+        border-color: {ACCENT_DIM};
+    }}
+    #gridCardTitle {{
+        color: {TEXT_PRIMARY};
+        font-size: 12px;
+        font-weight: 600;
+        background: transparent;
+        padding: 0;
+    }}
+    #gridCardSummary {{
+        color: {TEXT_SECONDARY};
+        font-size: 11px;
+        background: transparent;
+        padding: 0;
+    }}
+    #gridCardMeta {{
+        color: {TEXT_MUTED};
+        font-size: 10px;
+        background: transparent;
+        padding: 0;
+    }}
+    #gridEmptyColumn {{
+        color: {TEXT_MUTED};
+        font-size: 11px;
+        background: transparent;
+        padding: 12px 4px;
+    }}
+    #gridEmptyState {{
+        background: transparent;
+    }}
+    #gridEmptyLabel {{
+        color: {TEXT_MUTED};
+        font-size: 14px;
+        background: transparent;
+    }}
+    #gridZoomLabel {{
+        color: {TEXT_SECONDARY};
+        font-size: 11px;
+        background: transparent;
+    }}
     """
 
 
