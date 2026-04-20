@@ -31,6 +31,7 @@ from storyplanner.context_builder import (
     gather_story_memory,
 )
 from storyplanner.db import Database
+from storyplanner.memory_context import gather_memory_context
 from storyplanner.narrative_suggestions import (
     build_suggestion_messages,
     format_suggestion_debug,
@@ -678,7 +679,13 @@ class InlineAssistantPanel(QWidget):
 
         story_mem = ""
         if self._include_story_memory.isChecked():
-            story_mem = gather_story_memory(self._db, self._project_id)
+            global_mem = gather_story_memory(self._db, self._project_id)
+            scene_mem = gather_memory_context(
+                self._db, self._project_id, scene_id=scene_id,
+            )
+            story_mem = "\n\n".join(
+                part for part in [global_mem, scene_mem] if part
+            )
 
         psyke_ctx = ""
         orchestration_debug = ""
