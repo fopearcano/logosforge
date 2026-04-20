@@ -3,17 +3,19 @@
 import os
 from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QIcon, QKeySequence, QShortcut
+from PySide6.QtCore import QPropertyAnimation, QEasingCurve, Qt
+from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
+    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMenu,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -87,14 +89,18 @@ class MainWindow(QMainWindow):
         # -- Left sidebar ----------------------------------------------------
         sidebar = QWidget()
         sidebar.setObjectName("sidebar")
-        sidebar.setMinimumWidth(140)
-        sidebar.setMaximumWidth(200)
+        sidebar.setMinimumWidth(56)
+        sidebar.setMaximumWidth(180)
+        sidebar.setFixedWidth(180)
+        sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setContentsMargins(0, 8, 0, 8)
         sidebar_layout.setSpacing(0)
 
         self._sidebar_collapsed = False
+        self._sidebar_anim: QPropertyAnimation | None = None
         self._assistant_user_visible = False
+        self._assistant_overlay = False
         self._layout_tier: str | None = None
         self._sidebar_icons = {
             "Projects": "\U0001F4C1",
@@ -226,20 +232,26 @@ class MainWindow(QMainWindow):
             on_open_scene=self._open_scene_in_editor,
         )
         self._assistant_panel.panel_closed.connect(self._hide_assistant)
+        self._assistant_panel.overlay_toggled.connect(self._on_overlay_toggled)
         self._assistant_panel.setVisible(False)
+        self._assistant_panel.setSizePolicy(
+            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred,
+        )
+        self._assistant_panel.refresh_style()
 
         # -- Assemble --------------------------------------------------------
         self._sidebar = sidebar
-        root_layout.addWidget(sidebar)
+        self._root_layout = root_layout
+        root_layout.addWidget(sidebar, stretch=0)
         root_layout.addWidget(self.content_area, stretch=1)
-        root_layout.addWidget(self._assistant_panel)
+        root_layout.addWidget(self._assistant_panel, stretch=0)
 
         self.setCentralWidget(central)
 
         # -- Restore persisted state -----------------------------------------
         mgr = get_settings()
         if mgr.get("sidebar_collapsed"):
-            self._set_sidebar_collapsed(True)
+            self._set_sidebar_collapsed(True, animate=False)
         if mgr.get("assistant_open"):
             self._assistant_user_visible = True
             self._assistant_panel.refresh_scenes()
@@ -399,6 +411,8 @@ class MainWindow(QMainWindow):
         self._assistant_user_visible = not self._assistant_panel.isVisible()
         if self._assistant_user_visible:
             self._assistant_panel.refresh_scenes()
+            if self._assistant_overlay:
+                self._position_overlay_assistant()
         self._assistant_panel.setVisible(self._assistant_user_visible)
         get_settings().set("assistant_open", self._assistant_user_visible)
 
@@ -407,18 +421,54 @@ class MainWindow(QMainWindow):
         self._assistant_panel.setVisible(False)
         get_settings().set("assistant_open", False)
 
+    def _on_overlay_toggled(self, overlay: bool) -> None:
+        self._assistant_overlay = overlay
+        layout = self._root_layout
+
+        if overlay:
+            layout.removeWidget(self._assistant_panel)
+            self._assistant_panel.setParent(self.centralWidget())
+            self._assistant_panel.setMaximumWidth(380)
+            shadow = QGraphicsDropShadowEffect(self._assistant_panel)
+            shadow.setColor(QColor(0, 0, 0, 60))
+            shadow.setBlurRadius(24)
+            shadow.setOffset(-4, 0)
+            self._assistant_panel.setGraphicsEffect(shadow)
+            self._position_overlay_assistant()
+            self._assistant_panel.raise_()
+            self._assistant_panel.show()
+        else:
+            self._assistant_panel.setGraphicsEffect(None)
+            self._assistant_panel.setMaximumWidth(360)
+            layout.addWidget(self._assistant_panel, stretch=0)
+            self._assistant_panel.show()
+        self._assistant_panel.refresh_style()
+
+    def _position_overlay_assistant(self) -> None:
+        if not self._assistant_overlay:
+            return
+        central = self.centralWidget()
+        if central is None:
+            return
+        panel_w = min(380, central.width() // 3)
+        panel_h = central.height() - 16
+        x = central.width() - panel_w - 8
+        y = 8
+        self._assistant_panel.setGeometry(x, y, panel_w, panel_h)
+
     # -- Sidebar collapse/expand ---------------------------------------------
 
     def _toggle_sidebar(self) -> None:
         self._set_sidebar_collapsed(not self._sidebar_collapsed)
 
-    def _set_sidebar_collapsed(self, collapsed: bool) -> None:
+    def _set_sidebar_collapsed(self, collapsed: bool, animate: bool = True) -> None:
         if self._sidebar_collapsed == collapsed:
             return
         self._sidebar_collapsed = collapsed
 
+        target_width = 56 if collapsed else 180
+
         if collapsed:
-            self._sidebar.setFixedWidth(56)
             self._sidebar.setObjectName("sidebarCollapsed")
             self._toggle_btn.setText("\u00bb")
             self._toggle_btn.setToolTip("Expand sidebar")
@@ -433,8 +483,6 @@ class MainWindow(QMainWindow):
             self._appearance_label.setVisible(False)
             self._appearance_bar.setVisible(False)
         else:
-            self._sidebar.setMinimumWidth(140)
-            self._sidebar.setMaximumWidth(200)
             self._sidebar.setObjectName("sidebar")
             self._toggle_btn.setText("\u00ab")
             self._toggle_btn.setToolTip("")
@@ -449,8 +497,32 @@ class MainWindow(QMainWindow):
             self._appearance_label.setVisible(True)
             self._appearance_bar.setVisible(True)
 
-        self._refresh_sidebar_style()
+        if animate and self.isVisible():
+            if self._sidebar_anim is not None:
+                self._sidebar_anim.stop()
+            current = self._sidebar.width()
+            self._sidebar.setMinimumWidth(min(current, target_width))
+            self._sidebar.setMaximumWidth(max(current, target_width))
+            anim = QPropertyAnimation(self._sidebar, b"maximumWidth")
+            anim.setDuration(200)
+            anim.setStartValue(current)
+            anim.setEndValue(target_width)
+            anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
+            anim.finished.connect(lambda: self._finalize_sidebar(target_width))
+            self._sidebar_anim = anim
+            self._sidebar.setMinimumWidth(target_width)
+            anim.start()
+        else:
+            self._sidebar.setFixedWidth(target_width)
+            self._finalize_sidebar(target_width)
+
         get_settings().set("sidebar_collapsed", collapsed)
+
+    def _finalize_sidebar(self, width: int) -> None:
+        self._sidebar.setFixedWidth(width)
+        self._sidebar.setMinimumWidth(width)
+        self._sidebar.setMaximumWidth(width)
+        self._refresh_sidebar_style()
 
     def _refresh_sidebar_style(self) -> None:
         self._sidebar.style().unpolish(self._sidebar)
@@ -467,14 +539,18 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._apply_layout_for_width(event.size().width())
+        if self._assistant_overlay:
+            self._position_overlay_assistant()
 
     def _apply_layout_for_width(self, w: int) -> None:
         if w >= 1400:
             tier = "wide"
         elif w >= 1000:
             tier = "medium"
-        else:
+        elif w >= 800:
             tier = "narrow"
+        else:
+            tier = "minimal"
 
         if tier == self._layout_tier:
             return
@@ -488,6 +564,10 @@ class MainWindow(QMainWindow):
             self._set_sidebar_collapsed(True)
             if self._assistant_user_visible:
                 self._assistant_panel.setVisible(True)
+        elif tier == "narrow":
+            self._set_sidebar_collapsed(True)
+            if self._assistant_user_visible and not self._assistant_overlay:
+                self._assistant_panel.setVisible(False)
         else:
             self._set_sidebar_collapsed(True)
             self._assistant_panel.setVisible(False)

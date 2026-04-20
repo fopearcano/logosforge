@@ -650,6 +650,12 @@ def build_stylesheet() -> str:
         font-weight: bold;
     }}
 
+    /* -- Assistant panel -- */
+    #assistantPanel {{
+        border-left: 1px solid {BORDER};
+        background-color: {BG_PANEL};
+    }}
+
     /* -- Writing Core -- */
     #writingCanvas {{
         background-color: {BG_DARK};

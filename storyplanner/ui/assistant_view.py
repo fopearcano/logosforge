@@ -92,11 +92,12 @@ class AssistantPanel(QWidget):
         self._debounce_timer.setInterval(120)
         self._debounce_timer.timeout.connect(self._fire_request)
 
-        self.setMinimumWidth(240)
-        self.setMaximumWidth(340)
-        self.setStyleSheet(
-            f"AssistantPanel {{ border-left: 1px solid {theme.BORDER}; }}"
-        )
+        self._overlay_mode = False
+        self._typing_dimmed = False
+
+        self.setMinimumWidth(260)
+        self.setMaximumWidth(360)
+        self.setObjectName("assistantPanel")
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -132,6 +133,18 @@ class AssistantPanel(QWidget):
         title.setStyleSheet(f"color: {theme.TEXT_PRIMARY};")
         header.addWidget(title)
         header.addStretch()
+
+        self._overlay_btn = QPushButton("\u29c9")
+        self._overlay_btn.setFixedSize(24, 24)
+        self._overlay_btn.setFlat(True)
+        self._overlay_btn.setToolTip("Toggle overlay mode")
+        self._overlay_btn.setStyleSheet(
+            f"QPushButton {{ color: {theme.TEXT_MUTED}; border: none; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
+        )
+        self._overlay_btn.clicked.connect(self._toggle_overlay)
+        header.addWidget(self._overlay_btn)
+
         close_btn = QPushButton("\u2715")
         close_btn.setFixedSize(24, 24)
         close_btn.setFlat(True)
@@ -650,3 +663,52 @@ class AssistantPanel(QWidget):
         )
         if self._on_open_scene:
             self._on_open_scene(scene_id)
+
+    # -- Overlay mode ----------------------------------------------------------
+
+    overlay_toggled = Signal(bool)
+
+    def _toggle_overlay(self) -> None:
+        self._overlay_mode = not self._overlay_mode
+        self.overlay_toggled.emit(self._overlay_mode)
+        self.refresh_style()
+
+    def is_overlay(self) -> bool:
+        return self._overlay_mode
+
+    # -- Contextual dimming ----------------------------------------------------
+
+    def dim_for_typing(self) -> None:
+        if not self._typing_dimmed:
+            self._typing_dimmed = True
+            self.setWindowOpacity(0.7) if self._overlay_mode else None
+            self.setStyleSheet(self._build_style(dimmed=True))
+
+    def undim(self) -> None:
+        if self._typing_dimmed:
+            self._typing_dimmed = False
+            self.setWindowOpacity(1.0) if self._overlay_mode else None
+            self.setStyleSheet(self._build_style(dimmed=False))
+
+    def refresh_style(self) -> None:
+        self.setStyleSheet(self._build_style(dimmed=self._typing_dimmed))
+
+    def _build_style(self, dimmed: bool = False) -> str:
+        opacity_rule = "opacity: 0.65;" if dimmed and not self._overlay_mode else ""
+        if self._overlay_mode:
+            return (
+                f"#assistantPanel {{"
+                f"  border-left: none;"
+                f"  border: 1px solid {theme.BORDER};"
+                f"  border-radius: 10px;"
+                f"  background-color: {theme.BG_PANEL};"
+                f"  {opacity_rule}"
+                f"}}"
+            )
+        return (
+            f"#assistantPanel {{"
+            f"  border-left: 1px solid {theme.BORDER};"
+            f"  background-color: {theme.BG_PANEL};"
+            f"  {opacity_rule}"
+            f"}}"
+        )
