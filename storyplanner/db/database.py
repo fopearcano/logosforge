@@ -25,6 +25,7 @@ from storyplanner.models import (
     SceneCharacterLink,
     SceneCharacterState,
     ScenePlaceLink,
+    StoryMemoryEntry,
 )
 
 
@@ -920,6 +921,74 @@ class Database:
                 nodes.append(entity_info[key])
 
         return nodes, edges
+
+    # -- Story Memory -----------------------------------------------------------
+
+    def add_memory(
+        self,
+        project_id: int,
+        scene_id: int,
+        memory_type: str,
+        target: str,
+        value: str,
+    ) -> StoryMemoryEntry:
+        with Session(self._engine) as session:
+            entry = StoryMemoryEntry(
+                project_id=project_id,
+                scene_id=scene_id,
+                memory_type=memory_type,
+                target=target,
+                value=value,
+            )
+            session.add(entry)
+            session.commit()
+            session.refresh(entry)
+            return entry
+
+    def get_memories(
+        self, project_id: int, scene_id: int | None = None
+    ) -> list[StoryMemoryEntry]:
+        with Session(self._engine) as session:
+            stmt = select(StoryMemoryEntry).where(
+                StoryMemoryEntry.project_id == project_id
+            )
+            if scene_id is not None:
+                stmt = stmt.where(StoryMemoryEntry.scene_id == scene_id)
+            stmt = stmt.order_by(StoryMemoryEntry.scene_id, StoryMemoryEntry.id)
+            return list(session.exec(stmt).all())
+
+    def get_memories_by_type(
+        self, project_id: int, memory_type: str
+    ) -> list[StoryMemoryEntry]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(StoryMemoryEntry)
+                .where(StoryMemoryEntry.project_id == project_id)
+                .where(StoryMemoryEntry.memory_type == memory_type)
+                .order_by(StoryMemoryEntry.scene_id, StoryMemoryEntry.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def delete_memories_for_scene(self, scene_id: int) -> None:
+        with Session(self._engine) as session:
+            stmt = select(StoryMemoryEntry).where(
+                StoryMemoryEntry.scene_id == scene_id
+            )
+            for entry in session.exec(stmt).all():
+                session.delete(entry)
+            session.commit()
+
+    def memory_exists(
+        self, scene_id: int, memory_type: str, target: str
+    ) -> bool:
+        with Session(self._engine) as session:
+            stmt = (
+                select(StoryMemoryEntry)
+                .where(StoryMemoryEntry.scene_id == scene_id)
+                .where(StoryMemoryEntry.memory_type == memory_type)
+                .where(StoryMemoryEntry.target == target)
+            )
+            return session.exec(stmt).first() is not None
 
     @staticmethod
     def _matches(query_lower: str, *fields: str) -> bool:

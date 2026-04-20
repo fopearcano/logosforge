@@ -128,3 +128,15 @@ class PsykeProgression(SQLModel, table=True):
     text: str
     scene_id: Optional[int] = Field(default=None, foreign_key="scene.id")
     sort_order: int = 0
+
+
+class StoryMemoryEntry(SQLModel, table=True):
+    """Extracted narrative memory — continuity-relevant facts."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id")
+    scene_id: int = Field(foreign_key="scene.id")
+    memory_type: str = ""  # character_state, key_event, relationship, decision
+    target: str = ""  # character name, or empty for events
+    value: str = ""
+    created_at: datetime = Field(default_factory=_now)

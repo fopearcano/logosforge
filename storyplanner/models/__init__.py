@@ -10,6 +10,7 @@ from storyplanner.models.models import (
     SceneCharacterLink,
     SceneCharacterState,
     ScenePlaceLink,
+    StoryMemoryEntry,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "PsykeEntry",
     "PsykeRelation",
     "PsykeProgression",
+    "StoryMemoryEntry",
 ]
