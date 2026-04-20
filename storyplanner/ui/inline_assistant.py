@@ -29,6 +29,11 @@ from storyplanner.context_builder import (
     gather_story_memory,
 )
 from storyplanner.db import Database
+from storyplanner.orchestration import (
+    format_orchestration_debug,
+    orchestrate_psyke_context,
+    resolve_mode,
+)
 from storyplanner.prompt_router import route_prompt
 from storyplanner.providers import ProviderConfig
 from storyplanner.ui import theme
@@ -463,7 +468,7 @@ class InlineAssistantPanel(QWidget):
         if mode == "scene":
             prompt = PRESET_ACTIONS.get(key, "")
             if prompt:
-                self._send_request(prompt)
+                self._send_request(prompt, action_key=key)
             return
 
         instruction = SELECTION_ACTIONS.get(key, "")
@@ -489,7 +494,7 @@ class InlineAssistantPanel(QWidget):
             self._sel_end = None
 
         prompt = f"{instruction}\n\nText:\n{target_text}"
-        self._send_request(prompt)
+        self._send_request(prompt, action_key=key)
 
     def _extract_preceding_paragraph(self) -> str:
         doc = self._editor.toPlainText()
@@ -568,7 +573,7 @@ class InlineAssistantPanel(QWidget):
         if not instruction:
             return
         prompt = f"{instruction}\n\nText:\n{selected}"
-        self._send_request(prompt)
+        self._send_request(prompt, action_key=key)
 
     # -- Template actions (whole scene) --------------------------------------
 
@@ -577,7 +582,7 @@ class InlineAssistantPanel(QWidget):
         prompt = PRESET_ACTIONS.get(key, "")
         if not prompt:
             return
-        self._send_request(prompt)
+        self._send_request(prompt, action_key=key)
 
     def _on_send(self) -> None:
         prompt = self._prompt.toPlainText().strip()
@@ -591,6 +596,7 @@ class InlineAssistantPanel(QWidget):
 
     def _send_request(
         self, action_prompt: str, routed_to: str = "",
+        action_key: str = "",
     ) -> None:
         if self._worker is not None:
             return
@@ -618,11 +624,21 @@ class InlineAssistantPanel(QWidget):
             story_mem = gather_story_memory(self._db, self._project_id)
 
         psyke_ctx = ""
+        orchestration_debug = ""
         scene_id = self._get_scene_id()
         if self._include_psyke.isChecked() and scene_id is not None:
-            psyke_ctx = gather_psyke_context(
-                self._db, self._project_id, scene_id,
-            )
+            if action_key:
+                mode = resolve_mode(action_key)
+                result = orchestrate_psyke_context(
+                    self._db, self._project_id, scene_id, mode,
+                    selected_text=self._sel_text or "",
+                )
+                psyke_ctx = result.psyke_context
+                orchestration_debug = format_orchestration_debug(result)
+            else:
+                psyke_ctx = gather_psyke_context(
+                    self._db, self._project_id, scene_id,
+                )
 
         combined_memory = "\n\n".join(
             part for part in [story_mem, session_ctx] if part
@@ -641,6 +657,8 @@ class InlineAssistantPanel(QWidget):
             ctx_parts.append(f"--- Story Memory ---\n{story_mem}")
         if psyke_ctx:
             ctx_parts.append(f"--- Story Bible ---\n{psyke_ctx}")
+        if orchestration_debug:
+            ctx_parts.append(orchestration_debug)
         if session_ctx:
             ctx_parts.append(f"--- Session Memory ---\n{session_ctx}")
         ctx_parts.append(f"--- Action ---\n{action_prompt}")
