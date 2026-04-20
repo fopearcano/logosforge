@@ -25,7 +25,15 @@ from storyplanner.assistant import (
     build_messages,
     chat_completion,
 )
-from storyplanner.adaptive_mode import compute_mode, mode_context_block
+from storyplanner.adaptive_mode import (
+    AIMode,
+    HealthState,
+    ModeResult,
+    StoryStage,
+    _MODE_DESCRIPTIONS,
+    compute_mode,
+    mode_context_block,
+)
 from storyplanner.context_builder import (
     gather_graph_context,
     gather_outline_context,
@@ -45,6 +53,7 @@ from storyplanner.orchestration import (
 )
 from storyplanner.providers import ProviderConfig
 from storyplanner.ui import theme
+from storyplanner.ui.mode_strip import ModeStrip
 from storyplanner.ui.provider_settings import ProviderSettingsWidget
 
 
@@ -162,6 +171,13 @@ class AssistantPanel(QWidget):
         sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet(f"color: {theme.BORDER};")
         self._layout.addWidget(sep)
+
+        # Mode strip
+        self._mode_strip = ModeStrip(
+            self._db, self._project_id,
+            on_mode_changed=self._on_mode_override,
+        )
+        self._layout.addWidget(self._mode_strip)
 
         # Scene selector + Generate
         scene_row = QHBoxLayout()
@@ -332,6 +348,11 @@ class AssistantPanel(QWidget):
 
         self._load_scenes()
 
+    # -- Mode override ---------------------------------------------------------
+
+    def _on_mode_override(self, mode: AIMode | None) -> None:
+        pass  # Mode is read from strip at context-build time
+
     # -- Settings toggle -------------------------------------------------------
 
     def _toggle_settings(self) -> None:
@@ -366,6 +387,7 @@ class AssistantPanel(QWidget):
         self._load_scenes()
         if current is not None:
             self.set_active_scene(current)
+        self._mode_strip.refresh()
 
     # -- Sending requests ------------------------------------------------------
 
@@ -400,8 +422,17 @@ class AssistantPanel(QWidget):
                     self._db, self._project_id, scene_id,
                 )
         graph_ctx = gather_graph_context(self._db, self._project_id, scene_id)
-        mode_result = compute_mode(self._db, self._project_id)
-        mode_ctx = mode_context_block(mode_result)
+        self._mode_strip.refresh()
+        mode_result = self._mode_strip.get_mode_result()
+        if self._mode_strip.is_overridden():
+            effective = self._mode_strip.get_effective_mode()
+            mode_result = ModeResult(
+                mode=effective,
+                stage=mode_result.stage if mode_result else StoryStage.EARLY,
+                health=mode_result.health if mode_result else HealthState.FRAGMENTED,
+                description=_MODE_DESCRIPTIONS[effective],
+            )
+        mode_ctx = mode_context_block(mode_result) if mode_result else ""
         return scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orchestration_debug, graph_ctx, mode_ctx
 
     def _send_preset(self, action_key: str) -> None:

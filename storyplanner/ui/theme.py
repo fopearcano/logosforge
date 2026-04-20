@@ -1242,6 +1242,29 @@ def build_stylesheet() -> str:
         font-size: 13px;
         background: transparent;
     }}
+
+    /* -- Mode Strip (Assistant panel) -- */
+    #modeStrip {{
+        background-color: {BG_INPUT};
+        border: 1px solid {BORDER};
+        border-radius: 4px;
+    }}
+    #modeStripHint {{
+        color: {TEXT_MUTED};
+        font-size: 10px;
+        background: transparent;
+        padding: 0 0 0 12px;
+    }}
+    #modeStripReset {{
+        color: {TEXT_MUTED};
+        font-size: 10px;
+        border: none;
+        padding: 0 4px;
+        background: transparent;
+    }}
+    #modeStripReset:hover {{
+        color: {ACCENT};
+    }}
     """
 
 
