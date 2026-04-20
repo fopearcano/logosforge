@@ -1099,6 +1099,65 @@ def build_stylesheet() -> str:
         border: none;
         border-radius: 3px;
     }}
+
+    /* -- Character & Arc Balance -- */
+    #characterBalanceView {{
+        background-color: {BG_DARK};
+    }}
+    #balanceTitle {{
+        color: {TEXT_PRIMARY};
+        font-size: 16px;
+        font-weight: bold;
+        padding-bottom: 8px;
+        background: transparent;
+    }}
+    #balanceSectionHeader {{
+        color: {TEXT_SECONDARY};
+        font-size: 12px;
+        font-weight: bold;
+        padding: 8px 0 4px 0;
+        background: transparent;
+    }}
+    #balanceScroll {{
+        background-color: {BG_DARK};
+        border: none;
+    }}
+    #balanceRow {{
+        background: transparent;
+        border-radius: 4px;
+    }}
+    #balanceRow:hover {{
+        background-color: {BG_HOVER};
+    }}
+    #balanceRowName {{
+        color: {TEXT_PRIMARY};
+        font-size: 12px;
+        background: transparent;
+    }}
+    #balanceRowCount {{
+        color: {TEXT_MUTED};
+        font-size: 11px;
+        background: transparent;
+    }}
+    #balanceBar {{
+        background-color: {BG_INPUT};
+        border: none;
+        border-radius: 4px;
+    }}
+    #balanceBar::chunk {{
+        background-color: {ACCENT_DIM};
+        border-radius: 4px;
+    }}
+    #balanceFlag {{
+        font-size: 10px;
+        font-weight: bold;
+        background: transparent;
+    }}
+    #balanceEmpty {{
+        color: {TEXT_MUTED};
+        font-size: 13px;
+        background: transparent;
+    }}
     """
 
 
