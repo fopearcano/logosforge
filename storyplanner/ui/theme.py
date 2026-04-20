@@ -1069,6 +1069,36 @@ def build_stylesheet() -> str:
         font-size: 12px;
         background: transparent;
     }}
+
+    /* -- Story Health Panel -- */
+    #storyHealthView {{
+        background-color: {BG_DARK};
+    }}
+    #healthTitle {{
+        color: {TEXT_PRIMARY};
+        font-size: 16px;
+        font-weight: bold;
+        padding-bottom: 12px;
+        background: transparent;
+    }}
+    #healthBar {{
+        background: transparent;
+    }}
+    #healthBarTitle {{
+        color: {TEXT_SECONDARY};
+        font-size: 12px;
+        background: transparent;
+    }}
+    #healthBarStatus {{
+        font-size: 11px;
+        font-weight: bold;
+        background: transparent;
+    }}
+    #healthProgressBar {{
+        background-color: {BG_INPUT};
+        border: none;
+        border-radius: 3px;
+    }}
     """
 
 

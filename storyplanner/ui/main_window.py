@@ -43,6 +43,7 @@ from storyplanner.ui.character_arc_view import CharacterArcView
 from storyplanner.ui.characters_view import CharactersView
 from storyplanner.ui.dashboard_view import DashboardView
 from storyplanner.ui.focus_graph_view import FocusGraphView
+from storyplanner.ui.story_health_view import StoryHealthView
 from storyplanner.ui.graph_view import GraphView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.outline_view import OutlineView
@@ -126,6 +127,7 @@ class MainWindow(QMainWindow):
             "PSYKE": "\U0001F4D6",
             "Grid": "\U0001F5A5",
             "Plot": "\U0001F4CA",
+            "Health": "\U0001F49A",
             "Plugins": "\U0001F9E9",
             "Assistant": "\U0001F916",
         }
@@ -138,7 +140,7 @@ class MainWindow(QMainWindow):
             "Projects", "Dashboard", "Characters", "Places", "Notes",
             "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline", "Writer",
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
-            "Search", "PSYKE", "Plugins", "Assistant",
+            "Health", "Search", "PSYKE", "Plugins", "Assistant",
         ]
         self.sidebar_buttons: dict[str, QPushButton] = {}
         for label in _NAV_LABELS:
@@ -189,7 +191,7 @@ class MainWindow(QMainWindow):
             "Projects", "Dashboard", "Characters", "Places", "Notes",
             "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline", "Writer",
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
-            "Search", "PSYKE", "Plugins",
+            "Health", "Search", "PSYKE", "Plugins",
         ]
         _nav_handlers = {
             "Projects": self._show_projects,
@@ -210,6 +212,7 @@ class MainWindow(QMainWindow):
             "Tags": self._show_tags,
             "Graph": self._show_graph,
             "Arcs": self._show_arcs,
+            "Health": self._show_health,
             "Search": self._show_search,
             "PSYKE": self._show_psyke,
             "Plugins": self._show_plugins,
@@ -622,6 +625,9 @@ class MainWindow(QMainWindow):
                 on_open_scene=self._open_scene_in_editor,
             )
         )
+
+    def _show_health(self) -> None:
+        self._set_content(StoryHealthView(self._db, self._project_id))
 
     def _show_search(self) -> None:
         self._set_content(
