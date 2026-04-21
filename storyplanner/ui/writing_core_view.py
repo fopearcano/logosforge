@@ -11,15 +11,19 @@ from collections.abc import Callable
 from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, Qt, QTimer
 from PySide6.QtGui import (
     QColor,
+    QFont,
     QKeyEvent,
     QKeySequence,
     QPainter,
     QShortcut,
     QTextBlockFormat,
+    QTextBlockUserData,
+    QTextCharFormat,
     QTextCursor,
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QFrame,
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -45,6 +49,7 @@ from storyplanner.ui.psyke_highlighter import PsykeClickHandler
 from storyplanner.ui.psyke_quick_create import PsykeQuickCreateDialog
 from storyplanner.ui.suggestion_banner import SuggestionBanner
 from storyplanner.temporal_psyke import TemporalGraph
+from storyplanner.writing_formats import ALL_FORMATS, FORMAT_ORDER, WritingFormat
 
 
 _CANVAS_MAX_WIDTH = 720
@@ -56,6 +61,56 @@ _FADE_ALPHA_PARA = 70
 _FADE_ALPHA_SCENE = 110
 _PARA_BOTTOM_MARGIN = 10
 
+_ELEMENT_TRANSITIONS: dict[str, dict[str, str]] = {
+    "screenplay": {
+        "scene_heading": "action",
+        "action": "action",
+        "character": "dialogue",
+        "dialogue": "action",
+        "parenthetical": "dialogue",
+        "transition": "scene_heading",
+    },
+    "novel": {
+        "chapter": "body",
+        "scene_break": "body",
+        "body": "body",
+    },
+    "graphic_novel": {
+        "page": "panel",
+        "panel": "description",
+        "description": "character",
+        "character": "dialogue",
+        "dialogue": "character",
+        "caption": "panel",
+        "sfx": "panel",
+    },
+    "stage_script": {
+        "act": "scene",
+        "scene": "stage_direction",
+        "stage_direction": "character",
+        "character": "dialogue",
+        "dialogue": "character",
+        "parenthetical": "dialogue",
+    },
+    "series": {
+        "episode": "act_break",
+        "cold_open": "scene_heading",
+        "act_break": "scene_heading",
+        "scene_heading": "action",
+        "action": "action",
+        "character": "dialogue",
+        "dialogue": "action",
+    },
+}
+
+
+class _BlockData(QTextBlockUserData):
+    """Stores the element type for a single text block."""
+
+    def __init__(self, element: str = "") -> None:
+        super().__init__()
+        self.element = element
+
 
 class _SceneEditor(QPlainTextEdit):
     """Borderless editor with focus-fade overlay and cross-scene navigation."""
@@ -63,6 +118,7 @@ class _SceneEditor(QPlainTextEdit):
     slash_pressed = None
     _on_nav_next = None
     _on_nav_prev = None
+    _on_new_block = None
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -158,6 +214,15 @@ class _SceneEditor(QPlainTextEdit):
     # -- keyboard --
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            prev_elem = None
+            data = self.textCursor().block().userData()
+            if isinstance(data, _BlockData):
+                prev_elem = data.element
+            super().keyPressEvent(event)
+            if self._on_new_block is not None:
+                self._on_new_block(self, prev_elem)
+            return
         if event.key() in (Qt.Key.Key_Down, Qt.Key.Key_Up):
             old_pos = self.textCursor().position()
             super().keyPressEvent(event)
@@ -199,6 +264,9 @@ class WritingCoreView(QWidget):
         self._on_data_changed = on_data_changed
         self._on_focus_mode_changed = on_focus_mode_changed
         self._on_open_psyke_entry = on_open_psyke_entry
+        project = db.get_project_by_id(project_id)
+        fmt_name = (project.format_mode if project else "novel") or "novel"
+        self._format: WritingFormat = ALL_FORMATS.get(fmt_name, ALL_FORMATS["novel"])
         self._focus_mode = False
         self._use_serif = False
         self._editors: dict[int, _SceneEditor] = {}
@@ -227,6 +295,7 @@ class WritingCoreView(QWidget):
 
         self._command_palette: CommandPalette | None = None
         self._palette_source_editor: _SceneEditor | None = None
+        self._element_shortcuts: list[QShortcut] = []
         self._focus_fade = True
         self._tw_anim: QPropertyAnimation | None = None
         self._topbar_anim: QPropertyAnimation | None = None
@@ -253,6 +322,25 @@ class WritingCoreView(QWidget):
             " background: transparent;"
         )
         tb_layout.addWidget(self._word_count_label)
+
+        self._format_combo = QComboBox()
+        self._format_combo.setObjectName("writingFormatCombo")
+        self._format_combo.setFixedWidth(130)
+        for key in FORMAT_ORDER:
+            fmt = ALL_FORMATS[key]
+            self._format_combo.addItem(fmt.label, key)
+        idx = FORMAT_ORDER.index(self._format.name) if self._format.name in FORMAT_ORDER else 0
+        self._format_combo.setCurrentIndex(idx)
+        self._format_combo.currentIndexChanged.connect(self._on_format_changed)
+        tb_layout.addWidget(self._format_combo)
+
+        self._element_combo = QComboBox()
+        self._element_combo.setObjectName("writingElementCombo")
+        self._element_combo.setFixedWidth(140)
+        self._populate_element_combo()
+        self._element_combo.currentIndexChanged.connect(self._on_element_changed)
+        tb_layout.addWidget(self._element_combo)
+
         tb_layout.addStretch()
 
         self._font_toggle = QPushButton("Serif")
@@ -404,6 +492,24 @@ class WritingCoreView(QWidget):
         )
         tw_sc.activated.connect(self.toggle_typewriter_mode)
 
+        self._setup_element_shortcuts()
+
+    def _setup_element_shortcuts(self) -> None:
+        for sc in self._element_shortcuts:
+            sc.setEnabled(False)
+            sc.deleteLater()
+        self._element_shortcuts.clear()
+        for elem in self._format.elements:
+            if elem.shortcut:
+                sc = QShortcut(
+                    QKeySequence(elem.shortcut), self,
+                    context=Qt.ShortcutContext.WidgetWithChildrenShortcut,
+                )
+                sc.activated.connect(
+                    lambda name=elem.name: self._shortcut_element(name),
+                )
+                self._element_shortcuts.append(sc)
+
     # -- Top bar auto-fade ----------------------------------------------------
 
     def eventFilter(self, obj, event) -> bool:
@@ -527,8 +633,12 @@ class WritingCoreView(QWidget):
         editor.set_focus_fade(self._focus_fade, theme.BG_DARK)
         editor._on_nav_next = lambda e=editor: self._navigate_next_editor(e)
         editor._on_nav_prev = lambda e=editor: self._navigate_prev_editor(e)
+        editor._on_new_block = self._on_new_block_created
         editor.textChanged.connect(
             lambda sid=scene.id: self._schedule_save(sid)
+        )
+        editor.cursorPositionChanged.connect(
+            lambda e=editor: self._on_editor_cursor_moved(e),
         )
         self._inner_layout.addWidget(editor)
         self._scene_widgets.append(editor)
@@ -630,6 +740,140 @@ class WritingCoreView(QWidget):
 
     def is_flow_mode(self) -> bool:
         return self._flow_mode
+
+    # -- Format / element system -----------------------------------------------
+
+    def _populate_element_combo(self) -> None:
+        self._element_combo.blockSignals(True)
+        self._element_combo.clear()
+        for elem in self._format.elements:
+            label = elem.name.replace("_", " ").title()
+            self._element_combo.addItem(label, elem.name)
+        idx = next(
+            (i for i, e in enumerate(self._format.elements)
+             if e.name == self._format.default_element),
+            0,
+        )
+        self._element_combo.setCurrentIndex(idx)
+        self._element_combo.blockSignals(False)
+
+    def _on_format_changed(self, index: int) -> None:
+        key = self._format_combo.itemData(index)
+        if not key or key not in ALL_FORMATS:
+            return
+        self._format = ALL_FORMATS[key]
+        self._db.update_project_format(self._project_id, key)
+        self._populate_element_combo()
+        self._setup_element_shortcuts()
+
+    def _on_element_changed(self, index: int) -> None:
+        if index < 0:
+            return
+        elem_name = self._element_combo.itemData(index)
+        if not elem_name:
+            return
+        focused = QApplication.focusWidget()
+        if isinstance(focused, _SceneEditor):
+            self._apply_element_to_block(focused, elem_name)
+
+    def _get_element_style(self, name: str):
+        for e in self._format.elements:
+            if e.name == name:
+                return e
+        return None
+
+    def _apply_element_to_block(
+        self, editor: _SceneEditor, element_name: str,
+    ) -> None:
+        elem = self._get_element_style(element_name)
+        if elem is None:
+            return
+        cursor = editor.textCursor()
+        pos = cursor.position()
+        cursor.block().setUserData(_BlockData(element_name))
+
+        alignment = {
+            "center": Qt.AlignmentFlag.AlignCenter,
+            "right": Qt.AlignmentFlag.AlignRight,
+        }
+        bfmt = QTextBlockFormat()
+        bfmt.setAlignment(alignment.get(elem.align, Qt.AlignmentFlag.AlignLeft))
+        bfmt.setLeftMargin(elem.left_margin)
+        bfmt.setRightMargin(elem.right_margin)
+        bfmt.setTopMargin(elem.top_spacing)
+        bfmt.setBottomMargin(elem.bottom_spacing)
+        bfmt.setLineHeight(
+            elem.line_height * 100,
+            QTextBlockFormat.LineHeightTypes.ProportionalHeight.value,
+        )
+
+        cfmt = QTextCharFormat()
+        cfmt.setFontPointSize(elem.font_size)
+        cfmt.setFontWeight(700 if elem.bold else 400)
+        cfmt.setFontItalic(elem.italic)
+        cfmt.setFontCapitalization(
+            QFont.Capitalization.AllUppercase
+            if elem.all_caps
+            else QFont.Capitalization.MixedCase,
+        )
+        if elem.color_key == "muted":
+            cfmt.setForeground(QColor(theme.TEXT_MUTED))
+
+        cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock)
+        cursor.movePosition(
+            QTextCursor.MoveOperation.EndOfBlock,
+            QTextCursor.MoveMode.KeepAnchor,
+        )
+        cursor.setBlockFormat(bfmt)
+        cursor.mergeCharFormat(cfmt)
+
+        cursor.setPosition(pos)
+        cursor.mergeCharFormat(cfmt)
+        editor.setTextCursor(cursor)
+
+    def _on_editor_cursor_moved(self, editor: _SceneEditor) -> None:
+        if not editor.hasFocus():
+            return
+        data = editor.textCursor().block().userData()
+        elem_name = (
+            data.element
+            if isinstance(data, _BlockData) and data.element
+            else self._format.default_element
+        )
+        self._element_combo.blockSignals(True)
+        for i in range(self._element_combo.count()):
+            if self._element_combo.itemData(i) == elem_name:
+                self._element_combo.setCurrentIndex(i)
+                break
+        self._element_combo.blockSignals(False)
+
+    def _on_new_block_created(
+        self, editor: _SceneEditor, previous_element: str | None,
+    ) -> None:
+        transitions = _ELEMENT_TRANSITIONS.get(self._format.name, {})
+        if previous_element and previous_element in transitions:
+            next_elem = transitions[previous_element]
+        else:
+            next_elem = self._format.default_element
+        self._apply_element_to_block(editor, next_elem)
+        self._element_combo.blockSignals(True)
+        for i in range(self._element_combo.count()):
+            if self._element_combo.itemData(i) == next_elem:
+                self._element_combo.setCurrentIndex(i)
+                break
+        self._element_combo.blockSignals(False)
+
+    def _shortcut_element(self, element_name: str) -> None:
+        focused = QApplication.focusWidget()
+        if not isinstance(focused, _SceneEditor):
+            return
+        self._apply_element_to_block(focused, element_name)
+        self._element_combo.blockSignals(True)
+        for i in range(self._element_combo.count()):
+            if self._element_combo.itemData(i) == element_name:
+                self._element_combo.setCurrentIndex(i)
+                break
+        self._element_combo.blockSignals(False)
 
     # -- Review mode -----------------------------------------------------------
 
@@ -1012,12 +1256,35 @@ class WritingCoreView(QWidget):
             f"}}"
         )
 
+        combo_style = (
+            f"#writingFormatCombo, #writingElementCombo {{"
+            f"  background: transparent;"
+            f"  color: {theme.TEXT_MUTED};"
+            f"  border: 1px solid {theme.BORDER};"
+            f"  border-radius: 4px;"
+            f"  padding: 2px 8px;"
+            f"  font-size: 11px;"
+            f"}}"
+            f"#writingFormatCombo:hover, #writingElementCombo:hover {{"
+            f"  color: {theme.TEXT_PRIMARY};"
+            f"  border-color: {theme.TEXT_MUTED};"
+            f"}}"
+            f"#writingFormatCombo QAbstractItemView,"
+            f"#writingElementCombo QAbstractItemView {{"
+            f"  background: {theme.BG_PANEL};"
+            f"  color: {theme.TEXT_PRIMARY};"
+            f"  border: 1px solid {theme.BORDER};"
+            f"  selection-background-color: {theme.BG_HOVER};"
+            f"}}"
+        )
+
         full_style = (
             editor_style + act_style + chapter_style + scene_title_style
             + end_action_style
             + canvas_style + scroll_style + empty_style + focus_dim
             + review_style
             + format_toolbar_style + entity_hover_style + suggestion_style
+            + combo_style
         )
         self.setStyleSheet(full_style)
 

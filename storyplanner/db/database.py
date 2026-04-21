@@ -52,6 +52,14 @@ class Database:
                 )
                 conn.commit()
 
+            rows = conn.execute(text("PRAGMA table_info(project)")).fetchall()
+            columns = {row[1] for row in rows}
+            if rows and "format_mode" not in columns:
+                conn.execute(
+                    text("ALTER TABLE project ADD COLUMN format_mode TEXT DEFAULT 'novel'")
+                )
+                conn.commit()
+
     # -- Projects ------------------------------------------------------------
 
     def get_project_by_id(self, project_id: int) -> Project | None:
@@ -62,13 +70,20 @@ class Database:
         with Session(self._engine) as session:
             return list(session.exec(select(Project)).all())
 
-    def create_project(self, title: str) -> Project:
+    def create_project(self, title: str, format_mode: str = "novel") -> Project:
         with Session(self._engine) as session:
-            project = Project(title=title)
+            project = Project(title=title, format_mode=format_mode)
             session.add(project)
             session.commit()
             session.refresh(project)
             return project
+
+    def update_project_format(self, project_id: int, format_mode: str) -> None:
+        with Session(self._engine) as session:
+            project = session.get(Project, project_id)
+            if project:
+                project.format_mode = format_mode
+                session.commit()
 
     # -- Characters ----------------------------------------------------------
 

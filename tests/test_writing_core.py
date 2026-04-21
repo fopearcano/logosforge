@@ -15,11 +15,14 @@ from storyplanner.ui.writing_core_view import (
     WritingCoreView,
     _BODY_FONT_SIZE,
     _BODY_LINE_HEIGHT,
+    _BlockData,
     _CANVAS_MAX_WIDTH,
     _CANVAS_PADDING_H,
+    _ELEMENT_TRANSITIONS,
     _FOCUS_LINE_HEIGHT,
     _SceneEditor,
 )
+from storyplanner.writing_formats import ALL_FORMATS, FORMAT_ORDER, WritingFormat
 
 
 def _setup_project(db):
@@ -646,3 +649,220 @@ def test_hover_show_without_progression():
     panel = view._entity_hover_panel
     assert panel._name_label.text() == "Mary"
     assert panel._state_label.isHidden()
+
+
+# -- Writing formats -----------------------------------------------------------
+
+def test_all_formats_available():
+    assert len(ALL_FORMATS) == 5
+    for key in FORMAT_ORDER:
+        assert key in ALL_FORMATS
+
+
+def test_format_order_matches_keys():
+    assert set(FORMAT_ORDER) == set(ALL_FORMATS.keys())
+
+
+def test_each_format_has_elements():
+    for fmt in ALL_FORMATS.values():
+        assert len(fmt.elements) > 0
+        assert fmt.default_element in [e.name for e in fmt.elements]
+
+
+def test_element_transitions_defined():
+    for key in ALL_FORMATS:
+        assert key in _ELEMENT_TRANSITIONS
+
+
+def test_transitions_reference_valid_elements():
+    for fmt_name, transitions in _ELEMENT_TRANSITIONS.items():
+        fmt = ALL_FORMATS[fmt_name]
+        elem_names = {e.name for e in fmt.elements}
+        for src, dst in transitions.items():
+            assert src in elem_names, f"{fmt_name}: transition src '{src}' not in elements"
+            assert dst in elem_names, f"{fmt_name}: transition dst '{dst}' not in elements"
+
+
+# -- Format combo --------------------------------------------------------------
+
+def test_view_has_format_combo():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view._format_combo.count() == len(FORMAT_ORDER)
+
+
+def test_format_combo_default_novel():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view._format_combo.currentData() == "novel"
+    assert view._format.name == "novel"
+
+
+def test_format_combo_respects_project():
+    db = Database()
+    proj = db.create_project("Script", format_mode="screenplay")
+    db.create_scene(proj.id, "Scene", content="Action.")
+    view = WritingCoreView(db, proj.id)
+    assert view._format_combo.currentData() == "screenplay"
+    assert view._format.name == "screenplay"
+
+
+def test_format_change_persists():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._format_combo.setCurrentIndex(FORMAT_ORDER.index("screenplay"))
+    updated = db.get_project_by_id(proj.id)
+    assert updated.format_mode == "screenplay"
+
+
+def test_format_change_updates_element_combo():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    novel_count = view._element_combo.count()
+    view._format_combo.setCurrentIndex(FORMAT_ORDER.index("screenplay"))
+    screenplay_count = view._element_combo.count()
+    assert novel_count != screenplay_count
+    assert screenplay_count == len(ALL_FORMATS["screenplay"].elements)
+
+
+# -- Element combo -------------------------------------------------------------
+
+def test_element_combo_populated():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view._element_combo.count() == len(ALL_FORMATS["novel"].elements)
+
+
+def test_element_combo_default_matches_format():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view._element_combo.currentData() == ALL_FORMATS["novel"].default_element
+
+
+def test_element_combo_screenplay_default():
+    db = Database()
+    proj = db.create_project("Script", format_mode="screenplay")
+    db.create_scene(proj.id, "Scene", content="Action.")
+    view = WritingCoreView(db, proj.id)
+    assert view._element_combo.currentData() == "action"
+
+
+# -- Block data ----------------------------------------------------------------
+
+def test_block_data_stores_element():
+    data = _BlockData("character")
+    assert data.element == "character"
+
+
+def test_block_data_default_empty():
+    data = _BlockData()
+    assert data.element == ""
+
+
+# -- Element application -------------------------------------------------------
+
+def test_apply_element_sets_block_data():
+    db = Database()
+    proj = db.create_project("Script", format_mode="screenplay")
+    s1 = db.create_scene(proj.id, "Scene", content="John walks in.")
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    editor.setFocus()
+    view._apply_element_to_block(editor, "character")
+    data = editor.textCursor().block().userData()
+    assert isinstance(data, _BlockData)
+    assert data.element == "character"
+
+
+def test_get_element_style():
+    db = Database()
+    proj = db.create_project("Script", format_mode="screenplay")
+    db.create_scene(proj.id, "S", content="x")
+    view = WritingCoreView(db, proj.id)
+    style = view._get_element_style("character")
+    assert style is not None
+    assert style.all_caps is True
+    assert style.align == "center"
+
+
+def test_get_element_style_missing():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view._get_element_style("nonexistent") is None
+
+
+# -- Enter key transitions -----------------------------------------------------
+
+def test_new_block_transitions_screenplay():
+    db = Database()
+    proj = db.create_project("Script", format_mode="screenplay")
+    s1 = db.create_scene(proj.id, "Scene", content="INT. ROOM")
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._apply_element_to_block(editor, "character")
+    view._on_new_block_created(editor, "character")
+    data = editor.textCursor().block().userData()
+    assert isinstance(data, _BlockData)
+    assert data.element == "dialogue"
+
+
+def test_new_block_transitions_novel():
+    db = Database()
+    proj, s1, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._on_new_block_created(editor, "chapter")
+    data = editor.textCursor().block().userData()
+    assert isinstance(data, _BlockData)
+    assert data.element == "body"
+
+
+def test_new_block_default_when_no_transition():
+    db = Database()
+    proj, s1, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._on_new_block_created(editor, None)
+    data = editor.textCursor().block().userData()
+    assert isinstance(data, _BlockData)
+    assert data.element == "body"
+
+
+# -- Element shortcuts ---------------------------------------------------------
+
+def test_element_shortcuts_created():
+    db = Database()
+    proj = db.create_project("Script", format_mode="screenplay")
+    db.create_scene(proj.id, "S", content="x")
+    view = WritingCoreView(db, proj.id)
+    assert len(view._element_shortcuts) > 0
+
+
+def test_element_shortcuts_rebuild_on_format_change():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    novel_count = len(view._element_shortcuts)
+    view._format_combo.setCurrentIndex(FORMAT_ORDER.index("screenplay"))
+    screenplay_count = len(view._element_shortcuts)
+    assert screenplay_count > 0
+    assert novel_count != screenplay_count
+
+
+def test_shortcut_element_applies():
+    db = Database()
+    proj = db.create_project("Script", format_mode="screenplay")
+    s1 = db.create_scene(proj.id, "Scene", content="Action line.")
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._apply_element_to_block(editor, "transition")
+    data = editor.textCursor().block().userData()
+    assert isinstance(data, _BlockData)
+    assert data.element == "transition"
