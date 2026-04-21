@@ -788,7 +788,7 @@ def test_get_element_style():
     style = view._get_element_style("character")
     assert style is not None
     assert style.all_caps is True
-    assert style.align == "center"
+    assert style.left_margin == 264
 
 
 def test_get_element_style_missing():

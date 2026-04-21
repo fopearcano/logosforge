@@ -75,14 +75,14 @@ def test_series_format():
 
 def test_element_style_defaults():
     e = ElementStyle(name="test")
-    assert e.font_size == 18
+    assert e.font_size == 15
     assert e.bold is False
     assert e.italic is False
     assert e.all_caps is False
     assert e.align == "left"
     assert e.left_margin == 0
     assert e.right_margin == 0
-    assert e.line_height == 1.6
+    assert e.line_height == 1.5
     assert e.color_key == "text"
 
 
