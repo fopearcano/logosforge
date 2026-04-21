@@ -40,6 +40,7 @@ from storyplanner.auto_link import AutoLinkSuggester, Suggestion
 from storyplanner.context_assistant import ContextAssistant, ContextHint, HintRateLimiter
 from storyplanner.creative_layer import compute_review_metrics
 from storyplanner.db import Database
+from storyplanner.structural_intelligence import StructuralCache
 from storyplanner.settings import get_manager as get_settings
 from storyplanner.ui import theme
 from storyplanner.ui.command_palette import CommandPalette
@@ -317,6 +318,7 @@ class WritingCoreView(QWidget):
         self._focus_fade = True
         self._tw_anim: QPropertyAnimation | None = None
         self._topbar_anim: QPropertyAnimation | None = None
+        self._structural_cache = StructuralCache()
 
         self._build_ui()
         self._setup_shortcuts()
@@ -1004,6 +1006,27 @@ class WritingCoreView(QWidget):
             for hint in metrics.flagged_scenes[:8]:
                 lay.addWidget(QLabel(f"  {hint.message}"))
 
+        analysis = self._structural_cache.get(
+            self._db, self._project_id, self._temporal_graph,
+        )
+        if analysis.issues:
+            sep2 = QFrame()
+            sep2.setFrameShape(QFrame.Shape.HLine)
+            sep2.setStyleSheet(f"color: {theme.BORDER};")
+            lay.addWidget(sep2)
+            struct_label = QLabel(f"Structure ({len(analysis.issues)})")
+            struct_label.setObjectName("reviewOverlayTitle")
+            lay.addWidget(struct_label)
+            for issue in analysis.issues[:3]:
+                msg = QLabel(f"  {issue.message}")
+                msg.setWordWrap(True)
+                lay.addWidget(msg)
+                if issue.suggestion:
+                    sug = QLabel(f"    → {issue.suggestion}")
+                    sug.setWordWrap(True)
+                    sug.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 10px;")
+                    lay.addWidget(sug)
+
         overlay.adjustSize()
         overlay.move(self._scroll.width() - overlay.width() - 16, 12)
         overlay.show()
@@ -1068,6 +1091,7 @@ class WritingCoreView(QWidget):
         if editor is None:
             return
         self._db.update_scene_content(scene_id, editor.toPlainText())
+        self._structural_cache.mark_dirty()
         if self._on_data_changed:
             self._on_data_changed()
 
@@ -1662,6 +1686,8 @@ class WritingCoreView(QWidget):
 
         ignored = self._get_context_ignored_keys()
 
+        structural_hints = self._get_structural_hints()
+
         for scene_id, banner in self._context_hint_banners.items():
             if active_scene_id is not None and scene_id != active_scene_id:
                 continue
@@ -1670,12 +1696,28 @@ class WritingCoreView(QWidget):
                 scene_id, temporal_graph=self._temporal_graph,
             )
 
+            hints.extend(structural_hints)
             hints = [h for h in hints if h.dedup_key not in ignored]
 
             chosen = self._hint_rate_limiter.filter(hints)
             if chosen is not None:
                 self._hint_rate_limiter.mark_shown(chosen)
                 banner.show_hint(chosen)
+
+    def _get_structural_hints(self) -> list[ContextHint]:
+        analysis = self._structural_cache.get(
+            self._db, self._project_id, self._temporal_graph,
+        )
+        hints: list[ContextHint] = []
+        for issue in analysis.issues[:2]:
+            hints.append(ContextHint(
+                hint_type=f"structure_{issue.issue_type}",
+                message=issue.message,
+                priority=2 if issue.severity >= 0.5 else 3,
+                scene_id=0,
+                data={"_dedup": f"struct_{issue.issue_type}", **issue.data},
+            ))
+        return hints
 
     def _on_context_hint_accepted(self, hint: ContextHint) -> None:
         if hint.action == "open_progression":

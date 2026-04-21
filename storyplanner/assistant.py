@@ -65,6 +65,7 @@ def build_messages(
     graph_context: str = "",
     mode_context: str = "",
     user_note: str = "",
+    structural_context: str = "",
 ) -> list[dict]:
     system = (
         "You are a skilled writing assistant helping a fiction author. "
@@ -86,6 +87,9 @@ def build_messages(
         user_parts.append("")
     if graph_context:
         user_parts.append(graph_context)
+        user_parts.append("")
+    if structural_context:
+        user_parts.append(structural_context)
         user_parts.append("")
     if outline_context:
         user_parts.append(outline_context)
