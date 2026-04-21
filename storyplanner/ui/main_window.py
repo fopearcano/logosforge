@@ -63,7 +63,6 @@ from storyplanner.ui.structure_view import StructureView
 from storyplanner.ui.tag_analysis_view import TagAnalysisView
 from storyplanner.ui.timeline_view import TimelineView
 from storyplanner.ui.welcome_view import WelcomeView
-from storyplanner.ui.writer_outline_view import WriterOutlineView
 from storyplanner.ui.writing_core_view import WritingCoreView
 
 
@@ -150,7 +149,6 @@ class MainWindow(QMainWindow):
             "Manuscript": "\u2712",
             "Timeline": "\U0001F552",
             "Outline": "\U0001F4D1",
-            "Writer": "\u270D",
             "Structure": "\U0001F3D7",
             "Acts": "\U0001F3AD",
             "Beats": "\U0001F4CC",
@@ -176,7 +174,7 @@ class MainWindow(QMainWindow):
 
         _NAV_LABELS = [
             "Projects", "Dashboard", "Characters", "Places", "Notes",
-            "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline", "Writer",
+            "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline",
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
             "Health", "Balance", "Pacing", "Adapt", "Narrative", "Search", "PSYKE", "Plugins", "Assistant",
         ]
@@ -227,7 +225,7 @@ class MainWindow(QMainWindow):
         # -- Connect navigation buttons (checkable + active tracking) ----------
         self._nav_labels = [
             "Projects", "Dashboard", "Characters", "Places", "Notes",
-            "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline", "Writer",
+            "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline",
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
             "Health", "Balance", "Pacing", "Adapt", "Narrative", "Search", "PSYKE", "Plugins",
         ]
@@ -243,7 +241,6 @@ class MainWindow(QMainWindow):
             "Grid": self._show_grid,
             "Plot": self._show_plot,
             "Outline": self._show_outline,
-            "Writer": self._show_writer_outline,
             "Structure": self._show_structure,
             "Acts": self._show_acts,
             "Beats": self._show_beats,
@@ -448,9 +445,6 @@ class MainWindow(QMainWindow):
 
     def _show_outline(self) -> None:
         self._set_content(OutlineView(self._db, self._project_id))
-
-    def _show_writer_outline(self) -> None:
-        self._set_content(WriterOutlineView(self._db, self._project_id))
 
     def _show_structure(self) -> None:
         self._set_content(StructureView(self._db, self._project_id))
