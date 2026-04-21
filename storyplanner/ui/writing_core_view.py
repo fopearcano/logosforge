@@ -40,8 +40,11 @@ from storyplanner.creative_layer import (
 from storyplanner.db import Database
 from storyplanner.ui import theme
 from storyplanner.ui.command_palette import CommandPalette
+from storyplanner.ui.entity_hover import EntityHoverHandler, EntityHoverPanel
 from storyplanner.ui.format_toolbar import FormatToolbar
 from storyplanner.ui.manuscript_highlighter import ManuscriptHighlighter
+from storyplanner.ui.psyke_highlighter import PsykeClickHandler
+from storyplanner.temporal_psyke import TemporalGraph
 
 
 _CANVAS_MAX_WIDTH = 780
@@ -119,12 +122,14 @@ class WritingCoreView(QWidget):
         project_id: int,
         on_data_changed: Callable[[], None] | None = None,
         on_focus_mode_changed: Callable[[bool], None] | None = None,
+        on_open_psyke_entry: Callable[[int], None] | None = None,
     ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
         self._on_data_changed = on_data_changed
         self._on_focus_mode_changed = on_focus_mode_changed
+        self._on_open_psyke_entry = on_open_psyke_entry
         self._focus_mode = False
         self._use_serif = False
         self._editors: dict[int, _SceneEditor] = {}
@@ -133,11 +138,18 @@ class WritingCoreView(QWidget):
         self._header_widgets: list[QWidget] = []
         self._hint_containers: dict[int, QWidget] = {}
         self._rhythm_containers: dict[int, QWidget] = {}
-        self._highlighters: dict[int, PsykeHighlighter] = {}
+        self._highlighters: dict[int, ManuscriptHighlighter] = {}
+        self._click_handlers: dict[int, PsykeClickHandler] = {}
+        self._hover_handlers: dict[int, EntityHoverHandler] = {}
         self._flow_mode = False
         self._typewriter_mode = False
         self._review_mode = False
         self._review_overlay: QWidget | None = None
+
+        self._psyke_term_map: dict[str, int] = {}
+        self._psyke_entry_cache: dict[int, object] = {}
+        self._scene_sort_orders: dict[int, int] = {}
+        self._temporal_graph: TemporalGraph | None = None
 
         self._command_palette: CommandPalette | None = None
         self._palette_source_editor: _SceneEditor | None = None
@@ -275,8 +287,9 @@ class WritingCoreView(QWidget):
         self._scroll.setWidget(self._canvas)
 
         self._format_toolbar = FormatToolbar(self._scroll.viewport())
+        self._entity_hover_panel = EntityHoverPanel(self._scroll.viewport())
         self._scroll.verticalScrollBar().valueChanged.connect(
-            self._reposition_format_toolbar,
+            self._on_scroll,
         )
 
     def _setup_shortcuts(self) -> None:
@@ -312,6 +325,9 @@ class WritingCoreView(QWidget):
         self._clear_canvas()
         scenes = self._db.get_all_scenes(self._project_id)
 
+        self._scene_sort_orders = {s.id: s.sort_order for s in scenes}
+        self._temporal_graph = TemporalGraph(self._db, self._project_id)
+
         current_act = None
         current_chapter = None
 
@@ -344,6 +360,7 @@ class WritingCoreView(QWidget):
 
     def _clear_canvas(self) -> None:
         self._format_toolbar.untrack_all()
+        self._entity_hover_panel.hide()
         self._editors.clear()
         self._save_timers.clear()
         self._scene_widgets.clear()
@@ -351,6 +368,8 @@ class WritingCoreView(QWidget):
         self._hint_containers.clear()
         self._rhythm_containers.clear()
         self._highlighters.clear()
+        self._click_handlers.clear()
+        self._hover_handlers.clear()
         while self._inner_layout.count():
             item = self._inner_layout.takeAt(0)
             w = item.widget()
@@ -410,6 +429,20 @@ class WritingCoreView(QWidget):
 
         highlighter = ManuscriptHighlighter(editor.document())
         self._highlighters[scene.id] = highlighter
+
+        click_handler = PsykeClickHandler(
+            editor, highlighter, on_jump=self._on_psyke_jump,
+        )
+        click_handler.set_term_map(self._psyke_term_map)
+        self._click_handlers[scene.id] = click_handler
+
+        hover_handler = EntityHoverHandler(
+            editor, highlighter, self._psyke_term_map,
+            self._scroll.viewport(),
+            on_show=self._on_entity_hover_show,
+            on_hide=self._on_entity_hover_hide,
+        )
+        self._hover_handlers[scene.id] = hover_handler
 
         self._format_toolbar.track_editor(editor)
         editor.cursorPositionChanged.connect(
@@ -510,15 +543,25 @@ class WritingCoreView(QWidget):
     def refresh_psyke_terms(self) -> None:
         entries = self._db.get_all_psyke_entries(self._project_id)
         terms: list[str] = []
+        self._psyke_term_map.clear()
+        self._psyke_entry_cache.clear()
         for e in entries:
-            terms.append(e.name)
+            self._psyke_entry_cache[e.id] = e
+            if e.name.strip():
+                terms.append(e.name)
+                self._psyke_term_map[e.name.lower()] = e.id
             if e.aliases:
                 for alias in e.aliases.split(","):
                     alias = alias.strip()
                     if alias:
                         terms.append(alias)
+                        self._psyke_term_map[alias.lower()] = e.id
         for highlighter in self._highlighters.values():
             highlighter.refresh_patterns(terms)
+        for handler in self._click_handlers.values():
+            handler.set_term_map(self._psyke_term_map)
+        for handler in self._hover_handlers.values():
+            handler.set_term_map(self._psyke_term_map)
 
     # -- Flow mode (hide headers) ----------------------------------------------
 
@@ -886,12 +929,42 @@ class WritingCoreView(QWidget):
             f"}}"
         )
 
+        entity_hover_style = (
+            f"#entityHoverPanel {{"
+            f"  background: {theme.BG_PANEL};"
+            f"  border: 1px solid {theme.BORDER};"
+            f"  border-radius: 6px;"
+            f"}}"
+            f"#entityHoverName {{"
+            f"  color: {theme.TEXT_PRIMARY};"
+            f"  font-weight: bold;"
+            f"  font-size: 13px;"
+            f"  background: transparent;"
+            f"}}"
+            f"#entityHoverType {{"
+            f"  color: {theme.TEXT_MUTED};"
+            f"  font-size: 11px;"
+            f"  background: transparent;"
+            f"}}"
+            f"#entityHoverState {{"
+            f"  color: {theme.ACCENT};"
+            f"  font-size: 12px;"
+            f"  font-style: italic;"
+            f"  background: transparent;"
+            f"}}"
+            f"#entityHoverNotes {{"
+            f"  color: {theme.TEXT_SECONDARY};"
+            f"  font-size: 11px;"
+            f"  background: transparent;"
+            f"}}"
+        )
+
         full_style = (
             editor_style + act_style + chapter_style + scene_title_style
             + sep_style + scene_block_style + inline_action_style
             + canvas_style + scroll_style + empty_style + focus_dim
             + hint_style + rhythm_style + review_style
-            + format_toolbar_style
+            + format_toolbar_style + entity_hover_style
         )
         self.setStyleSheet(full_style)
 
@@ -984,10 +1057,52 @@ class WritingCoreView(QWidget):
         if isinstance(focused, _SceneEditor):
             self._format_toolbar.toggle_italic_on(focused)
 
-    def _reposition_format_toolbar(self) -> None:
+    def _on_scroll(self) -> None:
         ft = self._format_toolbar
         if ft.isVisible() and ft._active_editor is not None:
             ft._reposition(ft._active_editor)
+        self._entity_hover_panel.schedule_hide()
+
+    # -- PSYKE entity interaction ---------------------------------------------
+
+    def _on_psyke_jump(self, entry_id: int) -> None:
+        if self._on_open_psyke_entry:
+            self._on_open_psyke_entry(entry_id)
+
+    def _on_entity_hover_show(
+        self,
+        entry_id: int,
+        editor: QPlainTextEdit,
+        pos,
+    ) -> None:
+        entry = self._psyke_entry_cache.get(entry_id)
+        if entry is None:
+            return
+
+        state_text = ""
+        scene_id = getattr(editor, "_scene_id", None)
+        if scene_id and self._temporal_graph:
+            sort_order = self._scene_sort_orders.get(scene_id, 0)
+            state = self._temporal_graph.get_entry_state_at(
+                entry_id, sort_order,
+            )
+            if state and state.has_progression:
+                state_text = state.progression_text
+
+        notes = (entry.notes or "").strip()
+        if len(notes) > 180:
+            notes = notes[:177] + "..."
+
+        self._entity_hover_panel.show_entity(
+            name=entry.name,
+            entry_type=entry.entry_type,
+            state_text=state_text,
+            notes=notes,
+            pos=pos,
+        )
+
+    def _on_entity_hover_hide(self) -> None:
+        self._entity_hover_panel.schedule_hide()
 
     # -- Public API -----------------------------------------------------------
 

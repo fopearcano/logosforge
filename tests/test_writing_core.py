@@ -1,15 +1,16 @@
 """Tests for Writing Core view — canvas layout, typography, command palette,
-manuscript highlighting, format toolbar, typewriter mode."""
+manuscript highlighting, format toolbar, typewriter mode, PSYKE entity awareness."""
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QTextCursor, QTextDocument
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 
 from storyplanner.db import Database
 from storyplanner.ui.command_palette import COMMANDS, CommandPalette
+from storyplanner.ui.entity_hover import EntityHoverHandler, EntityHoverPanel
 from storyplanner.ui.format_toolbar import FormatToolbar
 from storyplanner.ui.manuscript_highlighter import ManuscriptHighlighter
-from storyplanner.ui.psyke_highlighter import PsykeHighlighter
+from storyplanner.ui.psyke_highlighter import PsykeClickHandler, PsykeHighlighter
 from storyplanner.ui.writing_core_view import (
     WritingCoreView,
     _BODY_FONT_SIZE,
@@ -412,3 +413,236 @@ def test_typewriter_mode_accessor():
     assert view.is_typewriter_mode() is False
     view.toggle_typewriter_mode()
     assert view.is_typewriter_mode() is True
+
+
+# -- PSYKE entity awareness ---------------------------------------------------
+
+def _setup_psyke_project(db):
+    """Create a project with scenes and PSYKE entries for entity testing."""
+    proj = db.create_project("Novel")
+    s1 = db.create_scene(
+        proj.id, "Opening",
+        content="John looked at Mary across the room.",
+        act="Act One", chapter="Chapter 1",
+    )
+    s2 = db.create_scene(
+        proj.id, "Rising",
+        content="Mary whispered to John about the plan.",
+        act="Act One", chapter="Chapter 1",
+    )
+    e1 = db.create_psyke_entry(proj.id, "John", entry_type="character", notes="A detective.")
+    e2 = db.create_psyke_entry(proj.id, "Mary", entry_type="character", aliases="M", notes="A scientist.")
+    return proj, s1, s2, e1, e2
+
+
+def test_psyke_term_map_built():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert "john" in view._psyke_term_map
+    assert "mary" in view._psyke_term_map
+    assert "m" in view._psyke_term_map
+    assert view._psyke_term_map["john"] == e1.id
+    assert view._psyke_term_map["mary"] == e2.id
+    assert view._psyke_term_map["m"] == e2.id
+
+
+def test_psyke_entry_cache_populated():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert e1.id in view._psyke_entry_cache
+    assert e2.id in view._psyke_entry_cache
+    assert view._psyke_entry_cache[e1.id].name == "John"
+    assert view._psyke_entry_cache[e2.id].name == "Mary"
+
+
+def test_click_handlers_created_per_editor():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert s1.id in view._click_handlers
+    assert s2.id in view._click_handlers
+    assert isinstance(view._click_handlers[s1.id], PsykeClickHandler)
+
+
+def test_hover_handlers_created_per_editor():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert s1.id in view._hover_handlers
+    assert s2.id in view._hover_handlers
+    assert isinstance(view._hover_handlers[s1.id], EntityHoverHandler)
+
+
+def test_entity_hover_panel_exists():
+    db = Database()
+    proj, *_ = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert hasattr(view, "_entity_hover_panel")
+    assert isinstance(view._entity_hover_panel, EntityHoverPanel)
+
+
+def test_entity_hover_panel_creation():
+    panel = EntityHoverPanel()
+    assert panel.objectName() == "entityHoverPanel"
+    assert panel.isHidden()
+
+
+def test_entity_hover_panel_show_entity():
+    parent = QWidget()
+    parent.setFixedSize(500, 400)
+    panel = EntityHoverPanel(parent)
+    panel.show_entity("John", "character", "Paranoid", "A detective.", QPoint(50, 50))
+    assert not panel.isHidden()
+    assert panel._name_label.text() == "John"
+    assert panel._type_label.text() == "character"
+    assert panel._state_label.text() == "Paranoid"
+    assert panel._notes_label.text() == "A detective."
+
+
+def test_entity_hover_panel_no_state():
+    parent = QWidget()
+    parent.setFixedSize(500, 400)
+    panel = EntityHoverPanel(parent)
+    panel.show_entity("Mary", "character", "", "A scientist.", QPoint(50, 50))
+    assert panel._state_label.isHidden()
+    assert not panel._notes_label.isHidden()
+
+
+def test_entity_hover_panel_no_notes():
+    parent = QWidget()
+    parent.setFixedSize(500, 400)
+    panel = EntityHoverPanel(parent)
+    panel.show_entity("Place", "place", "Destroyed", "", QPoint(50, 50))
+    assert not panel._state_label.isHidden()
+    assert panel._notes_label.isHidden()
+
+
+def test_entity_hover_handler_creation():
+    editor = _SceneEditor()
+    doc = QTextDocument()
+    highlighter = ManuscriptHighlighter(editor.document())
+    term_map = {"john": 1}
+    parent = QWidget()
+    handler = EntityHoverHandler(
+        editor, highlighter, term_map, parent,
+        on_show=lambda *a: None,
+        on_hide=lambda: None,
+    )
+    assert handler._term_map == {"john": 1}
+
+
+def test_entity_hover_handler_term_map_update():
+    editor = _SceneEditor()
+    highlighter = ManuscriptHighlighter(editor.document())
+    parent = QWidget()
+    handler = EntityHoverHandler(
+        editor, highlighter, {}, parent,
+        on_show=lambda *a: None,
+        on_hide=lambda: None,
+    )
+    new_map = {"alice": 10, "bob": 20}
+    handler.set_term_map(new_map)
+    assert handler._term_map == new_map
+
+
+def test_scene_sort_orders_built():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert s1.id in view._scene_sort_orders
+    assert s2.id in view._scene_sort_orders
+
+
+def test_temporal_graph_built():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view._temporal_graph is not None
+
+
+def test_temporal_state_in_hover():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    db.create_psyke_progression(e1.id, "Suspicious of everyone", scene_id=s1.id)
+    view = WritingCoreView(db, proj.id)
+    state = view._temporal_graph.get_entry_state_at(
+        e1.id, view._scene_sort_orders[s1.id],
+    )
+    assert state is not None
+    assert state.has_progression
+    assert "Suspicious" in state.progression_text
+
+
+def test_psyke_jump_callback():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    jumped = []
+    view = WritingCoreView(
+        db, proj.id,
+        on_open_psyke_entry=lambda eid: jumped.append(eid),
+    )
+    view._on_psyke_jump(e1.id)
+    assert jumped == [e1.id]
+
+
+def test_psyke_jump_callback_none():
+    db = Database()
+    proj, *_ = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._on_psyke_jump(999)
+
+
+def test_handlers_cleared_on_refresh():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert len(view._click_handlers) == 2
+    assert len(view._hover_handlers) == 2
+    db.create_scene(proj.id, "New", content="Extra scene.")
+    view.refresh()
+    assert len(view._click_handlers) == 3
+    assert len(view._hover_handlers) == 3
+
+
+def test_no_psyke_entries_no_overhead():
+    db = Database()
+    proj = db.create_project("Empty")
+    db.create_scene(proj.id, "Scene", content="Some text.")
+    view = WritingCoreView(db, proj.id)
+    assert len(view._psyke_term_map) == 0
+    assert len(view._psyke_entry_cache) == 0
+
+
+def test_hover_show_with_entity_data():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._on_entity_hover_show(e1.id, editor, QPoint(50, 50))
+    panel = view._entity_hover_panel
+    assert panel._name_label.text() == "John"
+    assert panel._type_label.text() == "character"
+
+
+def test_hover_show_with_temporal_state():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    db.create_psyke_progression(e1.id, "Paranoid after the incident", scene_id=s1.id)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._on_entity_hover_show(e1.id, editor, QPoint(50, 50))
+    panel = view._entity_hover_panel
+    assert "Paranoid" in panel._state_label.text()
+
+
+def test_hover_show_without_progression():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._on_entity_hover_show(e2.id, editor, QPoint(50, 50))
+    panel = view._entity_hover_panel
+    assert panel._name_label.text() == "Mary"
+    assert panel._state_label.isHidden()

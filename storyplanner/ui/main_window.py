@@ -378,6 +378,7 @@ class MainWindow(QMainWindow):
                 self._project_id,
                 on_data_changed=self._on_data_changed,
                 on_focus_mode_changed=self._on_focus_mode_changed,
+                on_open_psyke_entry=self._open_psyke_entry,
             )
         )
 
