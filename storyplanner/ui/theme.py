@@ -691,28 +691,18 @@ def build_stylesheet() -> str:
         background: transparent;
     }}
     #writingSceneTitle {{
-        color: {TEXT_SECONDARY};
-        font-size: 15px;
-        font-weight: 600;
-        background: transparent;
-    }}
-    #writingSceneSep {{
-        background-color: {BORDER};
-        max-height: 1px;
-    }}
-    #writingSceneBlock {{
-        background: transparent;
-        border: none;
-    }}
-    #writingInlineAction {{
         color: {TEXT_MUTED};
-        font-size: 12px;
+        font-size: 13px;
+        font-weight: normal;
+        background: transparent;
+    }}
+    #writingEndAction {{
+        color: {TEXT_MUTED};
+        font-size: 13px;
         background: transparent;
         border: none;
-        padding: 2px 0;
-        text-align: left;
     }}
-    #writingInlineAction:hover {{
+    #writingEndAction:hover {{
         color: {ACCENT};
     }}
     #writingEmptyState {{
@@ -721,32 +711,6 @@ def build_stylesheet() -> str:
         background: transparent;
     }}
 
-    /* -- Creative Layer -- */
-    #writingHintRow {{
-        background: transparent;
-    }}
-    #writingHint {{
-        color: {TEXT_MUTED};
-        font-size: 11px;
-        font-style: italic;
-        background: transparent;
-        padding: 0 4px;
-    }}
-    #writingRhythmRow {{
-        background: transparent;
-    }}
-    #rhythmDotShort {{
-        background-color: {ACCENT};
-        border-radius: 4px;
-    }}
-    #rhythmDotMedium {{
-        background-color: {TEXT_MUTED};
-        border-radius: 4px;
-    }}
-    #rhythmDotLong {{
-        background-color: {STATUS_ERR};
-        border-radius: 4px;
-    }}
     #reviewOverlay {{
         background-color: {BG_PANEL};
         border: 1px solid {BORDER};

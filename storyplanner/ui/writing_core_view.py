@@ -1,8 +1,7 @@
-"""Writing Core — immersive, continuous manuscript writing experience.
+"""Writing Core — continuous manuscript editor.
 
-Presents all scenes as a flowing vertical document with typographic hierarchy,
-inline micro-interactions, command palette, focus mode, and creative layer
-(context hints, rhythm dots, PSYKE highlighting, review mode).
+Scenes render as bare inline sections (muted title + editor) in a single
+720 px column with 44 px spacing. No containers, no cards, no borders.
 """
 
 from __future__ import annotations
@@ -12,8 +11,6 @@ from collections.abc import Callable
 from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, Qt, QTimer
 from PySide6.QtGui import (
     QColor,
-    QFont,
-    QFontDatabase,
     QKeyEvent,
     QKeySequence,
     QPainter,
@@ -27,7 +24,6 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -36,11 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.auto_link import AutoLinkSuggester, Suggestion
-from storyplanner.creative_layer import (
-    analyze_paragraph_rhythm,
-    generate_scene_hints,
-    compute_review_metrics,
-)
+from storyplanner.creative_layer import compute_review_metrics
 from storyplanner.db import Database
 from storyplanner.settings import get_manager as get_settings
 from storyplanner.ui import theme
@@ -181,27 +173,6 @@ class _SceneEditor(QPlainTextEdit):
         super().keyPressEvent(event)
 
 
-class _InlineAction(QPushButton):
-    """Near-invisible gutter action that reveals its label on hover."""
-
-    _IDLE_TEXT = "+"
-
-    def __init__(self, text: str, parent: QWidget | None = None) -> None:
-        super().__init__(self._IDLE_TEXT, parent)
-        self._hover_text = text
-        self.setFlat(True)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setObjectName("writingInlineAction")
-        self.setFixedHeight(22)
-        self.setToolTip(text)
-
-    def enterEvent(self, event) -> None:  # type: ignore[override]
-        self.setText(self._hover_text)
-        super().enterEvent(event)
-
-    def leaveEvent(self, event) -> None:  # type: ignore[override]
-        self.setText(self._IDLE_TEXT)
-        super().leaveEvent(event)
 
 
 class WritingCoreView(QWidget):
@@ -218,6 +189,7 @@ class WritingCoreView(QWidget):
         on_open_psyke_entry: Callable[[int], None] | None = None,
     ) -> None:
         super().__init__()
+        self.setMinimumWidth(0)
         self._db = db
         self._project_id = project_id
         self._on_data_changed = on_data_changed
@@ -229,8 +201,6 @@ class WritingCoreView(QWidget):
         self._save_timers: dict[int, QTimer] = {}
         self._scene_widgets: list[QWidget] = []
         self._header_widgets: list[QWidget] = []
-        self._hint_containers: dict[int, QWidget] = {}
-        self._rhythm_containers: dict[int, QWidget] = {}
         self._highlighters: dict[int, ManuscriptHighlighter] = {}
         self._click_handlers: dict[int, PsykeClickHandler] = {}
         self._hover_handlers: dict[int, EntityHoverHandler] = {}
@@ -459,6 +429,7 @@ class WritingCoreView(QWidget):
 
         current_act = None
         current_chapter = None
+        first_scene = True
 
         for scene in scenes:
             act = (scene.act or "").strip()
@@ -471,12 +442,13 @@ class WritingCoreView(QWidget):
             if chapter and chapter != current_chapter:
                 current_chapter = chapter
                 self._add_chapter_header(chapter)
-                self._add_new_scene_action(after_scene_id=None, chapter=chapter)
 
-            self._add_scene_block(scene)
-            self._add_new_scene_action(after_scene_id=scene.id)
+            self._add_scene_block(scene, is_first=first_scene)
+            first_scene = False
 
-        if not scenes:
+        if scenes:
+            self._add_end_action(scenes[-1].id)
+        else:
             self._add_empty_state()
 
         self._update_word_count()
@@ -495,8 +467,6 @@ class WritingCoreView(QWidget):
         self._save_timers.clear()
         self._scene_widgets.clear()
         self._header_widgets.clear()
-        self._hint_containers.clear()
-        self._rhythm_containers.clear()
         self._highlighters.clear()
         self._click_handlers.clear()
         self._hover_handlers.clear()
@@ -529,20 +499,17 @@ class WritingCoreView(QWidget):
         self._scene_widgets.append(label)
         self._header_widgets.append(label)
 
-    def _add_scene_block(self, scene) -> None:
-        container = QWidget()
-        container.setObjectName("writingSceneBlock")
-        block_layout = QVBoxLayout(container)
-        block_layout.setContentsMargins(0, 0, 0, 0)
-        block_layout.setSpacing(2)
+    def _add_scene_block(self, scene, *, is_first: bool = False) -> None:
+        if not is_first:
+            self._inner_layout.addSpacing(44)
 
         if scene.title:
             title = QLabel(scene.title)
             title.setObjectName("writingSceneTitle")
             title.setAlignment(Qt.AlignmentFlag.AlignLeft)
-            block_layout.addWidget(title)
-            block_layout.addSpacing(6)
-            self._header_widgets.append(title)
+            self._inner_layout.addWidget(title)
+            self._inner_layout.addSpacing(4)
+            self._scene_widgets.append(title)
 
         editor = _SceneEditor()
         editor._scene_id = scene.id
@@ -554,7 +521,8 @@ class WritingCoreView(QWidget):
         editor.textChanged.connect(
             lambda sid=scene.id: self._schedule_save(sid)
         )
-        block_layout.addWidget(editor)
+        self._inner_layout.addWidget(editor)
+        self._scene_widgets.append(editor)
 
         highlighter = ManuscriptHighlighter(editor.document())
         self._highlighters[scene.id] = highlighter
@@ -582,97 +550,41 @@ class WritingCoreView(QWidget):
         banner.accepted.connect(self._on_suggestion_accepted)
         banner.dismissed.connect(self._on_suggestion_dismissed)
         banner.ignored.connect(self._on_suggestion_ignored)
-        block_layout.addWidget(banner)
+        self._inner_layout.addWidget(banner)
         self._suggestion_banners[scene.id] = banner
 
-        hint_container = self._build_hint_row(scene)
-        block_layout.addWidget(hint_container)
-        self._hint_containers[scene.id] = hint_container
-
-        rhythm_container = self._build_rhythm_row(scene)
-        block_layout.addWidget(rhythm_container)
-        self._rhythm_containers[scene.id] = rhythm_container
-
         self._editors[scene.id] = editor
-        self._inner_layout.addWidget(container)
-        self._inner_layout.addSpacing(20)
-        self._scene_widgets.append(container)
 
-    def _add_new_scene_action(
-        self, after_scene_id: int | None = None, chapter: str = "",
-    ) -> None:
-        btn = _InlineAction("+ New Scene")
+    def _add_end_action(self, last_scene_id: int | None) -> None:
+        btn = QPushButton("+")
+        btn.setFlat(True)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setObjectName("writingEndAction")
+        btn.setFixedHeight(28)
+        btn.setToolTip("New Scene")
         btn.clicked.connect(
-            lambda _, sid=after_scene_id, ch=chapter: self._create_scene_after(sid, ch)
+            lambda: self._create_scene_after(last_scene_id)
         )
+        self._inner_layout.addSpacing(32)
         self._inner_layout.addWidget(btn)
-        self._inner_layout.addSpacing(12)
         self._scene_widgets.append(btn)
 
     def _add_empty_state(self) -> None:
-        msg = QLabel("Begin writing.\nPress / for commands, or click below.")
+        msg = QLabel("Begin writing.")
         msg.setObjectName("writingEmptyState")
         msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._inner_layout.addSpacing(80)
         self._inner_layout.addWidget(msg)
-        self._inner_layout.addSpacing(24)
-
-        btn = _InlineAction("+ Create First Scene")
+        self._inner_layout.addSpacing(16)
+        btn = QPushButton("+ New Scene")
+        btn.setFlat(True)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setObjectName("writingEndAction")
         btn.clicked.connect(lambda: self._create_scene_after(None))
         self._inner_layout.addWidget(
             btn, alignment=Qt.AlignmentFlag.AlignCenter,
         )
 
-    # -- Hints -----------------------------------------------------------------
-
-    def _build_hint_row(self, scene) -> QWidget:
-        container = QWidget()
-        container.setObjectName("writingHintRow")
-        layout = QHBoxLayout(container)
-        layout.setContentsMargins(0, 2, 0, 2)
-        layout.setSpacing(8)
-
-        hints = generate_scene_hints(self._db, self._project_id, scene.id)
-        for hint in hints:
-            lbl = QLabel(hint.message)
-            lbl.setObjectName("writingHint")
-            layout.addWidget(lbl)
-        layout.addStretch()
-
-        if not hints:
-            container.hide()
-
-        return container
-
-    # -- Rhythm dots -----------------------------------------------------------
-
-    def _build_rhythm_row(self, scene) -> QWidget:
-        container = QWidget()
-        container.setObjectName("writingRhythmRow")
-        layout = QHBoxLayout(container)
-        layout.setContentsMargins(0, 2, 0, 0)
-        layout.setSpacing(3)
-
-        content = scene.content or ""
-        rhythm = analyze_paragraph_rhythm(content, scene.id)
-
-        for dot in rhythm.dots:
-            d = QLabel()
-            d.setFixedSize(8, 8)
-            if dot.length == "short":
-                d.setObjectName("rhythmDotShort")
-            elif dot.length == "long":
-                d.setObjectName("rhythmDotLong")
-            else:
-                d.setObjectName("rhythmDotMedium")
-            d.setToolTip(f"{dot.word_count} words")
-            layout.addWidget(d)
-        layout.addStretch()
-
-        if not rhythm.dots:
-            container.hide()
-
-        return container
 
     # -- PSYKE highlighting ----------------------------------------------------
 
@@ -930,34 +842,24 @@ class WritingCoreView(QWidget):
 
         scene_title_style = (
             f"#writingSceneTitle {{"
-            f"  color: {theme.TEXT_PRIMARY};"
-            f"  font-size: 22px;"
-            f"  font-weight: 600;"
+            f"  color: {theme.TEXT_MUTED};"
+            f"  font-size: 13px;"
+            f"  font-weight: normal;"
             f"  font-family: {family};"
             f"  background: transparent;"
             f"  padding: 0;"
             f"}}"
         )
 
-        sep_style = ""
-
-        scene_block_style = (
-            f"#writingSceneBlock {{"
-            f"  background: transparent;"
-            f"  border: none;"
-            f"}}"
-        )
-
-        inline_action_style = (
-            f"#writingInlineAction {{"
+        end_action_style = (
+            f"#writingEndAction {{"
             f"  color: {theme.TEXT_MUTED};"
-            f"  font-size: 12px;"
+            f"  font-size: 13px;"
             f"  background: transparent;"
             f"  border: none;"
             f"  padding: 0;"
-            f"  text-align: center;"
             f"}}"
-            f"#writingInlineAction:hover {{"
+            f"#writingEndAction:hover {{"
             f"  color: {theme.ACCENT};"
             f"}}"
         )
@@ -998,36 +900,6 @@ class WritingCoreView(QWidget):
                 f"}}"
             )
 
-        hint_style = (
-            f"#writingHintRow {{"
-            f"  background: transparent;"
-            f"}}"
-            f"#writingHint {{"
-            f"  color: {theme.TEXT_MUTED};"
-            f"  font-size: 12px;"
-            f"  font-style: italic;"
-            f"  background: transparent;"
-            f"  padding: 0 4px;"
-            f"}}"
-        )
-
-        rhythm_style = (
-            f"#writingRhythmRow {{"
-            f"  background: transparent;"
-            f"}}"
-            f"#rhythmDotShort {{"
-            f"  background-color: {theme.ACCENT};"
-            f"  border-radius: 4px;"
-            f"}}"
-            f"#rhythmDotMedium {{"
-            f"  background-color: {theme.TEXT_MUTED};"
-            f"  border-radius: 4px;"
-            f"}}"
-            f"#rhythmDotLong {{"
-            f"  background-color: {theme.STATUS_ERR};"
-            f"  border-radius: 4px;"
-            f"}}"
-        )
 
         review_style = (
             f"#reviewOverlay {{"
@@ -1133,9 +1005,9 @@ class WritingCoreView(QWidget):
 
         full_style = (
             editor_style + act_style + chapter_style + scene_title_style
-            + sep_style + scene_block_style + inline_action_style
+            + end_action_style
             + canvas_style + scroll_style + empty_style + focus_dim
-            + hint_style + rhythm_style + review_style
+            + review_style
             + format_toolbar_style + entity_hover_style + suggestion_style
         )
         self.setStyleSheet(full_style)
@@ -1175,19 +1047,11 @@ class WritingCoreView(QWidget):
                 _CANVAS_PADDING_H, 24, _CANVAS_PADDING_H, 64,
             )
             self._inner.setMaximumWidth(_CANVAS_MAX_WIDTH + 60)
-            for c in self._hint_containers.values():
-                c.setVisible(False)
-            for c in self._rhythm_containers.values():
-                c.setVisible(False)
         else:
             self._canvas_layout.setContentsMargins(
                 _CANVAS_PADDING_H, 32, _CANVAS_PADDING_H, 64,
             )
             self._inner.setMaximumWidth(_CANVAS_MAX_WIDTH)
-            for scene_id, c in self._hint_containers.items():
-                c.setVisible(bool(c.findChildren(QLabel)))
-            for c in self._rhythm_containers.values():
-                c.setVisible(bool(c.findChildren(QLabel)))
 
         for editor in self._editors.values():
             editor._fade_alpha_para = para_alpha

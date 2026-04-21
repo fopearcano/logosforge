@@ -205,61 +205,6 @@ def test_review_metrics_flagged_scenes():
     assert len(metrics.flagged_scenes) >= 2
 
 
-# -- WritingCoreView integration: hints ------------------------------------
-
-def test_view_has_hint_containers():
-    db, proj, s1, s2, s3 = _make_project_with_scenes()
-    view = WritingCoreView(db, proj.id)
-    assert s1.id in view._hint_containers
-    assert s2.id in view._hint_containers
-    assert s3.id in view._hint_containers
-
-
-def test_view_empty_scene_shows_hint():
-    db, proj = _make_project()
-    scene = db.create_scene(proj.id, "Blank", content="")
-    view = WritingCoreView(db, proj.id)
-    container = view._hint_containers.get(scene.id)
-    assert container is not None
-    assert not container.isHidden()
-
-
-def test_view_normal_scene_hides_hints():
-    db, proj = _make_project()
-    content = "The hero fought against the villain bravely. " * 15
-    scene = db.create_scene(proj.id, "Normal", content=content, conflict="fight")
-    view = WritingCoreView(db, proj.id)
-    container = view._hint_containers.get(scene.id)
-    assert container is not None
-    assert container.isHidden()
-
-
-# -- WritingCoreView integration: rhythm dots ------------------------------
-
-def test_view_has_rhythm_containers():
-    db, proj, s1, s2, s3 = _make_project_with_scenes()
-    view = WritingCoreView(db, proj.id)
-    assert s1.id in view._rhythm_containers
-    assert s2.id in view._rhythm_containers
-
-
-def test_view_rhythm_dots_visible_for_content():
-    db, proj = _make_project()
-    content = ("Short para.\n\n" + " ".join(["word"] * 50) + "\n\n" + "End.")
-    scene = db.create_scene(proj.id, "Mixed", content=content)
-    view = WritingCoreView(db, proj.id)
-    container = view._rhythm_containers.get(scene.id)
-    assert container is not None
-    assert not container.isHidden()
-
-
-def test_view_rhythm_hidden_for_empty():
-    db, proj = _make_project()
-    scene = db.create_scene(proj.id, "Empty", content="")
-    view = WritingCoreView(db, proj.id)
-    container = view._rhythm_containers.get(scene.id)
-    assert container is not None
-    assert container.isHidden()
 
 
 # -- WritingCoreView integration: PSYKE highlighting -----------------------
@@ -361,16 +306,6 @@ def test_review_overlay_object_name():
 
 # -- Theme includes creative layer styles ----------------------------------
 
-def test_theme_has_hint_rules():
-    ss = theme.build_stylesheet()
-    assert "#writingHint" in ss
-
-
-def test_theme_has_rhythm_dot_rules():
-    ss = theme.build_stylesheet()
-    assert "#rhythmDotShort" in ss
-    assert "#rhythmDotMedium" in ss
-    assert "#rhythmDotLong" in ss
 
 
 def test_theme_has_review_overlay_rules():
