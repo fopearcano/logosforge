@@ -70,6 +70,9 @@ class _SceneEditor(QPlainTextEdit):
         self.setFrameShape(QPlainTextEdit.Shape.NoFrame)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed,
+        )
         self.setCursorWidth(2)
         self.setPlaceholderText("Start writing…")
         self._auto_height_timer = QTimer(self)
@@ -351,6 +354,7 @@ class WritingCoreView(QWidget):
 
         self._inner = QWidget()
         self._inner.setMaximumWidth(_CANVAS_MAX_WIDTH)
+        self._inner.setMinimumWidth(0)
         self._inner.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred,
         )
@@ -360,9 +364,9 @@ class WritingCoreView(QWidget):
 
         center_row = QHBoxLayout()
         center_row.setContentsMargins(_CANVAS_PADDING_H, 0, _CANVAS_PADDING_H, 0)
-        center_row.addStretch()
-        center_row.addWidget(self._inner)
-        center_row.addStretch()
+        center_row.addStretch(1)
+        center_row.addWidget(self._inner, stretch=0)
+        center_row.addStretch(1)
         self._canvas_layout.addLayout(center_row)
         self._canvas_layout.addStretch()
         self._scroll.setWidget(self._canvas)
