@@ -19,6 +19,8 @@ DEFAULTS: dict[str, object] = {
     "last_project_path": "",
     "plugin_states": {},
     "auto_link_ignored": [],
+    "context_assistant_enabled": True,
+    "context_assistant_ignored": [],
 }
 
 

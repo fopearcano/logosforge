@@ -37,11 +37,13 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.auto_link import AutoLinkSuggester, Suggestion
+from storyplanner.context_assistant import ContextAssistant, ContextHint, HintRateLimiter
 from storyplanner.creative_layer import compute_review_metrics
 from storyplanner.db import Database
 from storyplanner.settings import get_manager as get_settings
 from storyplanner.ui import theme
 from storyplanner.ui.command_palette import CommandPalette
+from storyplanner.ui.context_hint_banner import ContextHintBanner
 from storyplanner.ui.entity_hover import EntityHoverHandler, EntityHoverPanel
 from storyplanner.ui.format_toolbar import FormatToolbar
 from storyplanner.ui.manuscript_highlighter import ManuscriptHighlighter
@@ -283,6 +285,7 @@ class WritingCoreView(QWidget):
         self._click_handlers: dict[int, PsykeClickHandler] = {}
         self._hover_handlers: dict[int, EntityHoverHandler] = {}
         self._suggestion_banners: dict[int, SuggestionBanner] = {}
+        self._context_hint_banners: dict[int, ContextHintBanner] = {}
         self._flow_mode = False
         self._typewriter_mode = False
         self._review_mode = False
@@ -299,6 +302,14 @@ class WritingCoreView(QWidget):
         self._auto_link_timer.setSingleShot(True)
         self._auto_link_timer.setInterval(1500)
         self._auto_link_timer.timeout.connect(self._refresh_suggestions)
+
+        self._context_assistant = ContextAssistant(db, project_id)
+        self._hint_rate_limiter = HintRateLimiter()
+        self._context_assist_timer = QTimer(self)
+        self._context_assist_timer.setSingleShot(True)
+        self._context_assist_timer.setInterval(2000)
+        self._context_assist_timer.timeout.connect(self._run_context_analysis)
+        self._context_assistant_enabled = True
 
         self._command_palette: CommandPalette | None = None
         self._palette_source_editor: _SceneEditor | None = None
@@ -592,6 +603,7 @@ class WritingCoreView(QWidget):
         self._click_handlers.clear()
         self._hover_handlers.clear()
         self._suggestion_banners.clear()
+        self._context_hint_banners.clear()
         while self._inner_layout.count():
             item = self._inner_layout.takeAt(0)
             w = item.widget()
@@ -678,6 +690,13 @@ class WritingCoreView(QWidget):
         banner.ignored.connect(self._on_suggestion_ignored)
         self._inner_layout.addWidget(banner)
         self._suggestion_banners[scene.id] = banner
+
+        hint_banner = ContextHintBanner()
+        hint_banner.accepted.connect(self._on_context_hint_accepted)
+        hint_banner.dismissed.connect(self._on_context_hint_dismissed)
+        hint_banner.ignored.connect(self._on_context_hint_ignored)
+        self._inner_layout.addWidget(hint_banner)
+        self._context_hint_banners[scene.id] = hint_banner
 
         self._editors[scene.id] = editor
 
@@ -884,7 +903,10 @@ class WritingCoreView(QWidget):
 
     def _on_editor_cursor_moved(self, editor: _SceneEditor) -> None:
         if editor.hasFocus():
-            self._active_editor = editor
+            if self._active_editor is not editor:
+                self._active_editor = editor
+                if editor._scene_id is not None:
+                    self._hint_rate_limiter.on_scene_changed(editor._scene_id)
         data = editor.textCursor().block().userData()
         elem_name = (
             data.element
@@ -1037,6 +1059,8 @@ class WritingCoreView(QWidget):
             self._save_timers[scene_id] = timer
         self._save_timers[scene_id].start()
         self._auto_link_timer.start()
+        if self._context_assistant_enabled:
+            self._context_assist_timer.start()
         self._update_word_count()
 
     def _save_scene(self, scene_id: int) -> None:
@@ -1623,6 +1647,70 @@ class WritingCoreView(QWidget):
         for banner in self._suggestion_banners.values():
             if banner.current is suggestion:
                 banner.clear()
+
+    # -- Context assistant -----------------------------------------------------
+
+    def _run_context_analysis(self) -> None:
+        if not self._context_assistant_enabled:
+            return
+        if not self._context_hint_banners:
+            return
+
+        active_scene_id: int | None = None
+        if self._active_editor and self._active_editor._scene_id:
+            active_scene_id = self._active_editor._scene_id
+
+        ignored = self._get_context_ignored_keys()
+
+        for scene_id, banner in self._context_hint_banners.items():
+            if active_scene_id is not None and scene_id != active_scene_id:
+                continue
+
+            hints = self._context_assistant.analyze_scene(
+                scene_id, temporal_graph=self._temporal_graph,
+            )
+
+            hints = [h for h in hints if h.dedup_key not in ignored]
+
+            chosen = self._hint_rate_limiter.filter(hints)
+            if chosen is not None:
+                self._hint_rate_limiter.mark_shown(chosen)
+                banner.show_hint(chosen)
+
+    def _on_context_hint_accepted(self, hint: ContextHint) -> None:
+        if hint.action == "open_progression":
+            entry_id = hint.data.get("entry_id")
+            if entry_id is not None and self._on_open_psyke_entry:
+                self._on_open_psyke_entry(entry_id)
+        elif hint.action == "focus_conflict":
+            pass
+
+        self._close_hint_banner_for(hint)
+
+    def _on_context_hint_dismissed(self, hint: ContextHint) -> None:
+        self._close_hint_banner_for(hint)
+
+    def _on_context_hint_ignored(self, hint: ContextHint) -> None:
+        self._persist_context_ignored_key(hint.dedup_key)
+        self._close_hint_banner_for(hint)
+
+    def _close_hint_banner_for(self, hint: ContextHint) -> None:
+        for banner in self._context_hint_banners.values():
+            if banner.current is hint:
+                banner.clear()
+
+    def _get_context_ignored_keys(self) -> set[str]:
+        raw = get_settings().get("context_assistant_ignored")
+        if isinstance(raw, list):
+            return set(raw)
+        return set()
+
+    def _persist_context_ignored_key(self, key: str) -> None:
+        keys = list(self._get_context_ignored_keys())
+        if key in keys:
+            return
+        keys.append(key)
+        get_settings().set("context_assistant_ignored", keys)
 
     # -- Public API -----------------------------------------------------------
 
