@@ -1,8 +1,9 @@
-"""Export project data to JSON, Markdown, CSV, or DOCX."""
+"""Export project data to JSON, Markdown, CSV, DOCX, Fountain, PDF, HTML, or FDX."""
 
 import csv
 import io
 import json
+import xml.etree.ElementTree as ET
 
 from storyplanner.db import Database
 from storyplanner.writing_formats import ALL_FORMATS
@@ -708,3 +709,367 @@ def _add_content_paragraphs(doc, text: str, font_name: str) -> None:
             run = para.add_run(line)
             run.font.name = font_name
             run.font.size = Pt(12)
+
+
+# -- Fountain export ----------------------------------------------------------
+
+def export_fountain(db: Database, project_id: int) -> str:
+    data = _gather_project_data(db, project_id)
+    lines: list[str] = []
+
+    lines.append(f"Title: {data['project']['title']}")
+    lines.append(f"Credit: Written by")
+    lines.append(f"Author: ")
+    lines.append(f"Draft date: ")
+    lines.append("")
+    lines.append("")
+
+    fmt = data["project"].get("format_mode", "novel")
+
+    current_act = None
+    for scene in data["scenes"]:
+        act = scene.get("act", "")
+        if act and act != current_act:
+            current_act = act
+            if fmt in ("series", "stage_script"):
+                lines.append(f"= {act}")
+                lines.append("")
+
+        slug = _slug_line(scene)
+        lines.append(f".{slug}")
+        lines.append("")
+
+        body = _scene_body(scene)
+        if body:
+            lines.append(body)
+            lines.append("")
+
+    return "\n".join(lines)
+
+
+# -- FDX (Final Draft XML) export ---------------------------------------------
+
+def export_fdx(db: Database, project_id: int) -> str:
+    data = _gather_project_data(db, project_id)
+
+    root = ET.Element("FinalDraft", DocumentType="Script", Template="No", Version="4")
+    content = ET.SubElement(root, "Content")
+
+    title_para = ET.SubElement(content, "Paragraph", Type="Action")
+    title_text = ET.SubElement(title_para, "Text")
+    title_text.text = data["project"]["title"]
+
+    fmt = data["project"].get("format_mode", "novel")
+
+    current_act = None
+    for scene in data["scenes"]:
+        act = scene.get("act", "")
+        if act and act != current_act:
+            current_act = act
+            if fmt in ("series", "stage_script"):
+                act_para = ET.SubElement(content, "Paragraph", Type="Action")
+                act_t = ET.SubElement(act_para, "Text")
+                act_t.text = act.upper()
+
+        slug = _slug_line(scene)
+        slug_para = ET.SubElement(content, "Paragraph", Type="Scene Heading")
+        slug_text = ET.SubElement(slug_para, "Text")
+        slug_text.text = slug
+
+        body = _scene_body(scene)
+        if body:
+            for block in body.split("\n\n"):
+                block = block.strip()
+                if not block:
+                    continue
+                action_para = ET.SubElement(content, "Paragraph", Type="Action")
+                action_text = ET.SubElement(action_para, "Text")
+                action_text.text = block.replace("\n", " ")
+
+    tree = ET.ElementTree(root)
+    buf = io.BytesIO()
+    tree.write(buf, encoding="utf-8", xml_declaration=True)
+    return buf.getvalue().decode("utf-8")
+
+
+# -- PDF export ----------------------------------------------------------------
+
+def export_pdf(db: Database, project_id: int, path: str) -> None:
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.platypus import (
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+    )
+
+    data = _gather_project_data(db, project_id)
+    fmt = data["project"].get("format_mode", "novel")
+    is_script = fmt in ("screenplay", "series", "stage_script", "graphic_novel")
+    font_name = "Courier" if is_script else "Times-Roman"
+    font_bold = "Courier-Bold" if is_script else "Times-Bold"
+    font_italic = "Courier-Oblique" if is_script else "Times-Italic"
+
+    doc = SimpleDocTemplate(
+        path,
+        pagesize=letter,
+        leftMargin=1.5 * inch if is_script else 1.0 * inch,
+        rightMargin=1.0 * inch,
+        topMargin=1.0 * inch,
+        bottomMargin=1.0 * inch,
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "ScriptTitle",
+        parent=styles["Title"],
+        fontName=font_bold,
+        fontSize=24,
+        alignment=1,
+        spaceAfter=36,
+    )
+    heading_style = ParagraphStyle(
+        "SceneHeading",
+        parent=styles["Normal"],
+        fontName=font_bold,
+        fontSize=12,
+        spaceBefore=24,
+        spaceAfter=12,
+    )
+    body_style = ParagraphStyle(
+        "Body",
+        parent=styles["Normal"],
+        fontName=font_name,
+        fontSize=12,
+        leading=14 if is_script else 16,
+        spaceAfter=6 if is_script else 8,
+    )
+    act_style = ParagraphStyle(
+        "Act",
+        parent=styles["Normal"],
+        fontName=font_bold,
+        fontSize=14,
+        alignment=1,
+        spaceBefore=24,
+        spaceAfter=12,
+    )
+    chapter_style = ParagraphStyle(
+        "Chapter",
+        parent=styles["Normal"],
+        fontName=font_bold,
+        fontSize=16,
+        spaceBefore=24,
+        spaceAfter=12,
+    )
+
+    elements: list = []
+    elements.append(Paragraph(_esc(data["project"]["title"]), title_style))
+    elements.append(Spacer(1, 36))
+
+    if not data["scenes"]:
+        elements.append(Paragraph("No scenes.", body_style))
+        doc.build(elements)
+        return
+
+    if fmt in ("screenplay", "series"):
+        _pdf_screenplay(data, fmt, elements, heading_style, body_style, act_style)
+    elif fmt == "stage_script":
+        _pdf_stage_script(data, elements, heading_style, body_style, act_style)
+    elif fmt == "graphic_novel":
+        _pdf_graphic_novel(data, elements, heading_style, body_style)
+    else:
+        _pdf_novel(data, elements, chapter_style, heading_style, body_style)
+
+    doc.build(elements)
+
+
+def _esc(text: str) -> str:
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+def _pdf_body_blocks(text: str, style, elements: list) -> None:
+    from reportlab.platypus import Paragraph
+
+    for block in text.split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+        safe = _esc(block).replace("\n", "<br/>")
+        elements.append(Paragraph(safe, style))
+
+
+def _pdf_novel(data, elements, chapter_style, heading_style, body_style):
+    from reportlab.platypus import Paragraph
+
+    chapter_groups = _group_scenes_by_chapter(data["scenes"])
+    chapter_num = 0
+    for chapter_name, group_scenes in chapter_groups:
+        if chapter_name:
+            chapter_num += 1
+            elements.append(
+                Paragraph(_esc(f"Chapter {chapter_num}: {chapter_name}"), chapter_style),
+            )
+        for scene in group_scenes:
+            elements.append(Paragraph(f"<i>{_esc(scene['title'])}</i>", heading_style))
+            body = _scene_body(scene)
+            if body:
+                _pdf_body_blocks(body, body_style, elements)
+
+
+def _pdf_screenplay(data, fmt, elements, heading_style, body_style, act_style):
+    from reportlab.platypus import Paragraph
+
+    current_act = None
+    for scene in data["scenes"]:
+        act = scene.get("act", "")
+        if fmt == "series" and act and act != current_act:
+            current_act = act
+            elements.append(Paragraph(_esc(act.upper()), act_style))
+        elements.append(Paragraph(_esc(_slug_line(scene)), heading_style))
+        body = _scene_body(scene)
+        if body:
+            _pdf_body_blocks(body, body_style, elements)
+
+
+def _pdf_stage_script(data, elements, heading_style, body_style, act_style):
+    from reportlab.platypus import Paragraph
+
+    current_act = None
+    scene_num = 0
+    for scene in data["scenes"]:
+        act = scene.get("act", "")
+        if act and act != current_act:
+            current_act = act
+            scene_num = 0
+            elements.append(Paragraph(_esc(act.upper()), act_style))
+        scene_num += 1
+        elements.append(Paragraph(_esc(f"SCENE {scene_num}"), heading_style))
+        body = _scene_body(scene)
+        if body:
+            _pdf_body_blocks(body, body_style, elements)
+
+
+def _pdf_graphic_novel(data, elements, heading_style, body_style):
+    from reportlab.platypus import Paragraph
+
+    page_num = 0
+    for scene in data["scenes"]:
+        page_num += 1
+        elements.append(Paragraph(_esc(f"PAGE {page_num}"), heading_style))
+        body = _scene_body(scene)
+        if body:
+            _pdf_body_blocks(body, body_style, elements)
+
+
+# -- HTML export ---------------------------------------------------------------
+
+def export_html(db: Database, project_id: int) -> str:
+    data = _gather_project_data(db, project_id)
+    fmt = data["project"].get("format_mode", "novel")
+    is_script = fmt in ("screenplay", "series", "stage_script", "graphic_novel")
+    font = "Courier New, Courier, monospace" if is_script else "Times New Roman, Georgia, serif"
+    title = _esc(data["project"]["title"])
+
+    css = (
+        "body { max-width: 720px; margin: 40px auto; padding: 0 20px; "
+        f"font-family: {font}; font-size: 12pt; line-height: 1.5; }}\n"
+        "h1 { text-align: center; }\n"
+        "h2 { text-align: center; text-transform: uppercase; font-size: 14pt; }\n"
+        ".scene-heading { font-weight: bold; text-transform: uppercase; "
+        "margin-top: 24px; margin-bottom: 12px; }\n"
+        ".chapter { font-size: 16pt; font-weight: bold; margin-top: 36px; }\n"
+        ".body-text { margin-bottom: 8px; }\n"
+    )
+
+    parts: list[str] = [
+        "<!DOCTYPE html>",
+        "<html lang=\"en\">",
+        "<head>",
+        f"<meta charset=\"utf-8\"><title>{title}</title>",
+        f"<style>{css}</style>",
+        "</head>",
+        "<body>",
+        f"<h1>{title}</h1>",
+    ]
+
+    if not data["scenes"]:
+        parts.append("<p>No scenes.</p>")
+    elif fmt in ("screenplay", "series"):
+        _html_screenplay(data, fmt, parts)
+    elif fmt == "stage_script":
+        _html_stage_script(data, parts)
+    elif fmt == "graphic_novel":
+        _html_graphic_novel(data, parts)
+    else:
+        _html_novel(data, parts)
+
+    parts.append("</body>")
+    parts.append("</html>")
+    return "\n".join(parts)
+
+
+def _html_body_blocks(text: str, parts: list[str]) -> None:
+    for block in text.split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+        safe = _esc(block).replace("\n", "<br>")
+        parts.append(f"<p class=\"body-text\">{safe}</p>")
+
+
+def _html_novel(data, parts):
+    chapter_groups = _group_scenes_by_chapter(data["scenes"])
+    chapter_num = 0
+    for chapter_name, group_scenes in chapter_groups:
+        if chapter_name:
+            chapter_num += 1
+            parts.append(f"<div class=\"chapter\">Chapter {chapter_num}: {_esc(chapter_name)}</div>")
+        for scene in group_scenes:
+            parts.append(f"<div class=\"scene-heading\"><em>{_esc(scene['title'])}</em></div>")
+            body = _scene_body(scene)
+            if body:
+                _html_body_blocks(body, parts)
+
+
+def _html_screenplay(data, fmt, parts):
+    current_act = None
+    for scene in data["scenes"]:
+        act = scene.get("act", "")
+        if fmt == "series" and act and act != current_act:
+            current_act = act
+            parts.append(f"<h2>{_esc(act.upper())}</h2>")
+        parts.append(f"<div class=\"scene-heading\">{_esc(_slug_line(scene))}</div>")
+        body = _scene_body(scene)
+        if body:
+            _html_body_blocks(body, parts)
+
+
+def _html_stage_script(data, parts):
+    current_act = None
+    scene_num = 0
+    for scene in data["scenes"]:
+        act = scene.get("act", "")
+        if act and act != current_act:
+            current_act = act
+            scene_num = 0
+            parts.append(f"<h2>{_esc(act.upper())}</h2>")
+        scene_num += 1
+        parts.append(f"<div class=\"scene-heading\">SCENE {scene_num}</div>")
+        body = _scene_body(scene)
+        if body:
+            _html_body_blocks(body, parts)
+
+
+def _html_graphic_novel(data, parts):
+    page_num = 0
+    for scene in data["scenes"]:
+        page_num += 1
+        parts.append(f"<div class=\"scene-heading\">PAGE {page_num}</div>")
+        body = _scene_body(scene)
+        if body:
+            _html_body_blocks(body, parts)

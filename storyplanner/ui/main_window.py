@@ -28,10 +28,14 @@ from storyplanner.settings import get_manager as get_settings
 from storyplanner.export import (
     export_csv_scenes,
     export_docx_manuscript,
+    export_fdx,
     export_formatted_text,
+    export_fountain,
+    export_html,
     export_json,
     export_manuscript,
     export_markdown,
+    export_pdf,
     export_screenplay,
 )
 from storyplanner.import_data import import_json, validate_import_data
@@ -786,14 +790,32 @@ class MainWindow(QMainWindow):
         }
         fmt_label = fmt_labels.get(fmt, "Formatted Text")
 
+        filters = [
+            f"PDF {fmt_label} (*.pdf)",
+            f"DOCX {fmt_label} (*.docx)",
+            f"{fmt_label} (*.txt)",
+            "Fountain (*.fountain)",
+            "Final Draft (*.fdx)",
+            "HTML (*.html)",
+            "Markdown (*.md)",
+            "JSON (*.json)",
+            "CSV – Scenes (*.csv)",
+        ]
+
         path, selected_filter = QFileDialog.getSaveFileName(
             self,
             "Export Project",
             "",
-            f"JSON (*.json);;Markdown (*.md);;{fmt_label} (*.txt);;"
-            f"DOCX {fmt_label} (*.docx);;CSV – Scenes (*.csv)",
+            ";;".join(filters),
         )
         if not path:
+            return
+
+        if "PDF" in selected_filter:
+            if not path.endswith(".pdf"):
+                path += ".pdf"
+            export_pdf(self._db, self._project_id, path)
+            QMessageBox.information(self, "Export", f"Exported to {path}")
             return
 
         if "DOCX" in selected_filter:
@@ -807,6 +829,18 @@ class MainWindow(QMainWindow):
             content = export_csv_scenes(self._db, self._project_id)
             if not path.endswith(".csv"):
                 path += ".csv"
+        elif "Fountain" in selected_filter or path.endswith(".fountain"):
+            content = export_fountain(self._db, self._project_id)
+            if not path.endswith(".fountain"):
+                path += ".fountain"
+        elif "Final Draft" in selected_filter or path.endswith(".fdx"):
+            content = export_fdx(self._db, self._project_id)
+            if not path.endswith(".fdx"):
+                path += ".fdx"
+        elif "HTML" in selected_filter or path.endswith(".html"):
+            content = export_html(self._db, self._project_id)
+            if not path.endswith(".html"):
+                path += ".html"
         elif fmt_label in selected_filter:
             content = export_formatted_text(self._db, self._project_id)
             if not path.endswith(".txt"):
