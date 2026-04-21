@@ -30,7 +30,7 @@ It is a PySide6 desktop application with a SQLite backend, designed for novelist
 | AI Integration | OpenAI-compatible API (local or cloud) |
 | Architecture | MVC with layered context engines |
 
-**Codebase:** ~22,000 lines of source across 83 modules, with 725 tests (7,900 lines of test code).
+**Codebase:** ~24,600 lines of source across 91 modules, with 894 tests (10,200 lines of test code).
 
 ---
 
@@ -87,6 +87,30 @@ python -m pytest tests/ -v
 - Serif/sans-serif toggle
 - Word count tracking
 - Auto-save with debounce
+- Format toolbar: bold, italic, underline, headings, alignment, lists, blockquote
+- Typewriter mode (current line pinned to vertical center)
+- Per-scene auto-save indicator
+
+#### PSYKE-Aware Semantic Editor
+The manuscript editor doubles as a semantic surface linked to the Story Bible.
+
+- Inline highlighting of PSYKE entries (characters, themes, places) as you type
+- Hover tooltip shows the entry's current temporal state
+- Ctrl+Click on a highlighted entity jumps to the PSYKE view and selects it
+- Highlight palette differentiates entry types (character / theme / location / lore)
+- Live refresh as new entries or aliases are added
+
+#### Auto-Link (Manuscript ↔ PSYKE)
+Bidirectional suggestion layer between your prose and your Story Bible.
+
+- Detects recurring capitalized entities and offers to create PSYKE entries
+- Learns aliases for existing entries (e.g. "El Capitán" → Captain)
+- Proposes relations when two known entities co-occur in a scene
+- Extracts progression/memory candidates from state-verb sentences ("Alice realized…")
+- Non-intrusive inline banner with Accept / Dismiss / Ignore actions
+- **Suggest, never auto-commit** — the user is always in control
+- Persistent ignore list (remembered across sessions)
+- Rate-limited: one suggestion per scene at a time, debounced after edits
 
 #### Export & Import
 - JSON, Markdown, CSV, DOCX export
@@ -217,6 +241,16 @@ Automatically extracts continuity-relevant facts from scene structured fields:
 
 ### Analysis & Insights
 
+#### Narrative Dashboard
+Visual story intelligence at a glance. Four synchronized panels computed from scenes and PSYKE:
+
+- **Tension Curve** — per-scene score from character count, relation density, conflict keywords, and progression activity. Filled-area polyline with hover breakdown and click-to-open-scene. Flags flat sections, spikes, and weak first-third buildup.
+- **Character Presence** — horizontal strip per character with dots marking scenes where they appear. Click a name to toggle visibility. Flags over-dominance (>80% of scenes) and long absences (≥3 consecutive scenes).
+- **Act / Structure Distribution** — segmented bar showing word-count weight per act. Uses `scene.act` labels when present, otherwise infers a 25 / 50 / 25 three-act split. Flags weak sections and weak middles.
+- **Theme Continuity** — bar-style presence map per theme. Flags underused themes (<20% of scenes) and multi-scene disappearances.
+
+Dashboard is read-only, deterministic (no AI call), computed in a single pass, and lives in its own sidebar view so it stays non-intrusive.
+
 #### Story Health
 Four structural health signals with percentage indicators:
 - Connectivity, completeness, balance, depth
@@ -321,7 +355,7 @@ Plugins operate on structured narrative context, never on raw database access.
 - Light Warm
 
 #### Sidebar Navigation
-Projects, Dashboard, Characters, Places, Notes, Scenes, Manuscript, Timeline, Grid, Plot, Outline, Writer, Structure, Acts, Beats, Tags, Graph, Arcs, Health, Balance, Pacing, Adapt, Search, PSYKE, Plugins, Assistant
+Projects, Dashboard, Characters, Places, Notes, Scenes, Manuscript, Timeline, Grid, Plot, Outline, Writer, Structure, Acts, Beats, Tags, Graph, Arcs, Health, Balance, Pacing, Adapt, Narrative, Search, PSYKE, Plugins, Assistant
 
 #### Overlay Mode
 - Assistant panel can float as overlay
@@ -338,12 +372,21 @@ storyplanner/
 │   └── database.py           # All CRUD operations
 ├── models/                   # SQLModel data models
 │   └── models.py             # Project, Scene, Character, Place, Note, PSYKE, Memory
-├── ui/                       # PySide6 views and widgets (40 files)
-│   ├── main_window.py        # Main window with sidebar navigation
-│   ├── assistant_view.py     # AI assistant panel
-│   ├── inline_assistant.py   # Inline scene editor AI
-│   ├── writing_core_view.py  # Manuscript/focus mode editor
-│   └── ...                   # 36 more view/widget files
+├── ui/                       # PySide6 views and widgets (46 files)
+│   ├── main_window.py            # Main window with sidebar navigation
+│   ├── assistant_view.py         # AI assistant panel
+│   ├── inline_assistant.py       # Inline scene editor AI
+│   ├── writing_core_view.py      # Manuscript/focus mode editor
+│   ├── format_toolbar.py         # Rich-text formatting toolbar
+│   ├── manuscript_highlighter.py # Base manuscript syntax highlighting
+│   ├── psyke_highlighter.py      # PSYKE entity highlighting in prose
+│   ├── entity_hover.py           # Hover tooltip for PSYKE entities
+│   ├── link_preview.py           # Ctrl+Click link preview widget
+│   ├── suggestion_banner.py      # Auto-link suggestion banner
+│   ├── psyke_quick_create.py     # Quick-create dialog for new PSYKE entries
+│   ├── narrative_dashboard_view.py # Narrative Dashboard top-level view
+│   ├── dashboard_widgets.py      # Tension curve, presence, structure, theme panels
+│   └── ...                       # 33 more view/widget files
 ├── assistant.py              # AI prompt construction and API client
 ├── counterpart.py            # COUNTERPART dialogic assistant
 ├── context_builder.py        # Context gathering from all systems
@@ -352,6 +395,8 @@ storyplanner/
 ├── story_memory.py           # Memory extraction from scenes
 ├── temporal_psyke.py         # Time-aware story bible resolution
 ├── orchestration.py          # Mode-aware PSYKE context composition
+├── narrative_dashboard.py    # Tension, presence, structure, theme computations
+├── auto_link.py              # Manuscript ↔ PSYKE suggestion engine
 ├── narrative_suggestions.py  # Beat suggestion engine
 ├── graph_meaning.py          # Graph-based narrative metrics
 ├── graph_suggestions.py      # Graph-driven direction suggestions
@@ -407,7 +452,16 @@ Configure in the Assistant panel under Settings.
 4. **Deterministic analysis** — Pacing, health, balance, and suggestions compute without AI calls
 5. **Temporal awareness** — Story bible entries evolve over narrative time
 6. **Plugin safety** — Plugins see snapshots, never databases; they suggest, never mutate
-7. **Local-first** — Works offline with local models, no cloud dependency required
+7. **Suggest, never auto-commit** — Auto-link proposes; the user always decides before PSYKE is touched
+8. **Local-first** — Works offline with local models, no cloud dependency required
+
+---
+
+## Further Reading
+
+- [`docs/narrative_dashboard.md`](docs/narrative_dashboard.md) — panels, scoring formulas, flag rules
+- [`docs/auto_link.md`](docs/auto_link.md) — detection rules, suggestion flow, safety guarantees
+- [`docs/plugins.md`](docs/plugins.md) — writing and registering plugins
 
 ---
 
