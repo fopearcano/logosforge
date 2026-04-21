@@ -59,7 +59,6 @@ _BODY_LINE_HEIGHT = 1.65
 _FOCUS_LINE_HEIGHT = 1.75
 _FADE_ALPHA_PARA = 70
 _FADE_ALPHA_SCENE = 110
-_PARA_BOTTOM_MARGIN = 10
 
 _ELEMENT_TRANSITIONS: dict[str, dict[str, str]] = {
     "screenplay": {
@@ -1340,20 +1339,7 @@ class WritingCoreView(QWidget):
         )
         self.setStyleSheet(full_style)
 
-        for editor in self._editors.values():
-            self._apply_line_spacing(editor, lh)
-
         self._apply_format_to_all_blocks()
-
-    def _apply_line_spacing(self, editor: _SceneEditor, lh: float) -> None:
-        cursor = editor.textCursor()
-        cursor.select(QTextCursor.SelectionType.Document)
-        fmt = QTextBlockFormat()
-        fmt.setLineHeight(
-            lh * 100, QTextBlockFormat.LineHeightTypes.ProportionalHeight.value,
-        )
-        fmt.setBottomMargin(_PARA_BOTTOM_MARGIN)
-        cursor.mergeBlockFormat(fmt)
 
     def _toggle_font(self) -> None:
         self._use_serif = not self._use_serif

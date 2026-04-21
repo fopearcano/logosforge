@@ -6,7 +6,6 @@ import json
 import xml.etree.ElementTree as ET
 
 from storyplanner.db import Database
-from storyplanner.writing_formats import ALL_FORMATS
 
 
 def _gather_project_data(db: Database, project_id: int) -> dict:
@@ -62,8 +61,7 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
     psyke_entries = db.get_all_psyke_entries(project_id)
     psyke_name_by_id = {e.id: e.name for e in psyke_entries}
 
-    scenes_all = db.get_all_scenes(project_id)
-    scene_title_by_id = {s.id: s.title for s in scenes_all}
+    scene_title_by_id = {s.id: s.title for s in scenes}
 
     psyke_list = []
     for e in psyke_entries:
@@ -332,23 +330,25 @@ def _scene_body(scene: dict) -> str:
 
 
 def export_screenplay(db: Database, project_id: int) -> str:
-    return _export_formatted_text(db, project_id, "screenplay")
+    data = _gather_project_data(db, project_id)
+    return _format_text(data, "screenplay")
 
 
 def export_manuscript(db: Database, project_id: int) -> str:
-    return _export_formatted_text(db, project_id, "novel")
+    data = _gather_project_data(db, project_id)
+    return _format_text(data, "novel")
 
 
 def export_formatted_text(db: Database, project_id: int) -> str:
     data = _gather_project_data(db, project_id)
-    fmt = data["project"].get("format_mode", "novel")
-    return _export_formatted_text(db, project_id, fmt)
+    return _format_text(data, _get_fmt(data))
 
 
-def _export_formatted_text(
-    db: Database, project_id: int, fmt: str,
-) -> str:
-    data = _gather_project_data(db, project_id)
+def _is_script_format(fmt: str) -> bool:
+    return fmt in ("screenplay", "series", "stage_script", "graphic_novel")
+
+
+def _format_text(data: dict, fmt: str) -> str:
     if fmt in ("screenplay", "series"):
         return _fmt_screenplay_text(data, fmt)
     if fmt == "stage_script":
@@ -478,13 +478,17 @@ def _fmt_graphic_novel_text(data: dict) -> str:
 
 # -- DOCX export (format-aware) -----------------------------------------------
 
-_SCRIPT_FONTS = ("Courier New", "Courier", "monospace")
-_PROSE_FONTS = ("Times New Roman", "Times", "serif")
+_SCRIPT_FONT_DOCX = "Courier New"
+_PROSE_FONT_DOCX = "Times New Roman"
+
+
+def _get_fmt(data: dict) -> str:
+    return data["project"].get("format_mode", "novel")
 
 
 def export_docx_manuscript(db: Database, project_id: int, path: str) -> None:
     data = _gather_project_data(db, project_id)
-    fmt = data["project"].get("format_mode", "novel")
+    fmt = _get_fmt(data)
     if fmt in ("screenplay", "series"):
         _docx_screenplay(data, path, fmt)
     elif fmt == "stage_script":
@@ -515,12 +519,12 @@ def _docx_novel(data: dict, path: str) -> None:
 
     doc = Document()
     style = doc.styles["Normal"]
-    style.font.name = _PROSE_FONTS[0]
+    style.font.name = _PROSE_FONT_DOCX
     style.font.size = Pt(12)
     style.paragraph_format.space_after = Pt(6)
     style.paragraph_format.line_spacing = 1.15
 
-    _docx_title_page(doc, data["project"]["title"], _PROSE_FONTS[0])
+    _docx_title_page(doc, data["project"]["title"], _PROSE_FONT_DOCX)
 
     if not data["scenes"]:
         doc.add_paragraph("No scenes.")
@@ -540,7 +544,7 @@ def _docx_novel(data: dict, path: str) -> None:
         ch_run = ch_para.add_run(heading)
         ch_run.bold = True
         ch_run.font.size = Pt(16)
-        ch_run.font.name = _PROSE_FONTS[0]
+        ch_run.font.name = _PROSE_FONT_DOCX
 
         for scene in group_scenes:
             scene_para = doc.add_paragraph()
@@ -548,11 +552,11 @@ def _docx_novel(data: dict, path: str) -> None:
             scene_run = scene_para.add_run(scene["title"])
             scene_run.italic = True
             scene_run.font.size = Pt(12)
-            scene_run.font.name = _PROSE_FONTS[0]
+            scene_run.font.name = _PROSE_FONT_DOCX
 
             body = _scene_body(scene)
             if body:
-                _add_content_paragraphs(doc, body, _PROSE_FONTS[0])
+                _add_content_paragraphs(doc, body, _PROSE_FONT_DOCX)
 
     doc.save(path)
 
@@ -564,7 +568,7 @@ def _docx_screenplay(data: dict, path: str, fmt: str) -> None:
 
     doc = Document()
     style = doc.styles["Normal"]
-    style.font.name = _SCRIPT_FONTS[0]
+    style.font.name = _SCRIPT_FONT_DOCX
     style.font.size = Pt(12)
     style.paragraph_format.space_after = Pt(0)
     style.paragraph_format.line_spacing = 1.0
@@ -575,7 +579,7 @@ def _docx_screenplay(data: dict, path: str, fmt: str) -> None:
         section.top_margin = Inches(1.0)
         section.bottom_margin = Inches(1.0)
 
-    _docx_title_page(doc, data["project"]["title"], _SCRIPT_FONTS[0])
+    _docx_title_page(doc, data["project"]["title"], _SCRIPT_FONT_DOCX)
 
     if not data["scenes"]:
         doc.add_paragraph("No scenes.")
@@ -592,18 +596,18 @@ def _docx_screenplay(data: dict, path: str, fmt: str) -> None:
             act_para.paragraph_format.space_before = Pt(24)
             act_run = act_para.add_run(act.upper())
             act_run.bold = True
-            act_run.font.name = _SCRIPT_FONTS[0]
+            act_run.font.name = _SCRIPT_FONT_DOCX
 
         slug_para = doc.add_paragraph()
         slug_para.paragraph_format.space_before = Pt(24)
         slug_para.paragraph_format.space_after = Pt(12)
         slug_run = slug_para.add_run(_slug_line(scene))
         slug_run.bold = True
-        slug_run.font.name = _SCRIPT_FONTS[0]
+        slug_run.font.name = _SCRIPT_FONT_DOCX
 
         body = _scene_body(scene)
         if body:
-            _add_content_paragraphs(doc, body, _SCRIPT_FONTS[0])
+            _add_content_paragraphs(doc, body, _SCRIPT_FONT_DOCX)
 
     doc.save(path)
 
@@ -615,7 +619,7 @@ def _docx_stage_script(data: dict, path: str) -> None:
 
     doc = Document()
     style = doc.styles["Normal"]
-    style.font.name = _SCRIPT_FONTS[0]
+    style.font.name = _SCRIPT_FONT_DOCX
     style.font.size = Pt(12)
     style.paragraph_format.space_after = Pt(0)
     style.paragraph_format.line_spacing = 1.0
@@ -624,7 +628,7 @@ def _docx_stage_script(data: dict, path: str) -> None:
         section.left_margin = Inches(1.0)
         section.right_margin = Inches(1.0)
 
-    _docx_title_page(doc, data["project"]["title"], _SCRIPT_FONTS[0])
+    _docx_title_page(doc, data["project"]["title"], _SCRIPT_FONT_DOCX)
 
     if not data["scenes"]:
         doc.add_paragraph("No scenes.")
@@ -643,7 +647,7 @@ def _docx_stage_script(data: dict, path: str) -> None:
             act_para.paragraph_format.space_before = Pt(36)
             act_run = act_para.add_run(act.upper())
             act_run.bold = True
-            act_run.font.name = _SCRIPT_FONTS[0]
+            act_run.font.name = _SCRIPT_FONT_DOCX
 
         scene_num += 1
         sc_para = doc.add_paragraph()
@@ -651,11 +655,11 @@ def _docx_stage_script(data: dict, path: str) -> None:
         sc_para.paragraph_format.space_before = Pt(24)
         sc_run = sc_para.add_run(f"SCENE {scene_num}")
         sc_run.bold = True
-        sc_run.font.name = _SCRIPT_FONTS[0]
+        sc_run.font.name = _SCRIPT_FONT_DOCX
 
         body = _scene_body(scene)
         if body:
-            _add_content_paragraphs(doc, body, _SCRIPT_FONTS[0])
+            _add_content_paragraphs(doc, body, _SCRIPT_FONT_DOCX)
 
     doc.save(path)
 
@@ -666,12 +670,12 @@ def _docx_graphic_novel(data: dict, path: str) -> None:
 
     doc = Document()
     style = doc.styles["Normal"]
-    style.font.name = _SCRIPT_FONTS[0]
+    style.font.name = _SCRIPT_FONT_DOCX
     style.font.size = Pt(12)
     style.paragraph_format.space_after = Pt(0)
     style.paragraph_format.line_spacing = 1.0
 
-    _docx_title_page(doc, data["project"]["title"], _SCRIPT_FONTS[0])
+    _docx_title_page(doc, data["project"]["title"], _SCRIPT_FONT_DOCX)
 
     if not data["scenes"]:
         doc.add_paragraph("No scenes.")
@@ -685,11 +689,11 @@ def _docx_graphic_novel(data: dict, path: str) -> None:
         pg_para.paragraph_format.space_before = Pt(24)
         pg_run = pg_para.add_run(f"PAGE {page_num}")
         pg_run.bold = True
-        pg_run.font.name = _SCRIPT_FONTS[0]
+        pg_run.font.name = _SCRIPT_FONT_DOCX
 
         body = _scene_body(scene)
         if body:
-            _add_content_paragraphs(doc, body, _SCRIPT_FONTS[0])
+            _add_content_paragraphs(doc, body, _SCRIPT_FONT_DOCX)
 
     doc.save(path)
 
@@ -724,7 +728,7 @@ def export_fountain(db: Database, project_id: int) -> str:
     lines.append("")
     lines.append("")
 
-    fmt = data["project"].get("format_mode", "novel")
+    fmt = _get_fmt(data)
 
     current_act = None
     for scene in data["scenes"]:
@@ -759,7 +763,7 @@ def export_fdx(db: Database, project_id: int) -> str:
     title_text = ET.SubElement(title_para, "Text")
     title_text.text = data["project"]["title"]
 
-    fmt = data["project"].get("format_mode", "novel")
+    fmt = _get_fmt(data)
 
     current_act = None
     for scene in data["scenes"]:
@@ -805,8 +809,8 @@ def export_pdf(db: Database, project_id: int, path: str) -> None:
     )
 
     data = _gather_project_data(db, project_id)
-    fmt = data["project"].get("format_mode", "novel")
-    is_script = fmt in ("screenplay", "series", "stage_script", "graphic_novel")
+    fmt = _get_fmt(data)
+    is_script = _is_script_format(fmt)
     font_name = "Courier" if is_script else "Times-Roman"
     font_bold = "Courier-Bold" if is_script else "Times-Bold"
     font_italic = "Courier-Oblique" if is_script else "Times-Italic"
@@ -970,8 +974,8 @@ def _pdf_graphic_novel(data, elements, heading_style, body_style):
 
 def export_html(db: Database, project_id: int) -> str:
     data = _gather_project_data(db, project_id)
-    fmt = data["project"].get("format_mode", "novel")
-    is_script = fmt in ("screenplay", "series", "stage_script", "graphic_novel")
+    fmt = _get_fmt(data)
+    is_script = _is_script_format(fmt)
     font = "Courier New, Courier, monospace" if is_script else "Times New Roman, Georgia, serif"
     title = _esc(data["project"]["title"])
 
