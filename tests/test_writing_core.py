@@ -1,10 +1,15 @@
-"""Tests for Writing Core view — canvas layout, typography, command palette."""
+"""Tests for Writing Core view — canvas layout, typography, command palette,
+manuscript highlighting, format toolbar, typewriter mode."""
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QTextCursor, QTextDocument
 from PySide6.QtWidgets import QApplication
 
 from storyplanner.db import Database
 from storyplanner.ui.command_palette import COMMANDS, CommandPalette
+from storyplanner.ui.format_toolbar import FormatToolbar
+from storyplanner.ui.manuscript_highlighter import ManuscriptHighlighter
+from storyplanner.ui.psyke_highlighter import PsykeHighlighter
 from storyplanner.ui.writing_core_view import (
     WritingCoreView,
     _BODY_FONT_SIZE,
@@ -235,3 +240,175 @@ def test_scroll_to_scene():
     view = WritingCoreView(db, proj.id)
     view.scroll_to_scene(s3.id)
     assert view._editors[s3.id].hasFocus() or True  # Focus may not work without show
+
+
+# -- Manuscript Highlighter ---------------------------------------------------
+
+def test_manuscript_highlighter_inherits_psyke():
+    assert issubclass(ManuscriptHighlighter, PsykeHighlighter)
+
+
+def test_manuscript_highlighter_creates():
+    doc = QTextDocument()
+    h = ManuscriptHighlighter(doc)
+    assert h._b_fmt is not None
+    assert h._i_fmt is not None
+    assert h._bi_fmt is not None
+    assert h._h1_fmt is not None
+    assert h._h2_fmt is not None
+    assert h._h3_fmt is not None
+    assert h._q_fmt is not None
+    assert h._sep_fmt is not None
+
+
+def test_manuscript_highlighter_refresh_theme():
+    doc = QTextDocument()
+    h = ManuscriptHighlighter(doc)
+    h.refresh_theme()
+
+
+def test_manuscript_highlighter_refresh_patterns():
+    doc = QTextDocument()
+    h = ManuscriptHighlighter(doc)
+    h.refresh_patterns(["Alice", "Bob"])
+
+
+def test_view_uses_manuscript_highlighter():
+    db = Database()
+    proj, s1, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert isinstance(view._highlighters[s1.id], ManuscriptHighlighter)
+
+
+# -- Format Toolbar -----------------------------------------------------------
+
+def test_format_toolbar_creates():
+    toolbar = FormatToolbar()
+    assert toolbar.objectName() == "formatToolbar"
+
+
+def test_format_toolbar_bold_wraps():
+    editor = _SceneEditor()
+    editor.setPlainText("hello world")
+    cursor = editor.textCursor()
+    cursor.setPosition(6)
+    cursor.setPosition(11, QTextCursor.MoveMode.KeepAnchor)
+    editor.setTextCursor(cursor)
+
+    toolbar = FormatToolbar()
+    toolbar.toggle_bold_on(editor)
+    assert editor.toPlainText() == "hello **world**"
+
+
+def test_format_toolbar_bold_unwraps_surrounding():
+    editor = _SceneEditor()
+    editor.setPlainText("hello **world**")
+    cursor = editor.textCursor()
+    cursor.setPosition(8)
+    cursor.setPosition(13, QTextCursor.MoveMode.KeepAnchor)
+    editor.setTextCursor(cursor)
+
+    toolbar = FormatToolbar()
+    toolbar.toggle_bold_on(editor)
+    assert editor.toPlainText() == "hello world"
+
+
+def test_format_toolbar_bold_unwraps_selected():
+    editor = _SceneEditor()
+    editor.setPlainText("hello **world**")
+    cursor = editor.textCursor()
+    cursor.setPosition(6)
+    cursor.setPosition(15, QTextCursor.MoveMode.KeepAnchor)
+    editor.setTextCursor(cursor)
+
+    toolbar = FormatToolbar()
+    toolbar.toggle_bold_on(editor)
+    assert editor.toPlainText() == "hello world"
+
+
+def test_format_toolbar_italic_wraps():
+    editor = _SceneEditor()
+    editor.setPlainText("hello world")
+    cursor = editor.textCursor()
+    cursor.setPosition(6)
+    cursor.setPosition(11, QTextCursor.MoveMode.KeepAnchor)
+    editor.setTextCursor(cursor)
+
+    toolbar = FormatToolbar()
+    toolbar.toggle_italic_on(editor)
+    assert editor.toPlainText() == "hello *world*"
+
+
+def test_format_toolbar_heading_cycle():
+    editor = _SceneEditor()
+    editor.setPlainText("Title")
+    cursor = editor.textCursor()
+    cursor.setPosition(0)
+    editor.setTextCursor(cursor)
+
+    toolbar = FormatToolbar()
+    toolbar._active_editor = editor
+    toolbar._cycle_heading()
+    assert editor.toPlainText() == "# Title"
+    toolbar._cycle_heading()
+    assert editor.toPlainText() == "## Title"
+    toolbar._cycle_heading()
+    assert editor.toPlainText() == "### Title"
+    toolbar._cycle_heading()
+    assert editor.toPlainText() == "Title"
+
+
+def test_format_toolbar_quote_toggle():
+    editor = _SceneEditor()
+    editor.setPlainText("Some text")
+    cursor = editor.textCursor()
+    cursor.setPosition(0)
+    editor.setTextCursor(cursor)
+
+    toolbar = FormatToolbar()
+    toolbar._active_editor = editor
+    toolbar._toggle_quote()
+    assert editor.toPlainText() == "> Some text"
+    toolbar._toggle_quote()
+    assert editor.toPlainText() == "Some text"
+
+
+def test_format_toolbar_track_editor():
+    toolbar = FormatToolbar()
+    editor = _SceneEditor()
+    toolbar.track_editor(editor)
+    assert editor in toolbar._tracked
+    toolbar.untrack_all()
+    assert len(toolbar._tracked) == 0
+
+
+def test_view_has_format_toolbar():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert hasattr(view, "_format_toolbar")
+    assert isinstance(view._format_toolbar, FormatToolbar)
+
+
+# -- Typewriter mode ----------------------------------------------------------
+
+def test_typewriter_mode_toggle():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view._typewriter_mode is False
+    view.toggle_typewriter_mode()
+    assert view._typewriter_mode is True
+    assert "Exit" in view._typewriter_btn.text()
+    view.toggle_typewriter_mode()
+    assert view._typewriter_mode is False
+    assert view._typewriter_btn.text() == "Typewriter"
+
+
+def test_typewriter_mode_accessor():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view.is_typewriter_mode() is False
+    view.toggle_typewriter_mode()
+    assert view.is_typewriter_mode() is True

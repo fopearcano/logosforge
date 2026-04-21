@@ -40,7 +40,8 @@ from storyplanner.creative_layer import (
 from storyplanner.db import Database
 from storyplanner.ui import theme
 from storyplanner.ui.command_palette import CommandPalette
-from storyplanner.ui.psyke_highlighter import PsykeHighlighter
+from storyplanner.ui.format_toolbar import FormatToolbar
+from storyplanner.ui.manuscript_highlighter import ManuscriptHighlighter
 
 
 _CANVAS_MAX_WIDTH = 780
@@ -134,6 +135,7 @@ class WritingCoreView(QWidget):
         self._rhythm_containers: dict[int, QWidget] = {}
         self._highlighters: dict[int, PsykeHighlighter] = {}
         self._flow_mode = False
+        self._typewriter_mode = False
         self._review_mode = False
         self._review_overlay: QWidget | None = None
 
@@ -182,6 +184,16 @@ class WritingCoreView(QWidget):
         )
         self._flow_btn.clicked.connect(self.toggle_flow_mode)
         tb_layout.addWidget(self._flow_btn)
+
+        self._typewriter_btn = QPushButton("Typewriter")
+        self._typewriter_btn.setFlat(True)
+        self._typewriter_btn.setToolTip("Keep cursor line centered")
+        self._typewriter_btn.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: 11px;"
+            " background: transparent; padding: 2px 8px;"
+        )
+        self._typewriter_btn.clicked.connect(self.toggle_typewriter_mode)
+        tb_layout.addWidget(self._typewriter_btn)
 
         self._review_btn = QPushButton("Review")
         self._review_btn.setFlat(True)
@@ -262,6 +274,11 @@ class WritingCoreView(QWidget):
         self._canvas_layout.addStretch()
         self._scroll.setWidget(self._canvas)
 
+        self._format_toolbar = FormatToolbar(self._scroll.viewport())
+        self._scroll.verticalScrollBar().valueChanged.connect(
+            self._reposition_format_toolbar,
+        )
+
     def _setup_shortcuts(self) -> None:
         esc = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
         esc.activated.connect(self._exit_focus_mode)
@@ -270,6 +287,24 @@ class WritingCoreView(QWidget):
             context=Qt.ShortcutContext.WidgetWithChildrenShortcut,
         )
         focus.activated.connect(self.toggle_focus_mode)
+
+        bold_sc = QShortcut(
+            QKeySequence("Ctrl+B"), self,
+            context=Qt.ShortcutContext.WidgetWithChildrenShortcut,
+        )
+        bold_sc.activated.connect(self._shortcut_bold)
+
+        italic_sc = QShortcut(
+            QKeySequence("Ctrl+I"), self,
+            context=Qt.ShortcutContext.WidgetWithChildrenShortcut,
+        )
+        italic_sc.activated.connect(self._shortcut_italic)
+
+        tw_sc = QShortcut(
+            QKeySequence("Ctrl+Shift+T"), self,
+            context=Qt.ShortcutContext.WidgetWithChildrenShortcut,
+        )
+        tw_sc.activated.connect(self.toggle_typewriter_mode)
 
     # -- Data loading ---------------------------------------------------------
 
@@ -308,6 +343,7 @@ class WritingCoreView(QWidget):
                 w.setVisible(False)
 
     def _clear_canvas(self) -> None:
+        self._format_toolbar.untrack_all()
         self._editors.clear()
         self._save_timers.clear()
         self._scene_widgets.clear()
@@ -372,8 +408,13 @@ class WritingCoreView(QWidget):
         )
         block_layout.addWidget(editor)
 
-        highlighter = PsykeHighlighter(editor.document())
+        highlighter = ManuscriptHighlighter(editor.document())
         self._highlighters[scene.id] = highlighter
+
+        self._format_toolbar.track_editor(editor)
+        editor.cursorPositionChanged.connect(
+            lambda e=editor: self._on_cursor_for_typewriter(e),
+        )
 
         hint_container = self._build_hint_row(scene)
         block_layout.addWidget(hint_container)
@@ -820,11 +861,37 @@ class WritingCoreView(QWidget):
             f"}}"
         )
 
+        format_toolbar_style = (
+            f"#formatToolbar {{"
+            f"  background: {theme.BG_PANEL};"
+            f"  border: 1px solid {theme.BORDER};"
+            f"  border-radius: 6px;"
+            f"}}"
+            f"#formatToolbar QPushButton {{"
+            f"  background: transparent;"
+            f"  color: {theme.TEXT_SECONDARY};"
+            f"  border: none;"
+            f"  border-radius: 4px;"
+            f"  padding: 2px 8px;"
+            f"  font-size: 12px;"
+            f"  min-height: 20px;"
+            f"  min-width: 24px;"
+            f"}}"
+            f"#formatToolbar QPushButton:hover {{"
+            f"  background: {theme.BG_HOVER};"
+            f"  color: {theme.TEXT_PRIMARY};"
+            f"}}"
+            f"#formatToolbarSep {{"
+            f"  background: {theme.BORDER};"
+            f"}}"
+        )
+
         full_style = (
             editor_style + act_style + chapter_style + scene_title_style
             + sep_style + scene_block_style + inline_action_style
             + canvas_style + scroll_style + empty_style + focus_dim
             + hint_style + rhythm_style + review_style
+            + format_toolbar_style
         )
         self.setStyleSheet(full_style)
 
@@ -883,6 +950,44 @@ class WritingCoreView(QWidget):
         label = f"{total:,} words"
         self._word_count_label.setText(label)
         self._focus_word_label.setText(label)
+
+    # -- Typewriter mode ------------------------------------------------------
+
+    def toggle_typewriter_mode(self) -> None:
+        self._typewriter_mode = not self._typewriter_mode
+        self._typewriter_btn.setText(
+            "Exit Typewriter" if self._typewriter_mode else "Typewriter",
+        )
+
+    def is_typewriter_mode(self) -> bool:
+        return self._typewriter_mode
+
+    def _on_cursor_for_typewriter(self, editor: _SceneEditor) -> None:
+        if not self._typewriter_mode or not editor.hasFocus():
+            return
+        rect = editor.cursorRect()
+        cursor_y = editor.mapTo(self._canvas, rect.center()).y()
+        viewport_h = self._scroll.viewport().height()
+        target = cursor_y - viewport_h // 2
+        sb = self._scroll.verticalScrollBar()
+        sb.setValue(max(0, min(target, sb.maximum())))
+
+    # -- Format shortcuts -----------------------------------------------------
+
+    def _shortcut_bold(self) -> None:
+        focused = QApplication.focusWidget()
+        if isinstance(focused, _SceneEditor):
+            self._format_toolbar.toggle_bold_on(focused)
+
+    def _shortcut_italic(self) -> None:
+        focused = QApplication.focusWidget()
+        if isinstance(focused, _SceneEditor):
+            self._format_toolbar.toggle_italic_on(focused)
+
+    def _reposition_format_toolbar(self) -> None:
+        ft = self._format_toolbar
+        if ft.isVisible() and ft._active_editor is not None:
+            ft._reposition(ft._active_editor)
 
     # -- Public API -----------------------------------------------------------
 
