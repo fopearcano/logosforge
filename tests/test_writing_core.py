@@ -866,3 +866,56 @@ def test_shortcut_element_applies():
     data = editor.textCursor().block().userData()
     assert isinstance(data, _BlockData)
     assert data.element == "transition"
+
+
+# -- Format application to all blocks -----------------------------------------
+
+def test_format_to_all_blocks_on_load():
+    db = Database()
+    proj = db.create_project("Script", format_mode="screenplay")
+    s1 = db.create_scene(proj.id, "Scene", content="Line one.\nLine two.")
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    block = editor.document().begin()
+    data = block.userData()
+    assert isinstance(data, _BlockData)
+    assert data.element == "action"
+
+
+def test_format_change_applies_to_blocks():
+    db = Database()
+    proj, s1, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    block = editor.document().begin()
+    data = block.userData()
+    assert isinstance(data, _BlockData)
+    assert data.element == "body"
+    view._format_combo.setCurrentIndex(FORMAT_ORDER.index("screenplay"))
+    block = editor.document().begin()
+    data = block.userData()
+    assert isinstance(data, _BlockData)
+    assert data.element == "action"
+
+
+def test_active_editor_field_exists():
+    db = Database()
+    proj, s1, s2, s3 = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert hasattr(view, "_active_editor")
+
+
+def test_element_change_uses_active_editor():
+    db = Database()
+    proj = db.create_project("Script", format_mode="screenplay")
+    s1 = db.create_scene(proj.id, "Scene", content="Test.")
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._active_editor = editor
+    view._element_combo.setCurrentIndex(
+        next(i for i in range(view._element_combo.count())
+             if view._element_combo.itemData(i) == "character"),
+    )
+    data = editor.textCursor().block().userData()
+    assert isinstance(data, _BlockData)
+    assert data.element == "character"

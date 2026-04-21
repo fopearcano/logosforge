@@ -153,7 +153,7 @@ class _SceneEditor(QPlainTextEdit):
         doc = self.document()
         doc.setTextWidth(self.viewport().width())
         height = int(doc.size().height()) + 20
-        self.setFixedHeight(max(height, 80))
+        self.setFixedHeight(max(height, 120))
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -281,6 +281,7 @@ class WritingCoreView(QWidget):
         self._typewriter_mode = False
         self._review_mode = False
         self._review_overlay: QWidget | None = None
+        self._active_editor: _SceneEditor | None = None
 
         self._psyke_term_map: dict[str, int] = {}
         self._psyke_entry_cache: dict[int, object] = {}
@@ -453,7 +454,7 @@ class WritingCoreView(QWidget):
         center_row = QHBoxLayout()
         center_row.setContentsMargins(_CANVAS_PADDING_H, 0, _CANVAS_PADDING_H, 0)
         center_row.addStretch(1)
-        center_row.addWidget(self._inner, stretch=0)
+        center_row.addWidget(self._inner, stretch=999)
         center_row.addStretch(1)
         self._canvas_layout.addLayout(center_row)
         self._canvas_layout.addStretch()
@@ -567,6 +568,7 @@ class WritingCoreView(QWidget):
 
         self._update_word_count()
         self._apply_typography()
+        self._apply_format_to_all_blocks()
         self.refresh_psyke_terms()
         self._refresh_suggestions()
 
@@ -765,6 +767,7 @@ class WritingCoreView(QWidget):
         self._db.update_project_format(self._project_id, key)
         self._populate_element_combo()
         self._setup_element_shortcuts()
+        self._apply_format_to_all_blocks()
 
     def _on_element_changed(self, index: int) -> None:
         if index < 0:
@@ -772,9 +775,13 @@ class WritingCoreView(QWidget):
         elem_name = self._element_combo.itemData(index)
         if not elem_name:
             return
-        focused = QApplication.focusWidget()
-        if isinstance(focused, _SceneEditor):
-            self._apply_element_to_block(focused, elem_name)
+        editor = self._active_editor
+        if editor is None:
+            focused = QApplication.focusWidget()
+            if isinstance(focused, _SceneEditor):
+                editor = focused
+        if editor is not None:
+            self._apply_element_to_block(editor, elem_name)
 
     def _get_element_style(self, name: str):
         for e in self._format.elements:
@@ -782,22 +789,13 @@ class WritingCoreView(QWidget):
                 return e
         return None
 
-    def _apply_element_to_block(
-        self, editor: _SceneEditor, element_name: str,
-    ) -> None:
-        elem = self._get_element_style(element_name)
-        if elem is None:
-            return
-        cursor = editor.textCursor()
-        pos = cursor.position()
-        cursor.block().setUserData(_BlockData(element_name))
-
-        alignment = {
+    def _build_element_formats(self, elem):
+        _align_map = {
             "center": Qt.AlignmentFlag.AlignCenter,
             "right": Qt.AlignmentFlag.AlignRight,
         }
         bfmt = QTextBlockFormat()
-        bfmt.setAlignment(alignment.get(elem.align, Qt.AlignmentFlag.AlignLeft))
+        bfmt.setAlignment(_align_map.get(elem.align, Qt.AlignmentFlag.AlignLeft))
         bfmt.setLeftMargin(elem.left_margin)
         bfmt.setRightMargin(elem.right_margin)
         bfmt.setTopMargin(elem.top_spacing)
@@ -818,6 +816,19 @@ class WritingCoreView(QWidget):
         )
         if elem.color_key == "muted":
             cfmt.setForeground(QColor(theme.TEXT_MUTED))
+        return bfmt, cfmt
+
+    def _apply_element_to_block(
+        self, editor: _SceneEditor, element_name: str,
+    ) -> None:
+        elem = self._get_element_style(element_name)
+        if elem is None:
+            return
+        cursor = editor.textCursor()
+        pos = cursor.position()
+        cursor.block().setUserData(_BlockData(element_name))
+
+        bfmt, cfmt = self._build_element_formats(elem)
 
         cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock)
         cursor.movePosition(
@@ -831,9 +842,32 @@ class WritingCoreView(QWidget):
         cursor.mergeCharFormat(cfmt)
         editor.setTextCursor(cursor)
 
+    def _apply_format_to_all_blocks(self) -> None:
+        default_name = self._format.default_element
+        for editor in self._editors.values():
+            block = editor.document().begin()
+            while block.isValid():
+                data = block.userData()
+                elem_name = default_name
+                if isinstance(data, _BlockData) and data.element:
+                    if self._get_element_style(data.element):
+                        elem_name = data.element
+                elem = self._get_element_style(elem_name)
+                if elem:
+                    block.setUserData(_BlockData(elem_name))
+                    bfmt, cfmt = self._build_element_formats(elem)
+                    cursor = QTextCursor(block)
+                    cursor.movePosition(
+                        QTextCursor.MoveOperation.EndOfBlock,
+                        QTextCursor.MoveMode.KeepAnchor,
+                    )
+                    cursor.setBlockFormat(bfmt)
+                    cursor.mergeCharFormat(cfmt)
+                block = block.next()
+
     def _on_editor_cursor_moved(self, editor: _SceneEditor) -> None:
-        if not editor.hasFocus():
-            return
+        if editor.hasFocus():
+            self._active_editor = editor
         data = editor.textCursor().block().userData()
         elem_name = (
             data.element
