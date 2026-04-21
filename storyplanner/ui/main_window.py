@@ -1013,7 +1013,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_recent_menu(self) -> None:
         self._recent_menu.clear()
-        paths = recent_projects.load()
+        paths = recent_projects.clean()
         if not paths:
             no_recent = QAction("(no recent projects)", self)
             no_recent.setEnabled(False)

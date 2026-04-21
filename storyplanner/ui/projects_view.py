@@ -83,7 +83,7 @@ class ProjectsView(QWidget):
         btn_row.addStretch()
         self._layout.addLayout(btn_row)
 
-        recent_paths = recent_projects.load()
+        recent_paths = recent_projects.clean()
 
         if not recent_paths:
             self._add_empty_state()
@@ -145,7 +145,20 @@ class ProjectsView(QWidget):
         open_btn.clicked.connect(lambda _, p=path: self._on_open_file(p))
         row.addWidget(open_btn)
 
+        remove_btn = QPushButton("Remove")
+        remove_btn.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: 11px;"
+            " background: transparent; border: none; padding: 4px 8px;"
+        )
+        remove_btn.setToolTip("Remove from recent list")
+        remove_btn.clicked.connect(lambda _, p=path: self._remove_entry(p))
+        row.addWidget(remove_btn)
+
         return card
+
+    def _remove_entry(self, path: str) -> None:
+        recent_projects.remove(path)
+        self._build()
 
     def _add_empty_state(self) -> None:
         card = QFrame()
