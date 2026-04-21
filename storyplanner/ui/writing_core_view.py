@@ -503,12 +503,13 @@ class WritingCoreView(QWidget):
         if not is_first:
             self._inner_layout.addSpacing(44)
 
-        if scene.title:
-            title = QLabel(scene.title)
+        title_text = (scene.title or "").strip()
+        if title_text and title_text.lower() not in ("untitled", "untitled scene"):
+            title = QLabel(title_text)
             title.setObjectName("writingSceneTitle")
             title.setAlignment(Qt.AlignmentFlag.AlignLeft)
             self._inner_layout.addWidget(title)
-            self._inner_layout.addSpacing(4)
+            self._inner_layout.addSpacing(2)
             self._scene_widgets.append(title)
 
         editor = _SceneEditor()
