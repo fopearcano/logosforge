@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, Qt, QTimer
 from PySide6.QtGui import (
+    QColor,
     QFont,
     QFontDatabase,
     QKeyEvent,
     QKeySequence,
+    QPainter,
     QShortcut,
     QTextBlockFormat,
     QTextCursor,
@@ -22,6 +24,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -56,12 +59,17 @@ _CANVAS_PADDING_H = 48
 _BODY_FONT_SIZE = 18
 _BODY_LINE_HEIGHT = 1.65
 _FOCUS_LINE_HEIGHT = 1.75
+_FADE_ALPHA_PARA = 70
+_FADE_ALPHA_SCENE = 110
+_PARA_BOTTOM_MARGIN = 10
 
 
 class _SceneEditor(QPlainTextEdit):
-    """Borderless editor that blends into the canvas."""
+    """Borderless editor with focus-fade overlay and cross-scene navigation."""
 
     slash_pressed = None
+    _on_nav_next = None
+    _on_nav_prev = None
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -69,12 +77,22 @@ class _SceneEditor(QPlainTextEdit):
         self.setFrameShape(QPlainTextEdit.Shape.NoFrame)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setCursorWidth(2)
+        self.setPlaceholderText("Start writing…")
         self._auto_height_timer = QTimer(self)
         self._auto_height_timer.setSingleShot(True)
         self._auto_height_timer.setInterval(30)
         self._auto_height_timer.timeout.connect(self._adjust_height)
         self.textChanged.connect(self._schedule_resize)
         self._scene_id: int | None = None
+        self._focus_fade_enabled = False
+        self._fade_block = -1
+        self._fade_bg = "#0f1219"
+        self._fade_alpha_para = _FADE_ALPHA_PARA
+        self._fade_alpha_scene = _FADE_ALPHA_SCENE
+        self.cursorPositionChanged.connect(self._check_fade_block)
+
+    # -- auto height --
 
     def _schedule_resize(self) -> None:
         self._auto_height_timer.start()
@@ -83,8 +101,7 @@ class _SceneEditor(QPlainTextEdit):
         doc = self.document()
         doc.setTextWidth(self.viewport().width())
         height = int(doc.size().height()) + 20
-        min_h = 80
-        self.setFixedHeight(max(height, min_h))
+        self.setFixedHeight(max(height, 80))
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -94,7 +111,66 @@ class _SceneEditor(QPlainTextEdit):
         super().resizeEvent(event)
         self._adjust_height()
 
+    # -- focus fade overlay --
+
+    def set_focus_fade(self, enabled: bool, bg_color: str = "") -> None:
+        self._focus_fade_enabled = enabled
+        if bg_color:
+            self._fade_bg = bg_color
+        self.viewport().update()
+
+    def _check_fade_block(self) -> None:
+        if not self._focus_fade_enabled:
+            return
+        bn = self.textCursor().blockNumber()
+        if bn != self._fade_block:
+            self._fade_block = bn
+            self.viewport().update()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if not self._focus_fade_enabled:
+            return
+        focused = self.hasFocus()
+        active = self.textCursor().blockNumber() if focused else -1
+        alpha = self._fade_alpha_para if focused else self._fade_alpha_scene
+        color = QColor(self._fade_bg)
+        color.setAlpha(alpha)
+        painter = QPainter(self.viewport())
+        block = self.firstVisibleBlock()
+        offset = self.contentOffset()
+        vh = self.viewport().height()
+        while block.isValid():
+            geom = self.blockBoundingGeometry(block).translated(offset)
+            if geom.top() > vh:
+                break
+            if block.blockNumber() != active:
+                painter.fillRect(geom.toRect(), color)
+            block = block.next()
+        painter.end()
+
+    def focusInEvent(self, event) -> None:
+        super().focusInEvent(event)
+        if self._focus_fade_enabled:
+            self.viewport().update()
+
+    def focusOutEvent(self, event) -> None:
+        super().focusOutEvent(event)
+        if self._focus_fade_enabled:
+            self.viewport().update()
+
+    # -- keyboard --
+
     def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() in (Qt.Key.Key_Down, Qt.Key.Key_Up):
+            old_pos = self.textCursor().position()
+            super().keyPressEvent(event)
+            if self.textCursor().position() == old_pos:
+                if event.key() == Qt.Key.Key_Down and self._on_nav_next is not None:
+                    self._on_nav_next()
+                elif event.key() == Qt.Key.Key_Up and self._on_nav_prev is not None:
+                    self._on_nav_prev()
+            return
         if (
             event.text() == "/"
             and self.textCursor().atBlockStart()
@@ -177,6 +253,9 @@ class WritingCoreView(QWidget):
 
         self._command_palette: CommandPalette | None = None
         self._palette_source_editor: _SceneEditor | None = None
+        self._focus_fade = True
+        self._tw_anim: QPropertyAnimation | None = None
+        self._topbar_anim: QPropertyAnimation | None = None
 
         self._build_ui()
         self._setup_shortcuts()
@@ -250,6 +329,10 @@ class WritingCoreView(QWidget):
         self._focus_btn.clicked.connect(self.toggle_focus_mode)
         tb_layout.addWidget(self._focus_btn)
 
+        self._topbar_opacity = QGraphicsOpacityEffect(self._top_bar)
+        self._topbar_opacity.setOpacity(0.4)
+        self._top_bar.setGraphicsEffect(self._topbar_opacity)
+        self._top_bar.installEventFilter(self)
         outer.addWidget(self._top_bar)
 
         # -- Focus bar (shown only in focus mode) ----------------------------
@@ -342,6 +425,28 @@ class WritingCoreView(QWidget):
             context=Qt.ShortcutContext.WidgetWithChildrenShortcut,
         )
         tw_sc.activated.connect(self.toggle_typewriter_mode)
+
+    # -- Top bar auto-fade ----------------------------------------------------
+
+    def eventFilter(self, obj, event) -> bool:
+        if obj is self._top_bar:
+            if event.type() == QEvent.Type.Enter:
+                self._animate_topbar(1.0)
+            elif event.type() == QEvent.Type.Leave:
+                self._animate_topbar(0.4)
+        return super().eventFilter(obj, event)
+
+    def _animate_topbar(self, target: float) -> None:
+        if self._topbar_anim is None:
+            self._topbar_anim = QPropertyAnimation(
+                self._topbar_opacity, b"opacity",
+            )
+            self._topbar_anim.setDuration(200)
+            self._topbar_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        self._topbar_anim.stop()
+        self._topbar_anim.setStartValue(self._topbar_opacity.opacity())
+        self._topbar_anim.setEndValue(target)
+        self._topbar_anim.start()
 
     # -- Data loading ---------------------------------------------------------
 
@@ -443,6 +548,9 @@ class WritingCoreView(QWidget):
         editor._scene_id = scene.id
         editor.setPlainText(scene.content or "")
         editor.slash_pressed = self._on_slash_pressed
+        editor.set_focus_fade(self._focus_fade, theme.BG_DARK)
+        editor._on_nav_next = lambda e=editor: self._navigate_next_editor(e)
+        editor._on_nav_prev = lambda e=editor: self._navigate_prev_editor(e)
         editor.textChanged.connect(
             lambda sid=scene.id: self._schedule_save(sid)
         )
@@ -776,15 +884,24 @@ class WritingCoreView(QWidget):
         lh = _FOCUS_LINE_HEIGHT if self._focus_mode else _BODY_LINE_HEIGHT
         line_spacing_px = int(_BODY_FONT_SIZE * lh)
 
+        text_color = (
+            "#e0d8cc" if theme.current_palette() == "Dark"
+            else theme.TEXT_PRIMARY
+        )
+        sel_bg = (
+            "#2a2618" if theme.current_palette() == "Dark"
+            else theme.SELECTION_BG
+        )
+
         editor_style = (
             f"#writingCoreEditor {{"
             f"  background-color: transparent;"
-            f"  color: {theme.TEXT_PRIMARY};"
+            f"  color: {text_color};"
             f"  border: none;"
             f"  padding: 0;"
             f"  font-family: {family};"
             f"  font-size: {_BODY_FONT_SIZE}px;"
-            f"  selection-background-color: {theme.SELECTION_BG};"
+            f"  selection-background-color: {sel_bg};"
             f"  selection-color: {theme.SELECTION_TEXT};"
             f"}}"
         )
@@ -1033,6 +1150,7 @@ class WritingCoreView(QWidget):
         fmt.setLineHeight(
             lh * 100, QTextBlockFormat.LineHeightTypes.ProportionalHeight.value,
         )
+        fmt.setBottomMargin(_PARA_BOTTOM_MARGIN)
         cursor.mergeBlockFormat(fmt)
 
     def _toggle_font(self) -> None:
@@ -1046,12 +1164,17 @@ class WritingCoreView(QWidget):
         self._focus_mode = not self._focus_mode
         self._top_bar.setVisible(not self._focus_mode)
         self._focus_bar.setVisible(self._focus_mode)
+        if not self._focus_mode:
+            self._topbar_opacity.setOpacity(0.4)
+
+        para_alpha = 90 if self._focus_mode else _FADE_ALPHA_PARA
+        scene_alpha = 130 if self._focus_mode else _FADE_ALPHA_SCENE
 
         if self._focus_mode:
             self._canvas_layout.setContentsMargins(
                 _CANVAS_PADDING_H, 24, _CANVAS_PADDING_H, 64,
             )
-            self._inner.setMaximumWidth(_CANVAS_MAX_WIDTH + 40)
+            self._inner.setMaximumWidth(_CANVAS_MAX_WIDTH + 60)
             for c in self._hint_containers.values():
                 c.setVisible(False)
             for c in self._rhythm_containers.values():
@@ -1065,6 +1188,11 @@ class WritingCoreView(QWidget):
                 c.setVisible(bool(c.findChildren(QLabel)))
             for c in self._rhythm_containers.values():
                 c.setVisible(bool(c.findChildren(QLabel)))
+
+        for editor in self._editors.values():
+            editor._fade_alpha_para = para_alpha
+            editor._fade_alpha_scene = scene_alpha
+            editor.viewport().update()
 
         self._apply_typography()
         self._update_word_count()
@@ -1104,9 +1232,47 @@ class WritingCoreView(QWidget):
         rect = editor.cursorRect()
         cursor_y = editor.mapTo(self._canvas, rect.center()).y()
         viewport_h = self._scroll.viewport().height()
-        target = cursor_y - viewport_h // 2
+        target = max(0, cursor_y - viewport_h // 2)
         sb = self._scroll.verticalScrollBar()
-        sb.setValue(max(0, min(target, sb.maximum())))
+        target = min(target, sb.maximum())
+        if self._tw_anim is None:
+            self._tw_anim = QPropertyAnimation(sb, b"value")
+            self._tw_anim.setDuration(120)
+            self._tw_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._tw_anim.stop()
+        self._tw_anim.setStartValue(sb.value())
+        self._tw_anim.setEndValue(target)
+        self._tw_anim.start()
+
+    # -- Cross-scene navigation ------------------------------------------------
+
+    def _navigate_next_editor(self, current: _SceneEditor) -> None:
+        editors = list(self._editors.values())
+        try:
+            idx = editors.index(current)
+        except ValueError:
+            return
+        if idx < len(editors) - 1:
+            nxt = editors[idx + 1]
+            nxt.setFocus()
+            cursor = nxt.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.Start)
+            nxt.setTextCursor(cursor)
+            self._scroll.ensureWidgetVisible(nxt, 50, 50)
+
+    def _navigate_prev_editor(self, current: _SceneEditor) -> None:
+        editors = list(self._editors.values())
+        try:
+            idx = editors.index(current)
+        except ValueError:
+            return
+        if idx > 0:
+            prev = editors[idx - 1]
+            prev.setFocus()
+            cursor = prev.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.End)
+            prev.setTextCursor(cursor)
+            self._scroll.ensureWidgetVisible(prev, 50, 50)
 
     # -- Format shortcuts -----------------------------------------------------
 
