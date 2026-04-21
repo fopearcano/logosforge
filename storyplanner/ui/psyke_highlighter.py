@@ -11,7 +11,7 @@ from PySide6.QtGui import (
     QTextCharFormat,
     QTextDocument,
 )
-from PySide6.QtWidgets import QPlainTextEdit
+from PySide6.QtWidgets import QTextEdit
 
 from storyplanner.ui import theme
 
@@ -62,7 +62,7 @@ class PsykeClickHandler(QObject):
 
     def __init__(
         self,
-        editor: QPlainTextEdit,
+        editor: QTextEdit,
         highlighter: PsykeHighlighter,
         on_jump: callable,
     ) -> None:

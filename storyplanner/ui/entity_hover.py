@@ -14,7 +14,7 @@ from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QPlainTextEdit,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -119,11 +119,11 @@ class EntityHoverHandler(QObject):
 
     def __init__(
         self,
-        editor: QPlainTextEdit,
+        editor: QTextEdit,
         highlighter: PsykeHighlighter,
         term_map: dict[str, int],
         hover_parent: QWidget,
-        on_show: Callable[[int, QPlainTextEdit, QPoint], None],
+        on_show: Callable[[int, QTextEdit, QPoint], None],
         on_hide: Callable[[], None],
     ) -> None:
         super().__init__(editor)

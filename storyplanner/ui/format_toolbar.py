@@ -10,7 +10,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtWidgets import (
     QHBoxLayout,
-    QPlainTextEdit,
+    QTextEdit,
     QPushButton,
     QWidget,
 )
@@ -29,8 +29,8 @@ class FormatToolbar(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
 
-        self._active_editor: QPlainTextEdit | None = None
-        self._tracked: list[QPlainTextEdit] = []
+        self._active_editor: QTextEdit | None = None
+        self._tracked: list[QTextEdit] = []
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(6, 4, 6, 4)
@@ -89,7 +89,7 @@ class FormatToolbar(QWidget):
 
     # -- Editor tracking ------------------------------------------------------
 
-    def track_editor(self, editor: QPlainTextEdit) -> None:
+    def track_editor(self, editor: QTextEdit) -> None:
         if editor in self._tracked:
             return
         self._tracked.append(editor)
@@ -103,7 +103,7 @@ class FormatToolbar(QWidget):
         self.hide()
 
     @property
-    def active_editor(self) -> QPlainTextEdit | None:
+    def active_editor(self) -> QTextEdit | None:
         return self._active_editor
 
     @property
@@ -118,7 +118,7 @@ class FormatToolbar(QWidget):
 
     # -- Selection handling ---------------------------------------------------
 
-    def _on_selection_changed(self, editor: QPlainTextEdit) -> None:
+    def _on_selection_changed(self, editor: QTextEdit) -> None:
         cursor = editor.textCursor()
         if cursor.hasSelection():
             self._active_editor = editor
@@ -129,7 +129,7 @@ class FormatToolbar(QWidget):
             self.hide()
             self._active_editor = None
 
-    def _reposition(self, editor: QPlainTextEdit) -> None:
+    def _reposition(self, editor: QTextEdit) -> None:
         parent = self.parentWidget()
         if parent is None:
             return
@@ -147,12 +147,12 @@ class FormatToolbar(QWidget):
 
     # -- Public format helpers (for keyboard shortcuts) -----------------------
 
-    def toggle_bold_on(self, editor: QPlainTextEdit | None = None) -> None:
+    def toggle_bold_on(self, editor: QTextEdit | None = None) -> None:
         if editor is not None:
             self._active_editor = editor
         self._toggle_bold()
 
-    def toggle_italic_on(self, editor: QPlainTextEdit | None = None) -> None:
+    def toggle_italic_on(self, editor: QTextEdit | None = None) -> None:
         if editor is not None:
             self._active_editor = editor
         self._toggle_italic()

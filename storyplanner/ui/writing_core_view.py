@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
-    QPlainTextEdit,
+    QTextEdit,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -112,8 +112,12 @@ class _BlockData(QTextBlockUserData):
         self.element = element
 
 
-class _SceneEditor(QPlainTextEdit):
-    """Borderless editor with focus-fade overlay and cross-scene navigation."""
+class _SceneEditor(QTextEdit):
+    """Borderless editor with focus-fade overlay and cross-scene navigation.
+
+    Uses QTextEdit (not QPlainTextEdit) so that QTextBlockFormat margins
+    are honoured by the full QTextDocumentLayout.
+    """
 
     slash_pressed = None
     _on_nav_next = None
@@ -123,7 +127,7 @@ class _SceneEditor(QPlainTextEdit):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("writingCoreEditor")
-        self.setFrameShape(QPlainTextEdit.Shape.NoFrame)
+        self.setFrameShape(QFrame.Shape.NoFrame)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setSizePolicy(
@@ -131,6 +135,7 @@ class _SceneEditor(QPlainTextEdit):
         )
         self.setCursorWidth(2)
         self.setPlaceholderText("Start writing…")
+        self.setAcceptRichText(False)
         self._auto_height_timer = QTimer(self)
         self._auto_height_timer.setSingleShot(True)
         self._auto_height_timer.setInterval(30)
@@ -189,15 +194,17 @@ class _SceneEditor(QPlainTextEdit):
         color = QColor(self._fade_bg)
         color.setAlpha(alpha)
         painter = QPainter(self.viewport())
-        block = self.firstVisibleBlock()
-        offset = self.contentOffset()
+        layout = self.document().documentLayout()
+        scroll_y = self.verticalScrollBar().value()
         vh = self.viewport().height()
+        block = self.document().begin()
         while block.isValid():
-            geom = self.blockBoundingGeometry(block).translated(offset)
-            if geom.top() > vh:
+            rect = layout.blockBoundingRect(block)
+            rect.translate(0, -scroll_y)
+            if rect.top() > vh:
                 break
-            if block.blockNumber() != active:
-                painter.fillRect(geom.toRect(), color)
+            if block.blockNumber() != active and rect.bottom() >= 0:
+                painter.fillRect(rect.toRect(), color)
             block = block.next()
         painter.end()
 
@@ -1484,7 +1491,7 @@ class WritingCoreView(QWidget):
     def _on_entity_hover_show(
         self,
         entry_id: int,
-        editor: QPlainTextEdit,
+        editor: QTextEdit,
         pos,
     ) -> None:
         entry = self._psyke_entry_cache.get(entry_id)
