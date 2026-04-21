@@ -369,7 +369,7 @@ class MainWindow(QMainWindow):
             )
         if self.content_area is not self._cached_scenes_view:
             self._set_content(self._cached_scenes_view)
-            self._cached_scenes_view.refresh()
+        self._cached_scenes_view.refresh()
 
     def _show_manuscript(self) -> None:
         self._set_content(
@@ -740,6 +740,7 @@ class MainWindow(QMainWindow):
         new_project_id = import_json(self._db, data)
         self._project_id = new_project_id
         self._current_file = None
+        self._cached_scenes_view = None
         self._mark_clean()
         self._reset_content("Import complete. Select a section from the sidebar.")
         QMessageBox.information(
@@ -1100,6 +1101,7 @@ class MainWindow(QMainWindow):
         new_project_id = import_json(self._db, data)
         self._project_id = new_project_id
         self._current_file = path
+        self._cached_scenes_view = None
         self._mark_clean()
         recent_projects.add(path)
         self._refresh_recent_menu()
