@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMenu,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -111,7 +113,7 @@ class AssistantPanel(QWidget):
         self._overlay_mode = False
         self._typing_dimmed = False
 
-        self.setMinimumWidth(260)
+        self.setMinimumWidth(220)
         self.setMaximumWidth(360)
         self.setObjectName("assistantPanel")
 
@@ -217,24 +219,27 @@ class AssistantPanel(QWidget):
         scene_row.addWidget(self._send_btn)
         self._layout.addLayout(scene_row)
 
-        # Core actions
-        action_row = QHBoxLayout()
-        action_row.setSpacing(4)
+        # Core actions (grid for wrapping on narrow panels)
+        action_grid = QGridLayout()
+        action_grid.setSpacing(4)
+        action_grid.setContentsMargins(0, 0, 0, 0)
         self._preset_buttons: list[QPushButton] = []
-        for action in ("Rewrite", "Expand", "Dialogue"):
+        for col, action in enumerate(("Rewrite", "Expand", "Dialogue")):
             btn = QPushButton(action)
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             btn.clicked.connect(
                 lambda _, a=action: self._send_preset(a)
             )
-            action_row.addWidget(btn)
+            action_grid.addWidget(btn, 0, col)
             self._preset_buttons.append(btn)
 
-        self._suggest_btn = QPushButton("Suggest Beats")
+        self._suggest_btn = QPushButton("Suggest")
         self._suggest_btn.setToolTip(
             "Structured narrative direction suggestions"
         )
+        self._suggest_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._suggest_btn.clicked.connect(self._on_suggest_beats)
-        action_row.addWidget(self._suggest_btn)
+        action_grid.addWidget(self._suggest_btn, 1, 0, 1, 2)
         self._preset_buttons.append(self._suggest_btn)
 
         self._more_btn = QPushButton("More \u25be")
@@ -246,23 +251,24 @@ class AssistantPanel(QWidget):
                 action, lambda a=action: self._send_preset(a)
             )
         self._more_btn.setMenu(more_menu)
-        action_row.addWidget(self._more_btn)
+        self._more_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        action_grid.addWidget(self._more_btn, 1, 2)
         self._preset_buttons.append(self._more_btn)
-        self._assistant_actions_layout = action_row
-        self._layout.addLayout(action_row)
+        self._layout.addLayout(action_grid)
 
         # Counterpart actions (hidden by default)
         self._counterpart_row = QWidget()
-        cp_layout = QHBoxLayout(self._counterpart_row)
-        cp_layout.setContentsMargins(0, 0, 0, 0)
-        cp_layout.setSpacing(4)
+        cp_grid = QGridLayout(self._counterpart_row)
+        cp_grid.setContentsMargins(0, 0, 0, 0)
+        cp_grid.setSpacing(4)
         self._counterpart_buttons: list[QPushButton] = []
-        for mode_name in ("Feedback", "Critique", "Interpret"):
+        for col, mode_name in enumerate(("Feedback", "Critique", "Interpret")):
             btn = QPushButton(mode_name)
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             btn.clicked.connect(
                 lambda _, m=mode_name: self._send_counterpart(m)
             )
-            cp_layout.addWidget(btn)
+            cp_grid.addWidget(btn, 0, col)
             self._counterpart_buttons.append(btn)
         cp_more_btn = QPushButton("More ▾")
         cp_more_menu = QMenu(self)
@@ -271,7 +277,8 @@ class AssistantPanel(QWidget):
                 mode_name, lambda m=mode_name: self._send_counterpart(m)
             )
         cp_more_btn.setMenu(cp_more_menu)
-        cp_layout.addWidget(cp_more_btn)
+        cp_more_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        cp_grid.addWidget(cp_more_btn, 1, 0, 1, 3)
         self._counterpart_buttons.append(cp_more_btn)
         self._counterpart_row.setVisible(False)
         self._layout.addWidget(self._counterpart_row)
@@ -282,6 +289,7 @@ class AssistantPanel(QWidget):
             "Instructions or questions about the scene..."
         )
         self._prompt_input.setMaximumHeight(48)
+        self._prompt_input.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
         self._layout.addWidget(self._prompt_input)
 
         # Collapsible settings
@@ -355,6 +363,7 @@ class AssistantPanel(QWidget):
             "AI response will appear here..."
         )
         self._response_output.setMinimumHeight(80)
+        self._response_output.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
         self._response_output.setStyleSheet(
             f"QPlainTextEdit {{"
             f"  background-color: {theme.BG_PANEL};"

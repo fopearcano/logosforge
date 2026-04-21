@@ -21,7 +21,7 @@ def test_assistant_max_width():
 
 def test_assistant_min_width():
     panel, *_ = _make_panel()
-    assert panel.minimumWidth() >= 240
+    assert panel.minimumWidth() >= 200
 
 
 def test_assistant_object_name():

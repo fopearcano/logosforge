@@ -254,7 +254,7 @@ class MainWindow(QMainWindow):
         self._assistant_panel.overlay_toggled.connect(self._on_overlay_toggled)
         self._assistant_panel.setVisible(False)
         self._assistant_panel.setSizePolicy(
-            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred,
         )
         self._assistant_panel.refresh_style()
 
@@ -597,14 +597,17 @@ class MainWindow(QMainWindow):
 
         if tier == "wide":
             self._set_sidebar_collapsed(False)
+            self._assistant_panel.setMaximumWidth(360)
             if self._assistant_user_visible:
                 self._assistant_panel.setVisible(True)
         elif tier == "medium":
             self._set_sidebar_collapsed(True)
+            self._assistant_panel.setMaximumWidth(300)
             if self._assistant_user_visible:
                 self._assistant_panel.setVisible(True)
         elif tier == "narrow":
             self._set_sidebar_collapsed(True)
+            self._assistant_panel.setMaximumWidth(280)
             if self._assistant_user_visible and not self._assistant_overlay:
                 self._assistant_panel.setVisible(False)
         else:
