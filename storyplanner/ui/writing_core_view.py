@@ -32,18 +32,22 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from storyplanner.auto_link import AutoLinkSuggester, Suggestion
 from storyplanner.creative_layer import (
     analyze_paragraph_rhythm,
     generate_scene_hints,
     compute_review_metrics,
 )
 from storyplanner.db import Database
+from storyplanner.settings import get_manager as get_settings
 from storyplanner.ui import theme
 from storyplanner.ui.command_palette import CommandPalette
 from storyplanner.ui.entity_hover import EntityHoverHandler, EntityHoverPanel
 from storyplanner.ui.format_toolbar import FormatToolbar
 from storyplanner.ui.manuscript_highlighter import ManuscriptHighlighter
 from storyplanner.ui.psyke_highlighter import PsykeClickHandler
+from storyplanner.ui.psyke_quick_create import PsykeQuickCreateDialog
+from storyplanner.ui.suggestion_banner import SuggestionBanner
 from storyplanner.temporal_psyke import TemporalGraph
 
 
@@ -141,6 +145,7 @@ class WritingCoreView(QWidget):
         self._highlighters: dict[int, ManuscriptHighlighter] = {}
         self._click_handlers: dict[int, PsykeClickHandler] = {}
         self._hover_handlers: dict[int, EntityHoverHandler] = {}
+        self._suggestion_banners: dict[int, SuggestionBanner] = {}
         self._flow_mode = False
         self._typewriter_mode = False
         self._review_mode = False
@@ -150,6 +155,12 @@ class WritingCoreView(QWidget):
         self._psyke_entry_cache: dict[int, object] = {}
         self._scene_sort_orders: dict[int, int] = {}
         self._temporal_graph: TemporalGraph | None = None
+
+        self._auto_link_suggester = AutoLinkSuggester(db, project_id)
+        self._auto_link_timer = QTimer(self)
+        self._auto_link_timer.setSingleShot(True)
+        self._auto_link_timer.setInterval(1500)
+        self._auto_link_timer.timeout.connect(self._refresh_suggestions)
 
         self._command_palette: CommandPalette | None = None
         self._palette_source_editor: _SceneEditor | None = None
@@ -353,6 +364,7 @@ class WritingCoreView(QWidget):
         self._update_word_count()
         self._apply_typography()
         self.refresh_psyke_terms()
+        self._refresh_suggestions()
 
         if self._flow_mode:
             for w in self._header_widgets:
@@ -370,6 +382,7 @@ class WritingCoreView(QWidget):
         self._highlighters.clear()
         self._click_handlers.clear()
         self._hover_handlers.clear()
+        self._suggestion_banners.clear()
         while self._inner_layout.count():
             item = self._inner_layout.takeAt(0)
             w = item.widget()
@@ -448,6 +461,13 @@ class WritingCoreView(QWidget):
         editor.cursorPositionChanged.connect(
             lambda e=editor: self._on_cursor_for_typewriter(e),
         )
+
+        banner = SuggestionBanner()
+        banner.accepted.connect(self._on_suggestion_accepted)
+        banner.dismissed.connect(self._on_suggestion_dismissed)
+        banner.ignored.connect(self._on_suggestion_ignored)
+        block_layout.addWidget(banner)
+        self._suggestion_banners[scene.id] = banner
 
         hint_container = self._build_hint_row(scene)
         block_layout.addWidget(hint_container)
@@ -684,6 +704,7 @@ class WritingCoreView(QWidget):
             timer.timeout.connect(lambda sid=scene_id: self._save_scene(sid))
             self._save_timers[scene_id] = timer
         self._save_timers[scene_id].start()
+        self._auto_link_timer.start()
         self._update_word_count()
 
     def _save_scene(self, scene_id: int) -> None:
@@ -959,12 +980,43 @@ class WritingCoreView(QWidget):
             f"}}"
         )
 
+        suggestion_style = (
+            f"#suggestionBanner {{"
+            f"  background: {theme.BG_PANEL};"
+            f"  border: 1px solid {theme.BORDER};"
+            f"  border-left: 2px solid {theme.ACCENT};"
+            f"  border-radius: 4px;"
+            f"  margin: 4px 0 4px 0;"
+            f"}}"
+            f"#suggestionBannerIcon {{"
+            f"  color: {theme.ACCENT};"
+            f"  font-size: 12px;"
+            f"  background: transparent;"
+            f"  padding: 0 2px;"
+            f"}}"
+            f"#suggestionBannerLabel {{"
+            f"  color: {theme.TEXT_SECONDARY};"
+            f"  font-size: 11px;"
+            f"  background: transparent;"
+            f"}}"
+            f"#suggestionBannerBtn {{"
+            f"  color: {theme.TEXT_MUTED};"
+            f"  background: transparent;"
+            f"  border: none;"
+            f"  font-size: 11px;"
+            f"  padding: 2px 6px;"
+            f"}}"
+            f"#suggestionBannerBtn:hover {{"
+            f"  color: {theme.TEXT_PRIMARY};"
+            f"}}"
+        )
+
         full_style = (
             editor_style + act_style + chapter_style + scene_title_style
             + sep_style + scene_block_style + inline_action_style
             + canvas_style + scroll_style + empty_style + focus_dim
             + hint_style + rhythm_style + review_style
-            + format_toolbar_style + entity_hover_style
+            + format_toolbar_style + entity_hover_style + suggestion_style
         )
         self.setStyleSheet(full_style)
 
@@ -1103,6 +1155,121 @@ class WritingCoreView(QWidget):
 
     def _on_entity_hover_hide(self) -> None:
         self._entity_hover_panel.schedule_hide()
+
+    # -- Auto-link suggestions -------------------------------------------------
+
+    def _get_ignored_keys(self) -> list[str]:
+        raw = get_settings().get("auto_link_ignored") or []
+        if isinstance(raw, list):
+            return [str(k) for k in raw]
+        return []
+
+    def _persist_ignored_key(self, key: str) -> None:
+        keys = self._get_ignored_keys()
+        if key in keys:
+            return
+        keys.append(key)
+        get_settings().set("auto_link_ignored", keys)
+
+    def _refresh_suggestions(self) -> None:
+        if not self._suggestion_banners:
+            return
+        ignored = self._get_ignored_keys()
+        grouped = self._auto_link_suggester.suggest_for_project(
+            ignored_keys=ignored,
+        )
+        for scene_id, banner in self._suggestion_banners.items():
+            suggestions = grouped.get(scene_id, [])
+            if suggestions:
+                banner.show_suggestion(suggestions[0])
+            else:
+                banner.clear()
+
+    def _on_suggestion_accepted(self, suggestion: Suggestion) -> None:
+        kind = suggestion.kind
+        if kind == "create":
+            self._accept_create(suggestion)
+        elif kind == "alias":
+            self._accept_alias(suggestion)
+        elif kind == "relation":
+            self._accept_relation(suggestion)
+        elif kind == "memory":
+            self._accept_memory(suggestion)
+
+        self._close_banner_for(suggestion)
+        self.refresh_psyke_terms()
+        self._refresh_suggestions()
+        if self._on_data_changed:
+            self._on_data_changed()
+
+    def _accept_create(self, suggestion: Suggestion) -> None:
+        dialog = PsykeQuickCreateDialog(
+            self, initial_name=str(suggestion.data.get("name", "")),
+        )
+        if dialog.exec() != PsykeQuickCreateDialog.DialogCode.Accepted:
+            return
+        values = dialog.get_values()
+        if not values.get("name"):
+            return
+        self._db.create_psyke_entry(
+            self._project_id,
+            name=values["name"],
+            entry_type=values.get("entry_type", "other"),
+            aliases=values.get("aliases", ""),
+            notes=values.get("notes", ""),
+            is_global=values.get("is_global", False),
+        )
+
+    def _accept_alias(self, suggestion: Suggestion) -> None:
+        entry_id = suggestion.data.get("entry_id")
+        alias = suggestion.data.get("alias", "")
+        if entry_id is None or not alias:
+            return
+        entry = self._db.get_psyke_entry_by_id(entry_id)
+        if entry is None:
+            return
+        existing = [a.strip() for a in (entry.aliases or "").split(",") if a.strip()]
+        if alias not in existing:
+            existing.append(alias)
+        self._db.update_psyke_entry(
+            entry_id=entry_id,
+            name=entry.name,
+            entry_type=entry.entry_type,
+            aliases=", ".join(existing),
+            notes=entry.notes or "",
+            is_global=entry.is_global,
+        )
+
+    def _accept_relation(self, suggestion: Suggestion) -> None:
+        a = suggestion.data.get("entry_id")
+        b = suggestion.data.get("related_entry_id")
+        if a is None or b is None:
+            return
+        self._db.add_psyke_relation(a, b)
+
+    def _accept_memory(self, suggestion: Suggestion) -> None:
+        entry_id = suggestion.data.get("entry_id")
+        text = suggestion.data.get("text", "").strip()
+        scene_id = suggestion.data.get("scene_id")
+        if entry_id is None or not text:
+            return
+        self._db.create_psyke_progression(
+            entry_id=entry_id, text=text, scene_id=scene_id,
+        )
+
+    def _on_suggestion_dismissed(self, suggestion: Suggestion) -> None:
+        self._close_banner_for(suggestion)
+        self._refresh_suggestions()
+
+    def _on_suggestion_ignored(self, suggestion: Suggestion) -> None:
+        self._persist_ignored_key(suggestion.entity_key)
+        self._close_banner_for(suggestion)
+        self._refresh_suggestions()
+
+    def _close_banner_for(self, suggestion: Suggestion) -> None:
+        for banner in self._suggestion_banners.values():
+            if banner.current is suggestion:
+                banner.clear()
 
     # -- Public API -----------------------------------------------------------
 
