@@ -146,7 +146,6 @@ def test_sidebar_collapse_sets_icon_only():
     win._set_sidebar_collapsed(True, animate=False)
     for label, btn in win.sidebar_buttons.items():
         assert label not in btn.text()
-    assert win._sidebar.objectName() == "sidebarCollapsed"
 
 
 def test_sidebar_expand_restores_labels():
@@ -155,7 +154,6 @@ def test_sidebar_expand_restores_labels():
     win._set_sidebar_collapsed(False, animate=False)
     for label, btn in win.sidebar_buttons.items():
         assert label in btn.text()
-    assert win._sidebar.objectName() == "sidebar"
 
 
 def test_sidebar_appearance_hidden_when_collapsed():

@@ -67,6 +67,36 @@ from storyplanner.ui.writer_outline_view import WriterOutlineView
 from storyplanner.ui.writing_core_view import WritingCoreView
 
 
+_ICON_SLOT_WIDTH = 48
+
+
+class _SidebarButton(QPushButton):
+    """Sidebar button with fixed icon slot and collapsible label."""
+
+    def __init__(self, icon_text: str, label: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._icon_text = icon_text
+        self._label_text = label
+        self._collapsed = False
+        self.setCheckable(True)
+        self.setFlat(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setObjectName("sidebarBtn")
+        self._update_text()
+
+    def set_collapsed(self, collapsed: bool) -> None:
+        self._collapsed = collapsed
+        self._update_text()
+
+    def _update_text(self) -> None:
+        if self._collapsed:
+            self.setText(self._icon_text)
+            self.setToolTip(self._label_text)
+        else:
+            self.setText(f"{self._icon_text}  {self._label_text}")
+            self.setToolTip("")
+
+
 class MainWindow(QMainWindow):
     def __init__(self, db: Database, project_id: int) -> None:
         super().__init__()
@@ -150,10 +180,10 @@ class MainWindow(QMainWindow):
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
             "Health", "Balance", "Pacing", "Adapt", "Narrative", "Search", "PSYKE", "Plugins", "Assistant",
         ]
-        self.sidebar_buttons: dict[str, QPushButton] = {}
+        self.sidebar_buttons: dict[str, _SidebarButton] = {}
         for label in _NAV_LABELS:
             icon = self._sidebar_icons.get(label, "")
-            btn = QPushButton(f"{icon}  {label}")
+            btn = _SidebarButton(icon, label)
             sidebar_layout.addWidget(btn)
             self.sidebar_buttons[label] = btn
 
@@ -186,11 +216,11 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self._appearance_bar)
 
         # -- Import / Export ---------------------------------------------------
-        self._import_btn = QPushButton("\U0001F4E5  Import")
+        self._import_btn = _SidebarButton("\U0001F4E5", "Import")
         sidebar_layout.addWidget(self._import_btn)
         self._import_btn.clicked.connect(self._on_import)
 
-        self._export_btn = QPushButton("\U0001F4E4  Export")
+        self._export_btn = _SidebarButton("\U0001F4E4", "Export")
         sidebar_layout.addWidget(self._export_btn)
         self._export_btn.clicked.connect(self._on_export)
 
@@ -513,9 +543,6 @@ class MainWindow(QMainWindow):
 
         if collapsed:
             self._apply_collapsed_labels()
-        else:
-            self._toggle_btn.setText("\u00ab")
-            self._toggle_btn.setToolTip("")
 
         if animate and self.isVisible():
             if self._sidebar_anim is not None:
@@ -547,30 +574,22 @@ class MainWindow(QMainWindow):
         self._refresh_sidebar_style()
 
     def _apply_collapsed_labels(self) -> None:
-        self._sidebar.setObjectName("sidebarCollapsed")
         self._toggle_btn.setText("\u00bb")
         self._toggle_btn.setToolTip("Expand sidebar")
-        for label, btn in self.sidebar_buttons.items():
-            icon = self._sidebar_icons.get(label, "")
-            btn.setText(icon)
-            btn.setToolTip(label)
-        self._import_btn.setText("\U0001F4E5")
-        self._import_btn.setToolTip("Import")
-        self._export_btn.setText("\U0001F4E4")
-        self._export_btn.setToolTip("Export")
+        for btn in self.sidebar_buttons.values():
+            btn.set_collapsed(True)
+        self._import_btn.set_collapsed(True)
+        self._export_btn.set_collapsed(True)
         self._appearance_label.setVisible(False)
         self._appearance_bar.setVisible(False)
 
     def _apply_expanded_labels(self) -> None:
-        self._sidebar.setObjectName("sidebar")
-        for label, btn in self.sidebar_buttons.items():
-            icon = self._sidebar_icons.get(label, "")
-            btn.setText(f"{icon}  {label}")
-            btn.setToolTip("")
-        self._import_btn.setText("\U0001F4E5  Import")
-        self._import_btn.setToolTip("")
-        self._export_btn.setText("\U0001F4E4  Export")
-        self._export_btn.setToolTip("")
+        self._toggle_btn.setText("\u00ab")
+        self._toggle_btn.setToolTip("")
+        for btn in self.sidebar_buttons.values():
+            btn.set_collapsed(False)
+        self._import_btn.set_collapsed(False)
+        self._export_btn.set_collapsed(False)
         self._appearance_label.setVisible(True)
         self._appearance_bar.setVisible(True)
 

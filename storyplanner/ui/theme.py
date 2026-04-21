@@ -293,56 +293,28 @@ def build_stylesheet() -> str:
         background-color: {BG_SIDEBAR};
         border-right: 1px solid {BORDER};
     }}
-    #sidebar QPushButton {{
+    #sidebar QPushButton, #sidebarBtn {{
         border: none;
         border-radius: 6px;
         text-align: left;
-        padding: 8px 16px;
-        margin: 1px 8px;
-        background-color: transparent;
-        color: {TEXT_SECONDARY};
-        font-size: 12px;
-    }}
-    #sidebar QPushButton:hover {{
-        background-color: {BG_HOVER};
-        color: {TEXT_PRIMARY};
-    }}
-    #sidebar QPushButton:pressed {{
-        background-color: {SIDEBAR_ACTIVE_BG};
-        color: {SIDEBAR_ACTIVE_TEXT};
-    }}
-    #sidebar QPushButton:checked {{
-        background-color: {SIDEBAR_ACTIVE_BG};
-        color: {SIDEBAR_ACTIVE_TEXT};
-        font-weight: bold;
-    }}
-
-    /* -- Sidebar collapsed -- */
-    #sidebarCollapsed {{
-        background-color: {BG_SIDEBAR};
-        border-right: 1px solid {BORDER};
-    }}
-    #sidebarCollapsed QPushButton {{
-        border: none;
-        border-radius: 6px;
-        text-align: center;
-        padding: 8px 0;
+        padding: 8px 8px;
         margin: 1px 4px;
         background-color: transparent;
         color: {TEXT_SECONDARY};
-        font-size: 15px;
+        font-size: 13px;
     }}
-    #sidebarCollapsed QPushButton:hover {{
+    #sidebar QPushButton:hover, #sidebarBtn:hover {{
         background-color: {BG_HOVER};
         color: {TEXT_PRIMARY};
     }}
-    #sidebarCollapsed QPushButton:pressed {{
+    #sidebar QPushButton:pressed, #sidebarBtn:pressed {{
         background-color: {SIDEBAR_ACTIVE_BG};
         color: {SIDEBAR_ACTIVE_TEXT};
     }}
-    #sidebarCollapsed QPushButton:checked {{
+    #sidebar QPushButton:checked, #sidebarBtn:checked {{
         background-color: {SIDEBAR_ACTIVE_BG};
         color: {SIDEBAR_ACTIVE_TEXT};
+        font-weight: bold;
     }}
 
     /* -- Line edits -- */
