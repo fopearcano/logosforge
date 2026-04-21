@@ -42,8 +42,8 @@ NOVEL = WritingFormat(
     default_element="body",
     elements=[
         ElementStyle(name="chapter", font_size=24, bold=True, top_spacing=40, bottom_spacing=20, shortcut="Ctrl+1"),
-        ElementStyle(name="scene_break", font_size=14, align="center", top_spacing=20, bottom_spacing=20),
-        ElementStyle(name="body", font_size=18, line_height=1.65, bottom_spacing=10),
+        ElementStyle(name="scene_break", font_size=14, align="center", top_spacing=20, bottom_spacing=20, shortcut="Ctrl+2"),
+        ElementStyle(name="body", font_size=18, line_height=1.65, bottom_spacing=10, shortcut="Ctrl+3"),
     ],
 )
 

@@ -568,7 +568,6 @@ class WritingCoreView(QWidget):
 
         self._update_word_count()
         self._apply_typography()
-        self._apply_format_to_all_blocks()
         self.refresh_psyke_terms()
         self._refresh_suggestions()
 
@@ -800,20 +799,32 @@ class WritingCoreView(QWidget):
         bfmt.setRightMargin(elem.right_margin)
         bfmt.setTopMargin(elem.top_spacing)
         bfmt.setBottomMargin(elem.bottom_spacing)
+        lh = elem.line_height
+        if self._focus_mode:
+            lh = max(lh, _FOCUS_LINE_HEIGHT)
         bfmt.setLineHeight(
-            elem.line_height * 100,
+            lh * 100,
             QTextBlockFormat.LineHeightTypes.ProportionalHeight.value,
         )
 
-        cfmt = QTextCharFormat()
-        cfmt.setFontPointSize(elem.font_size)
-        cfmt.setFontWeight(700 if elem.bold else 400)
-        cfmt.setFontItalic(elem.italic)
-        cfmt.setFontCapitalization(
+        families = (
+            ["Georgia", "Noto Serif", "serif"]
+            if self._use_serif
+            else ["Segoe UI", "Noto Sans", "sans-serif"]
+        )
+        font = QFont()
+        font.setFamilies(families)
+        font.setPixelSize(elem.font_size)
+        font.setBold(elem.bold)
+        font.setItalic(elem.italic)
+        font.setCapitalization(
             QFont.Capitalization.AllUppercase
             if elem.all_caps
             else QFont.Capitalization.MixedCase,
         )
+
+        cfmt = QTextCharFormat()
+        cfmt.setFont(font)
         if elem.color_key == "muted":
             cfmt.setForeground(QColor(theme.TEXT_MUTED))
         return bfmt, cfmt
@@ -836,10 +847,10 @@ class WritingCoreView(QWidget):
             QTextCursor.MoveMode.KeepAnchor,
         )
         cursor.setBlockFormat(bfmt)
-        cursor.mergeCharFormat(cfmt)
+        cursor.setCharFormat(cfmt)
 
         cursor.setPosition(pos)
-        cursor.mergeCharFormat(cfmt)
+        cursor.setCharFormat(cfmt)
         editor.setTextCursor(cursor)
 
     def _apply_format_to_all_blocks(self) -> None:
@@ -862,7 +873,7 @@ class WritingCoreView(QWidget):
                         QTextCursor.MoveMode.KeepAnchor,
                     )
                     cursor.setBlockFormat(bfmt)
-                    cursor.mergeCharFormat(cfmt)
+                    cursor.setCharFormat(cfmt)
                 block = block.next()
 
     def _on_editor_cursor_moved(self, editor: _SceneEditor) -> None:
@@ -1324,6 +1335,8 @@ class WritingCoreView(QWidget):
 
         for editor in self._editors.values():
             self._apply_line_spacing(editor, lh)
+
+        self._apply_format_to_all_blocks()
 
     def _apply_line_spacing(self, editor: _SceneEditor, lh: float) -> None:
         cursor = editor.textCursor()
