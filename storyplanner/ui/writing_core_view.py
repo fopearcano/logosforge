@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -345,21 +346,24 @@ class WritingCoreView(QWidget):
         self._canvas = QWidget()
         self._canvas.setObjectName("writingCanvas")
         self._canvas_layout = QVBoxLayout(self._canvas)
-        self._canvas_layout.setContentsMargins(
-            _CANVAS_PADDING_H, 32, _CANVAS_PADDING_H, 64,
-        )
+        self._canvas_layout.setContentsMargins(0, 32, 0, 64)
         self._canvas_layout.setSpacing(0)
-        self._canvas_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
         self._inner = QWidget()
         self._inner.setMaximumWidth(_CANVAS_MAX_WIDTH)
+        self._inner.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred,
+        )
         self._inner_layout = QVBoxLayout(self._inner)
         self._inner_layout.setContentsMargins(0, 0, 0, 0)
         self._inner_layout.setSpacing(0)
 
-        self._canvas_layout.addWidget(
-            self._inner, alignment=Qt.AlignmentFlag.AlignHCenter,
-        )
+        center_row = QHBoxLayout()
+        center_row.setContentsMargins(_CANVAS_PADDING_H, 0, _CANVAS_PADDING_H, 0)
+        center_row.addStretch()
+        center_row.addWidget(self._inner)
+        center_row.addStretch()
+        self._canvas_layout.addLayout(center_row)
         self._canvas_layout.addStretch()
         self._scroll.setWidget(self._canvas)
 
@@ -1044,14 +1048,10 @@ class WritingCoreView(QWidget):
         scene_alpha = 130 if self._focus_mode else _FADE_ALPHA_SCENE
 
         if self._focus_mode:
-            self._canvas_layout.setContentsMargins(
-                _CANVAS_PADDING_H, 24, _CANVAS_PADDING_H, 64,
-            )
+            self._canvas_layout.setContentsMargins(0, 24, 0, 64)
             self._inner.setMaximumWidth(_CANVAS_MAX_WIDTH + 60)
         else:
-            self._canvas_layout.setContentsMargins(
-                _CANVAS_PADDING_H, 32, _CANVAS_PADDING_H, 64,
-            )
+            self._canvas_layout.setContentsMargins(0, 32, 0, 64)
             self._inner.setMaximumWidth(_CANVAS_MAX_WIDTH)
 
         for editor in self._editors.values():
