@@ -508,33 +508,10 @@ class MainWindow(QMainWindow):
         target_width = 56 if collapsed else 180
 
         if collapsed:
-            self._sidebar.setObjectName("sidebarCollapsed")
-            self._toggle_btn.setText("\u00bb")
-            self._toggle_btn.setToolTip("Expand sidebar")
-            for label, btn in self.sidebar_buttons.items():
-                icon = self._sidebar_icons.get(label, "")
-                btn.setText(icon)
-                btn.setToolTip(label)
-            self._import_btn.setText("\U0001F4E5")
-            self._import_btn.setToolTip("Import")
-            self._export_btn.setText("\U0001F4E4")
-            self._export_btn.setToolTip("Export")
-            self._appearance_label.setVisible(False)
-            self._appearance_bar.setVisible(False)
+            self._apply_collapsed_labels()
         else:
-            self._sidebar.setObjectName("sidebar")
             self._toggle_btn.setText("\u00ab")
             self._toggle_btn.setToolTip("")
-            for label, btn in self.sidebar_buttons.items():
-                icon = self._sidebar_icons.get(label, "")
-                btn.setText(f"{icon}  {label}")
-                btn.setToolTip("")
-            self._import_btn.setText("\U0001F4E5  Import")
-            self._import_btn.setToolTip("")
-            self._export_btn.setText("\U0001F4E4  Export")
-            self._export_btn.setToolTip("")
-            self._appearance_label.setVisible(True)
-            self._appearance_bar.setVisible(True)
 
         if animate and self.isVisible():
             if self._sidebar_anim is not None:
@@ -558,10 +535,40 @@ class MainWindow(QMainWindow):
         get_settings().set("sidebar_collapsed", collapsed)
 
     def _finalize_sidebar(self, width: int) -> None:
+        if not self._sidebar_collapsed:
+            self._apply_expanded_labels()
         self._sidebar.setFixedWidth(width)
         self._sidebar.setMinimumWidth(width)
         self._sidebar.setMaximumWidth(width)
         self._refresh_sidebar_style()
+
+    def _apply_collapsed_labels(self) -> None:
+        self._sidebar.setObjectName("sidebarCollapsed")
+        self._toggle_btn.setText("\u00bb")
+        self._toggle_btn.setToolTip("Expand sidebar")
+        for label, btn in self.sidebar_buttons.items():
+            icon = self._sidebar_icons.get(label, "")
+            btn.setText(icon)
+            btn.setToolTip(label)
+        self._import_btn.setText("\U0001F4E5")
+        self._import_btn.setToolTip("Import")
+        self._export_btn.setText("\U0001F4E4")
+        self._export_btn.setToolTip("Export")
+        self._appearance_label.setVisible(False)
+        self._appearance_bar.setVisible(False)
+
+    def _apply_expanded_labels(self) -> None:
+        self._sidebar.setObjectName("sidebar")
+        for label, btn in self.sidebar_buttons.items():
+            icon = self._sidebar_icons.get(label, "")
+            btn.setText(f"{icon}  {label}")
+            btn.setToolTip("")
+        self._import_btn.setText("\U0001F4E5  Import")
+        self._import_btn.setToolTip("")
+        self._export_btn.setText("\U0001F4E4  Export")
+        self._export_btn.setToolTip("")
+        self._appearance_label.setVisible(True)
+        self._appearance_bar.setVisible(True)
 
     def _refresh_sidebar_style(self) -> None:
         self._sidebar.style().unpolish(self._sidebar)
