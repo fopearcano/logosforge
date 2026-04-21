@@ -66,6 +66,7 @@ def build_messages(
     mode_context: str = "",
     user_note: str = "",
     structural_context: str = "",
+    irrational_context: str = "",
 ) -> list[dict]:
     system = (
         "You are a skilled writing assistant helping a fiction author. "
@@ -78,6 +79,9 @@ def build_messages(
     user_parts: list[str] = []
     if mode_context:
         user_parts.append(mode_context)
+        user_parts.append("")
+    if irrational_context:
+        user_parts.append(irrational_context)
         user_parts.append("")
     if story_memory_context:
         user_parts.append(story_memory_context)

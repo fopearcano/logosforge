@@ -47,6 +47,7 @@ from storyplanner.context_builder import (
     gather_scene_context,
     gather_story_memory,
 )
+from storyplanner.irrational import build_irrational_context, reroll_seed
 from storyplanner.structural_intelligence import gather_structural_context
 from storyplanner.db import Database
 from storyplanner.memory_context import gather_memory_context
@@ -316,6 +317,17 @@ class AssistantPanel(QWidget):
         settings_layout.addWidget(self._story_memory_check)
         settings_layout.addWidget(self._psyke_check)
 
+        self._irrational_check = QCheckBox("Go Irrational")
+        self._irrational_check.setToolTip(
+            "Disrupt PSYKE rules: temporal displacement, entity blending, surreal prompts"
+        )
+        self._irrational_check.setStyleSheet(
+            f"QCheckBox {{ color: {theme.TEXT_SECONDARY}; }}"
+            f"QCheckBox::indicator:checked {{ background: #a855f7; border: 1px solid #7c3aed; }}"
+        )
+        settings_layout.addWidget(self._irrational_check)
+        self._irrational_iteration = 0
+
         self._ctx_toggle = QCheckBox("Show context sent to model")
         self._ctx_toggle.toggled.connect(self._on_ctx_toggle)
         settings_layout.addWidget(self._ctx_toggle)
@@ -522,7 +534,7 @@ class AssistantPanel(QWidget):
 
     def _build_context(
         self, scene_id: int, action_key: str = "",
-    ) -> tuple[str, str, str, str, str, str, str, str]:
+    ) -> tuple[str, str, str, str, str, str, str, str, str]:
         scene_ctx = gather_scene_context(
             self._db, self._project_id, scene_id,
         )
@@ -558,6 +570,12 @@ class AssistantPanel(QWidget):
                 )
         graph_ctx = gather_graph_context(self._db, self._project_id, scene_id)
         structural_ctx = gather_structural_context(self._db, self._project_id)
+        irrational_ctx = ""
+        if self._irrational_check.isChecked():
+            seed = reroll_seed(scene_id, self._irrational_iteration)
+            irrational_ctx = build_irrational_context(
+                self._db, self._project_id, scene_id, seed=seed,
+            )
         self._mode_strip.refresh()
         mode_result = self._mode_strip.get_mode_result()
         if self._mode_strip.is_overridden():
@@ -569,7 +587,7 @@ class AssistantPanel(QWidget):
                 description=_MODE_DESCRIPTIONS[effective],
             )
         mode_ctx = mode_context_block(mode_result) if mode_result else ""
-        return scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orchestration_debug, graph_ctx, mode_ctx, structural_ctx
+        return scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orchestration_debug, graph_ctx, mode_ctx, structural_ctx, irrational_ctx
 
     def _send_preset(self, action_key: str) -> None:
         if self._worker is not None:
@@ -579,7 +597,7 @@ class AssistantPanel(QWidget):
             self._response_output.setPlainText("No scene selected.")
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, mode_ctx, struct_ctx = (
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, mode_ctx, struct_ctx, irr_ctx = (
             self._build_context(scene_id, action_key=action_key)
         )
         if not scene_ctx:
@@ -598,6 +616,7 @@ class AssistantPanel(QWidget):
             mode_context=mode_ctx,
             user_note=user_note,
             structural_context=struct_ctx,
+            irrational_context=irr_ctx,
         )
         self._update_ctx_viewer(
             scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, action_prompt,
@@ -620,7 +639,7 @@ class AssistantPanel(QWidget):
             self._response_output.setPlainText("No scene selected.")
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, mode_ctx, struct_ctx = (
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, mode_ctx, struct_ctx, irr_ctx = (
             self._build_context(scene_id)
         )
         if not scene_ctx:
@@ -635,6 +654,7 @@ class AssistantPanel(QWidget):
             graph_context=graph_ctx,
             mode_context=mode_ctx,
             structural_context=struct_ctx,
+            irrational_context=irr_ctx,
         )
         self._update_ctx_viewer(
             scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, prompt,
@@ -650,7 +670,7 @@ class AssistantPanel(QWidget):
             self._response_output.setPlainText("No scene selected.")
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, _mode_ctx, _struct_ctx = (
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, _mode_ctx, _struct_ctx, _irr_ctx = (
             self._build_context(scene_id)
         )
         if not scene_ctx:
@@ -688,7 +708,7 @@ class AssistantPanel(QWidget):
             self._response_output.setPlainText("No scene selected.")
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, _mode_ctx, _struct_ctx = (
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, _mode_ctx, _struct_ctx, _irr_ctx = (
             self._build_context(scene_id)
         )
         if not scene_ctx:
