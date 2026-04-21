@@ -12,6 +12,8 @@ DEFAULTS: dict[str, object] = {
     "appearance": "Dark",
     "ai_provider": "LM Studio",
     "ai_model": "",
+    "ai_api_key": "",
+    "ai_base_url": "",
     "sidebar_collapsed": False,
     "assistant_open": False,
     "last_project_path": "",

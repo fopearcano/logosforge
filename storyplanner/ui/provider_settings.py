@@ -1,5 +1,7 @@
 """Reusable provider settings widget for the writing assistant views."""
 
+import os
+
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import (
     QComboBox,
@@ -17,6 +19,7 @@ from storyplanner.providers import (
     PROVIDER_NAMES,
     ProviderConfig,
     default_config,
+    resolve_api_key,
     validate_provider,
 )
 from storyplanner.ui import theme
@@ -161,9 +164,14 @@ class ProviderSettingsWidget(QWidget):
 
         self._key_label.setVisible(caps.requires_api_key)
         self._key_input.setVisible(caps.requires_api_key)
-        self._key_input.setPlaceholderText(
-            "required" if caps.requires_api_key else "not required"
-        )
+        if caps.requires_api_key:
+            env_val = os.environ.get(caps.env_key_name, "") if caps.env_key_name else ""
+            if env_val:
+                self._key_input.setPlaceholderText(f"from ${caps.env_key_name}")
+            else:
+                self._key_input.setPlaceholderText("required")
+        else:
+            self._key_input.setPlaceholderText("not required")
         if not caps.requires_api_key:
             self._key_input.clear()
         self._status_label.setText("")
@@ -184,7 +192,7 @@ class ProviderSettingsWidget(QWidget):
         name = self._provider_combo.currentText()
         caps = PROVIDER_CAPABILITIES.get(name)
         extra = dict(caps.extra_headers) if caps else {}
-        return ProviderConfig(
+        config = ProviderConfig(
             name=name,
             base_url=self._url_input.text().strip()
             or (caps.default_base_url if caps else ""),
@@ -192,6 +200,9 @@ class ProviderSettingsWidget(QWidget):
             model=self._model_combo.currentText().strip(),
             extra_headers=extra,
         )
+        if not config.api_key:
+            config.api_key = resolve_api_key(config)
+        return config
 
     def validate(self) -> str | None:
         return validate_provider(self.get_provider_config())

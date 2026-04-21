@@ -9,7 +9,7 @@ import urllib.error
 import urllib.request
 from collections import OrderedDict
 
-from storyplanner.providers import ProviderConfig
+from storyplanner.providers import ProviderConfig, get_api_format, resolve_api_key
 
 DEFAULT_BASE_URL = "http://localhost:1234/v1"
 
@@ -127,6 +127,84 @@ def _cache_put(key: str, value: str) -> None:
         _cache.popitem(last=False)
 
 
+def _openai_completion(
+    messages: list[dict],
+    provider: ProviderConfig,
+    api_key: str,
+    timeout: int,
+) -> str:
+    url = f"{provider.base_url.rstrip('/')}/chat/completions"
+
+    body: dict = {
+        "messages": messages,
+        "temperature": 0.7,
+        "max_tokens": 2048,
+        "stream": False,
+    }
+    if provider.model:
+        body["model"] = provider.model
+
+    payload = json.dumps(body).encode("utf-8")
+
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    headers.update(provider.extra_headers)
+
+    req = urllib.request.Request(
+        url, data=payload, headers=headers, method="POST",
+    )
+
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+        return data["choices"][0]["message"]["content"]
+
+
+def _anthropic_completion(
+    messages: list[dict],
+    provider: ProviderConfig,
+    api_key: str,
+    timeout: int,
+) -> str:
+    url = f"{provider.base_url.rstrip('/')}/v1/messages"
+
+    system_text = ""
+    api_messages = []
+    for msg in messages:
+        if msg["role"] == "system":
+            system_text = msg["content"]
+        else:
+            api_messages.append({"role": msg["role"], "content": msg["content"]})
+
+    if not api_messages:
+        api_messages = [{"role": "user", "content": "Hello"}]
+
+    body: dict = {
+        "model": provider.model or "claude-sonnet-4-20250514",
+        "max_tokens": 2048,
+        "messages": api_messages,
+    }
+    if system_text:
+        body["system"] = system_text
+
+    payload = json.dumps(body).encode("utf-8")
+
+    headers: dict[str, str] = {
+        "Content-Type": "application/json",
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+    }
+    headers.update(provider.extra_headers)
+
+    req = urllib.request.Request(
+        url, data=payload, headers=headers, method="POST",
+    )
+
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+        return data["content"][0]["text"]
+
+
 def chat_completion(
     messages: list[dict],
     provider: ProviderConfig | None = None,
@@ -149,35 +227,18 @@ def chat_completion(
         if cached is not None:
             return cached, True
 
-    url = f"{provider.base_url.rstrip('/')}/chat/completions"
-
-    body: dict = {
-        "messages": messages,
-        "temperature": 0.7,
-        "max_tokens": 2048,
-        "stream": False,
-    }
-    if provider.model:
-        body["model"] = provider.model
-
-    payload = json.dumps(body).encode("utf-8")
-
-    headers: dict[str, str] = {"Content-Type": "application/json"}
-    if provider.api_key:
-        headers["Authorization"] = f"Bearer {provider.api_key}"
-    headers.update(provider.extra_headers)
-
-    req = urllib.request.Request(
-        url, data=payload, headers=headers, method="POST",
-    )
+    api_key = resolve_api_key(provider)
+    api_format = get_api_format(provider)
 
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            result = data["choices"][0]["message"]["content"]
-            if key is not None:
-                _cache_put(key, result)
-            return result, False
+        if api_format == "anthropic":
+            result = _anthropic_completion(messages, provider, api_key, timeout)
+        else:
+            result = _openai_completion(messages, provider, api_key, timeout)
+
+        if key is not None:
+            _cache_put(key, result)
+        return result, False
     except urllib.error.URLError as e:
         raise ConnectionError(
             f"Cannot reach {provider.name} at {provider.base_url}.\n\n"

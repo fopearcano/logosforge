@@ -59,6 +59,7 @@ from storyplanner.orchestration import (
     resolve_mode,
 )
 from storyplanner.providers import ProviderConfig
+from storyplanner.settings import get_manager as get_settings
 from storyplanner.ui import theme
 from storyplanner.ui.mode_strip import ModeStrip
 from storyplanner.ui.provider_settings import ProviderSettingsWidget
@@ -336,6 +337,7 @@ class AssistantPanel(QWidget):
         settings_layout.addWidget(self._ctx_viewer)
 
         self._provider_widget = ProviderSettingsWidget(compact=True)
+        self._restore_provider_settings()
         settings_layout.addWidget(self._provider_widget)
         self._settings_container.setVisible(False)
         self._layout.addWidget(self._settings_container)
@@ -464,6 +466,22 @@ class AssistantPanel(QWidget):
             )
 
     # -- Settings toggle -------------------------------------------------------
+
+    def _restore_provider_settings(self) -> None:
+        mgr = get_settings()
+        saved_provider = str(mgr.get("ai_provider"))
+        idx = self._provider_widget._provider_combo.findText(saved_provider)
+        if idx >= 0:
+            self._provider_widget._provider_combo.setCurrentIndex(idx)
+        saved_model = str(mgr.get("ai_model"))
+        if saved_model:
+            self._provider_widget._model_combo.setCurrentText(saved_model)
+        saved_key = str(mgr.get("ai_api_key"))
+        if saved_key:
+            self._provider_widget._key_input.setText(saved_key)
+        saved_url = str(mgr.get("ai_base_url"))
+        if saved_url:
+            self._provider_widget._url_input.setText(saved_url)
 
     def _toggle_settings(self) -> None:
         visible = not self._settings_container.isVisible()

@@ -91,12 +91,20 @@ class SettingsDialog(QDialog):
         saved_model = str(mgr.get("ai_model"))
         if saved_model:
             self._provider_widget._model_combo.setCurrentText(saved_model)
+        saved_key = str(mgr.get("ai_api_key"))
+        if saved_key:
+            self._provider_widget._key_input.setText(saved_key)
+        saved_url = str(mgr.get("ai_base_url"))
+        if saved_url:
+            self._provider_widget._url_input.setText(saved_url)
 
     def accept(self) -> None:
         config = self._provider_widget.get_provider_config()
         mgr = get_settings()
         mgr.set("ai_provider", config.name)
         mgr.set("ai_model", config.model)
+        mgr.set("ai_api_key", self._provider_widget._key_input.text().strip())
+        mgr.set("ai_base_url", config.base_url)
         super().accept()
 
     def _select_theme(self, name: str) -> None:
