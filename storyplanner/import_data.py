@@ -26,7 +26,8 @@ def validate_import_data(raw: str) -> tuple[dict | None, str]:
 def import_json(db: Database, data: dict) -> int:
     project_info = data.get("project", {})
     title = project_info.get("title", "Imported Project")
-    project = db.create_project(title)
+    format_mode = project_info.get("format_mode", "novel")
+    project = db.create_project(title, format_mode=format_mode)
     project_id = project.id
 
     # Create characters and build name → id mapping

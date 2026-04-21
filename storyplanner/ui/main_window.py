@@ -28,6 +28,7 @@ from storyplanner.settings import get_manager as get_settings
 from storyplanner.export import (
     export_csv_scenes,
     export_docx_manuscript,
+    export_formatted_text,
     export_json,
     export_manuscript,
     export_markdown,
@@ -774,13 +775,23 @@ class MainWindow(QMainWindow):
         )
 
     def _on_export(self) -> None:
+        project = self._db.get_project_by_id(self._project_id)
+        fmt = (project.format_mode if project else "novel") or "novel"
+        fmt_labels = {
+            "novel": "Manuscript",
+            "screenplay": "Screenplay",
+            "graphic_novel": "Graphic Novel Script",
+            "stage_script": "Stage Script",
+            "series": "TV Script",
+        }
+        fmt_label = fmt_labels.get(fmt, "Formatted Text")
+
         path, selected_filter = QFileDialog.getSaveFileName(
             self,
             "Export Project",
             "",
-            "JSON (*.json);;Markdown (*.md);;Screenplay (*.txt);;"
-            "Manuscript (*.txt);;DOCX Manuscript (*.docx);;"
-            "CSV – Scenes (*.csv)",
+            f"JSON (*.json);;Markdown (*.md);;{fmt_label} (*.txt);;"
+            f"DOCX {fmt_label} (*.docx);;CSV – Scenes (*.csv)",
         )
         if not path:
             return
@@ -796,12 +807,8 @@ class MainWindow(QMainWindow):
             content = export_csv_scenes(self._db, self._project_id)
             if not path.endswith(".csv"):
                 path += ".csv"
-        elif "Screenplay" in selected_filter:
-            content = export_screenplay(self._db, self._project_id)
-            if not path.endswith(".txt"):
-                path += ".txt"
-        elif "Manuscript" in selected_filter:
-            content = export_manuscript(self._db, self._project_id)
+        elif fmt_label in selected_filter:
+            content = export_formatted_text(self._db, self._project_id)
             if not path.endswith(".txt"):
                 path += ".txt"
         elif path.endswith(".md") or "Markdown" in selected_filter:
