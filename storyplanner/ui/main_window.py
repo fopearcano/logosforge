@@ -56,6 +56,7 @@ from storyplanner.ui.psyke_view import PsykeView
 from storyplanner.ui.projects_view import ProjectsView
 from storyplanner.ui.scenes_view import ScenesView
 from storyplanner.ui.multi_plot_view import MultiPlotView
+from storyplanner.ui.narrative_dashboard_view import NarrativeDashboardView
 from storyplanner.ui.story_grid_view import StoryGridView
 from storyplanner.ui.search_view import SearchView
 from storyplanner.ui.structure_view import StructureView
@@ -134,6 +135,7 @@ class MainWindow(QMainWindow):
             "Balance": "\u2696",
             "Pacing": "\U0001F3B5",
             "Adapt": "\U0001F9E0",
+            "Narrative": "\U0001F4CA",
             "Plugins": "\U0001F9E9",
             "Assistant": "\U0001F916",
         }
@@ -146,7 +148,7 @@ class MainWindow(QMainWindow):
             "Projects", "Dashboard", "Characters", "Places", "Notes",
             "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline", "Writer",
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
-            "Health", "Balance", "Pacing", "Adapt", "Search", "PSYKE", "Plugins", "Assistant",
+            "Health", "Balance", "Pacing", "Adapt", "Narrative", "Search", "PSYKE", "Plugins", "Assistant",
         ]
         self.sidebar_buttons: dict[str, QPushButton] = {}
         for label in _NAV_LABELS:
@@ -197,7 +199,7 @@ class MainWindow(QMainWindow):
             "Projects", "Dashboard", "Characters", "Places", "Notes",
             "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline", "Writer",
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
-            "Health", "Balance", "Pacing", "Adapt", "Search", "PSYKE", "Plugins",
+            "Health", "Balance", "Pacing", "Adapt", "Narrative", "Search", "PSYKE", "Plugins",
         ]
         _nav_handlers = {
             "Projects": self._show_projects,
@@ -222,6 +224,7 @@ class MainWindow(QMainWindow):
             "Balance": self._show_balance,
             "Pacing": self._show_pacing,
             "Adapt": self._show_adapt,
+            "Narrative": self._show_narrative,
             "Search": self._show_search,
             "PSYKE": self._show_psyke,
             "Plugins": self._show_plugins,
@@ -657,6 +660,15 @@ class MainWindow(QMainWindow):
 
     def _show_adapt(self) -> None:
         self._set_content(ModeSuggestionsView(self._db, self._project_id))
+
+    def _show_narrative(self) -> None:
+        self._set_content(
+            NarrativeDashboardView(
+                self._db,
+                self._project_id,
+                on_scene_selected=self._open_scene_in_editor,
+            )
+        )
 
     def _show_search(self) -> None:
         self._set_content(
