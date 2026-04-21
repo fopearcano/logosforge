@@ -144,8 +144,9 @@ SCREENPLAY = WritingFormat(
 # ---------------------------------------------------------------------------
 # Graphic Novel  (Dark Horse / DC "full script" style)
 #
-# Page headers and panel labels are structural.  Dialogue is indented
-# under the character name.  Descriptions sit at full width.
+# Page and panel headers full-width.  Description at 0.5 in indent (60 px).
+# Character, dialogue, caption, SFX at 1.5 in indent (180 px) per
+# Creator Resource / Blambot standard (1.5–2.0 in range).
 # ---------------------------------------------------------------------------
 GRAPHIC_NOVEL = WritingFormat(
     name="graphic_novel",
@@ -168,35 +169,35 @@ GRAPHIC_NOVEL = WritingFormat(
             name="description",
             shortcut="Ctrl+3",
             font_size=15,
-            left_margin=48,
+            left_margin=60,
             bottom_spacing=8,
         ),
         ElementStyle(
             name="character",
             shortcut="Ctrl+4",
             font_size=15, all_caps=True, bold=True,
-            left_margin=48,
+            left_margin=180,
             top_spacing=8, bottom_spacing=0,
         ),
         ElementStyle(
             name="dialogue",
             shortcut="Ctrl+5",
             font_size=15,
-            left_margin=96,
+            left_margin=180,
             bottom_spacing=8,
         ),
         ElementStyle(
             name="caption",
             shortcut="Ctrl+6",
             font_size=15, italic=True,
-            left_margin=48,
+            left_margin=180,
             color_key="muted",
             bottom_spacing=8,
         ),
         ElementStyle(
             name="sfx",
             font_size=15, bold=True, all_caps=True,
-            left_margin=48,
+            left_margin=180,
             bottom_spacing=8,
         ),
     ],
@@ -205,9 +206,9 @@ GRAPHIC_NOVEL = WritingFormat(
 # ---------------------------------------------------------------------------
 # Stage Script  (Samuel French / standard playwriting format)
 #
-# Act and scene headings are centered.  Stage directions are in italics
-# and bracketed.  Character names centered, dialogue at narrower margins
-# than screenplay.
+# Dialogue is the WIDEST element (runs full width, margin-to-margin).
+# Stage directions are indented and italic.  Character names centered.
+# Act/scene headings centered, ALL CAPS, bold.
 # ---------------------------------------------------------------------------
 STAGE_SCRIPT = WritingFormat(
     name="stage_script",
@@ -223,14 +224,14 @@ STAGE_SCRIPT = WritingFormat(
         ElementStyle(
             name="scene",
             shortcut="Ctrl+2",
-            font_size=16, bold=True, align="center",
+            font_size=16, bold=True, all_caps=True, align="center",
             top_spacing=24, bottom_spacing=12,
         ),
         ElementStyle(
             name="stage_direction",
             shortcut="Ctrl+3",
             font_size=15, italic=True,
-            left_margin=60, right_margin=60,
+            left_margin=120, right_margin=120,
             bottom_spacing=8,
         ),
         ElementStyle(
@@ -243,14 +244,13 @@ STAGE_SCRIPT = WritingFormat(
             name="dialogue",
             shortcut="Ctrl+5",
             font_size=15,
-            left_margin=120, right_margin=60,
             bottom_spacing=8,
         ),
         ElementStyle(
             name="parenthetical",
             shortcut="Ctrl+6",
             font_size=15, italic=True,
-            left_margin=168, right_margin=120,
+            left_margin=180, right_margin=120,
             bottom_spacing=0,
         ),
     ],
