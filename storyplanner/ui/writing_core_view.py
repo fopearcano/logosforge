@@ -51,11 +51,11 @@ from storyplanner.ui.suggestion_banner import SuggestionBanner
 from storyplanner.temporal_psyke import TemporalGraph
 
 
-_CANVAS_MAX_WIDTH = 780
+_CANVAS_MAX_WIDTH = 720
 _CANVAS_PADDING_H = 48
 _BODY_FONT_SIZE = 18
-_BODY_LINE_HEIGHT = 1.7
-_FOCUS_LINE_HEIGHT = 1.85
+_BODY_LINE_HEIGHT = 1.65
+_FOCUS_LINE_HEIGHT = 1.75
 
 
 class _SceneEditor(QPlainTextEdit):
@@ -106,13 +106,26 @@ class _SceneEditor(QPlainTextEdit):
 
 
 class _InlineAction(QPushButton):
-    """Low-contrast text-like button that fades in on hover."""
+    """Near-invisible gutter action that reveals its label on hover."""
+
+    _IDLE_TEXT = "+"
 
     def __init__(self, text: str, parent: QWidget | None = None) -> None:
-        super().__init__(text, parent)
+        super().__init__(self._IDLE_TEXT, parent)
+        self._hover_text = text
         self.setFlat(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setObjectName("writingInlineAction")
+        self.setFixedHeight(22)
+        self.setToolTip(text)
+
+    def enterEvent(self, event) -> None:  # type: ignore[override]
+        self.setText(self._hover_text)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # type: ignore[override]
+        self.setText(self._IDLE_TEXT)
+        super().leaveEvent(event)
 
 
 class WritingCoreView(QWidget):
@@ -416,20 +429,15 @@ class WritingCoreView(QWidget):
         container.setObjectName("writingSceneBlock")
         block_layout = QVBoxLayout(container)
         block_layout.setContentsMargins(0, 0, 0, 0)
-        block_layout.setSpacing(4)
+        block_layout.setSpacing(2)
 
         if scene.title:
             title = QLabel(scene.title)
             title.setObjectName("writingSceneTitle")
             title.setAlignment(Qt.AlignmentFlag.AlignLeft)
             block_layout.addWidget(title)
+            block_layout.addSpacing(6)
             self._header_widgets.append(title)
-
-        sep = QWidget()
-        sep.setFixedHeight(1)
-        sep.setObjectName("writingSceneSep")
-        block_layout.addWidget(sep)
-        block_layout.addSpacing(8)
 
         editor = _SceneEditor()
         editor._scene_id = scene.id
@@ -479,7 +487,7 @@ class WritingCoreView(QWidget):
 
         self._editors[scene.id] = editor
         self._inner_layout.addWidget(container)
-        self._inner_layout.addSpacing(24)
+        self._inner_layout.addSpacing(20)
         self._scene_widgets.append(container)
 
     def _add_new_scene_action(
@@ -490,7 +498,7 @@ class WritingCoreView(QWidget):
             lambda _, sid=after_scene_id, ch=chapter: self._create_scene_after(sid, ch)
         )
         self._inner_layout.addWidget(btn)
-        self._inner_layout.addSpacing(8)
+        self._inner_layout.addSpacing(12)
         self._scene_widgets.append(btn)
 
     def _add_empty_state(self) -> None:
@@ -795,7 +803,7 @@ class WritingCoreView(QWidget):
         chapter_style = (
             f"#writingChapterHeader {{"
             f"  color: {theme.TEXT_PRIMARY};"
-            f"  font-size: 22px;"
+            f"  font-size: 20px;"
             f"  font-weight: bold;"
             f"  font-family: {family};"
             f"  background: transparent;"
@@ -805,8 +813,8 @@ class WritingCoreView(QWidget):
 
         scene_title_style = (
             f"#writingSceneTitle {{"
-            f"  color: {theme.TEXT_SECONDARY};"
-            f"  font-size: 15px;"
+            f"  color: {theme.TEXT_PRIMARY};"
+            f"  font-size: 22px;"
             f"  font-weight: 600;"
             f"  font-family: {family};"
             f"  background: transparent;"
@@ -814,12 +822,7 @@ class WritingCoreView(QWidget):
             f"}}"
         )
 
-        sep_style = (
-            f"#writingSceneSep {{"
-            f"  background-color: {theme.BORDER};"
-            f"  max-height: 1px;"
-            f"}}"
-        )
+        sep_style = ""
 
         scene_block_style = (
             f"#writingSceneBlock {{"
@@ -834,8 +837,8 @@ class WritingCoreView(QWidget):
             f"  font-size: 12px;"
             f"  background: transparent;"
             f"  border: none;"
-            f"  padding: 2px 0;"
-            f"  text-align: left;"
+            f"  padding: 0;"
+            f"  text-align: center;"
             f"}}"
             f"#writingInlineAction:hover {{"
             f"  color: {theme.ACCENT};"
@@ -884,7 +887,7 @@ class WritingCoreView(QWidget):
             f"}}"
             f"#writingHint {{"
             f"  color: {theme.TEXT_MUTED};"
-            f"  font-size: 11px;"
+            f"  font-size: 12px;"
             f"  font-style: italic;"
             f"  background: transparent;"
             f"  padding: 0 4px;"
@@ -996,14 +999,14 @@ class WritingCoreView(QWidget):
             f"}}"
             f"#suggestionBannerLabel {{"
             f"  color: {theme.TEXT_SECONDARY};"
-            f"  font-size: 11px;"
+            f"  font-size: 12px;"
             f"  background: transparent;"
             f"}}"
             f"#suggestionBannerBtn {{"
             f"  color: {theme.TEXT_MUTED};"
             f"  background: transparent;"
             f"  border: none;"
-            f"  font-size: 11px;"
+            f"  font-size: 12px;"
             f"  padding: 2px 6px;"
             f"}}"
             f"#suggestionBannerBtn:hover {{"
@@ -1049,11 +1052,19 @@ class WritingCoreView(QWidget):
                 _CANVAS_PADDING_H, 24, _CANVAS_PADDING_H, 64,
             )
             self._inner.setMaximumWidth(_CANVAS_MAX_WIDTH + 40)
+            for c in self._hint_containers.values():
+                c.setVisible(False)
+            for c in self._rhythm_containers.values():
+                c.setVisible(False)
         else:
             self._canvas_layout.setContentsMargins(
                 _CANVAS_PADDING_H, 32, _CANVAS_PADDING_H, 64,
             )
             self._inner.setMaximumWidth(_CANVAS_MAX_WIDTH)
+            for scene_id, c in self._hint_containers.items():
+                c.setVisible(bool(c.findChildren(QLabel)))
+            for c in self._rhythm_containers.values():
+                c.setVisible(bool(c.findChildren(QLabel)))
 
         self._apply_typography()
         self._update_word_count()

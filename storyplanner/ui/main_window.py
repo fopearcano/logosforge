@@ -97,9 +97,9 @@ class MainWindow(QMainWindow):
         # -- Left sidebar ----------------------------------------------------
         sidebar = QWidget()
         sidebar.setObjectName("sidebar")
-        sidebar.setMinimumWidth(56)
-        sidebar.setMaximumWidth(180)
-        sidebar.setFixedWidth(180)
+        sidebar.setMinimumWidth(64)
+        sidebar.setMaximumWidth(220)
+        sidebar.setFixedWidth(220)
         sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setContentsMargins(0, 8, 0, 8)
@@ -471,7 +471,7 @@ class MainWindow(QMainWindow):
         if overlay:
             layout.removeWidget(self._assistant_panel)
             self._assistant_panel.setParent(self.centralWidget())
-            self._assistant_panel.setMaximumWidth(380)
+            self._assistant_panel.setMaximumWidth(360)
             shadow = QGraphicsDropShadowEffect(self._assistant_panel)
             shadow.setColor(QColor(0, 0, 0, 60))
             shadow.setBlurRadius(24)
@@ -482,7 +482,7 @@ class MainWindow(QMainWindow):
             self._assistant_panel.show()
         else:
             self._assistant_panel.setGraphicsEffect(None)
-            self._assistant_panel.setMaximumWidth(360)
+            self._assistant_panel.setMaximumWidth(340)
             layout.addWidget(self._assistant_panel, stretch=0)
             self._assistant_panel.show()
         self._assistant_panel.refresh_style()
@@ -493,7 +493,7 @@ class MainWindow(QMainWindow):
         central = self.centralWidget()
         if central is None:
             return
-        panel_w = min(380, central.width() // 3)
+        panel_w = min(360, central.width() // 3)
         panel_h = central.height() - 16
         x = central.width() - panel_w - 8
         y = 8
@@ -509,7 +509,7 @@ class MainWindow(QMainWindow):
             return
         self._sidebar_collapsed = collapsed
 
-        target_width = 56 if collapsed else 180
+        target_width = 64 if collapsed else 220
 
         if collapsed:
             self._apply_collapsed_labels()
@@ -595,9 +595,9 @@ class MainWindow(QMainWindow):
     def _apply_layout_for_width(self, w: int) -> None:
         if w >= 1400:
             tier = "wide"
-        elif w >= 1000:
+        elif w >= 1060:
             tier = "medium"
-        elif w >= 800:
+        elif w >= 820:
             tier = "narrow"
         else:
             tier = "minimal"
@@ -608,17 +608,17 @@ class MainWindow(QMainWindow):
 
         if tier == "wide":
             self._set_sidebar_collapsed(False)
-            self._assistant_panel.setMaximumWidth(360)
+            self._assistant_panel.setMaximumWidth(340)
             if self._assistant_user_visible:
                 self._assistant_panel.setVisible(True)
         elif tier == "medium":
             self._set_sidebar_collapsed(True)
-            self._assistant_panel.setMaximumWidth(300)
+            self._assistant_panel.setMaximumWidth(320)
             if self._assistant_user_visible:
                 self._assistant_panel.setVisible(True)
         elif tier == "narrow":
             self._set_sidebar_collapsed(True)
-            self._assistant_panel.setMaximumWidth(280)
+            self._assistant_panel.setMaximumWidth(300)
             if self._assistant_user_visible and not self._assistant_overlay:
                 self._assistant_panel.setVisible(False)
         else:
