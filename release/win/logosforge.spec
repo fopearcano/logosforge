@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for Logosforge — Mac Intel (x86_64), macOS 12 Monterey."""
+"""PyInstaller spec for Logosforge — Windows 10/11 (x86_64)."""
 
 import os
 import sys
@@ -7,10 +7,8 @@ from pathlib import Path
 
 block_cipher = None
 
-ROOT = os.path.abspath(os.path.dirname(SPECPATH))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(SPECPATH), "..", ".."))
 
-# Collect PySide6 — PyInstaller's hook handles most of it,
-# but we exclude unused Qt modules to shrink the bundle.
 EXCLUDE_QT = [
     "PySide6.Qt3DAnimation",
     "PySide6.Qt3DCore",
@@ -51,6 +49,13 @@ EXCLUDE_QT = [
     "PySide6.QtQml",
     "PySide6.QtHttpServer",
 ]
+
+def _find_icon():
+    for name in ("icon.ico", "icon.png"):
+        p = os.path.join(ROOT, "assets", name)
+        if os.path.exists(p):
+            return p
+    return None
 
 a = Analysis(
     [os.path.join(ROOT, "run.py")],
@@ -94,10 +99,11 @@ exe = EXE(
     name="Logosforge",
     debug=False,
     bootloader_ignore_signals=False,
-    strip=True,
+    strip=False,
     upx=False,
     console=False,
-    target_arch="x86_64",
+    icon=_find_icon(),
+    version_info=None,
 )
 
 coll = COLLECT(
@@ -105,31 +111,7 @@ coll = COLLECT(
     a.binaries,
     a.zipfiles,
     a.datas,
-    strip=True,
+    strip=False,
     upx=False,
     name="Logosforge",
-)
-
-def _find_icon():
-    for name in ("icon.icns", "icon.png"):
-        p = os.path.join(ROOT, "assets", name)
-        if os.path.exists(p):
-            return p
-    return None
-
-app = BUNDLE(
-    coll,
-    name="Logosforge.app",
-    icon=_find_icon(),
-    bundle_identifier="com.logosforge.app",
-    info_plist={
-        "CFBundleName": "Logosforge",
-        "CFBundleDisplayName": "Logosforge",
-        "CFBundleVersion": "1.0.0",
-        "CFBundleShortVersionString": "1.0.0",
-        "LSMinimumSystemVersion": "12.0",
-        "NSHighResolutionCapable": True,
-        "LSApplicationCategoryType": "public.app-category.productivity",
-        "NSRequiresAquaSystemAppearance": False,
-    },
 )

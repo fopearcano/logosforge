@@ -10,3 +10,4 @@ build/
 *.egg-info/
 *.spec.bak
 *.icns
+*.ico
