@@ -113,10 +113,8 @@ class MainWindow(QMainWindow):
         self.resize(900, 600)
         self.setMinimumSize(640, 400)
 
-        icon_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-            "assets", "icon.svg",
-        )
+        from storyplanner.paths import get_assets_path
+        icon_path = str(get_assets_path() / "icon.svg")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 

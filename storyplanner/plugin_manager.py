@@ -10,9 +10,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from storyplanner.paths import get_plugins_path
 from storyplanner.settings import get_manager as get_settings
 
-PLUGINS_DIR = Path(__file__).resolve().parent.parent / "plugins"
+PLUGINS_DIR = get_plugins_path()
 
 
 @dataclass

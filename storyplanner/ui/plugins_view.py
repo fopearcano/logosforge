@@ -17,11 +17,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from storyplanner.paths import get_docs_path
 from storyplanner.plugin_manager import PluginManager, get_plugin_manager
 
 USER_ROLE = Qt.ItemDataRole.UserRole
 
-DOCS_PATH = Path(__file__).resolve().parent.parent.parent / "docs" / "plugins.md"
+DOCS_PATH = get_docs_path() / "plugins.md"
 
 
 class PluginsView(QWidget):

@@ -4,6 +4,9 @@ __pycache__/
 *.db
 *.sqlite
 .venv/
+build_venv/
 dist/
 build/
 *.egg-info/
+*.spec.bak
+*.icns
