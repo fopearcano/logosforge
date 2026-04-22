@@ -37,30 +37,43 @@ pip install --upgrade pip -q
 pip install -r requirements.txt -q
 pip install pyinstaller>=6.0 -q
 
-# --- 3. Convert SVG icon to ICNS (if not already done) ---
+# --- 3. Convert PNG icon to ICNS (if not already done) ---
+ICON_PNG="$PROJECT_ROOT/assets/icon.png"
 ICON_SVG="$PROJECT_ROOT/assets/icon.svg"
 ICON_ICNS="$PROJECT_ROOT/assets/icon.icns"
-if [ -f "$ICON_SVG" ] && [ ! -f "$ICON_ICNS" ]; then
-    echo "[3/5] Converting icon SVG to ICNS..."
-    ICONSET_DIR="$PROJECT_ROOT/assets/icon.iconset"
-    mkdir -p "$ICONSET_DIR"
-
-    # Try sips (built-in macOS) for SVG→PNG, fall back to no icon
-    if command -v sips &>/dev/null; then
-        for SIZE in 16 32 64 128 256 512; do
-            sips -s format png -z $SIZE $SIZE "$ICON_SVG" --out "$ICONSET_DIR/icon_${SIZE}x${SIZE}.png" 2>/dev/null || true
-            DOUBLE=$((SIZE * 2))
-            sips -s format png -z $DOUBLE $DOUBLE "$ICON_SVG" --out "$ICONSET_DIR/icon_${SIZE}x${SIZE}@2x.png" 2>/dev/null || true
-        done
-        if command -v iconutil &>/dev/null; then
-            iconutil -c icns "$ICONSET_DIR" -o "$ICON_ICNS" 2>/dev/null || echo "  Warning: iconutil failed, building without custom icon"
-        fi
+if [ ! -f "$ICON_ICNS" ]; then
+    # Prefer PNG source; fall back to SVG
+    if [ -f "$ICON_PNG" ]; then
+        ICON_SRC="$ICON_PNG"
+    elif [ -f "$ICON_SVG" ]; then
+        ICON_SRC="$ICON_SVG"
     else
-        echo "  Warning: sips not available, building without custom icon"
+        ICON_SRC=""
     fi
-    rm -rf "$ICONSET_DIR"
+
+    if [ -n "$ICON_SRC" ]; then
+        echo "[3/5] Converting icon to ICNS..."
+        ICONSET_DIR="$PROJECT_ROOT/assets/icon.iconset"
+        mkdir -p "$ICONSET_DIR"
+
+        if command -v sips &>/dev/null; then
+            for SIZE in 16 32 64 128 256 512; do
+                sips -s format png -z $SIZE $SIZE "$ICON_SRC" --out "$ICONSET_DIR/icon_${SIZE}x${SIZE}.png" 2>/dev/null || true
+                DOUBLE=$((SIZE * 2))
+                sips -s format png -z $DOUBLE $DOUBLE "$ICON_SRC" --out "$ICONSET_DIR/icon_${SIZE}x${SIZE}@2x.png" 2>/dev/null || true
+            done
+            if command -v iconutil &>/dev/null; then
+                iconutil -c icns "$ICONSET_DIR" -o "$ICON_ICNS" 2>/dev/null || echo "  Warning: iconutil failed, building without custom icon"
+            fi
+        else
+            echo "  Warning: sips not available, building without custom icon"
+        fi
+        rm -rf "$ICONSET_DIR"
+    else
+        echo "[3/5] No icon source found, building without custom icon."
+    fi
 else
-    echo "[3/5] Icon ready (or no SVG source)."
+    echo "[3/5] Icon ICNS already exists."
 fi
 
 # --- 4. Run PyInstaller ---

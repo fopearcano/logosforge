@@ -114,9 +114,12 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(640, 400)
 
         from storyplanner.paths import get_assets_path
-        icon_path = str(get_assets_path() / "icon.svg")
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
+        assets = get_assets_path()
+        for icon_name in ("icon.png", "icon.svg"):
+            icon_path = str(assets / icon_name)
+            if os.path.exists(icon_path):
+                self.setWindowIcon(QIcon(icon_path))
+                break
 
         # -- Menu bar --------------------------------------------------------
         self._build_menu_bar()

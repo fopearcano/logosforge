@@ -110,12 +110,17 @@ coll = COLLECT(
     name="Logosforge",
 )
 
+def _find_icon():
+    for name in ("icon.icns", "icon.png"):
+        p = os.path.join(ROOT, "assets", name)
+        if os.path.exists(p):
+            return p
+    return None
+
 app = BUNDLE(
     coll,
     name="Logosforge.app",
-    icon=os.path.join(ROOT, "assets", "icon.icns")
-    if os.path.exists(os.path.join(ROOT, "assets", "icon.icns"))
-    else None,
+    icon=_find_icon(),
     bundle_identifier="com.logosforge.app",
     info_plist={
         "CFBundleName": "Logosforge",
