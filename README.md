@@ -30,7 +30,7 @@ It is a PySide6 desktop application with a SQLite backend, designed for novelist
 | AI Integration | OpenAI-compatible API (local or cloud) |
 | Architecture | MVC with layered context engines |
 
-**Codebase:** ~24,600 lines of source across 91 modules, with 894 tests (10,200 lines of test code).
+**Codebase:** ~27,300 lines of source across 95 modules, with 1,094 tests (~12,400 lines of test code).
 
 ---
 
@@ -113,8 +113,8 @@ Bidirectional suggestion layer between your prose and your Story Bible.
 - Rate-limited: one suggestion per scene at a time, debounced after edits
 
 #### Export & Import
-- JSON, Markdown, CSV, DOCX export
-- JSON import (full project restore)
+- **Export formats:** JSON, Markdown, CSV, DOCX, Fountain (screenwriting), PDF, Final Draft XML (`.fdx`), HTML
+- **Import:** JSON (full project restore)
 
 ---
 
@@ -212,7 +212,46 @@ Every AI request assembles rich context from:
 - Story memory (scored, scene-relevant entries)
 - PSYKE / Story Bible (temporal-aware, mode-orchestrated)
 - Graph context (character relationships, node importance)
+- Structural intelligence (narrative weakness detection)
 - Adaptive mode guidance
+- IRRATIONAL fragments (when activated)
+
+#### Proactive Context-Aware Assistant
+A lightweight heuristic engine that detects what you're writing and surfaces non-intrusive hints in real time.
+
+- **Writing mode detection** — identifies dialogue-heavy, descriptive, or short/long scenes
+- **Structural hints** — flags missing metadata (no conflict, no beat assignment, empty synopsis)
+- **PSYKE temporal hints** — detects stale character progressions and co-occurrence gaps
+- Rate-limited: per-type cooldown (60s), global cooldown (15s), deduplication
+- Resets on scene change
+- Dismiss / Ignore / Apply actions per hint
+- Non-intrusive inline banner (never blocks writing)
+
+#### Structural Intelligence (PSYKE-Driven)
+Analyzes narrative structure using PSYKE data, scenes, and outline to detect weaknesses across 7 detectors:
+
+- **Act Balance** — flags acts with disproportionately low word count
+- **Arc Completion** — detects character arcs that start but never progress
+- **Climax Preparation** — checks whether late-story tension builds adequately
+- **Tension Curve** — identifies flat or declining tension trends
+- **Theme Continuity** — flags themes that disappear for extended stretches
+- **Character Presence** — detects characters missing from long spans of the story
+- **Beat Placement** — checks Save-the-Cat beats against expected position ranges
+
+Results surface in the Review overlay and feed into the AI context pipeline. Cached with 30s TTL and dirty-flag invalidation.
+
+#### IRRATIONAL Mode
+A PSYKE rule-disruption engine that breaks narrative causality on demand.
+
+Activated via **"Go Irrational"** toggle in the Assistant panel. Generates surreal provocations from your Story Bible:
+
+- **Temporal Displacement** — pulls character progressions out of timeline order
+- **Entity Blend** — merges unrelated PSYKE entries using surreal templates
+- **Arc Inversion** — inverts character or theme arcs
+- **Temporal Echo** — cross-references scenes in dreamlike ways
+- **Reality Rupture** — breaks world rules using places, lore, and themes
+
+Deterministic (same scene = same output via seeded RNG). Re-rollable. Read-only — never writes to the database. Injected into the AI prompt as an `[IRRATIONAL MODE]` block that instructs the assistant to weave the fragments into its response.
 
 ---
 
@@ -322,6 +361,15 @@ Plugins operate on structured narrative context, never on raw database access.
 - **Dialogue Tension** — analyzes dialogue density, tension signals, rhythm uniformity, silent characters
 - **Character Presence** — tracks distribution gaps, clustering, disappearances, balance
 
+#### McKee Craft Knowledge (Plugin-Ready)
+Three canonical JSON knowledge systems ship as structured data for plugin development:
+
+- **Story System** — structural craft: Five-Part Spine, value-turn scenes, progressive complications, crisis dilemma, controlling idea, setup/payoff, exposition, pacing, genre, causal unity (19 methods)
+- **Character System** — character craft: characterization vs. true character, dimension engineering, three-layer self, desire/need separation, cast-as-solar-system, protagonist/antagonist design, arc types (20 methods)
+- **Dialogue System** — dialogue craft: said/unsaid/unsayable, six-task line test, beat-by-beat shaping, action-not-activity, credibility diagnostics, character voice, iceberg composition (18 methods)
+
+Each system includes principles, methods with operational rules, condition-based triggers, diagnostic checks, and cross-method conflict resolution tables. Designed as a runtime decision engine — methods act as constraints on generation, not templates to quote.
+
 #### Safety
 - Plugins never see the database
 - Plugins cannot mutate state
@@ -383,10 +431,11 @@ storyplanner/
 │   ├── entity_hover.py           # Hover tooltip for PSYKE entities
 │   ├── link_preview.py           # Ctrl+Click link preview widget
 │   ├── suggestion_banner.py      # Auto-link suggestion banner
+│   ├── context_hint_banner.py    # Context-aware assistant hint banner
 │   ├── psyke_quick_create.py     # Quick-create dialog for new PSYKE entries
 │   ├── narrative_dashboard_view.py # Narrative Dashboard top-level view
 │   ├── dashboard_widgets.py      # Tension curve, presence, structure, theme panels
-│   └── ...                       # 33 more view/widget files
+│   └── ...                       # 32 more view/widget files
 ├── assistant.py              # AI prompt construction and API client
 ├── counterpart.py            # COUNTERPART dialogic assistant
 ├── context_builder.py        # Context gathering from all systems
@@ -407,6 +456,9 @@ storyplanner/
 ├── story_health.py           # Structural health indicators
 ├── story_flow.py             # Tension and pacing curves
 ├── creative_layer.py         # Context hints and rhythm analysis
+├── context_assistant.py      # Proactive heuristic hint engine (3 detection layers)
+├── structural_intelligence.py # PSYKE-driven structural analysis (7 detectors)
+├── irrational.py             # IRRATIONAL mode — surreal PSYKE rule-disruption
 ├── analytics.py              # Writing metrics (word count, dialogue ratio)
 ├── connector_registry.py     # CONNECTOR action registry
 ├── connector_actions.py      # CONNECTOR action definitions + handlers
@@ -417,7 +469,12 @@ storyplanner/
 ├── plugin_manager.py         # Dynamic plugin loading
 ├── plugins/                  # Built-in plugins
 │   ├── dialogue_tension.py   # Dialogue analysis plugin
-│   └── character_presence.py # Character distribution plugin
+│   ├── character_presence.py # Character distribution plugin
+│   └── mckee/                # McKee craft knowledge (external plugin)
+│       └── knowledge/        # Canonical JSON domain systems
+│           ├── story_system.json     # 5 principles, 19 methods, 14 triggers, 6 checks
+│           ├── character_system.json # 5 principles, 20 methods, 13 triggers, 6 checks
+│           └── dialogue_system.json  # 5 principles, 18 methods, 12 triggers, 5 checks
 ├── providers.py              # LLM provider configuration
 ├── prompt_router.py          # Keyword-based prompt routing
 ├── export.py                 # Multi-format export
@@ -449,11 +506,13 @@ Configure in the Assistant panel under Settings.
 1. **Structure over generation** — The system helps you organize and think, not write for you
 2. **Context-aware AI** — Every AI interaction understands your story's full context
 3. **Non-destructive** — Templates scaffold, memory informs, analysis suggests — nothing overwrites without consent
-4. **Deterministic analysis** — Pacing, health, balance, and suggestions compute without AI calls
+4. **Deterministic analysis** — Pacing, health, balance, structural intelligence, and suggestions compute without AI calls
 5. **Temporal awareness** — Story bible entries evolve over narrative time
 6. **Plugin safety** — Plugins see snapshots, never databases; they suggest, never mutate
 7. **Suggest, never auto-commit** — Auto-link proposes; the user always decides before PSYKE is touched
 8. **Local-first** — Works offline with local models, no cloud dependency required
+9. **Proactive, not intrusive** — Context hints and structural warnings surface automatically but never block writing
+10. **Opt-in disruption** — IRRATIONAL mode breaks rules only when the writer explicitly activates it
 
 ---
 
@@ -462,6 +521,9 @@ Configure in the Assistant panel under Settings.
 - [`docs/narrative_dashboard.md`](docs/narrative_dashboard.md) — panels, scoring formulas, flag rules
 - [`docs/auto_link.md`](docs/auto_link.md) — detection rules, suggestion flow, safety guarantees
 - [`docs/plugins.md`](docs/plugins.md) — writing and registering plugins
+- [`docs/structural_intelligence.md`](docs/structural_intelligence.md) — 7 detectors, heuristic rules, data flow
+- [`docs/irrational_mode.md`](docs/irrational_mode.md) — fragment generators, seeding, AI integration
+- [`docs/context_assistant.md`](docs/context_assistant.md) — detection layers, rate limiting, hint types
 
 ---
 
