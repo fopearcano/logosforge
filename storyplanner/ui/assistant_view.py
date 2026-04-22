@@ -424,6 +424,7 @@ class AssistantPanel(QWidget):
         self._layout.addLayout(apply_row)
 
         self._load_scenes()
+        self._restore_panel_settings()
 
     # -- Mode override ---------------------------------------------------------
 
@@ -495,6 +496,29 @@ class AssistantPanel(QWidget):
         saved_url = str(mgr.get("ai_base_url"))
         if saved_url:
             self._provider_widget._url_input.setText(saved_url)
+
+    def _restore_panel_settings(self) -> None:
+        mgr = get_settings()
+        mode = str(mgr.get("assistant_panel_mode") or "assistant")
+        if mode in ("assistant", "counterpart"):
+            self._set_panel_mode(mode)
+        self._outline_check.setChecked(bool(mgr.get("assistant_include_outline")))
+        self._story_memory_check.setChecked(bool(mgr.get("assistant_include_memory")))
+        self._psyke_check.setChecked(bool(mgr.get("assistant_include_bible")))
+        self._irrational_check.setChecked(bool(mgr.get("assistant_irrational")))
+
+    def save_settings(self) -> None:
+        mgr = get_settings()
+        pw = self._provider_widget
+        mgr.set("ai_provider", pw._provider_combo.currentText())
+        mgr.set("ai_model", pw._model_combo.currentText())
+        mgr.set("ai_api_key", pw._key_input.text())
+        mgr.set("ai_base_url", pw._url_input.text())
+        mgr.set("assistant_panel_mode", self._panel_mode)
+        mgr.set("assistant_include_outline", self._outline_check.isChecked())
+        mgr.set("assistant_include_memory", self._story_memory_check.isChecked())
+        mgr.set("assistant_include_bible", self._psyke_check.isChecked())
+        mgr.set("assistant_irrational", self._irrational_check.isChecked())
 
     def _toggle_settings(self) -> None:
         visible = not self._settings_container.isVisible()

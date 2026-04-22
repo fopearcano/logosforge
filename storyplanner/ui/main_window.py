@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import QPropertyAnimation, QEasingCurve, Qt
-from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QCloseEvent, QColor, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -1259,6 +1259,33 @@ class MainWindow(QMainWindow):
     def _mark_clean(self) -> None:
         self._dirty = False
         self._update_title()
+
+    # -- Close event ---------------------------------------------------------
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        self._assistant_panel.save_settings()
+        if self._dirty and not self._current_file:
+            answer = QMessageBox.warning(
+                self,
+                "Unsaved Project",
+                "Your project has unsaved changes.\n\n"
+                "Do you want to save before closing?",
+                QMessageBox.StandardButton.Save
+                | QMessageBox.StandardButton.Discard
+                | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Save,
+            )
+            if answer == QMessageBox.StandardButton.Save:
+                self._on_save_as()
+                if self._dirty:
+                    event.ignore()
+                    return
+            elif answer == QMessageBox.StandardButton.Cancel:
+                event.ignore()
+                return
+        elif self._dirty and self._current_file:
+            self._auto_save()
+        event.accept()
 
     # -- Theme switching -----------------------------------------------------
 
