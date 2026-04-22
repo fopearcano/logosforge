@@ -361,14 +361,12 @@ Plugins operate on structured narrative context, never on raw database access.
 - **Dialogue Tension** — analyzes dialogue density, tension signals, rhythm uniformity, silent characters
 - **Character Presence** — tracks distribution gaps, clustering, disappearances, balance
 
-#### McKee Craft Knowledge (Plugin-Ready)
-Three canonical JSON knowledge systems ship as structured data for plugin development:
+#### McKee Craft Knowledge (External Plugin)
+An optional writing-intelligence plugin based on Robert McKee's three craft domains: story structure, character, and dialogue.
 
-- **Story System** — structural craft: Five-Part Spine, value-turn scenes, progressive complications, crisis dilemma, controlling idea, setup/payoff, exposition, pacing, genre, causal unity (19 methods)
-- **Character System** — character craft: characterization vs. true character, dimension engineering, three-layer self, desire/need separation, cast-as-solar-system, protagonist/antagonist design, arc types (20 methods)
-- **Dialogue System** — dialogue craft: said/unsaid/unsayable, six-task line test, beat-by-beat shaping, action-not-activity, credibility diagnostics, character voice, iceberg composition (18 methods)
+Three canonical JSON knowledge systems with 57 operational methods, 40 triggers, 17 diagnostic checks, and 25 cross-method conflict resolution rules. Designed as a runtime decision engine — methods act as constraints on generation, not templates to quote.
 
-Each system includes principles, methods with operational rules, condition-based triggers, diagnostic checks, and cross-method conflict resolution tables. Designed as a runtime decision engine — methods act as constraints on generation, not templates to quote.
+**[Download McKee Plugin](https://drive.google.com/drive/folders/1t5j4dFIW82U-MT81vBiQDQTfCyIMQMZV?usp=sharing)**
 
 #### Safety
 - Plugins never see the database
@@ -469,12 +467,7 @@ storyplanner/
 ├── plugin_manager.py         # Dynamic plugin loading
 ├── plugins/                  # Built-in plugins
 │   ├── dialogue_tension.py   # Dialogue analysis plugin
-│   ├── character_presence.py # Character distribution plugin
-│   └── mckee/                # McKee craft knowledge (external plugin)
-│       └── knowledge/        # Canonical JSON domain systems
-│           ├── story_system.json     # 5 principles, 19 methods, 14 triggers, 6 checks
-│           ├── character_system.json # 5 principles, 20 methods, 13 triggers, 6 checks
-│           └── dialogue_system.json  # 5 principles, 18 methods, 12 triggers, 5 checks
+│   └── character_presence.py # Character distribution plugin
 ├── providers.py              # LLM provider configuration
 ├── prompt_router.py          # Keyword-based prompt routing
 ├── export.py                 # Multi-format export
