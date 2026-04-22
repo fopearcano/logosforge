@@ -13,14 +13,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
 
 echo "=== Logosforge Mac Build ==="
 echo "Target: macOS 12 Monterey, Intel x86_64"
 echo ""
 
 # --- 1. Create or reuse virtual environment ---
-VENV_DIR="$SCRIPT_DIR/build_venv"
+VENV_DIR="$PROJECT_ROOT/build_venv"
 if [ ! -d "$VENV_DIR" ]; then
     echo "[1/5] Creating build virtual environment..."
     python3 -m venv "$VENV_DIR"
@@ -37,11 +38,11 @@ pip install -r requirements.txt -q
 pip install pyinstaller>=6.0 -q
 
 # --- 3. Convert SVG icon to ICNS (if not already done) ---
-ICON_SVG="$SCRIPT_DIR/assets/icon.svg"
-ICON_ICNS="$SCRIPT_DIR/assets/icon.icns"
+ICON_SVG="$PROJECT_ROOT/assets/icon.svg"
+ICON_ICNS="$PROJECT_ROOT/assets/icon.icns"
 if [ -f "$ICON_SVG" ] && [ ! -f "$ICON_ICNS" ]; then
     echo "[3/5] Converting icon SVG to ICNS..."
-    ICONSET_DIR="$SCRIPT_DIR/assets/icon.iconset"
+    ICONSET_DIR="$PROJECT_ROOT/assets/icon.iconset"
     mkdir -p "$ICONSET_DIR"
 
     # Try sips (built-in macOS) for SVG→PNG, fall back to no icon
@@ -64,14 +65,14 @@ fi
 
 # --- 4. Run PyInstaller ---
 echo "[4/5] Building with PyInstaller..."
-pyinstaller logosforge.spec \
+pyinstaller "$SCRIPT_DIR/logosforge.spec" \
     --noconfirm \
     --clean \
-    --distpath "$SCRIPT_DIR/dist" \
-    --workpath "$SCRIPT_DIR/build"
+    --distpath "$PROJECT_ROOT/dist" \
+    --workpath "$PROJECT_ROOT/build"
 
 # --- 5. Verify ---
-APP_PATH="$SCRIPT_DIR/dist/Logosforge.app"
+APP_PATH="$PROJECT_ROOT/dist/Logosforge.app"
 if [ -d "$APP_PATH" ]; then
     echo ""
     echo "[5/5] Build successful!"
