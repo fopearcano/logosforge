@@ -366,7 +366,7 @@ An optional writing-intelligence plugin based on Robert McKee's three craft doma
 
 Three canonical JSON knowledge systems with 57 operational methods, 40 triggers, 17 diagnostic checks, and 25 cross-method conflict resolution rules. Designed as a runtime decision engine — methods act as constraints on generation, not templates to quote.
 
-**[Download McKee Plugin](https://drive.google.com/drive/folders/1t5j4dFIW82U-MT81vBiQDQTfCyIMQMZV?usp=sharing)**
+**[Download Plugins](https://drive.google.com/drive/folders/1t5j4dFIW82U-MT81vBiQDQTfCyIMQMZV?usp=sharing)**
 
 #### Safety
 - Plugins never see the database
