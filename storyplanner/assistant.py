@@ -164,8 +164,19 @@ def _openai_completion(
     )
 
     with urllib.request.urlopen(req, timeout=timeout) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-        return data["choices"][0]["message"]["content"]
+        raw = resp.read().decode("utf-8")
+    data = json.loads(raw)
+    if "choices" not in data:
+        err = data.get("error")
+        if err:
+            msg = err.get("message") if isinstance(err, dict) else str(err)
+            raise RuntimeError(f"{provider.name} error: {msg}")
+        raise RuntimeError(
+            f"{provider.name} returned no 'choices'. "
+            f"Check that a model is loaded and the base URL ends with /v1.\n"
+            f"Response: {raw[:400]}"
+        )
+    return data["choices"][0]["message"]["content"]
 
 
 def _anthropic_completion(
@@ -247,6 +258,15 @@ def chat_completion(
         if key is not None:
             _cache_put(key, result)
         return result, False
+    except urllib.error.HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="replace")[:400]
+        except Exception:
+            pass
+        raise RuntimeError(
+            f"{provider.name} returned HTTP {e.code}: {e.reason}\n{body}"
+        ) from e
     except urllib.error.URLError as e:
         raise ConnectionError(
             f"Cannot reach {provider.name} at {provider.base_url}.\n\n"
