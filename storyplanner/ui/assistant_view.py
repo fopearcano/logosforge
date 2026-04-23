@@ -393,6 +393,10 @@ class AssistantPanel(QWidget):
         apply_row = QHBoxLayout()
         apply_row.setSpacing(4)
 
+        self._copy_btn = QPushButton("Copy")
+        self._copy_btn.clicked.connect(self._copy_response)
+        apply_row.addWidget(self._copy_btn)
+
         self._replace_content_btn = QPushButton("Replace")
         self._replace_content_btn.clicked.connect(
             self._apply_replace_content
@@ -411,12 +415,11 @@ class AssistantPanel(QWidget):
         apply_more_menu.addAction("Append", self._apply_append_content)
         apply_more_menu.addAction("As Synopsis", self._apply_as_synopsis)
         apply_more_menu.addAction("As Summary", self._apply_as_summary)
-        apply_more_menu.addSeparator()
-        apply_more_menu.addAction("Copy", self._copy_response)
         self._apply_more_btn.setMenu(apply_more_menu)
         apply_row.addWidget(self._apply_more_btn)
 
         self._apply_buttons = [
+            self._copy_btn,
             self._replace_content_btn,
             self._insert_cursor_btn,
             self._apply_more_btn,
@@ -463,7 +466,6 @@ class AssistantPanel(QWidget):
         # Toggle apply buttons (Counterpart never mutates content)
         self._replace_content_btn.setVisible(is_assistant)
         self._insert_cursor_btn.setVisible(is_assistant)
-        # Keep the ▾ apply button but replace with Copy-only in counterpart
         self._apply_more_btn.setVisible(is_assistant)
 
         # Mode strip only relevant for assistant
@@ -853,10 +855,21 @@ class AssistantPanel(QWidget):
         if self._on_data_changed:
             self._on_data_changed()
 
+    def _require_scene(self) -> int | None:
+        scene_id = self._get_selected_scene_id()
+        if scene_id is None:
+            QMessageBox.information(
+                self, "Select a Scene",
+                "Select a scene from the dropdown to apply this action.",
+            )
+        return scene_id
+
     def _apply_replace_content(self) -> None:
         text = self._get_response_text()
-        scene_id = self._get_selected_scene_id()
-        if text is None or scene_id is None:
+        if text is None:
+            return
+        scene_id = self._require_scene()
+        if scene_id is None:
             return
 
         answer = QMessageBox.question(
@@ -875,8 +888,10 @@ class AssistantPanel(QWidget):
 
     def _apply_append_content(self) -> None:
         text = self._get_response_text()
-        scene_id = self._get_selected_scene_id()
-        if text is None or scene_id is None:
+        if text is None:
+            return
+        scene_id = self._require_scene()
+        if scene_id is None:
             return
 
         scene = self._db.get_scene_by_id(scene_id)
@@ -894,8 +909,10 @@ class AssistantPanel(QWidget):
 
     def _apply_as_synopsis(self) -> None:
         text = self._get_response_text()
-        scene_id = self._get_selected_scene_id()
-        if text is None or scene_id is None:
+        if text is None:
+            return
+        scene_id = self._require_scene()
+        if scene_id is None:
             return
 
         scene = self._db.get_scene_by_id(scene_id)
@@ -917,8 +934,10 @@ class AssistantPanel(QWidget):
 
     def _apply_as_summary(self) -> None:
         text = self._get_response_text()
-        scene_id = self._get_selected_scene_id()
-        if text is None or scene_id is None:
+        if text is None:
+            return
+        scene_id = self._require_scene()
+        if scene_id is None:
             return
 
         scene = self._db.get_scene_by_id(scene_id)
@@ -940,8 +959,10 @@ class AssistantPanel(QWidget):
 
     def _apply_insert_at_cursor(self) -> None:
         text = self._get_response_text()
-        scene_id = self._get_selected_scene_id()
-        if text is None or scene_id is None:
+        if text is None:
+            return
+        scene_id = self._require_scene()
+        if scene_id is None:
             return
 
         QApplication.clipboard().setText(text)
