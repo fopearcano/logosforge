@@ -183,12 +183,14 @@ class AssistantPanel(QWidget):
         project_id: int,
         on_data_changed: Callable[[], None] | None = None,
         on_open_scene: Callable[[int], None] | None = None,
+        get_active_scene_id: Callable[[], int | None] | None = None,
     ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
         self._on_data_changed = on_data_changed
         self._on_open_scene = on_open_scene
+        self._get_active_scene_id = get_active_scene_id
         self._active_section: str = "Dashboard"
         self._worker: _AssistantWorker | None = None
         self._pending_messages: list[dict] | None = None
@@ -942,6 +944,14 @@ class AssistantPanel(QWidget):
         if text:
             QApplication.clipboard().setText(text)
 
+    def _copy_and_notify(self, text: str) -> None:
+        QApplication.clipboard().setText(text)
+        QMessageBox.information(
+            self, "Copied",
+            "Text copied to clipboard.\n\n"
+            "Paste it where you want with Ctrl+V (Cmd+V on Mac).",
+        )
+
     # -- Apply to scene --------------------------------------------------------
 
     def _get_response_text(self) -> str | None:
@@ -957,21 +967,26 @@ class AssistantPanel(QWidget):
         if self._on_data_changed:
             self._on_data_changed()
 
-    def _require_scene(self) -> int | None:
+    def _resolve_scene(self) -> int | None:
         scene_id = self._get_selected_scene_id()
-        if scene_id is None:
-            QMessageBox.information(
-                self, "Select a Scene",
-                "Select a scene from the dropdown to apply this action.",
-            )
-        return scene_id
+        if scene_id is not None:
+            return scene_id
+        if self._get_active_scene_id:
+            scene_id = self._get_active_scene_id()
+            if scene_id is not None:
+                return scene_id
+        scenes = self._db.get_all_scenes(self._project_id)
+        if len(scenes) == 1:
+            return scenes[0].id
+        return None
 
     def _apply_replace_content(self) -> None:
         text = self._get_response_text()
         if text is None:
             return
-        scene_id = self._require_scene()
+        scene_id = self._resolve_scene()
         if scene_id is None:
+            self._copy_and_notify(text)
             return
 
         answer = QMessageBox.question(
@@ -992,8 +1007,9 @@ class AssistantPanel(QWidget):
         text = self._get_response_text()
         if text is None:
             return
-        scene_id = self._require_scene()
+        scene_id = self._resolve_scene()
         if scene_id is None:
+            self._copy_and_notify(text)
             return
 
         scene = self._db.get_scene_by_id(scene_id)
@@ -1013,8 +1029,9 @@ class AssistantPanel(QWidget):
         text = self._get_response_text()
         if text is None:
             return
-        scene_id = self._require_scene()
+        scene_id = self._resolve_scene()
         if scene_id is None:
+            self._copy_and_notify(text)
             return
 
         scene = self._db.get_scene_by_id(scene_id)
@@ -1038,8 +1055,9 @@ class AssistantPanel(QWidget):
         text = self._get_response_text()
         if text is None:
             return
-        scene_id = self._require_scene()
+        scene_id = self._resolve_scene()
         if scene_id is None:
+            self._copy_and_notify(text)
             return
 
         scene = self._db.get_scene_by_id(scene_id)
@@ -1063,16 +1081,14 @@ class AssistantPanel(QWidget):
         text = self._get_response_text()
         if text is None:
             return
-        scene_id = self._require_scene()
-        if scene_id is None:
-            return
 
+        scene_id = self._resolve_scene()
         QApplication.clipboard().setText(text)
         QMessageBox.information(
             self,
-            "Insert at Cursor",
+            "Copied",
             "Text copied to clipboard.\n\n"
-            "Position your cursor in the scene editor and paste (Ctrl+V).",
+            "Paste it where you want with Ctrl+V (Cmd+V on Mac).",
         )
         if self._on_open_scene:
             self._on_open_scene(scene_id)

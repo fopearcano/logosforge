@@ -286,6 +286,7 @@ class MainWindow(QMainWindow):
             self._project_id,
             on_data_changed=self._on_data_changed,
             on_open_scene=self._open_scene_in_editor,
+            get_active_scene_id=self._detect_active_scene_id,
         )
         self._assistant_panel.panel_closed.connect(self._hide_assistant)
         self._assistant_panel.overlay_toggled.connect(self._on_overlay_toggled)
@@ -734,6 +735,22 @@ class MainWindow(QMainWindow):
             view.select_note(entity_id)
         elif entity_type == "Scene":
             self._open_scene_in_editor(entity_id)
+
+    def _detect_active_scene_id(self) -> int | None:
+        from storyplanner.ui.writing_core_view import WritingCoreView
+        view = self.content_area
+        if isinstance(view, WritingCoreView):
+            editor = getattr(view, "_active_editor", None)
+            if editor:
+                return getattr(editor, "_scene_id", None)
+        if self._cached_scenes_view is not None and self.content_area is self._cached_scenes_view:
+            editor = getattr(self._cached_scenes_view, "_active_editor", None)
+            if editor:
+                return getattr(editor, "_scene_id", None)
+        scenes = self._db.get_all_scenes(self._project_id)
+        if len(scenes) == 1:
+            return scenes[0].id
+        return None
 
     def _open_scene_in_editor(self, scene_id: int) -> None:
         self._set_active_section("Scenes")
