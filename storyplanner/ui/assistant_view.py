@@ -185,6 +185,7 @@ class AssistantPanel(QWidget):
         on_open_scene: Callable[[int], None] | None = None,
         get_active_scene_id: Callable[[], int | None] | None = None,
         get_selected_text: Callable[[], str] | None = None,
+        get_active_editor: Callable[[], object | None] | None = None,
     ) -> None:
         super().__init__()
         self._db = db
@@ -193,6 +194,7 @@ class AssistantPanel(QWidget):
         self._on_open_scene = on_open_scene
         self._get_active_scene_id = get_active_scene_id
         self._get_selected_text = get_selected_text
+        self._get_active_editor = get_active_editor
         self._active_section: str = "Dashboard"
         self._worker: _AssistantWorker | None = None
         self._pending_messages: list[dict] | None = None
@@ -493,31 +495,22 @@ class AssistantPanel(QWidget):
         apply_row.addWidget(self._copy_btn)
 
         self._replace_content_btn = QPushButton("Replace")
-        self._replace_content_btn.clicked.connect(
-            self._apply_replace_content
-        )
+        self._replace_content_btn.clicked.connect(self._apply_replace)
         apply_row.addWidget(self._replace_content_btn)
 
         self._insert_cursor_btn = QPushButton("Insert")
-        self._insert_cursor_btn.clicked.connect(
-            self._apply_insert_at_cursor
-        )
+        self._insert_cursor_btn.clicked.connect(self._apply_insert)
         apply_row.addWidget(self._insert_cursor_btn)
 
-        self._apply_more_btn = QPushButton("\u25be")
-        self._apply_more_btn.setFixedWidth(28)
-        apply_more_menu = QMenu(self)
-        apply_more_menu.addAction("Append", self._apply_append_content)
-        apply_more_menu.addAction("As Synopsis", self._apply_as_synopsis)
-        apply_more_menu.addAction("As Summary", self._apply_as_summary)
-        self._apply_more_btn.setMenu(apply_more_menu)
-        apply_row.addWidget(self._apply_more_btn)
+        self._append_btn = QPushButton("Append")
+        self._append_btn.clicked.connect(self._apply_append)
+        apply_row.addWidget(self._append_btn)
 
         self._apply_buttons = [
             self._copy_btn,
             self._replace_content_btn,
             self._insert_cursor_btn,
-            self._apply_more_btn,
+            self._append_btn,
         ]
         self._layout.addLayout(apply_row)
 
@@ -561,7 +554,7 @@ class AssistantPanel(QWidget):
         # Toggle apply buttons (Counterpart never mutates content)
         self._replace_content_btn.setVisible(is_assistant)
         self._insert_cursor_btn.setVisible(is_assistant)
-        self._apply_more_btn.setVisible(is_assistant)
+        self._append_btn.setVisible(is_assistant)
 
         # Mode strip only relevant for assistant
         self._mode_strip.setVisible(is_assistant)
@@ -963,15 +956,7 @@ class AssistantPanel(QWidget):
         if text:
             QApplication.clipboard().setText(text)
 
-    def _copy_and_notify(self, text: str) -> None:
-        QApplication.clipboard().setText(text)
-        QMessageBox.information(
-            self, "Copied",
-            "Text copied to clipboard.\n\n"
-            "Paste it where you want with Ctrl+V (Cmd+V on Mac).",
-        )
-
-    # -- Apply to scene --------------------------------------------------------
+    # -- Apply to editor / scene -----------------------------------------------
 
     def _get_response_text(self) -> str | None:
         text = self._response_output.toPlainText().strip()
@@ -979,138 +964,109 @@ class AssistantPanel(QWidget):
             return None
         return text
 
-    def _get_selected_scene_id(self) -> int | None:
-        return self._get_auto_scene_id()
-
     def _notify_data_changed(self) -> None:
         if self._on_data_changed:
             self._on_data_changed()
 
-    def _resolve_scene(self) -> int | None:
-        scene_id = self._get_selected_scene_id()
-        if scene_id is not None:
-            return scene_id
-        if self._get_active_scene_id:
-            scene_id = self._get_active_scene_id()
-            if scene_id is not None:
-                return scene_id
-        scenes = self._db.get_all_scenes(self._project_id)
-        if len(scenes) == 1:
-            return scenes[0].id
+    def _active_editor(self) -> object | None:
+        if self._get_active_editor:
+            return self._get_active_editor()
         return None
 
-    def _apply_replace_content(self) -> None:
+    def _apply_replace(self) -> None:
         text = self._get_response_text()
         if text is None:
             return
-        scene_id = self._resolve_scene()
-        if scene_id is None:
-            self._copy_and_notify(text)
-            return
+        source = self._get_context_source()
 
-        answer = QMessageBox.question(
-            self,
-            "Replace Content",
-            "This will replace the entire scene content.\n\n"
-            "Are you sure?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            return
+        if source == "selection":
+            editor = self._active_editor()
+            if editor and hasattr(editor, "textCursor"):
+                cursor = editor.textCursor()
+                if cursor.hasSelection():
+                    answer = QMessageBox.question(
+                        self, "Replace Selection",
+                        "Replace the selected text with the AI response?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No,
+                    )
+                    if answer != QMessageBox.StandardButton.Yes:
+                        return
+                    cursor.insertText(text)
+                    editor.setTextCursor(cursor)
+                    self._notify_data_changed()
+                    return
 
-        self._db.update_scene_content(scene_id, text)
-        self._notify_data_changed()
-
-    def _apply_append_content(self) -> None:
-        text = self._get_response_text()
-        if text is None:
-            return
-        scene_id = self._resolve_scene()
-        if scene_id is None:
-            self._copy_and_notify(text)
-            return
-
-        scene = self._db.get_scene_by_id(scene_id)
-        if scene is None:
-            return
-
-        existing = scene.content or ""
-        if existing:
-            new_content = existing + "\n\n" + text
-        else:
-            new_content = text
-
-        self._db.update_scene_content(scene_id, new_content)
-        self._notify_data_changed()
-
-    def _apply_as_synopsis(self) -> None:
-        text = self._get_response_text()
-        if text is None:
-            return
-        scene_id = self._resolve_scene()
-        if scene_id is None:
-            self._copy_and_notify(text)
-            return
-
-        scene = self._db.get_scene_by_id(scene_id)
-        if scene and scene.synopsis:
-            answer = QMessageBox.question(
-                self,
-                "Replace Synopsis",
-                "This will replace the existing synopsis.\n\n"
-                "Are you sure?",
-                QMessageBox.StandardButton.Yes
-                | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if answer != QMessageBox.StandardButton.Yes:
+        if source == "scene":
+            scene_id = self._get_auto_scene_id()
+            if scene_id is not None:
+                answer = QMessageBox.question(
+                    self, "Replace Scene Content",
+                    "Replace the entire scene content?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if answer != QMessageBox.StandardButton.Yes:
+                    return
+                self._db.update_scene_content(scene_id, text)
+                self._notify_data_changed()
                 return
 
-        self._db.update_scene_synopsis(scene_id, text)
-        self._notify_data_changed()
-
-    def _apply_as_summary(self) -> None:
-        text = self._get_response_text()
-        if text is None:
-            return
-        scene_id = self._resolve_scene()
-        if scene_id is None:
-            self._copy_and_notify(text)
-            return
-
-        scene = self._db.get_scene_by_id(scene_id)
-        if scene and scene.summary:
-            answer = QMessageBox.question(
-                self,
-                "Replace Summary",
-                "This will replace the existing summary.\n\n"
-                "Are you sure?",
-                QMessageBox.StandardButton.Yes
-                | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if answer != QMessageBox.StandardButton.Yes:
-                return
-
-        self._db.update_scene_summary(scene_id, text)
-        self._notify_data_changed()
-
-    def _apply_insert_at_cursor(self) -> None:
-        text = self._get_response_text()
-        if text is None:
-            return
-
-        scene_id = self._resolve_scene()
         QApplication.clipboard().setText(text)
-        QMessageBox.information(
-            self,
-            "Copied",
-            "Text copied to clipboard.\n\n"
-            "Paste it where you want with Ctrl+V (Cmd+V on Mac).",
-        )
-        if self._on_open_scene:
-            self._on_open_scene(scene_id)
+
+    def _apply_insert(self) -> None:
+        text = self._get_response_text()
+        if text is None:
+            return
+
+        editor = self._active_editor()
+        if editor and hasattr(editor, "textCursor"):
+            answer = QMessageBox.question(
+                self, "Insert Text",
+                "Insert the AI response at the cursor position?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            cursor = editor.textCursor()
+            cursor.setPosition(cursor.position())
+            cursor.insertText(text)
+            editor.setTextCursor(cursor)
+            self._notify_data_changed()
+            return
+
+        QApplication.clipboard().setText(text)
+
+    def _apply_append(self) -> None:
+        text = self._get_response_text()
+        if text is None:
+            return
+        source = self._get_context_source()
+
+        if source == "selection":
+            editor = self._active_editor()
+            if editor and hasattr(editor, "textCursor"):
+                cursor = editor.textCursor()
+                end = max(cursor.position(), cursor.anchor())
+                cursor.setPosition(end)
+                cursor.insertText("\n\n" + text)
+                editor.setTextCursor(cursor)
+                self._notify_data_changed()
+                return
+
+        if source == "scene":
+            scene_id = self._get_auto_scene_id()
+            if scene_id is not None:
+                scene = self._db.get_scene_by_id(scene_id)
+                if scene is not None:
+                    existing = scene.content or ""
+                    new_content = (existing + "\n\n" + text) if existing else text
+                    self._db.update_scene_content(scene_id, new_content)
+                    self._notify_data_changed()
+                    return
+
+        QApplication.clipboard().setText(text)
 
     # -- Overlay mode ----------------------------------------------------------
 
