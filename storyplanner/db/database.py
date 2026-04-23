@@ -855,6 +855,13 @@ class Database:
         self, project_id: int, name: str
     ) -> tuple[str, int] | None:
         name_lower = name.strip().lower()
+        for entry in self.get_all_psyke_entries(project_id):
+            if entry.name.lower() == name_lower:
+                return ("PsykeEntry", entry.id)
+            if entry.aliases:
+                for alias in entry.aliases.split(","):
+                    if alias.strip().lower() == name_lower:
+                        return ("PsykeEntry", entry.id)
         for char in self.get_all_characters(project_id):
             if char.name.lower() == name_lower:
                 return ("Character", char.id)

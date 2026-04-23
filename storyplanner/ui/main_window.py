@@ -45,7 +45,6 @@ from storyplanner.ui.settings_dialog import SettingsDialog
 from storyplanner.ui.act_analysis_view import ActAnalysisView
 from storyplanner.ui.beat_analysis_view import BeatAnalysisView
 from storyplanner.ui.character_arc_view import CharacterArcView
-from storyplanner.ui.characters_view import CharactersView
 from storyplanner.ui.dashboard_view import DashboardView
 from storyplanner.ui.focus_graph_view import FocusGraphView
 from storyplanner.ui.story_health_view import StoryHealthView
@@ -55,7 +54,6 @@ from storyplanner.ui.mode_suggestions_view import ModeSuggestionsView
 from storyplanner.ui.graph_view import GraphView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.outline_view import OutlineView
-from storyplanner.ui.places_view import PlacesView
 from storyplanner.ui.plugins_view import PluginsView
 from storyplanner.ui.psyke_view import PsykeView
 from storyplanner.ui.projects_view import ProjectsView
@@ -149,8 +147,6 @@ class MainWindow(QMainWindow):
         self._sidebar_icons = {
             "Projects": "\U0001F4C1",
             "Dashboard": "\U0001F3E0",
-            "Characters": "\U0001F464",
-            "Places": "\U0001F4CD",
             "Notes": "\U0001F4DD",
             "Scenes": "\U0001F3AC",
             "Manuscript": "\u2712",
@@ -180,7 +176,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self._toggle_btn)
 
         _NAV_LABELS = [
-            "Projects", "Dashboard", "Characters", "Places", "Notes",
+            "Projects", "Dashboard", "Notes",
             "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline",
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
             "Health", "Balance", "Pacing", "Adapt", "Narrative", "Search", "PSYKE", "Plugins", "Assistant",
@@ -231,7 +227,7 @@ class MainWindow(QMainWindow):
 
         # -- Connect navigation buttons (checkable + active tracking) ----------
         self._nav_labels = [
-            "Projects", "Dashboard", "Characters", "Places", "Notes",
+            "Projects", "Dashboard", "Notes",
             "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline",
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
             "Health", "Balance", "Pacing", "Adapt", "Narrative", "Search", "PSYKE", "Plugins",
@@ -239,8 +235,6 @@ class MainWindow(QMainWindow):
         _nav_handlers = {
             "Projects": self._show_projects,
             "Dashboard": self._show_dashboard,
-            "Characters": self._show_characters,
-            "Places": self._show_places,
             "Notes": self._show_notes,
             "Scenes": self._show_scenes,
             "Manuscript": self._show_manuscript,
@@ -365,27 +359,9 @@ class MainWindow(QMainWindow):
         if name == "scenes":
             self._show_scenes()
         elif name == "characters":
-            self._show_characters()
+            self._show_psyke()
         elif name == "timeline":
             self._show_timeline()
-
-    def _show_characters(self) -> None:
-        self._set_content(
-            CharactersView(
-                self._db, self._project_id,
-                on_data_changed=self._on_data_changed,
-                on_link_clicked=self._on_link_navigated,
-            )
-        )
-
-    def _show_places(self) -> None:
-        self._set_content(
-            PlacesView(
-                self._db, self._project_id,
-                on_data_changed=self._on_data_changed,
-                on_link_clicked=self._on_link_navigated,
-            )
-        )
 
     def _show_notes(self) -> None:
         self._set_content(
@@ -713,24 +689,25 @@ class MainWindow(QMainWindow):
         self._on_link_navigated(entity_type, entity_id)
 
     def _on_link_navigated(self, entity_type: str, entity_id: int) -> None:
-        if entity_type == "Character":
-            self._set_active_section("Characters")
-            view = CharactersView(
-                self._db, self._project_id,
-                on_data_changed=self._on_data_changed,
-                on_link_clicked=self._on_link_navigated,
-            )
-            self._set_content(view)
-            view.select_character(entity_id)
-        elif entity_type == "Place":
-            self._set_active_section("Places")
-            view = PlacesView(
-                self._db, self._project_id,
-                on_data_changed=self._on_data_changed,
-                on_link_clicked=self._on_link_navigated,
-            )
-            self._set_content(view)
-            view.select_place(entity_id)
+        if entity_type in ("Character", "Place", "PsykeEntry"):
+            self._set_active_section("PSYKE")
+            self._show_psyke()
+            psyke_view = self.content_area
+            if entity_type == "PsykeEntry":
+                psyke_view.select_entry(entity_id)
+            else:
+                name = None
+                if entity_type == "Character":
+                    c = self._db.get_character_by_id(entity_id)
+                    name = c.name if c else None
+                elif entity_type == "Place":
+                    p = self._db.get_place_by_id(entity_id)
+                    name = p.name if p else None
+                if name:
+                    for e in self._db.get_all_psyke_entries(self._project_id):
+                        if e.name.lower() == name.lower():
+                            psyke_view.select_entry(e.id)
+                            break
         elif entity_type == "Note":
             self._set_active_section("Notes")
             view = NotesView(
@@ -1038,9 +1015,8 @@ class MainWindow(QMainWindow):
             ("Scenes", self._show_scenes, "Ctrl+2"),
             ("Manuscript", self._show_manuscript, "Ctrl+3"),
             ("Timeline", self._show_timeline, "Ctrl+4"),
-            ("Characters", self._show_characters, "Ctrl+5"),
-            ("Notes", self._show_notes, "Ctrl+6"),
-            ("PSYKE", self._show_psyke, "Ctrl+7"),
+            ("Notes", self._show_notes, "Ctrl+5"),
+            ("PSYKE", self._show_psyke, "Ctrl+6"),
         ]
         for label, handler, shortcut in nav_items:
             act = QAction(label, self)

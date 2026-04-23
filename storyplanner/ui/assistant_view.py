@@ -409,7 +409,7 @@ class AssistantPanel(QWidget):
         settings_layout.setSpacing(4)
         self._outline_check = QCheckBox("Include story outline")
         self._story_memory_check = QCheckBox("Include story memory")
-        self._psyke_check = QCheckBox("Include Story Bible")
+        self._psyke_check = QCheckBox("PSYKE")
         settings_layout.addWidget(self._outline_check)
         settings_layout.addWidget(self._story_memory_check)
         settings_layout.addWidget(self._psyke_check)
@@ -701,8 +701,8 @@ class AssistantPanel(QWidget):
 
         psyke_ctx = ""
         orchestration_debug = ""
-        if self._psyke_check.isChecked() and scene_id is not None:
-            if action_key:
+        if self._psyke_check.isChecked():
+            if action_key and scene_id is not None:
                 mode = resolve_mode(action_key)
                 result = orchestrate_psyke_context(
                     self._db, self._project_id, scene_id, mode,

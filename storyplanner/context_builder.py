@@ -375,15 +375,35 @@ def _build_position_section(
 def gather_psyke_context(
     db: Database,
     project_id: int,
-    scene_id: int,
+    scene_id: int | None = None,
 ) -> str:
     entries = db.get_all_psyke_entries(project_id)
+
+    characters = db.get_all_characters(project_id)
+    places = db.get_all_places(project_id)
+    psyke_names = {e.name.lower() for e in entries}
+    for char in characters:
+        if char.name.lower() not in psyke_names:
+            entries.append(_LegacyAsPsyke(
+                char.id + 1_000_000, char.name, "character",
+                char.description or "",
+            ))
+    for place in places:
+        if place.name.lower() not in psyke_names:
+            entries.append(_LegacyAsPsyke(
+                place.id + 2_000_000, place.name, "place",
+                place.description or "",
+            ))
+
     if not entries:
         return ""
 
+    if scene_id is None:
+        return _gather_psyke_all(entries)
+
     scene = db.get_scene_by_id(scene_id)
     if scene is None:
-        return ""
+        return _gather_psyke_all(entries)
 
     all_scenes = db.get_all_scenes(project_id)
     scene_order = {s.id: s.sort_order for s in all_scenes}
@@ -444,6 +464,45 @@ def gather_psyke_context(
         parts.append("")
         parts.append("Related:")
         parts.extend(related_lines)
+
+    return "\n".join(parts)
+
+
+class _LegacyAsPsyke:
+    """Adapter so Character/Place records look like PsykeEntry for context."""
+
+    def __init__(self, id_: int, name: str, entry_type: str, notes: str):
+        self.id = id_
+        self.name = name
+        self.entry_type = entry_type
+        self.notes = notes
+        self.aliases = ""
+        self.is_global = False
+        self.details_json = ""
+
+
+def _gather_psyke_all(entries: list) -> str:
+    """Build PSYKE context without scene filtering (include everything)."""
+    global_lines: list[str] = []
+    other_lines: list[str] = []
+    for entry in entries:
+        if entry.is_global:
+            global_lines.append(_format_psyke_entry(entry, PSYKE_GLOBAL_NOTES_MAX))
+        else:
+            other_lines.append(_format_psyke_entry(entry, PSYKE_GLOBAL_NOTES_MAX))
+
+    if not global_lines and not other_lines:
+        return ""
+
+    parts = ["[PSYKE Context]"]
+    if global_lines:
+        parts.append("")
+        parts.append("Global:")
+        parts.extend(global_lines)
+    if other_lines:
+        parts.append("")
+        parts.append("Entries:")
+        parts.extend(other_lines)
 
     return "\n".join(parts)
 
