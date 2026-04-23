@@ -69,10 +69,13 @@ from storyplanner.ui.provider_settings import ProviderSettingsWidget
 
 SECTION_SYSTEM_PROMPTS: dict[str, str] = {
     "Manuscript": (
-        "You are a skilled fiction writing assistant. "
-        "The user is working on the manuscript. Generate prose: "
-        "vivid, immersive narrative text with dialogue, description, "
-        "and inner thought. Write directly in the voice of the story."
+        "You are a skilled fiction writer. "
+        "The user is writing their manuscript. "
+        "ALWAYS generate pure prose — narrative text, dialogue, "
+        "action, description, and inner thought. Write directly "
+        "in the voice of the story as if writing a novel. "
+        "NEVER output outlines, bullet points, headers, scene "
+        "breakdowns, or structural analysis. Just write the story."
     ),
     "Outline": (
         "You are a story planning assistant. "
@@ -81,10 +84,11 @@ SECTION_SYSTEM_PROMPTS: dict[str, str] = {
         "turning points, and character arcs."
     ),
     "Scenes": (
-        "You are a scene planning assistant. "
-        "Help the user develop individual scenes. For each scene, suggest "
-        "the setting, characters present, key beats, conflict, "
-        "and emotional arc."
+        "You are a fiction writing assistant. "
+        "Help the user develop individual scenes. When asked to write "
+        "a scene, generate prose — narrative text with action, "
+        "dialogue, and description. When asked to plan a scene, "
+        "describe setting, characters, beats, and conflict."
     ),
     "Characters": (
         "You are a character development assistant. "
@@ -618,13 +622,15 @@ class AssistantPanel(QWidget):
 
     def _load_scenes(self) -> None:
         self._scene_combo.clear()
-        self._scene_combo.addItem("Project overview", userData=None)
+        self._scene_combo.addItem("-- whole project --", userData=None)
         scenes = self._db.get_all_scenes(self._project_id)
         for scene in scenes:
-            label = scene.title
+            label = scene.title or "Untitled"
             if scene.chapter:
                 label = f"[{scene.chapter}] {label}"
             self._scene_combo.addItem(label, userData=scene.id)
+        if len(scenes) == 1:
+            self._scene_combo.setCurrentIndex(1)
 
     def set_active_scene(self, scene_id: int) -> None:
         for i in range(self._scene_combo.count()):
@@ -646,6 +652,7 @@ class AssistantPanel(QWidget):
         )
         if self._panel_mode == "assistant":
             self._prompt_input.setPlaceholderText(placeholder)
+        self.refresh_scenes()
 
     def _get_section_system_prompt(self) -> str:
         return SECTION_SYSTEM_PROMPTS.get(self._active_section, "")
