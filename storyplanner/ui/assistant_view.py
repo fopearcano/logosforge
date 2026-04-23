@@ -486,7 +486,7 @@ class AssistantPanel(QWidget):
         )
         self._layout.addWidget(self._response_output, stretch=1)
 
-        # Apply actions: Replace | Insert at Cursor | More▾
+        # Apply actions: Copy | Replace | Insert | Append
         apply_row = QHBoxLayout()
         apply_row.setSpacing(4)
 
