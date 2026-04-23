@@ -67,6 +67,86 @@ from storyplanner.ui.mode_strip import ModeStrip
 from storyplanner.ui.provider_settings import ProviderSettingsWidget
 
 
+SECTION_SYSTEM_PROMPTS: dict[str, str] = {
+    "Manuscript": (
+        "You are a skilled fiction writing assistant. "
+        "The user is working on the manuscript. Generate prose: "
+        "vivid, immersive narrative text with dialogue, description, "
+        "and inner thought. Write directly in the voice of the story."
+    ),
+    "Outline": (
+        "You are a story planning assistant. "
+        "The user is building the story outline. Generate a structured outline: "
+        "numbered scenes or chapters with brief descriptions of key events, "
+        "turning points, and character arcs."
+    ),
+    "Scenes": (
+        "You are a scene planning assistant. "
+        "Help the user develop individual scenes. For each scene, suggest "
+        "the setting, characters present, key beats, conflict, "
+        "and emotional arc."
+    ),
+    "Characters": (
+        "You are a character development assistant. "
+        "Help the user flesh out characters: personality traits, backstory, "
+        "motivations, relationships, speech patterns, and arc."
+    ),
+    "Plot": (
+        "You are a plot development assistant. "
+        "Help the user structure the plot. Focus on cause and effect, "
+        "escalation, stakes, subplots, and story beats."
+    ),
+    "Acts": (
+        "You are a story structure assistant. "
+        "Help the user organize the story into acts. Analyze structure, "
+        "identify act breaks, midpoints, climax placement, and pacing."
+    ),
+    "Beats": (
+        "You are a narrative beat analyst. "
+        "Help the user plan and refine story beats: emotional shifts, "
+        "revelations, reversals, and micro-tensions within scenes."
+    ),
+    "Dialogue": (
+        "You are a dialogue specialist. "
+        "Help the user write natural, character-appropriate dialogue "
+        "with subtext, rhythm, and distinct voices."
+    ),
+    "Notes": (
+        "You are a creative writing assistant. "
+        "The user is taking notes. Help organize ideas, brainstorm, "
+        "and develop raw concepts into structured story material."
+    ),
+    "Places": (
+        "You are a worldbuilding assistant. "
+        "Help the user develop locations: atmosphere, sensory details, "
+        "history, significance to the plot, and mood."
+    ),
+    "Pacing": (
+        "You are a pacing analyst. "
+        "Analyze and suggest improvements to narrative pacing: rhythm, "
+        "scene length, tension curves, and breathing room."
+    ),
+    "PSYKE": (
+        "You are a story bible assistant. "
+        "Help the user develop and organize their story bible: rules, "
+        "lore, character facts, world details, and continuity notes."
+    ),
+}
+
+SECTION_PLACEHOLDERS: dict[str, str] = {
+    "Manuscript": "Describe what to write: a scene, continuation, dialogue...",
+    "Outline": "Describe your story idea or ask to structure the plot...",
+    "Scenes": "Describe the scene you want to develop...",
+    "Characters": "Describe a character to develop or ask for suggestions...",
+    "Plot": "Ask about plot structure, stakes, subplots...",
+    "Acts": "Ask about act structure, turning points...",
+    "Beats": "Ask about beats, emotional shifts, revelations...",
+    "Notes": "Brainstorm, develop ideas, or ask questions...",
+    "Places": "Describe a location to develop or ask for details...",
+    "Pacing": "Ask about pacing, rhythm, scene lengths...",
+    "PSYKE": "Ask about story rules, lore, continuity...",
+}
+
 class _AssistantWorker(QThread):
     completed = Signal(str, bool)
     failed = Signal(str)
@@ -105,6 +185,7 @@ class AssistantPanel(QWidget):
         self._project_id = project_id
         self._on_data_changed = on_data_changed
         self._on_open_scene = on_open_scene
+        self._active_section: str = "Dashboard"
         self._worker: _AssistantWorker | None = None
         self._pending_messages: list[dict] | None = None
 
@@ -471,11 +552,12 @@ class AssistantPanel(QWidget):
         # Mode strip only relevant for assistant
         self._mode_strip.setVisible(is_assistant)
 
-        # Update placeholder
         if is_assistant:
-            self._prompt_input.setPlaceholderText(
-                "Instructions or questions about the scene..."
+            placeholder = SECTION_PLACEHOLDERS.get(
+                self._active_section,
+                "Instructions or questions about your story...",
             )
+            self._prompt_input.setPlaceholderText(placeholder)
         else:
             self._prompt_input.setPlaceholderText(
                 "Ask about your scene, request feedback, or reflect..."
@@ -556,6 +638,17 @@ class AssistantPanel(QWidget):
         if current is not None:
             self.set_active_scene(current)
         self._mode_strip.refresh()
+
+    def set_active_section_name(self, name: str) -> None:
+        self._active_section = name
+        placeholder = SECTION_PLACEHOLDERS.get(
+            name, "Instructions or questions about your story..."
+        )
+        if self._panel_mode == "assistant":
+            self._prompt_input.setPlaceholderText(placeholder)
+
+    def _get_section_system_prompt(self) -> str:
+        return SECTION_SYSTEM_PROMPTS.get(self._active_section, "")
 
     # -- Sending requests ------------------------------------------------------
 
@@ -645,6 +738,7 @@ class AssistantPanel(QWidget):
             user_note=user_note,
             structural_context=struct_ctx,
             irrational_context=irr_ctx,
+            system_prompt=self._get_section_system_prompt(),
         )
         self._update_ctx_viewer(
             scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, action_prompt,
@@ -677,6 +771,7 @@ class AssistantPanel(QWidget):
             mode_context=mode_ctx,
             structural_context=struct_ctx,
             irrational_context=irr_ctx,
+            system_prompt=self._get_section_system_prompt(),
         )
         self._update_ctx_viewer(
             scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, prompt,

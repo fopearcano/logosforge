@@ -108,6 +108,7 @@ class MainWindow(QMainWindow):
         self._project_id = project_id
         self._current_file: str | None = None
         self._dirty = False
+        self._current_section: str = "Dashboard"
         self._cached_scenes_view: ScenesView | None = None
         self._update_title()
         self.resize(900, 600)
@@ -602,8 +603,10 @@ class MainWindow(QMainWindow):
         self._sidebar.update()
 
     def _set_active_section(self, name: str) -> None:
+        self._current_section = name
         for label in self._nav_labels:
             self.sidebar_buttons[label].setChecked(label == name)
+        self._assistant_panel.set_active_section_name(name)
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)

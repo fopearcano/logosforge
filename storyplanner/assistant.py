@@ -56,6 +56,15 @@ PRESET_ACTIONS = {
 }
 
 
+DEFAULT_SYSTEM_PROMPT = (
+    "You are a skilled writing assistant helping a fiction author. "
+    "You have access to the current scene and story context. "
+    "Provide clear, creative, and actionable writing assistance. "
+    "Respond directly with your writing or suggestions — "
+    "no meta-commentary about being an AI."
+)
+
+
 def build_messages(
     action_prompt: str,
     scene_context: str,
@@ -67,14 +76,9 @@ def build_messages(
     user_note: str = "",
     structural_context: str = "",
     irrational_context: str = "",
+    system_prompt: str = "",
 ) -> list[dict]:
-    system = (
-        "You are a skilled writing assistant helping a fiction author. "
-        "You have access to the current scene and story context. "
-        "Provide clear, creative, and actionable writing assistance. "
-        "Respond directly with your writing or suggestions — "
-        "no meta-commentary about being an AI."
-    )
+    system = system_prompt or DEFAULT_SYSTEM_PROMPT
 
     user_parts: list[str] = []
     if mode_context:
