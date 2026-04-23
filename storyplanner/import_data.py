@@ -163,4 +163,22 @@ def import_json(db: Database, data: dict) -> int:
             scene_id = scene_id_by_title.get(scene_title) if scene_title else None
             db.create_psyke_progression(entry_id, text, scene_id=scene_id)
 
+    # Restore outline nodes (optional — absent in older exports)
+    outline_data = data.get("outline", [])
+    if outline_data:
+        def _create_outline_nodes(items: list, parent_id: int | None) -> None:
+            for i, item in enumerate(items):
+                node = db.create_outline_node(
+                    project_id,
+                    title=item.get("title", ""),
+                    description=item.get("description", ""),
+                    parent_id=parent_id,
+                    sort_order=i,
+                )
+                children = item.get("children", [])
+                if children:
+                    _create_outline_nodes(children, node.id)
+
+        _create_outline_nodes(outline_data, None)
+
     return project_id

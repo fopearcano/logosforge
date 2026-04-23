@@ -141,3 +141,15 @@ class StoryMemoryEntry(SQLModel, table=True):
     target: str = ""  # character name, or empty for events
     value: str = ""
     created_at: datetime = Field(default_factory=_now)
+
+
+class OutlineNode(SQLModel, table=True):
+    """A node in the hierarchical story outline."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id")
+    parent_id: Optional[int] = Field(default=None)
+    title: str
+    description: str = ""
+    sort_order: int = 0
+    created_at: datetime = Field(default_factory=_now)

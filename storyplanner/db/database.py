@@ -16,6 +16,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 from storyplanner.models import (
     Character,
     Note,
+    OutlineNode,
     Place,
     Project,
     PsykeEntry,
@@ -1004,6 +1005,95 @@ class Database:
                 .where(StoryMemoryEntry.target == target)
             )
             return session.exec(stmt).first() is not None
+
+    # -- Outline Nodes -------------------------------------------------------
+
+    def get_outline_nodes(self, project_id: int) -> list[OutlineNode]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(OutlineNode)
+                .where(OutlineNode.project_id == project_id)
+                .order_by(OutlineNode.sort_order, OutlineNode.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def get_outline_node_by_id(self, node_id: int) -> OutlineNode | None:
+        with Session(self._engine) as session:
+            return session.get(OutlineNode, node_id)
+
+    def get_outline_children(
+        self, project_id: int, parent_id: int | None,
+    ) -> list[OutlineNode]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(OutlineNode)
+                .where(OutlineNode.project_id == project_id)
+                .where(OutlineNode.parent_id == parent_id)
+                .order_by(OutlineNode.sort_order, OutlineNode.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def create_outline_node(
+        self,
+        project_id: int,
+        title: str,
+        description: str = "",
+        parent_id: int | None = None,
+        sort_order: int = 0,
+    ) -> OutlineNode:
+        with Session(self._engine) as session:
+            node = OutlineNode(
+                project_id=project_id,
+                parent_id=parent_id,
+                title=title,
+                description=description,
+                sort_order=sort_order,
+            )
+            session.add(node)
+            session.commit()
+            session.refresh(node)
+            return node
+
+    def update_outline_node(
+        self,
+        node_id: int,
+        title: str | None = None,
+        description: str | None = None,
+        sort_order: int | None = None,
+    ) -> None:
+        with Session(self._engine) as session:
+            node = session.get(OutlineNode, node_id)
+            if node is None:
+                return
+            if title is not None:
+                node.title = title
+            if description is not None:
+                node.description = description
+            if sort_order is not None:
+                node.sort_order = sort_order
+            session.commit()
+
+    def delete_outline_node(self, node_id: int) -> None:
+        with Session(self._engine) as session:
+            children = session.exec(
+                select(OutlineNode).where(OutlineNode.parent_id == node_id)
+            ).all()
+            for child in children:
+                self.delete_outline_node(child.id)
+            node = session.get(OutlineNode, node_id)
+            if node:
+                session.delete(node)
+                session.commit()
+
+    def delete_all_outline_nodes(self, project_id: int) -> None:
+        with Session(self._engine) as session:
+            nodes = session.exec(
+                select(OutlineNode)
+                .where(OutlineNode.project_id == project_id)
+            ).all()
+            for node in nodes:
+                session.delete(node)
+            session.commit()
 
     @staticmethod
     def _matches(query_lower: str, *fields: str) -> bool:

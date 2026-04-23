@@ -453,7 +453,12 @@ class MainWindow(QMainWindow):
         )
 
     def _show_outline(self) -> None:
-        self._set_content(OutlineView(self._db, self._project_id))
+        self._set_content(
+            OutlineView(
+                self._db, self._project_id,
+                on_data_changed=self._on_data_changed,
+            )
+        )
 
     def _show_structure(self) -> None:
         self._set_content(StructureView(self._db, self._project_id))

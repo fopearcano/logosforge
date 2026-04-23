@@ -1,322 +1,516 @@
-"""Outline view — read-only outline with Structure and Prose modes."""
+"""Outline view — editable story structure with template presets."""
 
-from PySide6.QtCore import Qt
+from __future__ import annotations
+
+from collections.abc import Callable
+
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
+    QComboBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
-    QTextBrowser,
+    QSplitter,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
 from storyplanner.db import Database
-from storyplanner.export import export_outline_markdown
+from storyplanner.outline_templates import OUTLINE_TEMPLATES, list_templates
 from storyplanner.ui import theme
+
+_NODE_ID_ROLE = Qt.ItemDataRole.UserRole
 
 
 class OutlineView(QWidget):
-    def __init__(self, db: Database, project_id: int) -> None:
+    def __init__(
+        self,
+        db: Database,
+        project_id: int,
+        on_data_changed: Callable[[], None] | None = None,
+    ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
-        self._mode = "structure"
+        self._on_data_changed = on_data_changed
+        self._current_node_id: int | None = None
+        self._suppress = False
 
-        layout = QVBoxLayout(self)
+        self._save_timer = QTimer()
+        self._save_timer.setSingleShot(True)
+        self._save_timer.setInterval(300)
+        self._save_timer.timeout.connect(self._flush_description)
 
-        toolbar = QHBoxLayout()
-        toolbar.setSpacing(8)
+        self._build_ui()
+        self._load_outline()
 
-        self._structure_btn = QPushButton("Structure")
-        self._structure_btn.setCheckable(True)
-        self._structure_btn.setChecked(True)
-        self._structure_btn.clicked.connect(lambda: self._set_mode("structure"))
-        toolbar.addWidget(self._structure_btn)
+    # -- Layout ----------------------------------------------------------------
 
-        self._prose_btn = QPushButton("Prose")
-        self._prose_btn.setCheckable(True)
-        self._prose_btn.clicked.connect(lambda: self._set_mode("prose"))
-        toolbar.addWidget(self._prose_btn)
+    def _build_ui(self) -> None:
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        toolbar.addStretch()
+        # -- Toolbar -----------------------------------------------------------
+        toolbar = QWidget()
+        toolbar.setObjectName("outlineToolbar")
+        tb = QHBoxLayout(toolbar)
+        tb.setContentsMargins(12, 8, 12, 8)
+        tb.setSpacing(8)
 
-        self._export_btn = QPushButton("Export")
-        self._export_btn.clicked.connect(self._on_export)
-        toolbar.addWidget(self._export_btn)
+        tb.addWidget(QLabel("Template:"))
+        self._template_combo = QComboBox()
+        self._template_combo.addItem("Choose a template…", userData="")
+        for key, name, desc in list_templates():
+            self._template_combo.addItem(name, userData=key)
+            self._template_combo.setItemData(
+                self._template_combo.count() - 1, desc, Qt.ItemDataRole.ToolTipRole,
+            )
+        tb.addWidget(self._template_combo)
 
-        layout.addLayout(toolbar)
+        apply_btn = QPushButton("Apply")
+        apply_btn.setToolTip("Replace outline with the selected template")
+        apply_btn.clicked.connect(self._apply_template)
+        tb.addWidget(apply_btn)
 
-        self._browser = QTextBrowser()
-        self._browser.setOpenLinks(False)
-        layout.addWidget(self._browser)
+        tb.addSpacing(16)
 
-        self._render()
+        add_section_btn = QPushButton("+ Section")
+        add_section_btn.setToolTip("Add a top-level section (act / part)")
+        add_section_btn.clicked.connect(self._add_section)
+        tb.addWidget(add_section_btn)
 
-    def _set_mode(self, mode: str) -> None:
-        self._mode = mode
-        self._structure_btn.setChecked(mode == "structure")
-        self._prose_btn.setChecked(mode == "prose")
-        self._render()
+        add_beat_btn = QPushButton("+ Beat")
+        add_beat_btn.setToolTip("Add a beat under the selected section")
+        add_beat_btn.clicked.connect(self._add_beat)
+        tb.addWidget(add_beat_btn)
 
-    def _on_export(self) -> None:
-        if self._mode == "structure":
-            self._export_structure()
-        else:
-            self._export_prose()
+        delete_btn = QPushButton("Delete")
+        delete_btn.clicked.connect(self._delete_node)
+        tb.addWidget(delete_btn)
 
-    def _export_structure(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export Outline", "", "Markdown (*.md)",
+        tb.addSpacing(8)
+
+        up_btn = QPushButton("▲")
+        up_btn.setFixedWidth(28)
+        up_btn.setToolTip("Move up")
+        up_btn.clicked.connect(self._move_up)
+        tb.addWidget(up_btn)
+
+        down_btn = QPushButton("▼")
+        down_btn.setFixedWidth(28)
+        down_btn.setToolTip("Move down")
+        down_btn.clicked.connect(self._move_down)
+        tb.addWidget(down_btn)
+
+        tb.addStretch()
+
+        export_btn = QPushButton("Export")
+        export_btn.clicked.connect(self._export_outline)
+        tb.addWidget(export_btn)
+
+        root.addWidget(toolbar)
+
+        # -- Splitter: tree + editor -------------------------------------------
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+
+        # Left: tree
+        self._tree = QTreeWidget()
+        self._tree.setHeaderHidden(True)
+        self._tree.setIndentation(20)
+        self._tree.setMinimumWidth(200)
+        self._tree.currentItemChanged.connect(self._on_item_selected)
+        self._tree.setStyleSheet(
+            f"QTreeWidget {{ border: none; background: {theme.BG_PRIMARY}; }}"
+            f"QTreeWidget::item {{ padding: 4px 6px; }}"
+            f"QTreeWidget::item:selected {{"
+            f"  background: {theme.ACCENT}; color: #ffffff;"
+            f"}}"
         )
-        if not path:
-            return
-        if not path.endswith(".md"):
-            path += ".md"
-        content = export_outline_markdown(self._db, self._project_id)
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(content)
-        QMessageBox.information(self, "Export", f"Outline exported to {path}")
+        splitter.addWidget(self._tree)
 
-    def _export_prose(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export Prose Outline", "", "Text (*.txt)",
+        # Right: editor
+        editor = QWidget()
+        editor.setMinimumWidth(300)
+        ed = QVBoxLayout(editor)
+        ed.setContentsMargins(16, 16, 16, 16)
+        ed.setSpacing(10)
+
+        self._editor_label = QLabel("Select or create a section to begin")
+        label_font = QFont()
+        label_font.setBold(True)
+        self._editor_label.setFont(label_font)
+        self._editor_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY};")
+        ed.addWidget(self._editor_label)
+
+        title_label = QLabel("Title")
+        title_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 11px;")
+        ed.addWidget(title_label)
+
+        self._title_input = QLineEdit()
+        self._title_input.setPlaceholderText("Beat title")
+        self._title_input.textChanged.connect(self._on_title_changed)
+        ed.addWidget(self._title_input)
+
+        desc_label = QLabel("Description")
+        desc_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 11px;")
+        ed.addWidget(desc_label)
+
+        self._desc_input = QPlainTextEdit()
+        self._desc_input.setPlaceholderText(
+            "Write your outline notes, scene ideas, or structure plan…"
         )
-        if not path:
-            return
-        if not path.endswith(".txt"):
-            path += ".txt"
-        text = self._build_prose_text()
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(text)
-        QMessageBox.information(self, "Export", f"Outline exported to {path}")
+        self._desc_input.textChanged.connect(self._on_desc_changed)
+        self._desc_input.setStyleSheet(
+            f"QPlainTextEdit {{"
+            f"  background-color: {theme.BG_PANEL};"
+            f"  color: {theme.TEXT_PRIMARY};"
+            f"  border: 1px solid {theme.BORDER};"
+            f"  border-radius: 4px; padding: 8px;"
+            f"}}"
+        )
+        ed.addWidget(self._desc_input, stretch=1)
 
-    # -- Rendering ---------------------------------------------------------------
+        splitter.addWidget(editor)
+        splitter.setSizes([280, 520])
+        root.addWidget(splitter, stretch=1)
 
-    def _render(self) -> None:
-        if self._mode == "structure":
-            self._render_structure()
-        else:
-            self._render_prose()
+        self._set_editor_enabled(False)
 
-    def _render_structure(self) -> None:
-        project = self._db.get_project_by_id(self._project_id)
-        characters = self._db.get_all_characters(self._project_id)
-        places = self._db.get_all_places(self._project_id)
-        scenes = self._db.get_all_scenes(self._project_id)
+    # -- Tree operations -------------------------------------------------------
 
-        char_name_by_id = {c.id: c.name for c in characters}
-        place_name_by_id = {p.id: p.name for p in places}
+    def _load_outline(self) -> None:
+        self._tree.clear()
+        nodes = self._db.get_outline_nodes(self._project_id)
 
-        html_parts: list[str] = []
-        title = project.title if project else "Untitled"
-        html_parts.append(f"<h1>{_esc(title)}</h1>")
+        children_map: dict[int | None, list] = {}
+        for node in nodes:
+            children_map.setdefault(node.parent_id, []).append(node)
 
-        if not scenes:
-            html_parts.append("<p>No scenes to display.</p>")
-            self._browser.setHtml("".join(html_parts))
-            return
+        self._populate_tree(None, children_map, None)
+        self._tree.expandAll()
 
-        chapter_groups = _group_by_chapter(scenes)
+        if self._tree.topLevelItemCount() == 0:
+            self._current_node_id = None
+            self._set_editor_enabled(False)
 
-        scene_index = 0
-        for chapter_name, group_scenes in chapter_groups:
-            if chapter_name:
-                html_parts.append(f"<h2>{_esc(chapter_name)}</h2>")
-            else:
-                html_parts.append("<h2>Uncategorized</h2>")
-
-            for scene in group_scenes:
-                scene_index += 1
-                html_parts.append(
-                    self._render_structure_scene(
-                        scene, scene_index, char_name_by_id, place_name_by_id,
-                    )
-                )
-
-        self._browser.setHtml("".join(html_parts))
-
-    def _render_structure_scene(
+    def _populate_tree(
         self,
-        scene,
-        index: int,
-        char_name_by_id: dict[int, str],
-        place_name_by_id: dict[int, str],
-    ) -> str:
-        parts: list[str] = []
-        parts.append(f"<h3>{index}. {_esc(scene.title)}</h3>")
+        parent_id: int | None,
+        children_map: dict[int | None, list],
+        parent_item: QTreeWidgetItem | None,
+    ) -> None:
+        children = children_map.get(parent_id, [])
+        children.sort(key=lambda n: (n.sort_order, n.id))
 
-        meta_lines: list[str] = []
-        if scene.act:
-            meta_lines.append(f"<b>Act:</b> {_esc(scene.act)}")
-        if scene.plotline:
-            meta_lines.append(f"<b>Plotline:</b> {_esc(scene.plotline)}")
-        if scene.beat:
-            meta_lines.append(f"<b>Beat:</b> {_esc(scene.beat)}")
-        if scene.tags:
-            meta_lines.append(f"<b>Tags:</b> {_esc(scene.tags)}")
+        for node in children:
+            item = QTreeWidgetItem()
+            item.setText(0, node.title)
+            item.setData(0, _NODE_ID_ROLE, node.id)
 
-        char_ids = self._db.get_scene_character_ids(scene.id)
-        char_names = [
-            char_name_by_id[cid] for cid in char_ids if cid in char_name_by_id
-        ]
-        if char_names:
-            meta_lines.append(
-                f"<b>Characters:</b> {_esc(', '.join(char_names))}"
+            if parent_id is None:
+                font = item.font(0)
+                font.setBold(True)
+                item.setFont(0, font)
+
+            if parent_item is None:
+                self._tree.addTopLevelItem(item)
+            else:
+                parent_item.addChild(item)
+
+            self._populate_tree(node.id, children_map, item)
+
+    def _find_tree_item(self, node_id: int) -> QTreeWidgetItem | None:
+        def _search(parent_item: QTreeWidgetItem | None) -> QTreeWidgetItem | None:
+            count = (
+                parent_item.childCount()
+                if parent_item
+                else self._tree.topLevelItemCount()
             )
+            for i in range(count):
+                child = (
+                    parent_item.child(i)
+                    if parent_item
+                    else self._tree.topLevelItem(i)
+                )
+                if child.data(0, _NODE_ID_ROLE) == node_id:
+                    return child
+                found = _search(child)
+                if found:
+                    return found
+            return None
 
-        place_ids = self._db.get_scene_place_ids(scene.id)
-        place_names = [
-            place_name_by_id[pid] for pid in place_ids if pid in place_name_by_id
-        ]
-        if place_names:
-            meta_lines.append(
-                f"<b>Places:</b> {_esc(', '.join(place_names))}"
-            )
+        return _search(None)
 
-        if meta_lines:
-            parts.append("<p>" + "<br>".join(meta_lines) + "</p>")
+    def _select_node(self, node_id: int) -> None:
+        item = self._find_tree_item(node_id)
+        if item:
+            self._tree.setCurrentItem(item)
 
-        if scene.summary:
-            parts.append(f"<p>{_esc(scene.summary)}</p>")
+    # -- Editor ----------------------------------------------------------------
 
-        if scene.synopsis:
-            parts.append(f"<p><b>Synopsis:</b> {_esc(scene.synopsis)}</p>")
+    def _set_editor_enabled(self, enabled: bool) -> None:
+        self._title_input.setEnabled(enabled)
+        self._desc_input.setEnabled(enabled)
+        if not enabled:
+            self._suppress = True
+            self._title_input.clear()
+            self._desc_input.clear()
+            self._editor_label.setText("Select or create a section to begin")
+            self._suppress = False
 
-        gco: list[str] = []
-        if scene.goal:
-            gco.append(f"<b>Goal:</b> {_esc(scene.goal)}")
-        if scene.conflict:
-            gco.append(f"<b>Conflict:</b> {_esc(scene.conflict)}")
-        if scene.outcome:
-            gco.append(f"<b>Outcome:</b> {_esc(scene.outcome)}")
-        if gco:
-            parts.append("<p>" + "<br>".join(gco) + "</p>")
-
-        char_states = self._db.get_scene_character_states(scene.id)
-        if char_states:
-            state_lines = []
-            for cid, state in char_states:
-                cname = char_name_by_id.get(cid, "Unknown")
-                state_lines.append(f"{_esc(cname)}: {_esc(state)}")
-            parts.append(
-                "<p><b>Character States:</b><br>"
-                + "<br>".join(state_lines)
-                + "</p>"
-            )
-
-        return "".join(parts)
-
-    def _render_prose(self) -> None:
-        project = self._db.get_project_by_id(self._project_id)
-        scenes = self._db.get_all_scenes(self._project_id)
-
-        parts: list[str] = []
-        title = project.title if project else "Untitled"
-        parts.append(f"<h1>{_esc(title)}</h1>")
-
-        if not scenes:
-            parts.append("<p>No scenes yet.</p>")
-            self._browser.setHtml("".join(parts))
+    def _on_item_selected(
+        self, current: QTreeWidgetItem | None, _prev: QTreeWidgetItem | None,
+    ) -> None:
+        if current is None:
+            self._current_node_id = None
+            self._set_editor_enabled(False)
             return
 
-        chapter_groups = _group_by_chapter(scenes)
+        node_id = current.data(0, _NODE_ID_ROLE)
+        self._current_node_id = node_id
+        node = self._db.get_outline_node_by_id(node_id)
+        if node is None:
+            self._set_editor_enabled(False)
+            return
 
-        scene_index = 0
-        for chapter_name, group_scenes in chapter_groups:
-            if chapter_name:
-                parts.append(f"<h2>{_esc(chapter_name)}</h2>")
+        self._suppress = True
+        self._set_editor_enabled(True)
+        self._title_input.setText(node.title)
+        self._desc_input.setPlainText(node.description)
+        is_section = current.parent() is None
+        self._editor_label.setText("Section" if is_section else "Beat")
+        self._suppress = False
 
-            for scene in group_scenes:
-                scene_index += 1
-                parts.append(self._render_prose_scene(scene, scene_index))
+    def _on_title_changed(self, text: str) -> None:
+        if self._suppress or self._current_node_id is None:
+            return
+        self._db.update_outline_node(self._current_node_id, title=text)
+        current = self._tree.currentItem()
+        if current:
+            current.setText(0, text)
+        self._notify()
 
-        self._browser.setHtml("".join(parts))
+    def _on_desc_changed(self) -> None:
+        if self._suppress or self._current_node_id is None:
+            return
+        self._save_timer.start()
 
-    def _render_prose_scene(self, scene, index: int) -> str:
-        parts: list[str] = []
-        parts.append(f"<h3>{index}. {_esc(scene.title)}</h3>")
+    def _flush_description(self) -> None:
+        if self._current_node_id is None:
+            return
+        self._db.update_outline_node(
+            self._current_node_id,
+            description=self._desc_input.toPlainText(),
+        )
+        self._notify()
 
-        if scene.synopsis:
-            parts.append(
-                f"<p style='color: {theme.TEXT_SECONDARY}; font-style: italic;'>"
-                f"{_esc(scene.synopsis)}</p>"
+    # -- Add / delete ----------------------------------------------------------
+
+    def _add_section(self) -> None:
+        siblings = self._db.get_outline_children(self._project_id, None)
+        node = self._db.create_outline_node(
+            self._project_id, "New Section",
+            parent_id=None, sort_order=len(siblings),
+        )
+        self._load_outline()
+        self._select_node(node.id)
+        self._title_input.selectAll()
+        self._title_input.setFocus()
+        self._notify()
+
+    def _add_beat(self) -> None:
+        current = self._tree.currentItem()
+        if current is None:
+            self._add_section()
+            return
+
+        section_item = current
+        while section_item.parent() is not None:
+            section_item = section_item.parent()
+        parent_id = section_item.data(0, _NODE_ID_ROLE)
+
+        siblings = self._db.get_outline_children(self._project_id, parent_id)
+        node = self._db.create_outline_node(
+            self._project_id, "New Beat",
+            parent_id=parent_id, sort_order=len(siblings),
+        )
+        self._load_outline()
+        self._select_node(node.id)
+        self._title_input.selectAll()
+        self._title_input.setFocus()
+        self._notify()
+
+    def _delete_node(self) -> None:
+        current = self._tree.currentItem()
+        if current is None:
+            return
+        node_id = current.data(0, _NODE_ID_ROLE)
+        has_children = current.childCount() > 0
+        msg = (
+            "Delete this section and all its beats?"
+            if has_children
+            else "Delete this item?"
+        )
+        answer = QMessageBox.question(
+            self, "Delete", msg,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        self._db.delete_outline_node(node_id)
+        self._current_node_id = None
+        self._load_outline()
+        self._set_editor_enabled(False)
+        self._notify()
+
+    # -- Reorder ---------------------------------------------------------------
+
+    def _move_up(self) -> None:
+        self._swap_sibling(-1)
+
+    def _move_down(self) -> None:
+        self._swap_sibling(1)
+
+    def _swap_sibling(self, direction: int) -> None:
+        current = self._tree.currentItem()
+        if current is None:
+            return
+        node_id = current.data(0, _NODE_ID_ROLE)
+        node = self._db.get_outline_node_by_id(node_id)
+        if node is None:
+            return
+
+        siblings = self._db.get_outline_children(self._project_id, node.parent_id)
+        siblings.sort(key=lambda n: (n.sort_order, n.id))
+        idx = next((i for i, n in enumerate(siblings) if n.id == node_id), -1)
+        target = idx + direction
+        if idx < 0 or target < 0 or target >= len(siblings):
+            return
+
+        other = siblings[target]
+        self._db.update_outline_node(node_id, sort_order=other.sort_order)
+        self._db.update_outline_node(other.id, sort_order=node.sort_order)
+        if node.sort_order == other.sort_order:
+            self._db.update_outline_node(node_id, sort_order=target)
+            self._db.update_outline_node(other.id, sort_order=idx)
+        self._load_outline()
+        self._select_node(node_id)
+        self._notify()
+
+    # -- Templates -------------------------------------------------------------
+
+    def _apply_template(self) -> None:
+        key = self._template_combo.currentData()
+        if not key:
+            return
+        template = OUTLINE_TEMPLATES.get(key)
+        if not template:
+            return
+
+        existing = self._db.get_outline_nodes(self._project_id)
+        if existing:
+            answer = QMessageBox.question(
+                self,
+                "Apply Template",
+                f"Apply “{template.name}” template?\n\n"
+                "This will replace the current outline structure.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
             )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
 
-        if scene.content:
-            content_html = _esc(scene.content).replace("\n\n", "</p><p>")
-            content_html = content_html.replace("\n", "<br>")
-            parts.append(f"<p>{content_html}</p>")
-        elif scene.summary:
-            parts.append(f"<p>{_esc(scene.summary)}</p>")
+        self._db.delete_all_outline_nodes(self._project_id)
 
-        return "".join(parts)
+        def create_beats(beats, parent_id: int | None) -> None:
+            for i, beat in enumerate(beats):
+                node = self._db.create_outline_node(
+                    self._project_id, beat.title, beat.description,
+                    parent_id=parent_id, sort_order=i,
+                )
+                if beat.children:
+                    create_beats(beat.children, node.id)
 
-    def _build_prose_text(self) -> str:
+        create_beats(template.beats, None)
+
+        self._load_outline()
+        self._template_combo.setCurrentIndex(0)
+        self._notify()
+
+    # -- Export ----------------------------------------------------------------
+
+    def _export_outline(self) -> None:
+        nodes = self._db.get_outline_nodes(self._project_id)
+        if not nodes:
+            QMessageBox.information(self, "Export", "No outline to export.")
+            return
+
+        path, selected = QFileDialog.getSaveFileName(
+            self, "Export Outline", "",
+            "Markdown (*.md);;Text (*.txt)",
+        )
+        if not path:
+            return
+
+        is_md = "Markdown" in selected or path.endswith(".md")
+        if not path.endswith((".md", ".txt")):
+            path += ".md" if is_md else ".txt"
+
+        children_map: dict[int | None, list] = {}
+        for node in nodes:
+            children_map.setdefault(node.parent_id, []).append(node)
+
         project = self._db.get_project_by_id(self._project_id)
-        scenes = self._db.get_all_scenes(self._project_id)
+        title = project.title if project else "Untitled"
 
         lines: list[str] = []
-        title = project.title if project else "Untitled"
-        lines.append(title.upper())
-        lines.append("=" * len(title))
+        if is_md:
+            lines.append(f"# {title} — Story Outline")
+        else:
+            header = f"{title} — Story Outline"
+            lines.append(header)
+            lines.append("=" * len(header))
         lines.append("")
 
-        if not scenes:
-            lines.append("No scenes yet.")
-            return "\n".join(lines)
-
-        chapter_groups = _group_by_chapter(scenes)
-
-        scene_index = 0
-        for chapter_name, group_scenes in chapter_groups:
-            if chapter_name:
-                lines.append("")
-                lines.append(chapter_name.upper())
-                lines.append("-" * len(chapter_name))
-                lines.append("")
-
-            for scene in group_scenes:
-                scene_index += 1
-                lines.append(f"{scene_index}. {scene.title}")
-                lines.append("")
-                if scene.synopsis:
-                    lines.append(scene.synopsis)
+        def write_nodes(parent_id: int | None, depth: int) -> None:
+            children = children_map.get(parent_id, [])
+            children.sort(key=lambda n: (n.sort_order, n.id))
+            for node in children:
+                if is_md:
+                    prefix = "#" * (depth + 2)
+                    lines.append(f"{prefix} {node.title}")
+                else:
+                    indent = "  " * depth
+                    lines.append(f"{indent}{node.title}")
+                if node.description:
                     lines.append("")
-                if scene.content:
-                    lines.append(scene.content)
-                elif scene.summary:
-                    lines.append(scene.summary)
+                    if is_md:
+                        lines.append(node.description)
+                    else:
+                        pad = "  " * (depth + 1)
+                        for line in node.description.split("\n"):
+                            lines.append(f"{pad}{line}")
                 lines.append("")
-                lines.append("")
+                write_nodes(node.id, depth + 1)
 
-        return "\n".join(lines)
+        write_nodes(None, 0)
 
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+        QMessageBox.information(self, "Export", f"Outline exported to {path}")
 
-def _group_by_chapter(scenes: list) -> list[tuple[str, list]]:
-    groups: list[tuple[str, list]] = []
-    current_chapter: str | None = None
-    current_group: list = []
+    # -- Helpers ---------------------------------------------------------------
 
-    for scene in scenes:
-        chapter = scene.chapter if scene.chapter else ""
-        if chapter != current_chapter:
-            if current_group:
-                groups.append((current_chapter or "", current_group))
-            current_chapter = chapter
-            current_group = [scene]
-        else:
-            current_group.append(scene)
-    if current_group:
-        groups.append((current_chapter or "", current_group))
-
-    return groups
-
-
-def _esc(text: str) -> str:
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
+    def _notify(self) -> None:
+        if self._on_data_changed:
+            self._on_data_changed()

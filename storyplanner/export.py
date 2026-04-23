@@ -87,6 +87,23 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
             ],
         })
 
+    outline_nodes = db.get_outline_nodes(project_id)
+    children_map: dict[int | None, list] = {}
+    for node in outline_nodes:
+        children_map.setdefault(node.parent_id, []).append(node)
+
+    def _build_outline_tree(parent_id: int | None) -> list[dict]:
+        children = children_map.get(parent_id, [])
+        children.sort(key=lambda n: (n.sort_order, n.id))
+        return [
+            {
+                "title": n.title,
+                "description": n.description,
+                "children": _build_outline_tree(n.id),
+            }
+            for n in children
+        ]
+
     return {
         "project": {
             "title": project.title if project else "Untitled",
@@ -104,6 +121,7 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
         ],
         "scenes": scene_list,
         "psyke_entries": psyke_list,
+        "outline": _build_outline_tree(None),
     }
 
 

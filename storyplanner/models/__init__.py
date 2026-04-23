@@ -1,6 +1,7 @@
 from storyplanner.models.models import (
     Character,
     Note,
+    OutlineNode,
     Place,
     Project,
     PsykeEntry,
@@ -26,4 +27,5 @@ __all__ = [
     "PsykeRelation",
     "PsykeProgression",
     "StoryMemoryEntry",
+    "OutlineNode",
 ]
