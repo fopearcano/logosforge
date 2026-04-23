@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QMimeData, QPoint, Qt, QTimer
-from PySide6.QtGui import QDrag, QMouseEvent, QPainter, QPixmap
+from PySide6.QtGui import QDrag, QMouseEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -201,12 +201,7 @@ class _SceneCard(QFrame):
         mime.setText(str(self.scene_id))
         drag.setMimeData(mime)
 
-        pixmap = QPixmap(self.size())
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        self.render(painter)
-        painter.end()
-        drag.setPixmap(pixmap)
+        drag.setPixmap(self.grab())
         drag.setHotSpot(event.pos())
 
         self.setCursor(Qt.CursorShape.ClosedHandCursor)
