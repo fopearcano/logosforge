@@ -184,6 +184,7 @@ class AssistantPanel(QWidget):
         on_data_changed: Callable[[], None] | None = None,
         on_open_scene: Callable[[int], None] | None = None,
         get_active_scene_id: Callable[[], int | None] | None = None,
+        get_selected_text: Callable[[], str] | None = None,
     ) -> None:
         super().__init__()
         self._db = db
@@ -191,6 +192,7 @@ class AssistantPanel(QWidget):
         self._on_data_changed = on_data_changed
         self._on_open_scene = on_open_scene
         self._get_active_scene_id = get_active_scene_id
+        self._get_selected_text = get_selected_text
         self._active_section: str = "Dashboard"
         self._worker: _AssistantWorker | None = None
         self._pending_messages: list[dict] | None = None
@@ -298,16 +300,22 @@ class AssistantPanel(QWidget):
         )
         self._layout.addWidget(self._mode_strip)
 
-        # Scene selector + Generate
-        scene_row = QHBoxLayout()
-        scene_row.setSpacing(4)
-        self._scene_combo = QComboBox()
-        scene_row.addWidget(self._scene_combo, stretch=1)
+        # Context source selector + Generate
+        ctx_row = QHBoxLayout()
+        ctx_row.setSpacing(4)
+        self._ctx_source_combo = QComboBox()
+        self._ctx_source_combo.addItem("Selection", userData="selection")
+        self._ctx_source_combo.addItem("Current scene", userData="scene")
+        self._ctx_source_combo.addItem("Outline", userData="outline")
+        self._ctx_source_combo.addItem("Acts", userData="acts")
+        self._ctx_source_combo.addItem("Whole project", userData="project")
+        self._ctx_source_combo.setCurrentIndex(1)
+        ctx_row.addWidget(self._ctx_source_combo, stretch=1)
         self._send_btn = QPushButton("Generate")
         self._send_btn.setStyleSheet(theme.primary_btn())
         self._send_btn.clicked.connect(self._send_custom)
-        scene_row.addWidget(self._send_btn)
-        self._layout.addLayout(scene_row)
+        ctx_row.addWidget(self._send_btn)
+        self._layout.addLayout(ctx_row)
 
         # Core actions (grid for wrapping on narrow panels)
         action_grid = QGridLayout()
@@ -513,7 +521,7 @@ class AssistantPanel(QWidget):
         ]
         self._layout.addLayout(apply_row)
 
-        self._load_scenes()
+        self._mode_strip.refresh()
         self._restore_panel_settings()
 
     # -- Mode override ---------------------------------------------------------
@@ -620,31 +628,32 @@ class AssistantPanel(QWidget):
     def _on_ctx_toggle(self, checked: bool) -> None:
         self._ctx_viewer.setVisible(checked)
 
-    # -- Scene loading ---------------------------------------------------------
+    # -- Context source --------------------------------------------------------
 
-    def _load_scenes(self) -> None:
-        self._scene_combo.clear()
-        self._scene_combo.addItem("-- whole project --", userData=None)
+    def _get_context_source(self) -> str:
+        return self._ctx_source_combo.currentData() or "scene"
+
+    def _get_auto_scene_id(self) -> int | None:
+        if self._get_active_scene_id:
+            sid = self._get_active_scene_id()
+            if sid is not None:
+                return sid
         scenes = self._db.get_all_scenes(self._project_id)
-        for scene in scenes:
-            label = scene.title or "Untitled"
-            if scene.chapter:
-                label = f"[{scene.chapter}] {label}"
-            self._scene_combo.addItem(label, userData=scene.id)
         if len(scenes) == 1:
-            self._scene_combo.setCurrentIndex(1)
+            return scenes[0].id
+        return None
+
+    def _get_selected_text_content(self) -> str:
+        if self._get_selected_text:
+            text = self._get_selected_text()
+            if text:
+                return text
+        return ""
 
     def set_active_scene(self, scene_id: int) -> None:
-        for i in range(self._scene_combo.count()):
-            if self._scene_combo.itemData(i) == scene_id:
-                self._scene_combo.setCurrentIndex(i)
-                return
+        pass
 
     def refresh_scenes(self) -> None:
-        current = self._scene_combo.currentData()
-        self._load_scenes()
-        if current is not None:
-            self.set_active_scene(current)
         self._mode_strip.refresh()
 
     def set_active_section_name(self, name: str) -> None:
@@ -662,21 +671,32 @@ class AssistantPanel(QWidget):
     # -- Sending requests ------------------------------------------------------
 
     def _build_context(
-        self, scene_id: int | None, action_key: str = "",
+        self, action_key: str = "",
     ) -> tuple[str, str, str, str, str, str, str, str, str]:
+        source = self._get_context_source()
+        scene_id = self._get_auto_scene_id()
+
         scene_ctx = ""
-        if scene_id is not None:
+        if source == "selection":
+            selected = self._get_selected_text_content()
+            if selected:
+                scene_ctx = f"[Selected Text]\n{selected}"
+            elif scene_id is not None:
+                scene_ctx = gather_scene_context(
+                    self._db, self._project_id, scene_id,
+                )
+        elif source == "scene" and scene_id is not None:
             scene_ctx = gather_scene_context(
                 self._db, self._project_id, scene_id,
             )
-        outline_ctx = gather_outline_context(self._db, self._project_id)
-        if not self._outline_check.isChecked() and scene_id is not None:
-            outline_ctx = ""
+
+        outline_ctx = ""
+        if source in ("outline", "project", "acts") or self._outline_check.isChecked():
+            outline_ctx = gather_outline_context(self._db, self._project_id)
+
         story_memory_ctx = ""
         if self._story_memory_check.isChecked():
-            global_mem = gather_story_memory(
-                self._db, self._project_id,
-            )
+            global_mem = gather_story_memory(self._db, self._project_id)
             scene_mem = ""
             if scene_id is not None:
                 scene_mem = gather_memory_context(
@@ -685,30 +705,35 @@ class AssistantPanel(QWidget):
             story_memory_ctx = "\n\n".join(
                 part for part in [global_mem, scene_mem] if part
             )
+
         psyke_ctx = ""
         orchestration_debug = ""
-        if self._psyke_check.isChecked():
-            if action_key and scene_id is not None:
+        if self._psyke_check.isChecked() and scene_id is not None:
+            if action_key:
                 mode = resolve_mode(action_key)
                 result = orchestrate_psyke_context(
                     self._db, self._project_id, scene_id, mode,
                 )
                 psyke_ctx = result.psyke_context
                 orchestration_debug = format_orchestration_debug(result)
-            elif scene_id is not None:
+            else:
                 psyke_ctx = gather_psyke_context(
                     self._db, self._project_id, scene_id,
                 )
+
         graph_ctx = ""
-        if scene_id is not None:
+        if scene_id is not None and source in ("scene", "selection"):
             graph_ctx = gather_graph_context(self._db, self._project_id, scene_id)
+
         structural_ctx = gather_structural_context(self._db, self._project_id)
+
         irrational_ctx = ""
         if self._irrational_check.isChecked() and scene_id is not None:
             seed = reroll_seed(scene_id, self._irrational_iteration)
             irrational_ctx = build_irrational_context(
                 self._db, self._project_id, scene_id, seed=seed,
             )
+
         self._mode_strip.refresh()
         mode_result = self._mode_strip.get_mode_result()
         if self._mode_strip.is_overridden():
@@ -725,10 +750,9 @@ class AssistantPanel(QWidget):
     def _send_preset(self, action_key: str) -> None:
         if self._worker is not None:
             return
-        scene_id = self._scene_combo.currentData()
 
         scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, mode_ctx, struct_ctx, irr_ctx = (
-            self._build_context(scene_id, action_key=action_key)
+            self._build_context(action_key=action_key)
         )
         if not scene_ctx and not outline_ctx and not struct_ctx:
             self._response_output.setPlainText("No context available. Add scenes or project data first.")
@@ -765,10 +789,8 @@ class AssistantPanel(QWidget):
             self._response_output.setPlainText("Enter a prompt first.")
             return
 
-        scene_id = self._scene_combo.currentData()
-
         scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, mode_ctx, struct_ctx, irr_ctx = (
-            self._build_context(scene_id)
+            self._build_context()
         )
 
         messages = build_messages(
@@ -791,10 +813,9 @@ class AssistantPanel(QWidget):
     def _send_counterpart(self, mode_key: str) -> None:
         if self._worker is not None:
             return
-        scene_id = self._scene_combo.currentData()
 
         scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, _mode_ctx, _struct_ctx, _irr_ctx = (
-            self._build_context(scene_id)
+            self._build_context()
         )
         if not scene_ctx and not outline_ctx:
             self._response_output.setPlainText("No context available. Add scenes or project data first.")
@@ -826,10 +847,8 @@ class AssistantPanel(QWidget):
             self._response_output.setPlainText("Enter a prompt first.")
             return
 
-        scene_id = self._scene_combo.currentData()
-
         scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, _mode_ctx, _struct_ctx, _irr_ctx = (
-            self._build_context(scene_id)
+            self._build_context()
         )
 
         messages = build_counterpart_messages(
@@ -849,7 +868,7 @@ class AssistantPanel(QWidget):
     def _on_suggest_beats(self) -> None:
         if self._worker is not None:
             return
-        scene_id = self._scene_combo.currentData()
+        scene_id = self._get_auto_scene_id()
         if scene_id is None:
             self._response_output.setPlainText("Select a scene to get beat suggestions.")
             return
@@ -933,7 +952,7 @@ class AssistantPanel(QWidget):
 
     def _set_busy(self, busy: bool) -> None:
         self._send_btn.setEnabled(not busy)
-        self._scene_combo.setEnabled(not busy)
+        self._ctx_source_combo.setEnabled(not busy)
         for btn in self._preset_buttons:
             btn.setEnabled(not busy)
         for btn in self._apply_buttons:
@@ -961,7 +980,7 @@ class AssistantPanel(QWidget):
         return text
 
     def _get_selected_scene_id(self) -> int | None:
-        return self._scene_combo.currentData()
+        return self._get_auto_scene_id()
 
     def _notify_data_changed(self) -> None:
         if self._on_data_changed:

@@ -287,6 +287,7 @@ class MainWindow(QMainWindow):
             on_data_changed=self._on_data_changed,
             on_open_scene=self._open_scene_in_editor,
             get_active_scene_id=self._detect_active_scene_id,
+            get_selected_text=self._detect_selected_text,
         )
         self._assistant_panel.panel_closed.connect(self._hide_assistant)
         self._assistant_panel.overlay_toggled.connect(self._on_overlay_toggled)
@@ -751,6 +752,19 @@ class MainWindow(QMainWindow):
         if len(scenes) == 1:
             return scenes[0].id
         return None
+
+    def _detect_selected_text(self) -> str:
+        from storyplanner.ui.writing_core_view import WritingCoreView
+        view = self.content_area
+        if isinstance(view, WritingCoreView):
+            editor = getattr(view, "_active_editor", None)
+            if editor and hasattr(editor, "textCursor"):
+                return editor.textCursor().selectedText().replace(" ", "\n")
+        if self._cached_scenes_view is not None and self.content_area is self._cached_scenes_view:
+            editor = getattr(self._cached_scenes_view, "_active_editor", None)
+            if editor and hasattr(editor, "textCursor"):
+                return editor.textCursor().selectedText().replace(" ", "\n")
+        return ""
 
     def _open_scene_in_editor(self, scene_id: int) -> None:
         self._set_active_section("Scenes")
