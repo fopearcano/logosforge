@@ -60,6 +60,9 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
 
     psyke_entries = db.get_all_psyke_entries(project_id)
     psyke_name_by_id = {e.id: e.name for e in psyke_entries}
+    psyke_names_lower = {e.name.lower() for e in psyke_entries}
+    characters = [c for c in characters if c.name.lower() not in psyke_names_lower]
+    places = [p for p in places if p.name.lower() not in psyke_names_lower]
 
     scene_title_by_id = {s.id: s.title for s in scenes}
 

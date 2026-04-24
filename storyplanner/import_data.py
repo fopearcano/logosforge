@@ -32,6 +32,7 @@ def import_json(db: Database, data: dict) -> int:
 
     # Create characters and build name → id mapping
     char_id_by_name: dict[str, int] = {}
+    psyke_names_seen: set[str] = set()
     for char_data in data.get("characters", []):
         name = char_data.get("name", "").strip()
         if not name:
@@ -42,6 +43,13 @@ def import_json(db: Database, data: dict) -> int:
             description=char_data.get("description", ""),
         )
         char_id_by_name[name] = char.id
+        psyke_names_seen.add(name.lower())
+        db.create_psyke_entry(
+            project_id,
+            name=name,
+            entry_type="character",
+            notes=char_data.get("description", ""),
+        )
 
     # Create places and build name → id mapping
     place_id_by_name: dict[str, int] = {}
@@ -55,6 +63,13 @@ def import_json(db: Database, data: dict) -> int:
             description=place_data.get("description", ""),
         )
         place_id_by_name[name] = place.id
+        psyke_names_seen.add(name.lower())
+        db.create_psyke_entry(
+            project_id,
+            name=name,
+            entry_type="place",
+            notes=place_data.get("description", ""),
+        )
 
     # Create notes
     for note_data in data.get("notes", []):
@@ -126,6 +141,13 @@ def import_json(db: Database, data: dict) -> int:
         name = entry_data.get("name", "").strip()
         if not name:
             continue
+        if name.lower() in psyke_names_seen:
+            for existing in db.get_all_psyke_entries(project_id):
+                if existing.name.lower() == name.lower():
+                    psyke_id_by_name[name] = existing.id
+                    break
+            continue
+        psyke_names_seen.add(name.lower())
         details_raw = entry_data.get("details")
         details = details_raw if isinstance(details_raw, dict) else None
         entry = db.create_psyke_entry(
