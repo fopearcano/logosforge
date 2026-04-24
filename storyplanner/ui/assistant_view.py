@@ -982,40 +982,40 @@ class AssistantPanel(QWidget):
         text = self._get_response_text()
         if text is None:
             return
-        source = self._get_context_source()
 
-        if source == "selection":
-            editor = self._active_editor()
-            if editor and hasattr(editor, "textCursor"):
-                cursor = editor.textCursor()
-                if cursor.hasSelection():
-                    answer = QMessageBox.question(
-                        self, "Replace Selection",
-                        "Replace the selected text with the AI response?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                        QMessageBox.StandardButton.No,
-                    )
-                    if answer != QMessageBox.StandardButton.Yes:
-                        return
-                    cursor.insertText(text)
-                    editor.setTextCursor(cursor)
-                    self._notify_data_changed()
-                    return
-
-        if source == "scene":
-            scene_id = self._get_auto_scene_id()
-            if scene_id is not None:
-                answer = QMessageBox.question(
-                    self, "Replace Scene Content",
-                    "Replace the entire scene content?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.No,
-                )
-                if answer != QMessageBox.StandardButton.Yes:
-                    return
-                self._db.update_scene_content(scene_id, text)
-                self._notify_data_changed()
+        editor = self._active_editor()
+        if editor and hasattr(editor, "textCursor"):
+            cursor = editor.textCursor()
+            has_selection = cursor.hasSelection()
+            what = "the selected text" if has_selection else "all text in the editor"
+            answer = QMessageBox.question(
+                self, "Replace",
+                f"Replace {what} with the AI response?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
                 return
+            if not has_selection:
+                cursor.select(cursor.SelectionType.Document)
+            cursor.insertText(text)
+            editor.setTextCursor(cursor)
+            self._notify_data_changed()
+            return
+
+        scene_id = self._get_auto_scene_id()
+        if scene_id is not None:
+            answer = QMessageBox.question(
+                self, "Replace Scene Content",
+                "Replace the entire scene content?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            self._db.update_scene_content(scene_id, text)
+            self._notify_data_changed()
+            return
 
         QApplication.clipboard().setText(text)
 
@@ -1035,7 +1035,6 @@ class AssistantPanel(QWidget):
             if answer != QMessageBox.StandardButton.Yes:
                 return
             cursor = editor.textCursor()
-            cursor.setPosition(cursor.position())
             cursor.insertText(text)
             editor.setTextCursor(cursor)
             self._notify_data_changed()
@@ -1047,29 +1046,29 @@ class AssistantPanel(QWidget):
         text = self._get_response_text()
         if text is None:
             return
-        source = self._get_context_source()
 
-        if source == "selection":
-            editor = self._active_editor()
-            if editor and hasattr(editor, "textCursor"):
-                cursor = editor.textCursor()
+        editor = self._active_editor()
+        if editor and hasattr(editor, "textCursor"):
+            cursor = editor.textCursor()
+            if cursor.hasSelection():
                 end = max(cursor.position(), cursor.anchor())
                 cursor.setPosition(end)
-                cursor.insertText("\n\n" + text)
-                editor.setTextCursor(cursor)
+            else:
+                cursor.movePosition(cursor.MoveOperation.End)
+            cursor.insertText("\n\n" + text)
+            editor.setTextCursor(cursor)
+            self._notify_data_changed()
+            return
+
+        scene_id = self._get_auto_scene_id()
+        if scene_id is not None:
+            scene = self._db.get_scene_by_id(scene_id)
+            if scene is not None:
+                existing = scene.content or ""
+                new_content = (existing + "\n\n" + text) if existing else text
+                self._db.update_scene_content(scene_id, new_content)
                 self._notify_data_changed()
                 return
-
-        if source == "scene":
-            scene_id = self._get_auto_scene_id()
-            if scene_id is not None:
-                scene = self._db.get_scene_by_id(scene_id)
-                if scene is not None:
-                    existing = scene.content or ""
-                    new_content = (existing + "\n\n" + text) if existing else text
-                    self._db.update_scene_content(scene_id, new_content)
-                    self._notify_data_changed()
-                    return
 
         QApplication.clipboard().setText(text)
 
