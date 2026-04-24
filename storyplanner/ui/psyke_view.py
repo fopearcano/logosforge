@@ -253,9 +253,11 @@ class PsykeView(QWidget):
         self._form_label.setText("Edit Entry")
         self._delete_btn.setEnabled(True)
         self._name_input.setText(entry.name)
+        self._type_combo.blockSignals(True)
         idx = self._type_combo.findData(entry.entry_type)
         if idx >= 0:
             self._type_combo.setCurrentIndex(idx)
+        self._type_combo.blockSignals(False)
         self._aliases_input.setText(entry.aliases)
         self._notes_input.setPlainText(entry.notes)
         self._global_check.setChecked(entry.is_global)
@@ -498,9 +500,6 @@ class PsykeView(QWidget):
         self._rebuild_detail_fields(entry_type)
 
     def _rebuild_detail_fields(self, entry_type: str) -> None:
-        for w in self._detail_widgets.values():
-            w.setParent(None)
-            w.deleteLater()
         self._detail_widgets.clear()
 
         layout = self._details_layout
@@ -508,7 +507,7 @@ class PsykeView(QWidget):
             item = layout.takeAt(1)
             w = item.widget()
             if w:
-                w.setParent(None)
+                w.hide()
                 w.deleteLater()
 
         schema = get_detail_schema(entry_type)
