@@ -11,41 +11,52 @@ from storyplanner.models.psyke_details import FieldSpec, get_detail_schema
 
 def test_get_detail_schema_character():
     schema = get_detail_schema("character")
-    assert len(schema) == 4
+    assert len(schema) >= 20
     keys = [f.key for f in schema]
-    assert keys == ["appearance", "voice", "goals", "background"]
+    assert "full_name" in keys
+    assert "personality" in keys
+    assert "arc" in keys
+    assert "appearance" in keys
     for f in schema:
         assert isinstance(f, FieldSpec)
-        assert f.widget in ("line", "multiline")
-        assert f.max_chars > 0
+        assert f.widget in ("line", "multiline", "combo")
+        assert f.max_chars > 0 or f.widget == "combo"
 
 
 def test_get_detail_schema_place():
     schema = get_detail_schema("place")
-    assert len(schema) == 3
-    assert schema[0].key == "climate"
-    assert schema[0].widget == "line"
+    assert len(schema) >= 15
+    keys = [f.key for f in schema]
+    assert "climate" in keys
+    assert "atmosphere" in keys
+    assert "history" in keys
 
 
 def test_get_detail_schema_object():
     schema = get_detail_schema("object")
-    assert len(schema) == 3
+    assert len(schema) >= 10
+    keys = [f.key for f in schema]
+    assert "appearance" in keys
+    assert "function" in keys
 
 
 def test_get_detail_schema_lore():
     schema = get_detail_schema("lore")
-    assert len(schema) == 2
+    assert len(schema) >= 10
+    keys = [f.key for f in schema]
+    assert "summary" in keys
+    assert "rules" in keys
 
 
 def test_get_detail_schema_theme():
     schema = get_detail_schema("theme")
-    assert len(schema) == 2
+    assert len(schema) >= 8
     assert schema[0].key == "statement"
-    assert schema[0].widget == "line"
 
 
 def test_get_detail_schema_other():
-    assert get_detail_schema("other") == []
+    schema = get_detail_schema("other")
+    assert len(schema) >= 3
 
 
 def test_get_detail_schema_unknown():

@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -46,7 +47,7 @@ class PsykeView(QWidget):
 
         # -- Left panel: search + filter + list ------------------------------
         left = QVBoxLayout()
-        left.addWidget(QLabel("Story Bible"))
+        left.addWidget(QLabel("PSYKE"))
 
         self._search_input = QLineEdit()
         self._search_input.setPlaceholderText("Search entries...")
@@ -123,7 +124,7 @@ class PsykeView(QWidget):
         self._details_layout.setContentsMargins(0, 8, 0, 0)
         self._details_label = QLabel("Details")
         self._details_layout.addWidget(self._details_label)
-        self._detail_widgets: dict[str, QLineEdit | QPlainTextEdit] = {}
+        self._detail_widgets: dict[str, QLineEdit | QPlainTextEdit | QComboBox] = {}
         self._details_section.setVisible(False)
         right.addWidget(self._details_section)
 
@@ -502,7 +503,6 @@ class PsykeView(QWidget):
             w.deleteLater()
         self._detail_widgets.clear()
 
-        # Remove old labels (everything after self._details_label)
         layout = self._details_layout
         while layout.count() > 1:
             item = layout.takeAt(1)
@@ -516,10 +516,27 @@ class PsykeView(QWidget):
             self._details_section.setVisible(False)
             return
 
+        current_section = None
         for spec in schema:
+            if spec.section and spec.section != current_section:
+                current_section = spec.section
+                sep = QFrame()
+                sep.setFrameShape(QFrame.Shape.HLine)
+                sep.setFrameShadow(QFrame.Shadow.Sunken)
+                layout.addWidget(sep)
+                section_label = QLabel(f"<b>{current_section}</b>")
+                section_label.setStyleSheet("margin-top: 4px; margin-bottom: 2px;")
+                layout.addWidget(section_label)
+
             label = QLabel(spec.label)
             layout.addWidget(label)
-            if spec.widget == "line":
+
+            if spec.widget == "combo":
+                widget = QComboBox()
+                for opt in spec.options:
+                    widget.addItem(opt or "(none)", opt)
+                layout.addWidget(widget)
+            elif spec.widget == "line":
                 widget = QLineEdit()
                 widget.setMaxLength(spec.max_chars)
                 layout.addWidget(widget)
@@ -547,7 +564,9 @@ class PsykeView(QWidget):
     def _collect_details(self) -> dict:
         result: dict[str, str] = {}
         for key, widget in self._detail_widgets.items():
-            if isinstance(widget, QLineEdit):
+            if isinstance(widget, QComboBox):
+                val = widget.currentData() or ""
+            elif isinstance(widget, QLineEdit):
                 val = widget.text().strip()
             else:
                 val = widget.toPlainText().strip()
@@ -558,7 +577,10 @@ class PsykeView(QWidget):
     def _load_details(self, details: dict) -> None:
         for key, widget in self._detail_widgets.items():
             val = details.get(key, "")
-            if isinstance(widget, QLineEdit):
+            if isinstance(widget, QComboBox):
+                idx = widget.findData(val)
+                widget.setCurrentIndex(max(0, idx))
+            elif isinstance(widget, QLineEdit):
                 widget.setText(val)
             else:
                 widget.setPlainText(val)
