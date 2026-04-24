@@ -289,7 +289,7 @@ class MainWindow(QMainWindow):
             self._appearance_btns[name] = btn
         sidebar_layout.addWidget(self._appearance_bar)
 
-        # -- Import / Export ---------------------------------------------------
+        # -- Import / Export / Settings ---------------------------------------
         self._import_btn = _SidebarButton("\U0001F4E5", "Import")
         sidebar_layout.addWidget(self._import_btn)
         self._import_btn.clicked.connect(self._on_import)
@@ -297,6 +297,10 @@ class MainWindow(QMainWindow):
         self._export_btn = _SidebarButton("\U0001F4E4", "Export")
         sidebar_layout.addWidget(self._export_btn)
         self._export_btn.clicked.connect(self._on_export)
+
+        self._settings_btn = _SidebarButton("⚙", "Settings")
+        sidebar_layout.addWidget(self._settings_btn)
+        self._settings_btn.clicked.connect(self._open_settings)
 
         # -- Connect navigation buttons (checkable + active tracking) ----------
         self._nav_labels = [
@@ -640,6 +644,7 @@ class MainWindow(QMainWindow):
             group.set_sidebar_collapsed(True)
         self._import_btn.set_collapsed(True)
         self._export_btn.set_collapsed(True)
+        self._settings_btn.set_collapsed(True)
         self._appearance_label.setVisible(False)
         self._appearance_bar.setVisible(False)
 
@@ -652,6 +657,7 @@ class MainWindow(QMainWindow):
             group.set_sidebar_collapsed(False)
         self._import_btn.set_collapsed(False)
         self._export_btn.set_collapsed(False)
+        self._settings_btn.set_collapsed(False)
         self._appearance_label.setVisible(True)
         self._appearance_bar.setVisible(True)
 
@@ -1054,6 +1060,7 @@ class MainWindow(QMainWindow):
 
         prefs_action = QAction("Preferences...", self)
         prefs_action.setShortcut(QKeySequence("Ctrl+,"))
+        prefs_action.setMenuRole(QAction.MenuRole.PreferencesRole)
         prefs_action.triggered.connect(self._open_settings)
         edit_menu.addAction(prefs_action)
 
