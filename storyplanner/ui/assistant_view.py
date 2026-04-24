@@ -702,16 +702,21 @@ class AssistantPanel(QWidget):
         psyke_ctx = ""
         orchestration_debug = ""
         if self._psyke_check.isChecked():
+            prompt_query = self._prompt_input.toPlainText().strip()
+            selected_text = self._get_selected_text_content()
+            query_text = "\n".join(t for t in (prompt_query, selected_text) if t)
             if action_key and scene_id is not None:
                 mode = resolve_mode(action_key)
                 result = orchestrate_psyke_context(
                     self._db, self._project_id, scene_id, mode,
+                    selected_text=query_text,
                 )
                 psyke_ctx = result.psyke_context
                 orchestration_debug = format_orchestration_debug(result)
             else:
                 psyke_ctx = gather_psyke_context(
                     self._db, self._project_id, scene_id,
+                    query_text=query_text,
                 )
 
         graph_ctx = ""

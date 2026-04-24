@@ -108,15 +108,15 @@ def orchestrate_psyke_context(
         )
     elif mode == MODE_DIALOGUE:
         return _orchestrate_dialogue(
-            db, tg, entries, scene, current_order,
+            db, tg, entries, scene, current_order, selected_text,
         )
     elif mode == MODE_EXPAND:
         return _orchestrate_expand(
-            db, tg, entries, scene, current_order,
+            db, tg, entries, scene, current_order, selected_text,
         )
     elif mode == MODE_BRAINSTORM:
         return _orchestrate_brainstorm(
-            db, tg, entries, scene, current_order,
+            db, tg, entries, scene, current_order, selected_text,
         )
     else:
         return _orchestrate_rewrite(
@@ -129,7 +129,8 @@ def _orchestrate_rewrite(
 ) -> OrchestrationResult:
     """Rewrite: compact PSYKE, only entries mentioned in text."""
     decisions: list[str] = []
-    match_text = selected_text if selected_text else _scene_searchable_text(scene)
+    scene_text = _scene_searchable_text(scene)
+    match_text = f"{scene_text}\n{selected_text}" if selected_text else scene_text
     max_entries = _MAX_ENTRIES[MODE_REWRITE]
     max_notes = _MAX_NOTES[MODE_REWRITE]
 
@@ -178,11 +179,13 @@ def _orchestrate_rewrite(
 
 
 def _orchestrate_dialogue(
-    db, tg, entries, scene, current_order,
+    db, tg, entries, scene, current_order, selected_text: str = "",
 ) -> OrchestrationResult:
     """Dialogue: character-focused entries + one-hop character relations."""
     decisions: list[str] = []
     scene_text = _scene_searchable_text(scene)
+    if selected_text:
+        scene_text = f"{scene_text}\n{selected_text}"
     max_entries = _MAX_ENTRIES[MODE_DIALOGUE]
     max_notes = _MAX_NOTES[MODE_DIALOGUE]
 
@@ -274,11 +277,13 @@ def _orchestrate_dialogue(
 
 
 def _orchestrate_expand(
-    db, tg, entries, scene, current_order,
+    db, tg, entries, scene, current_order, selected_text: str = "",
 ) -> OrchestrationResult:
     """Expand: matched entries with moderate detail + conservative relations."""
     decisions: list[str] = []
     scene_text = _scene_searchable_text(scene)
+    if selected_text:
+        scene_text = f"{scene_text}\n{selected_text}"
     max_entries = _MAX_ENTRIES[MODE_EXPAND]
     max_notes = _MAX_NOTES[MODE_EXPAND]
 
@@ -364,11 +369,13 @@ def _orchestrate_expand(
 
 
 def _orchestrate_brainstorm(
-    db, tg, entries, scene, current_order,
+    db, tg, entries, scene, current_order, selected_text: str = "",
 ) -> OrchestrationResult:
     """Brainstorm: global + active entities + temporal state."""
     decisions: list[str] = []
     scene_text = _scene_searchable_text(scene)
+    if selected_text:
+        scene_text = f"{scene_text}\n{selected_text}"
     max_entries = _MAX_ENTRIES[MODE_BRAINSTORM]
 
     global_lines = []

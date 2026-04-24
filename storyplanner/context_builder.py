@@ -376,6 +376,7 @@ def gather_psyke_context(
     db: Database,
     project_id: int,
     scene_id: int | None = None,
+    query_text: str = "",
 ) -> str:
     entries = db.get_all_psyke_entries(project_id)
 
@@ -410,6 +411,7 @@ def gather_psyke_context(
     current_order = scene_order.get(scene_id, 0)
 
     scene_text = _scene_searchable_text(scene)
+    search_text = scene_text + "\n" + query_text if query_text else scene_text
     entry_by_id = {e.id: e for e in entries}
 
     global_lines: list[str] = []
@@ -421,7 +423,7 @@ def gather_psyke_context(
             global_lines.append(_format_psyke_entry(
                 entry, PSYKE_GLOBAL_NOTES_MAX,
             ))
-        elif _entry_matches_scene(entry, scene_text):
+        elif _entry_matches_scene(entry, search_text):
             if len(relevant_lines) < PSYKE_MAX_RELEVANT:
                 prog = _latest_progression(db, entry.id, current_order, scene_order)
                 relevant_lines.append(_format_psyke_entry(
@@ -449,7 +451,7 @@ def gather_psyke_context(
                 break
 
     if not global_lines and not relevant_lines:
-        return ""
+        return _gather_psyke_all(entries)
 
     parts = ["[PSYKE Context]"]
     if global_lines:
