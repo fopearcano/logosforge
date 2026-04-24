@@ -1,5 +1,7 @@
 """Tests for CONNECTOR — local AI control bridge."""
 
+import pytest
+
 from storyplanner.connector_executor import execute_action
 from storyplanner.connector_registry import (
     describe_action,
@@ -9,6 +11,23 @@ from storyplanner.connector_registry import (
     list_actions,
 )
 from storyplanner.db import Database
+from storyplanner.settings import get_manager as get_settings
+
+
+@pytest.fixture(autouse=True)
+def _connector_enabled():
+    """Enable the Connector for every test in this module."""
+    mgr = get_settings()
+    prev_enabled = mgr.get("connector_enabled")
+    prev_writes = mgr.get("connector_allow_writes")
+    prev_disabled = list(mgr.get("connector_disabled_actions") or [])
+    mgr.set("connector_enabled", True)
+    mgr.set("connector_allow_writes", True)
+    mgr.set("connector_disabled_actions", [])
+    yield
+    mgr.set("connector_enabled", prev_enabled)
+    mgr.set("connector_allow_writes", prev_writes)
+    mgr.set("connector_disabled_actions", prev_disabled)
 
 
 def _make_project():
@@ -412,3 +431,74 @@ def test_success_includes_action_name():
     db, proj = _make_project()
     result = execute_action(db, proj.id, {"action": "get_project"})
     assert result["action"] == "get_project"
+
+
+# =============================================================================
+# SETTINGS GATING
+# =============================================================================
+
+def test_connector_disabled_blocks_execution():
+    db, proj = _make_project()
+    mgr = get_settings()
+    mgr.set("connector_enabled", False)
+    try:
+        result = execute_action(db, proj.id, {"action": "get_project"})
+        assert result["ok"] is False
+        assert "disabled" in result["error"].lower()
+    finally:
+        mgr.set("connector_enabled", True)
+
+
+def test_write_action_blocked_when_writes_disallowed():
+    db, proj = _make_project()
+    mgr = get_settings()
+    mgr.set("connector_allow_writes", False)
+    try:
+        result = execute_action(db, proj.id, {
+            "action": "create_note",
+            "args": {"title": "Nope", "content": "blocked"},
+        })
+        assert result["ok"] is False
+        assert "write" in result["error"].lower()
+    finally:
+        mgr.set("connector_allow_writes", True)
+
+
+def test_read_action_still_works_when_writes_disallowed():
+    db, proj = _make_project()
+    mgr = get_settings()
+    mgr.set("connector_allow_writes", False)
+    try:
+        result = execute_action(db, proj.id, {"action": "get_project"})
+        assert result["ok"] is True
+    finally:
+        mgr.set("connector_allow_writes", True)
+
+
+def test_disabled_action_list_blocks_specific_action():
+    db, proj = _make_project()
+    mgr = get_settings()
+    mgr.set("connector_disabled_actions", ["get_project"])
+    try:
+        result = execute_action(db, proj.id, {"action": "get_project"})
+        assert result["ok"] is False
+        assert "disabled" in result["error"].lower()
+        # other actions still work
+        result2 = execute_action(db, proj.id, {"action": "list_scenes"})
+        assert result2["ok"] is True
+    finally:
+        mgr.set("connector_disabled_actions", [])
+
+
+def test_enforce_settings_false_bypasses_gating():
+    db, proj = _make_project()
+    mgr = get_settings()
+    mgr.set("connector_enabled", False)
+    try:
+        result = execute_action(
+            db, proj.id, {"action": "get_project"},
+            enforce_settings=False,
+        )
+        assert result["ok"] is True
+    finally:
+        mgr.set("connector_enabled", True)

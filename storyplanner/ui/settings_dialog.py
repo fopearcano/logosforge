@@ -5,14 +5,20 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QPushButton,
     QVBoxLayout,
 )
+from PySide6.QtCore import Qt
 
+import storyplanner.connector_actions  # noqa: F401 — registers actions
+from storyplanner.connector_registry import list_actions
 from storyplanner.settings import get_manager as get_settings
 from storyplanner.ui import theme
 from storyplanner.ui.provider_settings import ProviderSettingsWidget
@@ -66,6 +72,53 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(self._separator())
 
+        # -- Connector ----------------------------------------------------------
+        layout.addWidget(self._section_label("Connector"))
+        desc = QLabel(
+            "Allow the AI to invoke safe actions on this project "
+            "(listing scenes, creating notes, etc.)."
+        )
+        desc.setWordWrap(True)
+        desc.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 11px;")
+        layout.addWidget(desc)
+
+        mgr = get_settings()
+        self._conn_enabled = QCheckBox("Enable Connector")
+        self._conn_enabled.setChecked(bool(mgr.get("connector_enabled")))
+        layout.addWidget(self._conn_enabled)
+
+        self._conn_writes = QCheckBox("Allow write actions (create / update)")
+        self._conn_writes.setChecked(bool(mgr.get("connector_allow_writes")))
+        layout.addWidget(self._conn_writes)
+
+        self._conn_confirm = QCheckBox("Confirm before running write actions")
+        self._conn_confirm.setChecked(bool(mgr.get("connector_confirm_writes")))
+        layout.addWidget(self._conn_confirm)
+
+        self._conn_enabled.toggled.connect(self._update_connector_enabled)
+        self._update_connector_enabled(self._conn_enabled.isChecked())
+
+        actions_label = QLabel("Available actions (uncheck to disable):")
+        actions_label.setStyleSheet(
+            f"color: {theme.TEXT_SECONDARY}; font-size: 11px; margin-top: 4px;"
+        )
+        layout.addWidget(actions_label)
+
+        disabled = set(mgr.get("connector_disabled_actions") or [])
+        self._conn_actions_list = QListWidget()
+        self._conn_actions_list.setMaximumHeight(140)
+        for action in sorted(list_actions(), key=lambda a: (a.category, a.name)):
+            item = QListWidgetItem(f"[{action.category}] {action.name} — {action.description}")
+            item.setData(Qt.ItemDataRole.UserRole, action.name)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(
+                Qt.CheckState.Unchecked if action.name in disabled else Qt.CheckState.Checked
+            )
+            self._conn_actions_list.addItem(item)
+        layout.addWidget(self._conn_actions_list)
+
+        layout.addWidget(self._separator())
+
         # -- General (placeholder) ---------------------------------------------
         layout.addWidget(self._section_label("General"))
         placeholder = QLabel("No additional settings yet.")
@@ -105,7 +158,21 @@ class SettingsDialog(QDialog):
         mgr.set("ai_model", config.model)
         mgr.set("ai_api_key", self._provider_widget._key_input.text().strip())
         mgr.set("ai_base_url", config.base_url)
+
+        mgr.set("connector_enabled", self._conn_enabled.isChecked())
+        mgr.set("connector_allow_writes", self._conn_writes.isChecked())
+        mgr.set("connector_confirm_writes", self._conn_confirm.isChecked())
+        disabled: list[str] = []
+        for i in range(self._conn_actions_list.count()):
+            item = self._conn_actions_list.item(i)
+            if item.checkState() != Qt.CheckState.Checked:
+                disabled.append(str(item.data(Qt.ItemDataRole.UserRole)))
+        mgr.set("connector_disabled_actions", disabled)
         super().accept()
+
+    def _update_connector_enabled(self, enabled: bool) -> None:
+        self._conn_writes.setEnabled(enabled)
+        self._conn_confirm.setEnabled(enabled)
 
     def _select_theme(self, name: str) -> None:
         for key, btn in self._theme_btns.items():

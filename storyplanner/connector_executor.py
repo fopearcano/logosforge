@@ -19,6 +19,8 @@ def execute_action(
     db: Database,
     project_id: int,
     request: dict[str, Any],
+    *,
+    enforce_settings: bool = True,
 ) -> dict[str, Any]:
     """Execute a CONNECTOR action request.
 
@@ -26,6 +28,9 @@ def execute_action(
         db: Database instance
         project_id: Active project id
         request: Dict with "action" key and optional "args" dict
+        enforce_settings: When True (default), honor user settings for
+            enabled state, write-access, and disabled-actions. Tests
+            can pass False to exercise handlers directly.
 
     Returns:
         {"ok": True, "result": ...} on success
@@ -41,6 +46,20 @@ def execute_action(
 
     if action_def.handler is None:
         return _error(f"Action '{action_name}' has no handler.")
+
+    if enforce_settings:
+        from storyplanner.settings import get_manager as get_settings
+        mgr = get_settings()
+        if not mgr.get("connector_enabled"):
+            return _error("Connector is disabled in settings.")
+        disabled = mgr.get("connector_disabled_actions") or []
+        if action_name in disabled:
+            return _error(f"Action '{action_name}' is disabled in settings.")
+        if action_def.category == "write" and not mgr.get("connector_allow_writes"):
+            return _error(
+                f"Action '{action_name}' is a write action; "
+                "enable 'Allow write actions' in Connector settings."
+            )
 
     raw_args = request.get("args", {})
     if not isinstance(raw_args, dict):

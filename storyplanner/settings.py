@@ -26,6 +26,10 @@ DEFAULTS: dict[str, object] = {
     "auto_link_ignored": [],
     "context_assistant_enabled": True,
     "context_assistant_ignored": [],
+    "connector_enabled": False,
+    "connector_allow_writes": False,
+    "connector_confirm_writes": True,
+    "connector_disabled_actions": [],
 }
 
 
