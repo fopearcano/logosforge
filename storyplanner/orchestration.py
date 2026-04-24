@@ -14,6 +14,7 @@ from storyplanner.context_builder import (
     _entry_matches_scene,
     _scene_searchable_text,
     _word_match,
+    render_psyke_details,
 )
 from storyplanner.temporal_psyke import TemporalGraph
 
@@ -161,6 +162,7 @@ def _orchestrate_rewrite(
             line += f" | State: {prog}"
             temporal_used = True
         lines.append(line)
+        lines.extend(render_psyke_details(e, per_field_max=max_notes * 2))
 
     decisions.append(f"Matched {len(matched)} entries to {'selection' if selected_text else 'scene'}")
     if temporal_used:
@@ -221,6 +223,7 @@ def _orchestrate_dialogue(
             line += f" | State: {prog}"
             temporal_used = True
         lines.append(line)
+        lines.extend(render_psyke_details(e, per_field_max=max_notes * 2))
 
     # One-hop character relations
     related_lines = []
@@ -285,6 +288,7 @@ def _orchestrate_expand(
         if e.is_global:
             short = _truncate(e.notes.split("\n")[0] if e.notes else "", 80)
             global_lines.append(f"- {e.name} ({e.entry_type}): {short}" if short else f"- {e.name} ({e.entry_type})")
+            global_lines.extend(render_psyke_details(e, per_field_max=150))
         elif _entry_matches_scene(e, scene_text):
             matched.append(e)
             if len(matched) >= max_entries:
@@ -306,6 +310,7 @@ def _orchestrate_expand(
             line += f" | State: {prog}"
             temporal_used = True
         lines.append(line)
+        lines.extend(render_psyke_details(e, per_field_max=max_notes * 2))
 
     # Conservative one-hop relations
     related_lines = []
@@ -380,6 +385,7 @@ def _orchestrate_brainstorm(
             if short:
                 line += f": {short}"
             global_lines.append(line)
+            global_lines.extend(render_psyke_details(e, per_field_max=150))
             seen_ids.add(e.id)
 
     for e in entries:
@@ -398,6 +404,7 @@ def _orchestrate_brainstorm(
                 line += f" | State: {prog}"
                 temporal_used = True
             active_lines.append(line)
+            active_lines.extend(render_psyke_details(e, per_field_max=200))
 
     # One-hop relations for active entries
     related_lines = []

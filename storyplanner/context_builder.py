@@ -565,35 +565,55 @@ def _latest_progression(
     return best.text
 
 
+def render_psyke_details(entry, per_field_max: int = 200) -> list[str]:
+    """Return the labeled detail lines (indented) for a PSYKE entry."""
+    import json
+    from storyplanner.models.psyke_details import get_detail_schema
+
+    try:
+        details = json.loads(entry.details_json) if entry.details_json else {}
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if not details:
+        return []
+
+    schema = get_detail_schema(entry.entry_type)
+    field_labels = {f.key: f.label for f in schema}
+    field_order = [f.key for f in schema] or list(details.keys())
+
+    lines: list[str] = []
+    for key in field_order:
+        val = details.get(key)
+        if not val:
+            continue
+        label = field_labels.get(key, key.replace("_", " ").title())
+        val_str = str(val).replace("\n", " ").strip()
+        if len(val_str) > per_field_max:
+            val_str = val_str[:per_field_max].rsplit(" ", 1)[0] + "..."
+        lines.append(f"  {label}: {val_str}")
+    return lines
+
+
 def _format_psyke_entry(
     entry, max_notes: int, progression: str = "",
 ) -> str:
-    import json
-    line = f"- {entry.name} ({entry.entry_type})"
+    header = f"- {entry.name} ({entry.entry_type})"
     if entry.notes:
         short = entry.notes.split("\n")[0]
         if len(short) > max_notes:
             short = short[:max_notes].rsplit(" ", 1)[0] + "..."
-        line += f": {short}"
-    details = {}
-    try:
-        if entry.details_json:
-            details = json.loads(entry.details_json)
-    except (json.JSONDecodeError, TypeError):
-        pass
-    if details:
-        detail_parts = [f"{k}={v}" for k, v in details.items() if v]
-        if detail_parts:
-            detail_str = "; ".join(detail_parts)
-            if len(detail_str) > max_notes:
-                detail_str = detail_str[:max_notes].rsplit(" ", 1)[0] + "..."
-            line += f" [{detail_str}]"
+        header += f": {short}"
+
+    lines = [header]
+    lines.extend(render_psyke_details(entry, per_field_max=max(80, max_notes * 2)))
+
     if progression:
-        prog_short = progression
-        if len(prog_short) > 80:
-            prog_short = prog_short[:80].rsplit(" ", 1)[0] + "..."
-        line += f" | Latest: {prog_short}"
-    return line
+        prog_short = progression.replace("\n", " ").strip()
+        if len(prog_short) > 120:
+            prog_short = prog_short[:120].rsplit(" ", 1)[0] + "..."
+        lines.append(f"  Latest progression: {prog_short}")
+
+    return "\n".join(lines)
 
 
 def find_psyke_scene_references(
