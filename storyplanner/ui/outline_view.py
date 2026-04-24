@@ -128,7 +128,7 @@ class OutlineView(QWidget):
         self._tree.setMinimumWidth(200)
         self._tree.currentItemChanged.connect(self._on_item_selected)
         self._tree.setStyleSheet(
-            f"QTreeWidget {{ border: none; background: {theme.BG_PRIMARY}; }}"
+            f"QTreeWidget {{ border: none; background: {theme.BG_DARK}; }}"
             f"QTreeWidget::item {{ padding: 4px 6px; }}"
             f"QTreeWidget::item:selected {{"
             f"  background: {theme.ACCENT}; color: #ffffff;"
