@@ -75,11 +75,15 @@ _ICON_SLOT_WIDTH = 48
 class _SidebarButton(QPushButton):
     """Sidebar button with fixed icon slot and collapsible label."""
 
-    def __init__(self, icon_text: str, label: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, icon_text: str, label: str,
+        parent: QWidget | None = None, indent: bool = False,
+    ) -> None:
         super().__init__(parent)
         self._icon_text = icon_text
         self._label_text = label
         self._collapsed = False
+        self._indent = indent
         self.setCheckable(True)
         self.setFlat(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -91,12 +95,64 @@ class _SidebarButton(QPushButton):
         self._update_text()
 
     def _update_text(self) -> None:
+        indent = "   " if (self._indent and not self._collapsed) else ""
         if self._collapsed:
             self.setText(self._icon_text)
             self.setToolTip(self._label_text)
         else:
-            self.setText(f"{self._icon_text}  {self._label_text}")
+            self.setText(f"{indent}{self._icon_text}  {self._label_text}")
             self.setToolTip("")
+
+
+class _SidebarGroupHeader(QPushButton):
+    """Collapsible group header that toggles visibility of child buttons."""
+
+    def __init__(
+        self, label: str, children: list[QPushButton],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._label_text = label
+        self._children = children
+        self._expanded = True
+        self._sidebar_collapsed = False
+        self.setFlat(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setObjectName("sidebarGroupHeader")
+        self.setStyleSheet(
+            "QPushButton#sidebarGroupHeader {"
+            " border: none; text-align: left; padding: 6px 8px;"
+            " margin: 6px 4px 2px 4px; background-color: transparent;"
+            " font-size: 11px; font-weight: bold;"
+            " letter-spacing: 1px; text-transform: uppercase; }"
+            "QPushButton#sidebarGroupHeader:hover { background-color: rgba(255,255,255,0.05); }"
+        )
+        self.clicked.connect(self._toggle)
+        self._update_text()
+
+    def set_sidebar_collapsed(self, collapsed: bool) -> None:
+        self._sidebar_collapsed = collapsed
+        if collapsed:
+            for c in self._children:
+                c.setVisible(True)
+            self.setVisible(False)
+        else:
+            self.setVisible(True)
+            for c in self._children:
+                c.setVisible(self._expanded)
+        self._update_text()
+
+    def _toggle(self) -> None:
+        if self._sidebar_collapsed:
+            return
+        self._expanded = not self._expanded
+        for c in self._children:
+            c.setVisible(self._expanded)
+        self._update_text()
+
+    def _update_text(self) -> None:
+        arrow = "▾" if self._expanded else "▸"
+        self.setText(f"{arrow}  {self._label_text}")
 
 
 class MainWindow(QMainWindow):
@@ -175,18 +231,35 @@ class MainWindow(QMainWindow):
         self._toggle_btn.clicked.connect(self._toggle_sidebar)
         sidebar_layout.addWidget(self._toggle_btn)
 
-        _NAV_LABELS = [
+        _SIDEBAR_LAYOUT: list = [
             "Projects", "Dashboard", "Notes",
             "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline",
-            "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
-            "Health", "Balance", "Pacing", "Adapt", "Narrative", "Search", "PSYKE", "Plugins", "Assistant",
+            ("group", "Structure", ["Structure", "Acts", "Beats", "Arcs"]),
+            "Tags", "Graph",
+            ("group", "Analytics", ["Health", "Balance", "Pacing", "Narrative"]),
+            "Adapt", "Search", "PSYKE", "Plugins", "Assistant",
         ]
         self.sidebar_buttons: dict[str, _SidebarButton] = {}
-        for label in _NAV_LABELS:
-            icon = self._sidebar_icons.get(label, "")
-            btn = _SidebarButton(icon, label)
-            sidebar_layout.addWidget(btn)
-            self.sidebar_buttons[label] = btn
+        self._sidebar_groups: list[_SidebarGroupHeader] = []
+        for item in _SIDEBAR_LAYOUT:
+            if isinstance(item, tuple) and item[0] == "group":
+                _, group_label, member_labels = item
+                children: list[QPushButton] = []
+                for member in member_labels:
+                    icon = self._sidebar_icons.get(member, "")
+                    btn = _SidebarButton(icon, member, indent=True)
+                    self.sidebar_buttons[member] = btn
+                    children.append(btn)
+                header = _SidebarGroupHeader(group_label, children)
+                sidebar_layout.addWidget(header)
+                for btn in children:
+                    sidebar_layout.addWidget(btn)
+                self._sidebar_groups.append(header)
+            else:
+                icon = self._sidebar_icons.get(item, "")
+                btn = _SidebarButton(icon, item)
+                sidebar_layout.addWidget(btn)
+                self.sidebar_buttons[item] = btn
 
         sidebar_layout.addStretch()
 
@@ -563,6 +636,8 @@ class MainWindow(QMainWindow):
         self._toggle_btn.setToolTip("Expand sidebar")
         for btn in self.sidebar_buttons.values():
             btn.set_collapsed(True)
+        for group in self._sidebar_groups:
+            group.set_sidebar_collapsed(True)
         self._import_btn.set_collapsed(True)
         self._export_btn.set_collapsed(True)
         self._appearance_label.setVisible(False)
@@ -573,6 +648,8 @@ class MainWindow(QMainWindow):
         self._toggle_btn.setToolTip("")
         for btn in self.sidebar_buttons.values():
             btn.set_collapsed(False)
+        for group in self._sidebar_groups:
+            group.set_sidebar_collapsed(False)
         self._import_btn.set_collapsed(False)
         self._export_btn.set_collapsed(False)
         self._appearance_label.setVisible(True)
