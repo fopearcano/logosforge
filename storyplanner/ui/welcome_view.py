@@ -1,9 +1,10 @@
 """First-launch welcome view — one heading, one line, one action."""
 
+import os
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -12,6 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from storyplanner.paths import get_assets_path
 from storyplanner.ui import theme
 
 
@@ -26,6 +28,18 @@ class WelcomeView(QWidget):
         layout.setContentsMargins(48, 48, 48, 48)
         layout.setSpacing(16)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        icon_path = str(get_assets_path() / "icon_128.png")
+        if os.path.exists(icon_path):
+            icon_label = QLabel()
+            pixmap = QPixmap(icon_path)
+            icon_label.setPixmap(pixmap.scaled(
+                96, 96,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            ))
+            icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(icon_label)
 
         heading = QLabel("Welcome to Logosforge")
         heading_font = QFont()
