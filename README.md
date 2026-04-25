@@ -1,6 +1,10 @@
-# Logosforge
+<p align="center">
+  <img src="assets/icon.png" alt="Logosforge" width="128" height="128">
+</p>
 
-**A narrative operating system for structured writing.**
+<h1 align="center">Logosforge</h1>
+
+<p align="center"><strong>A narrative operating system for structured writing.</strong></p>
 
 Logosforge helps you plan, write, and evolve your story with AI — without losing control.
 
