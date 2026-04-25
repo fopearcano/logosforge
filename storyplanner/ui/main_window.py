@@ -696,22 +696,18 @@ class MainWindow(QMainWindow):
         self._layout_tier = tier
 
         if tier == "wide":
-            self._set_sidebar_collapsed(False)
             self._assistant_panel.setMaximumWidth(340)
             if self._assistant_user_visible:
                 self._assistant_panel.setVisible(True)
         elif tier == "medium":
-            self._set_sidebar_collapsed(True)
             self._assistant_panel.setMaximumWidth(320)
             if self._assistant_user_visible:
                 self._assistant_panel.setVisible(True)
         elif tier == "narrow":
-            self._set_sidebar_collapsed(True)
             self._assistant_panel.setMaximumWidth(300)
             if self._assistant_user_visible and not self._assistant_overlay:
                 self._assistant_panel.setVisible(False)
         else:
-            self._set_sidebar_collapsed(True)
             self._assistant_panel.setVisible(False)
 
     def _open_psyke_entry(self, entry_id: int) -> None:
@@ -1362,8 +1358,8 @@ class MainWindow(QMainWindow):
             self._assistant_panel.setVisible(False)
         else:
             self._sidebar.setVisible(True)
-            self._layout_tier = None
-            self._apply_layout_for_width(self.width())
+            if self._assistant_user_visible:
+                self._assistant_panel.setVisible(True)
         central = self.centralWidget()
         if central:
             central.layout().invalidate()

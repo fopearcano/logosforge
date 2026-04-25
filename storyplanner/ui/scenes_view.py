@@ -76,6 +76,7 @@ class ScenesView(QWidget):
 
         # -- Left: scene list (wrapped for focus toggle) ---------------------
         self._left_panel = QWidget()
+        self._left_panel.setFixedWidth(220)
         left = QVBoxLayout(self._left_panel)
         left.setContentsMargins(0, 0, 0, 0)
         left.addWidget(QLabel("Scenes"))
