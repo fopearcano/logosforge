@@ -17,7 +17,20 @@ from storyplanner.ui import theme
 DB_PATH = "storyplanner.db"
 
 
+def _set_macos_app_name(name: str) -> None:
+    """Set CFBundleName so macOS shows the correct name in the menu bar and dock."""
+    if sys.platform != "darwin":
+        return
+    try:
+        from Foundation import NSBundle
+        info = NSBundle.mainBundle().infoDictionary()
+        info["CFBundleName"] = name
+    except Exception:
+        pass
+
+
 def create_app() -> tuple[QApplication, MainWindow]:
+    _set_macos_app_name("Logosforge")
     QApplication.setApplicationName("Logosforge")
     QApplication.setApplicationDisplayName("Logosforge")
     QApplication.setOrganizationName("Logosforge")
