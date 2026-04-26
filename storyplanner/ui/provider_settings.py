@@ -65,6 +65,7 @@ class ProviderSettingsWidget(QWidget):
 
         self._model_combo = QComboBox()
         self._model_combo.setEditable(True)
+        self._model_combo.setMaxVisibleItems(15)
         layout.addWidget(self._model_combo)
 
         self._url_input = QLineEdit()
@@ -109,7 +110,8 @@ class ProviderSettingsWidget(QWidget):
         row1.addWidget(QLabel("Model:"))
         self._model_combo = QComboBox()
         self._model_combo.setEditable(True)
-        self._model_combo.setMaximumWidth(200)
+        self._model_combo.setMaximumWidth(260)
+        self._model_combo.setMaxVisibleItems(15)
         row1.addWidget(self._model_combo)
 
         self._defaults_btn = QPushButton("Defaults")
