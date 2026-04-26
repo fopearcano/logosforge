@@ -1,11 +1,14 @@
 """Application factory — creates the QApplication and MainWindow."""
 
+import os
 import sys
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from storyplanner import preferences
 from storyplanner.db import Database
+from storyplanner.paths import get_assets_path
 from storyplanner.plugin_manager import get_plugin_manager
 from storyplanner.settings import get_manager as get_settings
 from storyplanner.ui.main_window import MainWindow
@@ -15,7 +18,17 @@ DB_PATH = "storyplanner.db"
 
 
 def create_app() -> tuple[QApplication, MainWindow]:
+    QApplication.setApplicationName("Logosforge")
+    QApplication.setApplicationDisplayName("Logosforge")
+    QApplication.setOrganizationName("Logosforge")
     app = QApplication.instance() or QApplication(sys.argv)
+
+    assets = get_assets_path()
+    for icon_name in ("icon.png", "icon.svg"):
+        icon_path = str(assets / icon_name)
+        if os.path.exists(icon_path):
+            app.setWindowIcon(QIcon(icon_path))
+            break
 
     mgr = get_settings()
     saved = str(mgr.get("appearance"))
