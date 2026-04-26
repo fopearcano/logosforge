@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -12,6 +13,14 @@ from collections import OrderedDict
 from storyplanner.providers import ProviderConfig, get_api_format, resolve_api_key
 
 DEFAULT_BASE_URL = "http://localhost:1234/v1"
+
+
+def _ssl_context() -> ssl.SSLContext:
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
 
 _CACHE_MAX_SIZE = 128
 _CACHE_TTL_SECONDS = 300
@@ -167,7 +176,7 @@ def _openai_completion(
         url, data=payload, headers=headers, method="POST",
     )
 
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with urllib.request.urlopen(req, timeout=timeout, context=_ssl_context()) as resp:
         raw = resp.read().decode("utf-8")
     data = json.loads(raw)
     if "choices" not in data:
@@ -223,7 +232,7 @@ def _anthropic_completion(
         url, data=payload, headers=headers, method="POST",
     )
 
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with urllib.request.urlopen(req, timeout=timeout, context=_ssl_context()) as resp:
         data = json.loads(resp.read().decode("utf-8"))
         return data["content"][0]["text"]
 
