@@ -385,6 +385,7 @@ class MainWindow(QMainWindow):
         outer_layout.addWidget(main_row, stretch=1)
 
         self._psyke_console = PsykeConsole(self._db, self._project_id)
+        self._psyke_console.entry_selected.connect(self._open_psyke_entry)
         outer_layout.addWidget(self._psyke_console, stretch=0)
 
         self.setCentralWidget(central)
