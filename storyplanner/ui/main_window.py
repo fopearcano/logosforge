@@ -55,6 +55,7 @@ from storyplanner.ui.graph_view import GraphView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.outline_view import OutlineView
 from storyplanner.ui.plugins_view import PluginsView
+from storyplanner.ui.psyke_console import PsykeConsole
 from storyplanner.ui.psyke_view import PsykeView
 from storyplanner.ui.projects_view import ProjectsView
 from storyplanner.ui.scenes_view import ScenesView
@@ -180,7 +181,12 @@ class MainWindow(QMainWindow):
         self._build_menu_bar()
 
         central = QWidget()
-        root_layout = QHBoxLayout(central)
+        outer_layout = QVBoxLayout(central)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        main_row = QWidget()
+        root_layout = QHBoxLayout(main_row)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
@@ -376,6 +382,11 @@ class MainWindow(QMainWindow):
         root_layout.addWidget(self.content_area, stretch=1)
         root_layout.addWidget(self._assistant_panel, stretch=0)
 
+        outer_layout.addWidget(main_row, stretch=1)
+
+        self._psyke_console = PsykeConsole()
+        outer_layout.addWidget(self._psyke_console, stretch=0)
+
         self.setCentralWidget(central)
 
         # -- Restore persisted state -----------------------------------------
@@ -389,8 +400,7 @@ class MainWindow(QMainWindow):
 
     def _set_content(self, widget: QWidget) -> None:
         """Replace the content area with a new widget."""
-        layout = self.centralWidget().layout()
-        layout.replaceWidget(self.content_area, widget)
+        self._root_layout.replaceWidget(self.content_area, widget)
         old = self.content_area
         if old is self._cached_scenes_view:
             old.hide()
@@ -1406,5 +1416,6 @@ class MainWindow(QMainWindow):
             app.setStyleSheet(theme.build_stylesheet())
         for key, btn in self._appearance_btns.items():
             btn.setChecked(key == name)
+        self._psyke_console.refresh_style()
         preferences.set_string("appearance", name)
         get_settings().set("appearance", name)
