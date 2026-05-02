@@ -384,7 +384,7 @@ class MainWindow(QMainWindow):
 
         outer_layout.addWidget(main_row, stretch=1)
 
-        self._psyke_console = PsykeConsole()
+        self._psyke_console = PsykeConsole(self._db, self._project_id)
         outer_layout.addWidget(self._psyke_console, stretch=0)
 
         self.setCentralWidget(central)
@@ -1357,6 +1357,7 @@ class MainWindow(QMainWindow):
         self._update_title()
         self._auto_save()
         self._assistant_panel.refresh_scenes()
+        self._psyke_console.rebuild_index()
 
     def _auto_save(self) -> None:
         if not self._current_file:
