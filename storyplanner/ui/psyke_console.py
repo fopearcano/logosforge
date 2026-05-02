@@ -1,10 +1,10 @@
-"""PSYKE Console — omnibox with live search dropdown."""
+"""PSYKE Console — omnibox with live search dropdown and keyboard navigation."""
 
 from __future__ import annotations
 
 import re
 
-from PySide6.QtCore import QEvent, QTimer, Qt
+from PySide6.QtCore import QEvent, QTimer, Qt, Signal
 from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -32,6 +32,8 @@ _TYPE_ICONS = {
     "other": "\U0001F4CC",
 }
 
+_SELECTED_BG = "rgba(255,255,255,0.08)"
+
 
 class _ResultItem(QWidget):
     """Single row in the results dropdown."""
@@ -58,6 +60,10 @@ class _ResultItem(QWidget):
         type_label.setObjectName("psykeResultType")
         layout.addWidget(type_label)
 
+    def set_selected(self, selected: bool) -> None:
+        bg = _SELECTED_BG if selected else "transparent"
+        self.setStyleSheet(f"#psykeResultItem {{ background-color: {bg}; }}")
+
 
 def _highlight(name: str, query: str) -> str:
     """Wrap matched substring in bold tags."""
@@ -82,10 +88,14 @@ def _esc(text: str) -> str:
 class _ResultsDropdown(QWidget):
     """Popup list that appears above the console."""
 
+    item_selected = Signal(SearchResult)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("psykeResultsDropdown")
         self.setVisible(False)
+        self._items: list[_ResultItem] = []
+        self._selected_index: int = -1
 
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 4, 0, 4)
@@ -93,6 +103,7 @@ class _ResultsDropdown(QWidget):
 
     def show_results(self, results: list[SearchResult], query: str) -> None:
         self._clear()
+        self._selected_index = -1
 
         if not results:
             empty = QLabel("No results")
@@ -106,15 +117,44 @@ class _ResultsDropdown(QWidget):
         for r in results[:_MAX_VISIBLE]:
             item = _ResultItem(r, query)
             self._layout.addWidget(item)
+            self._items.append(item)
 
         self.setVisible(True)
         self._apply_style()
 
     def hide_results(self) -> None:
         self._clear()
+        self._selected_index = -1
         self.setVisible(False)
 
+    def move_selection(self, delta: int) -> None:
+        if not self._items:
+            return
+        old = self._selected_index
+        new = self._selected_index + delta
+        new = max(-1, min(new, len(self._items) - 1))
+        if new == old:
+            return
+        if 0 <= old < len(self._items):
+            self._items[old].set_selected(False)
+        self._selected_index = new
+        if 0 <= new < len(self._items):
+            self._items[new].set_selected(True)
+
+    def confirm_selection(self) -> bool:
+        if 0 <= self._selected_index < len(self._items):
+            self.item_selected.emit(self._items[self._selected_index].result)
+            return True
+        return False
+
+    def has_selection(self) -> bool:
+        return 0 <= self._selected_index < len(self._items)
+
+    def has_items(self) -> bool:
+        return len(self._items) > 0
+
     def _clear(self) -> None:
+        self._items.clear()
         while self._layout.count():
             child = self._layout.takeAt(0)
             if child.widget():
@@ -131,9 +171,6 @@ class _ResultsDropdown(QWidget):
             f"#psykeResultItem {{"
             f"  background-color: transparent;"
             f"  padding: 2px 0;"
-            f"}}"
-            f"#psykeResultItem:hover {{"
-            f"  background-color: rgba(255,255,255,0.05);"
             f"}}"
             f"#psykeResultName {{"
             f"  color: {theme.TEXT_PRIMARY};"
@@ -153,7 +190,9 @@ class _ResultsDropdown(QWidget):
 
 
 class PsykeConsole(QWidget):
-    """Slim search bar with live results dropdown."""
+    """Slim search bar with live results dropdown and keyboard navigation."""
+
+    entry_selected = Signal(int)
 
     def __init__(
         self,
@@ -190,6 +229,7 @@ class PsykeConsole(QWidget):
         self.setGraphicsEffect(self._opacity)
 
         self._dropdown = _ResultsDropdown(self.window() if self.window() else self)
+        self._dropdown.item_selected.connect(self._on_item_selected)
 
         self._apply_style()
 
@@ -245,6 +285,10 @@ class PsykeConsole(QWidget):
         self._dropdown.raise_()
         self._dropdown.show()
 
+    def _on_item_selected(self, result: SearchResult) -> None:
+        self.entry_selected.emit(result.entry_id)
+        self.deactivate()
+
     def eventFilter(self, obj, event) -> bool:
         if obj is self._input:
             if event.type() == QEvent.Type.FocusIn:
@@ -253,9 +297,19 @@ class PsykeConsole(QWidget):
                 self._opacity.setOpacity(_OPACITY_IDLE)
                 QTimer.singleShot(150, self._maybe_hide_dropdown)
             elif event.type() == QEvent.Type.KeyPress:
-                if event.key() == Qt.Key.Key_Escape:
+                key = event.key()
+                if key == Qt.Key.Key_Escape:
                     self.deactivate()
                     return True
+                if key == Qt.Key.Key_Down and self._dropdown.has_items():
+                    self._dropdown.move_selection(1)
+                    return True
+                if key == Qt.Key.Key_Up and self._dropdown.has_items():
+                    self._dropdown.move_selection(-1)
+                    return True
+                if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                    if self._dropdown.confirm_selection():
+                        return True
         return super().eventFilter(obj, event)
 
     def _maybe_hide_dropdown(self) -> None:
