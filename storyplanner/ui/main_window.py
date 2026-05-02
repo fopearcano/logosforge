@@ -389,6 +389,11 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(central)
 
+        # -- Global "/" shortcut to focus PSYKE console ----------------------
+        app = QApplication.instance()
+        if app:
+            app.installEventFilter(self)
+
         # -- Restore persisted state -----------------------------------------
         mgr = get_settings()
         if mgr.get("sidebar_collapsed"):
@@ -1419,3 +1424,16 @@ class MainWindow(QMainWindow):
         self._psyke_console.refresh_style()
         preferences.set_string("appearance", name)
         get_settings().set("appearance", name)
+
+    # -- Global "/" shortcut to PSYKE console --------------------------------
+
+    def eventFilter(self, obj, event) -> bool:
+        if event.type() == event.Type.KeyPress and event.text() == "/":
+            focus = QApplication.focusWidget()
+            if focus is not None:
+                for cls in ("QLineEdit", "QPlainTextEdit", "QTextEdit"):
+                    if focus.inherits(cls):
+                        return super().eventFilter(obj, event)
+            self._psyke_console.activate()
+            return True
+        return super().eventFilter(obj, event)
