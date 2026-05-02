@@ -839,22 +839,16 @@ class MainWindow(QMainWindow):
             if editor and hasattr(editor, "textCursor"):
                 return editor
         if self._cached_scenes_view is not None and self.content_area is self._cached_scenes_view:
-            editor = getattr(self._cached_scenes_view, "_active_editor", None)
-            if editor and hasattr(editor, "textCursor"):
-                return editor
+            for attr in ("_active_editor", "_content_input"):
+                editor = getattr(self._cached_scenes_view, attr, None)
+                if editor and hasattr(editor, "textCursor"):
+                    return editor
         return None
 
     def _detect_selected_text(self) -> str:
-        from storyplanner.ui.writing_core_view import WritingCoreView
-        view = self.content_area
-        if isinstance(view, WritingCoreView):
-            editor = getattr(view, "_active_editor", None)
-            if editor and hasattr(editor, "textCursor"):
-                return editor.textCursor().selectedText().replace(" ", "\n")
-        if self._cached_scenes_view is not None and self.content_area is self._cached_scenes_view:
-            editor = getattr(self._cached_scenes_view, "_active_editor", None)
-            if editor and hasattr(editor, "textCursor"):
-                return editor.textCursor().selectedText().replace(" ", "\n")
+        editor = self._detect_active_editor()
+        if editor:
+            return editor.textCursor().selectedText().replace(" ", "\n")
         return ""
 
     def _open_scene_in_editor(self, scene_id: int) -> None:
