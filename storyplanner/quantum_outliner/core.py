@@ -564,6 +564,9 @@ def _wf_summary(wf: Wavefunction) -> dict:
                 "structure_method": b.structure_method,
                 "structure_beat": b.structure_beat,
                 "branch_type": b.branch_type,
+                "score": b.score,
+                "probability": b.probability,
+                "factors": b.factors,
             }
             for b in wf.branches
         ],

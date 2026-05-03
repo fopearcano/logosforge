@@ -36,6 +36,9 @@ class Branch:
     structure_method: str | None = None
     structure_beat: str | None = None
     branch_type: str | None = None
+    score: float = 0.0
+    probability: float = 0.0
+    factors: dict[str, float] = field(default_factory=dict)
 
     @classmethod
     def new(
@@ -48,6 +51,9 @@ class Branch:
         structure_method: str | None = None,
         structure_beat: str | None = None,
         branch_type: str | None = None,
+        score: float = 0.0,
+        probability: float = 0.0,
+        factors: dict[str, float] | None = None,
     ) -> "Branch":
         return cls(
             id=uuid.uuid4().hex[:8],
@@ -59,6 +65,9 @@ class Branch:
             structure_method=structure_method,
             structure_beat=structure_beat,
             branch_type=branch_type,
+            score=score,
+            probability=probability,
+            factors=factors or {},
         )
 
 
@@ -232,6 +241,9 @@ def deserialize_state(raw: str, project_id: int) -> NarrativeState | None:
                 arc_updates=delta_raw.get("arc_updates", []),
                 notes=delta_raw.get("notes", ""),
             )
+            raw_factors = b_raw.get("factors") or {}
+            if not isinstance(raw_factors, dict):
+                raw_factors = {}
             branches.append(Branch(
                 id=b_raw.get("id", ""),
                 title=b_raw.get("title", ""),
@@ -242,6 +254,9 @@ def deserialize_state(raw: str, project_id: int) -> NarrativeState | None:
                 structure_method=b_raw.get("structure_method"),
                 structure_beat=b_raw.get("structure_beat"),
                 branch_type=b_raw.get("branch_type"),
+                score=float(b_raw.get("score", 0.0)),
+                probability=float(b_raw.get("probability", 0.0)),
+                factors=raw_factors,
             ))
 
         wf = Wavefunction(
