@@ -1,0 +1,178 @@
+"""PSYKE natural language intent detection — rule-based.
+
+Converts plain English phrases into structured Intent objects
+without requiring slash-command syntax.
+
+Examples:
+    "open scene 3"         → Intent("open_scene", {"id": 3})
+    "create character john" → Intent("create_entry", {"entry_type": "character", "name": "john"})
+    "insert john"          → Intent("insert_entity", {"name": "john"})
+    "go to next scene"     → Intent("go_scene", {"direction": "next"})
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class Intent:
+    """Structured representation of a detected user intent."""
+
+    action: str
+    args: dict[str, str | int] = field(default_factory=dict)
+    confidence: float = 1.0
+
+
+_ENTRY_TYPES = ("character", "place", "object", "lore", "theme", "other")
+
+_RULES: list[tuple[re.Pattern, callable]] = []
+
+
+def _rule(pattern: str, flags: int = re.IGNORECASE):
+    """Decorator that registers a regex rule with its handler."""
+    compiled = re.compile(pattern, flags)
+
+    def decorator(func):
+        _RULES.append((compiled, func))
+        return func
+
+    return decorator
+
+
+# --- Open rules ---
+
+@_rule(r"^open\s+scene\s+(\d+)$")
+def _open_scene_by_id(m: re.Match) -> Intent:
+    return Intent("open_scene", {"id": int(m.group(1))})
+
+
+@_rule(r"^(?:open|show|view)\s+(?:entry|psyke)\s+(.+)$")
+def _open_entry(m: re.Match) -> Intent:
+    return Intent("open_entry", {"name": m.group(1).strip()})
+
+
+@_rule(r"^open\s+(.+)$")
+def _open_generic(m: re.Match) -> Intent:
+    name = m.group(1).strip()
+    if name.isdigit():
+        return Intent("open_scene", {"id": int(name)})
+    return Intent("open_entry", {"name": name})
+
+
+# --- Create rules ---
+
+@_rule(r"^(?:create|new|add)\s+(character|place|object|lore|theme|other)\s+(.+)$")
+def _create_typed(m: re.Match) -> Intent:
+    return Intent("create_entry", {
+        "entry_type": m.group(1).lower(),
+        "name": m.group(2).strip(),
+    })
+
+
+@_rule(r"^(?:create|new|add)\s+(character|place|object|lore|theme|other)$")
+def _create_typed_no_name(m: re.Match) -> Intent:
+    return Intent("create_entry", {"entry_type": m.group(1).lower(), "name": ""})
+
+
+@_rule(r"^(?:create|new|add)\s+(.+)$")
+def _create_generic(m: re.Match) -> Intent:
+    name = m.group(1).strip()
+    return Intent("create_entry", {"entry_type": "other", "name": name}, confidence=0.7)
+
+
+# --- Navigation rules ---
+
+@_rule(r"^(?:go\s+to|goto|next)\s+scene$")
+def _go_next_scene_short(m: re.Match) -> Intent:
+    return Intent("go_scene", {"direction": "next"})
+
+
+@_rule(r"^(?:go\s+to|goto|go)\s+(?:scene\s+)?(next|previous|prev)(?:\s+scene)?$")
+def _go_scene_direction(m: re.Match) -> Intent:
+    direction = m.group(1).lower()
+    if direction == "prev":
+        direction = "previous"
+    return Intent("go_scene", {"direction": direction})
+
+
+@_rule(r"^(?:go\s+to|goto|go)\s+scene\s+(\d+)$")
+def _go_scene_by_id(m: re.Match) -> Intent:
+    return Intent("go_scene", {"id": int(m.group(1))})
+
+
+@_rule(r"^(?:previous|prev)\s+scene$")
+def _prev_scene_short(m: re.Match) -> Intent:
+    return Intent("go_scene", {"direction": "previous"})
+
+
+# --- Insert rules ---
+
+@_rule(r"^insert\s+(.+)$")
+def _insert_entity(m: re.Match) -> Intent:
+    return Intent("insert_entity", {"name": m.group(1).strip()})
+
+
+@_rule(r"^(?:use|mention|add)\s+(.+?)(?:\s+here)?$")
+def _insert_synonym(m: re.Match) -> Intent:
+    return Intent("insert_entity", {"name": m.group(1).strip()}, confidence=0.6)
+
+
+# --- AI action rules ---
+
+@_rule(r"^(?:ai\s+)?(rewrite|expand|summarize|condense|elaborate)\s*(.*)$")
+def _ai_action(m: re.Match) -> Intent:
+    action = m.group(1).lower()
+    context = m.group(2).strip()
+    args: dict[str, str | int] = {"action": action}
+    if context:
+        args["context"] = context
+    return Intent("ai_action", args, confidence=0.8)
+
+
+@_rule(r"^(?:make\s+(?:it|this)\s+)(shorter|longer|clearer|more\s+dramatic)$")
+def _ai_rephrase(m: re.Match) -> Intent:
+    modifier = m.group(1).strip().replace(" ", "_")
+    action_map = {
+        "shorter": "condense",
+        "longer": "expand",
+        "clearer": "rewrite",
+        "more_dramatic": "rewrite",
+    }
+    return Intent("ai_action", {"action": action_map.get(modifier, "rewrite")}, confidence=0.7)
+
+
+# --- Delete / rename rules ---
+
+@_rule(r"^(?:delete|remove)\s+(?:entry\s+)?(.+)$")
+def _delete_entity(m: re.Match) -> Intent:
+    return Intent("delete_entry", {"name": m.group(1).strip()})
+
+
+@_rule(r"^rename\s+(.+?)\s+(?:to|as)\s+(.+)$")
+def _rename_entity(m: re.Match) -> Intent:
+    return Intent("rename_entry", {
+        "name": m.group(1).strip(),
+        "new_name": m.group(2).strip(),
+    })
+
+
+# --- Public API ---
+
+def detect_intent(text: str) -> Intent | None:
+    """Attempt to detect a structured intent from natural language.
+
+    Returns the first matching Intent, or None if no rule matches.
+    Rules are evaluated in registration order (most specific first).
+    """
+    text = text.strip()
+    if not text:
+        return None
+
+    for pattern, handler in _RULES:
+        m = pattern.match(text)
+        if m:
+            return handler(m)
+
+    return None
