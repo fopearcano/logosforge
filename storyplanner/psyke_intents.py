@@ -176,3 +176,72 @@ def detect_intent(text: str) -> Intent | None:
             return handler(m)
 
     return None
+
+
+_INTENT_TO_COMMAND: dict[str, callable] = {}
+
+
+def _maps(action: str):
+    """Register an intent-to-command mapping."""
+    def decorator(func):
+        _INTENT_TO_COMMAND[action] = func
+        return func
+    return decorator
+
+
+@_maps("open_scene")
+def _cmd_open_scene(args: dict) -> str:
+    return f"/open scene {args['id']}"
+
+
+@_maps("open_entry")
+def _cmd_open_entry(args: dict) -> str:
+    return f"/open psyke {args['name']}"
+
+
+@_maps("create_entry")
+def _cmd_create_entry(args: dict) -> str:
+    entry_type = args.get("entry_type", "other")
+    name = args.get("name", "")
+    if name:
+        return f"/create {entry_type} {name}"
+    return f"/create {entry_type}"
+
+
+@_maps("go_scene")
+def _cmd_go_scene(args: dict) -> str:
+    if "id" in args:
+        return f"/go scene {args['id']}"
+    return f"/go scene {args['direction']}"
+
+
+@_maps("insert_entity")
+def _cmd_insert_entity(args: dict) -> str:
+    return f"/insert {args['name']}"
+
+
+@_maps("ai_action")
+def _cmd_ai_action(args: dict) -> str:
+    return f"/ai {args['action']}"
+
+
+@_maps("delete_entry")
+def _cmd_delete_entry(args: dict) -> str:
+    return f"/delete {args['name']}"
+
+
+@_maps("rename_entry")
+def _cmd_rename_entry(args: dict) -> str:
+    return f"/rename {args['name']} to {args['new_name']}"
+
+
+def intent_to_command(intent: Intent) -> str | None:
+    """Convert a detected Intent into a slash-command string.
+
+    Returns a command string that can be fed into the existing command
+    parser, or None if the intent has no command mapping.
+    """
+    mapper = _INTENT_TO_COMMAND.get(intent.action)
+    if mapper is None:
+        return None
+    return mapper(intent.args)

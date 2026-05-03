@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from storyplanner.db import Database
 from storyplanner.psyke_commands import CommandType, parse as parse_command
+from storyplanner.psyke_intents import detect_intent, intent_to_command
 from storyplanner.psyke_search import PsykeSearchIndex
 from storyplanner.psyke_suggestions import Suggestion, suggest
 from storyplanner.ui import theme
@@ -508,6 +509,26 @@ class PsykeConsole(QWidget):
             self.deactivate()
             return True
 
+        return self._try_intent(text)
+
+    def _try_intent(self, text: str) -> bool:
+        intent = detect_intent(text)
+        if intent is None:
+            return False
+        cmd_str = intent_to_command(intent)
+        if cmd_str is None:
+            return False
+        parsed = parse_command(cmd_str)
+        if parsed.kind == CommandType.SYSTEM:
+            self.command_submitted.emit(parsed.command, parsed.args)
+            self.deactivate()
+            return True
+        if parsed.kind == CommandType.ENTITY:
+            resolved = self._search_index.resolve_entity(parsed.command)
+            if resolved:
+                self.entry_selected.emit(resolved.entry_id, resolved.name)
+                self.deactivate()
+                return True
         return False
 
     def _maybe_hide_dropdown(self) -> None:
