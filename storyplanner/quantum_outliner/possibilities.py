@@ -71,6 +71,7 @@ def generate_possibilities(
     n: int = 4,
     source_scene_id: int | None = None,
     source_scene_order: int | None = None,
+    structure_mode: str = "hybrid",
 ) -> Wavefunction:
     """Generate a wavefunction of N branches for a narrative anchor.
 

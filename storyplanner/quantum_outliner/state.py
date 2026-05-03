@@ -112,6 +112,9 @@ class Wavefunction:
         return self.get_branch(self.collapsed_branch_id)
 
 
+STRUCTURE_MODES = ("auto", "classical", "quantum", "hybrid")
+
+
 @dataclass
 class NarrativeState:
     """In-memory store of all live wavefunctions for a project."""
@@ -120,6 +123,7 @@ class NarrativeState:
     wavefunctions: dict[str, Wavefunction] = field(default_factory=dict)
     selected_pov: str = ""
     linked_scene_id: int | None = None
+    structure_mode: str = "hybrid"
 
     def add(self, wf: Wavefunction) -> None:
         self.wavefunctions[wf.id] = wf
@@ -160,6 +164,7 @@ def serialize_state(state: NarrativeState) -> str:
         "project_id": state.project_id,
         "selected_pov": state.selected_pov,
         "linked_scene_id": state.linked_scene_id,
+        "structure_mode": state.structure_mode,
         "wavefunctions": [asdict(wf) for wf in state.wavefunctions.values()],
     }
     return json.dumps(data)
@@ -173,10 +178,15 @@ def deserialize_state(raw: str, project_id: int) -> NarrativeState | None:
     if not isinstance(data, dict):
         return None
 
+    raw_mode = data.get("structure_mode", "hybrid")
+    if raw_mode not in STRUCTURE_MODES:
+        raw_mode = "hybrid"
+
     state = NarrativeState(
         project_id=project_id,
         selected_pov=str(data.get("selected_pov", "")),
         linked_scene_id=data.get("linked_scene_id"),
+        structure_mode=raw_mode,
     )
 
     for wf_raw in data.get("wavefunctions", []):

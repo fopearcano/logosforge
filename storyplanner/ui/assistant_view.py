@@ -62,10 +62,12 @@ from storyplanner.orchestration import (
 )
 from storyplanner.providers import ProviderConfig
 from storyplanner.quantum_outliner import (
+    STRUCTURE_MODES,
     collapse_branch as quantum_collapse_branch,
     detect_weak_scenes as quantum_detect_weak_scenes,
     generate_branches as quantum_generate_branches,
     generate_outline as quantum_generate_outline,
+    get_state as quantum_get_state,
     list_active_wavefunctions as quantum_list_active,
     load_state as quantum_load_state,
     reframe as quantum_reframe,
@@ -472,6 +474,31 @@ class AssistantPanel(QWidget):
         self._quantum_row.setVisible(False)
         self._layout.addWidget(self._quantum_row)
 
+        # Quantum structure mode selector
+        self._structure_mode_row = QWidget()
+        sm_layout = QHBoxLayout(self._structure_mode_row)
+        sm_layout.setContentsMargins(0, 2, 0, 2)
+        sm_layout.setSpacing(2)
+        sm_label = QLabel("Structure:")
+        sm_label.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: 10px; background: transparent;"
+        )
+        sm_layout.addWidget(sm_label)
+        self._structure_mode_buttons: list[QPushButton] = []
+        for mode_name in STRUCTURE_MODES:
+            btn = QPushButton(mode_name.capitalize())
+            btn.setCheckable(True)
+            btn.setFixedHeight(20)
+            btn.clicked.connect(
+                lambda _, m=mode_name: self._on_structure_mode(m)
+            )
+            sm_layout.addWidget(btn)
+            self._structure_mode_buttons.append(btn)
+        sm_layout.addStretch()
+        self._structure_mode_row.setVisible(False)
+        self._layout.addWidget(self._structure_mode_row)
+        self._sync_structure_mode_buttons()
+
         # Quantum timeline superposition
         self._quantum_timeline = QuantumTimelineWidget(self._db, self._project_id)
         self._quantum_timeline.branch_selected.connect(self._on_timeline_branch_selected)
@@ -655,8 +682,10 @@ class AssistantPanel(QWidget):
             btn.setVisible(is_assistant)
         self._counterpart_row.setVisible(is_counterpart)
         self._quantum_row.setVisible(is_quantum)
+        self._structure_mode_row.setVisible(is_quantum)
         self._quantum_timeline.setVisible(is_quantum)
         if is_quantum:
+            self._sync_structure_mode_buttons()
             self._quantum_timeline.refresh()
 
         # Apply buttons mutate scene content — only Assistant uses them
@@ -1014,6 +1043,36 @@ class AssistantPanel(QWidget):
 
     def _quantum_prompt(self) -> str:
         return self._prompt_input.toPlainText().strip()
+
+    def _on_structure_mode(self, mode: str) -> None:
+        state = quantum_get_state(self._project_id)
+        state.structure_mode = mode
+        self._sync_structure_mode_buttons()
+        quantum_save_state(self._db, self._project_id)
+
+    def _sync_structure_mode_buttons(self) -> None:
+        state = quantum_get_state(self._project_id)
+        current = state.structure_mode
+        for btn in self._structure_mode_buttons:
+            is_active = btn.text().lower() == current
+            btn.setChecked(is_active)
+            btn.setStyleSheet(self._structure_mode_btn_style(is_active))
+
+    @staticmethod
+    def _structure_mode_btn_style(active: bool) -> str:
+        if active:
+            return (
+                f"QPushButton {{ background: {theme.SELECTION_BG};"
+                f" color: {theme.ACCENT}; border: 1px solid {theme.ACCENT_DIM};"
+                f" border-radius: 3px; padding: 1px 6px;"
+                f" font-size: 10px; font-weight: bold; }}"
+            )
+        return (
+            f"QPushButton {{ background: transparent;"
+            f" color: {theme.TEXT_MUTED}; border: 1px solid {theme.BORDER};"
+            f" border-radius: 3px; padding: 1px 6px; font-size: 10px; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
+        )
 
     def _show_quantum_result(self, result) -> None:
         body = f"[QUANTUM · {result.title}]\n\n{result.body}"

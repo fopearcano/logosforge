@@ -29,6 +29,7 @@ from storyplanner.quantum_outliner.persistence import (
     save_state,
 )
 from storyplanner.quantum_outliner.state import (
+    STRUCTURE_MODES,
     Branch,
     NarrativeState,
     StateDelta,
@@ -41,6 +42,7 @@ __all__ = [
     "QuantumResult",
     "Branch",
     "NarrativeState",
+    "STRUCTURE_MODES",
     "StateDelta",
     "Wavefunction",
     "apply_proposal",

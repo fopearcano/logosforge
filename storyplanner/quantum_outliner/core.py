@@ -43,18 +43,21 @@ def generate_outline(
     *,
     n: int = 4,
     source_scene_id: int | None = None,
+    structure_mode: str | None = None,
 ) -> QuantumResult:
     """Generate an outline as a wavefunction of opening branches."""
     if not premise.strip():
         return QuantumResult(
             kind="error", title="Outline", body="Provide a premise first.", payload={},
         )
+    mode = structure_mode or get_state(project_id).structure_mode
     scene_order = _resolve_scene_order(db, project_id, source_scene_id)
     wf = generate_possibilities(
         anchor=f"Story opening: {premise}",
         db=db, project_id=project_id, n=n,
         source_scene_id=source_scene_id,
         source_scene_order=scene_order,
+        structure_mode=mode,
     )
     get_state(project_id).add(wf)
     return _format_wavefunction("Outline", wf)
@@ -68,18 +71,21 @@ def generate_branches(
     n: int = 4,
     extra_context: str = "",
     source_scene_id: int | None = None,
+    structure_mode: str | None = None,
 ) -> QuantumResult:
     """Generate possible next moves for a given situation."""
     if not situation.strip():
         return QuantumResult(
             kind="error", title="Possibilities", body="Provide a situation first.", payload={},
         )
+    mode = structure_mode or get_state(project_id).structure_mode
     scene_order = _resolve_scene_order(db, project_id, source_scene_id)
     wf = generate_possibilities(
         anchor=situation, db=db, project_id=project_id,
         extra_context=extra_context, n=n,
         source_scene_id=source_scene_id,
         source_scene_order=scene_order,
+        structure_mode=mode,
     )
     get_state(project_id).add(wf)
     return _format_wavefunction("Possibilities", wf)
