@@ -413,6 +413,21 @@ class PsykeConsole(QWidget):
         dropdown.show()
 
     def _on_suggestion_activated(self, suggestion: Suggestion) -> None:
+        if suggestion.category == "intent":
+            parsed = parse_command(suggestion.text)
+            if parsed.kind == CommandType.SYSTEM:
+                self.command_submitted.emit(parsed.command, parsed.args)
+                self.deactivate()
+                return
+            if parsed.kind == CommandType.ENTITY:
+                resolved = self._search_index.resolve_entity(parsed.command)
+                if resolved:
+                    self.entry_selected.emit(resolved.entry_id, resolved.name)
+                    self.deactivate()
+                    return
+            self.deactivate()
+            return
+
         if suggestion.category == "command":
             text = suggestion.text.lstrip("/")
             parsed = parse_command("/" + text)

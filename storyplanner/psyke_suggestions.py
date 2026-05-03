@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from storyplanner.psyke_intents import detect_intent, intent_to_command
+
 if TYPE_CHECKING:
     from storyplanner.db import Database
     from storyplanner.psyke_command_registry import CommandRegistry
@@ -55,10 +57,22 @@ def _suggest_search(
     scene_entry_ids: set[int] | None,
     max_results: int,
 ) -> list[Suggestion]:
-    from storyplanner.psyke_search import _score
+    suggestions: list[Suggestion] = []
+
+    intent = detect_intent(query)
+    if intent is not None:
+        cmd_str = intent_to_command(intent)
+        if cmd_str is not None:
+            suggestions.append(Suggestion(
+                text=cmd_str,
+                description=f"Run: {query}",
+                icon="⚡",
+                category="intent",
+                score=1.0 + intent.confidence,
+                entry_id=0,
+            ))
 
     results = search_index.search(query, max_results=max_results + 4)
-    suggestions: list[Suggestion] = []
     for r in results:
         boost = 0.05 if (scene_entry_ids and r.entry_id in scene_entry_ids) else 0.0
         icon = _type_icon(r.entry_type)
