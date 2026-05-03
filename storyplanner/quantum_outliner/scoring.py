@@ -32,6 +32,24 @@ DEFAULT_WEIGHTS: dict[str, float] = {
 }
 
 
+_FACTOR_LABELS: dict[str, str] = {
+    "structure_fit": "aligns with structural beat",
+    "psyke_consistency": "consistent with story bible",
+    "tension_gain": "raises narrative tension",
+    "novelty": "offers fresh direction",
+    "goal_alignment": "advances protagonist's goal",
+}
+
+
+@dataclass(frozen=True)
+class CollapseRecommendation:
+    branch_id: str
+    title: str
+    probability: float
+    reason: str
+    top_factors: list[tuple[str, float]]
+
+
 @dataclass(frozen=True)
 class ScoredBranch:
     branch_id: str
@@ -94,6 +112,39 @@ def apply_scores(wf: Wavefunction, scored: list[ScoredBranch]) -> None:
             b.score = s.score
             b.probability = s.probability
             b.factors = dict(s.factors)
+
+
+def recommend_collapse(wf: Wavefunction) -> CollapseRecommendation | None:
+    """Pick the highest-probability branch as collapse recommendation.
+
+    Returns None if fewer than 2 branches or none are scored.
+    """
+    candidates = [b for b in wf.branches if b.probability > 0]
+    if len(candidates) < 2:
+        return None
+
+    best = max(candidates, key=lambda b: b.probability)
+
+    runner_up = max(
+        (b for b in candidates if b.id != best.id),
+        key=lambda b: b.probability,
+    )
+    is_tie = abs(best.probability - runner_up.probability) < 0.01
+
+    top_factors = sorted(best.factors.items(), key=lambda kv: kv[1], reverse=True)[:2]
+
+    parts = [_FACTOR_LABELS.get(k, k) for k, _ in top_factors if _ > 0]
+    if is_tie:
+        parts = [f"near-tie with {runner_up.title}"] + parts[:1]
+    reason = "; ".join(parts) if parts else "highest overall score"
+
+    return CollapseRecommendation(
+        branch_id=best.id,
+        title=best.title,
+        probability=best.probability,
+        reason=reason,
+        top_factors=top_factors,
+    )
 
 
 def compute_probabilities(

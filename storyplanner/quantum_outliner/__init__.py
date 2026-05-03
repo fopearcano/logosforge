@@ -28,7 +28,11 @@ from storyplanner.quantum_outliner.persistence import (
     load_state,
     save_state,
 )
-from storyplanner.quantum_outliner.scoring import compute_probabilities
+from storyplanner.quantum_outliner.scoring import (
+    CollapseRecommendation,
+    compute_probabilities,
+    recommend_collapse,
+)
 from storyplanner.quantum_outliner.state import (
     OUTLINE_MODES,
     STRUCTURE_MODES,
@@ -53,9 +57,11 @@ __all__ = [
     "STRUCTURE_MODES",
     "StateDelta",
     "Wavefunction",
+    "CollapseRecommendation",
     "apply_proposal",
     "collapse_branch",
     "compute_probabilities",
+    "recommend_collapse",
     "detect_weak_scenes",
     "export_quantum_state",
     "generate_branches",

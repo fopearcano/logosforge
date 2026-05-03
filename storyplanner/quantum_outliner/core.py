@@ -12,7 +12,11 @@ from typing import TYPE_CHECKING
 from storyplanner.quantum_outliner.collapse import CollapseError, collapse
 from storyplanner.quantum_outliner.possibilities import generate_possibilities
 from storyplanner.quantum_outliner.psyke_adapter import PsykeSignals, gather_psyke_signals
-from storyplanner.quantum_outliner.scoring import apply_scores, score_branches
+from storyplanner.quantum_outliner.scoring import (
+    apply_scores,
+    recommend_collapse,
+    score_branches,
+)
 from storyplanner.quantum_outliner.relativity import reframe_scene
 from storyplanner.quantum_outliner.state import (
     Branch,
@@ -379,6 +383,12 @@ def _format_lambda(
         lines.append("  Use /quantum reframe <name> to shift perspective.")
         lines.append("")
 
+    rec = recommend_collapse(wf)
+    if rec:
+        lines.append(f"Recommended: {rec.title}  ({rec.probability:.0%})")
+        lines.append(f"  {rec.reason}")
+        lines.append("")
+
     lines.append(
         f"Uncertainty: {n} branches in superposition — "
         f"all futures coexist until collapsed."
@@ -555,6 +565,16 @@ def _pick_collapse_candidate(
 
 
 def _wf_summary(wf: Wavefunction) -> dict:
+    rec = recommend_collapse(wf)
+    rec_data = None
+    if rec:
+        rec_data = {
+            "branch_id": rec.branch_id,
+            "title": rec.title,
+            "probability": rec.probability,
+            "reason": rec.reason,
+            "top_factors": rec.top_factors,
+        }
     return {
         "wavefunction_id": wf.id,
         "anchor": wf.anchor,
@@ -563,6 +583,7 @@ def _wf_summary(wf: Wavefunction) -> dict:
         "source_scene_order": wf.source_scene_order,
         "target_scene_id": wf.target_scene_id,
         "structure_method": wf.structure_method,
+        "recommendation": rec_data,
         "branches": [
             {
                 "id": b.id,
