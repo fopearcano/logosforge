@@ -1201,6 +1201,46 @@ def build_stylesheet() -> str:
     #modeStripReset:hover {{
         color: {ACCENT};
     }}
+
+    /* -- Quantum Timeline Superposition -- */
+    #qtlScroll {{
+        background-color: {BG_DARK};
+        border: none;
+    }}
+    #qtlContainer {{
+        background-color: {BG_DARK};
+    }}
+    #qtlColumn {{
+        background-color: {BG_PANEL};
+        border: 1px solid {BORDER};
+        border-radius: 4px;
+    }}
+    #qtlSceneTitle {{
+        color: {TEXT_PRIMARY};
+        font-size: 10px;
+        font-weight: bold;
+        background: transparent;
+        padding: 0;
+    }}
+    #qtlBranchTitle {{
+        color: {TEXT_PRIMARY};
+        font-size: 10px;
+        font-weight: 600;
+        background: transparent;
+        padding: 0;
+    }}
+    #qtlBranchMeta {{
+        color: {TEXT_MUTED};
+        font-size: 9px;
+        background: transparent;
+        padding: 0;
+    }}
+    #qtlEmpty {{
+        color: {TEXT_MUTED};
+        font-size: 11px;
+        background: transparent;
+        padding: 8px 0;
+    }}
     """
 
 

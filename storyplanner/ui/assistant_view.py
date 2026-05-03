@@ -75,6 +75,7 @@ from storyplanner.settings import get_manager as get_settings
 from storyplanner.ui import theme
 from storyplanner.ui.mode_strip import ModeStrip
 from storyplanner.ui.provider_settings import ProviderSettingsWidget
+from storyplanner.ui.quantum_timeline import QuantumTimelineWidget
 
 
 SECTION_SYSTEM_PROMPTS: dict[str, str] = {
@@ -471,6 +472,14 @@ class AssistantPanel(QWidget):
         self._quantum_row.setVisible(False)
         self._layout.addWidget(self._quantum_row)
 
+        # Quantum timeline superposition
+        self._quantum_timeline = QuantumTimelineWidget(self._db, self._project_id)
+        self._quantum_timeline.branch_selected.connect(self._on_timeline_branch_selected)
+        self._quantum_timeline.collapse_requested.connect(self._on_quantum_collapse)
+        self._quantum_timeline.archive_requested.connect(self._on_timeline_archive)
+        self._quantum_timeline.setVisible(False)
+        self._layout.addWidget(self._quantum_timeline)
+
         # Custom prompt
         self._prompt_input = QPlainTextEdit()
         self._prompt_input.setPlaceholderText(
@@ -646,6 +655,9 @@ class AssistantPanel(QWidget):
             btn.setVisible(is_assistant)
         self._counterpart_row.setVisible(is_counterpart)
         self._quantum_row.setVisible(is_quantum)
+        self._quantum_timeline.setVisible(is_quantum)
+        if is_quantum:
+            self._quantum_timeline.refresh()
 
         # Apply buttons mutate scene content — only Assistant uses them
         self._replace_content_btn.setVisible(is_assistant)
@@ -1026,6 +1038,7 @@ class AssistantPanel(QWidget):
         if result.kind == "collapse" and self._on_data_changed:
             self._on_data_changed()
         self._quantum_worker = None
+        self._quantum_timeline.refresh()
 
     def _on_quantum_error(self, error: str) -> None:
         self._response_output.setPlainText(f"Error:\n\n{error}")
@@ -1112,6 +1125,37 @@ class AssistantPanel(QWidget):
             quantum_collapse_branch, self._db, self._project_id, wf_id, branch_id,
             loading_msg="Collapsing branch…",
         )
+
+    def _on_timeline_branch_selected(self, wf_id: str, branch_id: str) -> None:
+        from storyplanner.quantum_outliner.state import get_state
+        state = get_state(self._project_id)
+        wf = state.get(wf_id)
+        if wf is None:
+            return
+        branch = wf.get_branch(branch_id)
+        if branch is None:
+            return
+        lines = [
+            f"[QUANTUM · Branch Selected]",
+            "",
+            f"Wavefunction: {wf.anchor}",
+            f"Branch: {branch.title}  [{branch.id}]",
+            f"  {branch.description}",
+        ]
+        if branch.stakes:
+            lines.append(f"  Stakes: {branch.stakes}")
+        if branch.consequence:
+            lines.append(f"  Consequence: {branch.consequence}")
+        self._response_output.setPlainText("\n".join(lines))
+
+    def _on_timeline_archive(self, wf_id: str) -> None:
+        from storyplanner.quantum_outliner.state import get_state
+        state = get_state(self._project_id)
+        removed = state.remove(wf_id)
+        if removed:
+            quantum_save_state(self._db, self._project_id)
+            self._quantum_timeline.refresh()
+            self._response_output.setPlainText("Wavefunction archived.")
 
     def _on_suggest_beats(self) -> None:
         if self._worker is not None:
