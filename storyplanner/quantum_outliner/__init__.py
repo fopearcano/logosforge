@@ -28,12 +28,14 @@ from storyplanner.quantum_outliner.persistence import (
     load_state,
     save_state,
 )
+from storyplanner.quantum_outliner.scoring import compute_probabilities
 from storyplanner.quantum_outliner.state import (
     OUTLINE_MODES,
     STRUCTURE_MODES,
     Branch,
     NarrativeState,
     OutlineMode,
+    QuantumPossibility,
     StateDelta,
     Wavefunction,
     get_outline_mode,
@@ -44,6 +46,7 @@ from storyplanner.quantum_outliner.state import (
 __all__ = [
     "OUTLINE_MODES",
     "OutlineMode",
+    "QuantumPossibility",
     "QuantumResult",
     "Branch",
     "NarrativeState",
@@ -52,6 +55,7 @@ __all__ = [
     "Wavefunction",
     "apply_proposal",
     "collapse_branch",
+    "compute_probabilities",
     "detect_weak_scenes",
     "export_quantum_state",
     "generate_branches",

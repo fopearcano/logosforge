@@ -10,11 +10,18 @@ from storyplanner.quantum_outliner.psyke_adapter import PsykeSignals
 from storyplanner.quantum_outliner.scoring import (
     DEFAULT_WEIGHTS,
     ScoredBranch,
+    _softmax,
     apply_scores,
     compute_factors,
+    compute_probabilities,
     score_branches,
 )
-from storyplanner.quantum_outliner.state import Branch, StateDelta, Wavefunction
+from storyplanner.quantum_outliner.state import (
+    Branch,
+    QuantumPossibility,
+    StateDelta,
+    Wavefunction,
+)
 
 
 def _make_branch(**kwargs) -> Branch:
@@ -427,3 +434,127 @@ class TestDefaultWeights:
             "novelty", "goal_alignment",
         }
         assert set(DEFAULT_WEIGHTS.keys()) == expected
+
+
+class TestQuantumPossibilityAlias:
+    def test_alias_is_branch(self):
+        assert QuantumPossibility is Branch
+
+    def test_create_via_alias(self):
+        p = QuantumPossibility.new(title="Path A", description="A choice")
+        assert isinstance(p, Branch)
+        assert p.score == 0.0
+        assert p.probability == 0.0
+
+
+class TestComputeProbabilities:
+    def test_three_possibilities_sum_to_one(self):
+        """Example: 3 possibilities with distinct scores → probabilities sum to 1."""
+        p1 = _make_branch(title="High tension", description="D", score=0.8)
+        p2 = _make_branch(title="Medium path", description="D", score=0.5)
+        p3 = _make_branch(title="Low stakes", description="D", score=0.2)
+
+        compute_probabilities([p1, p2, p3])
+
+        total = p1.probability + p2.probability + p3.probability
+        assert abs(total - 1.0) < 0.01
+        assert p1.probability > p2.probability > p3.probability
+
+    def test_equal_scores_equal_probability(self):
+        p1 = _make_branch(title="A", description="D", score=0.5)
+        p2 = _make_branch(title="B", description="D", score=0.5)
+        p3 = _make_branch(title="C", description="D", score=0.5)
+
+        compute_probabilities([p1, p2, p3])
+
+        assert p1.probability == p2.probability == p3.probability
+        total = p1.probability + p2.probability + p3.probability
+        assert abs(total - 1.0) < 0.01
+
+    def test_all_zero_scores_uniform(self):
+        p1 = _make_branch(title="A", description="D", score=0.0)
+        p2 = _make_branch(title="B", description="D", score=0.0)
+
+        compute_probabilities([p1, p2])
+
+        assert p1.probability == 0.5
+        assert p2.probability == 0.5
+
+    def test_empty_list_is_safe(self):
+        compute_probabilities([])
+
+    def test_single_possibility_gets_one(self):
+        p = _make_branch(title="Solo", description="D", score=0.6)
+        compute_probabilities([p])
+        assert p.probability == 1.0
+
+    def test_mutates_in_place(self):
+        p = _make_branch(title="X", description="D", score=0.7)
+        assert p.probability == 0.0
+
+        compute_probabilities([p])
+        assert p.probability == 1.0
+
+    def test_temperature_sharpens_distribution(self):
+        """Low temperature → winner-take-all; high temperature → uniform."""
+        p1 = _make_branch(title="A", description="D", score=0.8)
+        p2 = _make_branch(title="B", description="D", score=0.2)
+
+        compute_probabilities([p1, p2], temperature=0.1)
+        sharp_gap = p1.probability - p2.probability
+
+        p1.score, p2.score = 0.8, 0.2
+        compute_probabilities([p1, p2], temperature=5.0)
+        flat_gap = p1.probability - p2.probability
+
+        assert sharp_gap > flat_gap
+
+    def test_three_possibilities_example(self):
+        """Concrete example: 3 branches scored and normalized."""
+        betrayal = _make_branch(title="Betrayal", description="D", score=0.75)
+        alliance = _make_branch(title="Alliance", description="D", score=0.50)
+        retreat = _make_branch(title="Retreat", description="D", score=0.25)
+
+        compute_probabilities([betrayal, alliance, retreat])
+
+        assert betrayal.probability > alliance.probability
+        assert alliance.probability > retreat.probability
+
+        total = betrayal.probability + alliance.probability + retreat.probability
+        assert abs(total - 1.0) < 0.01
+
+        for p in [betrayal, alliance, retreat]:
+            assert 0.0 < p.probability < 1.0
+
+
+class TestSoftmax:
+    def test_empty_returns_empty(self):
+        assert _softmax([]) == []
+
+    def test_single_value(self):
+        assert _softmax([0.5]) == [1.0]
+
+    def test_equal_values_uniform(self):
+        result = _softmax([0.3, 0.3, 0.3])
+        assert all(abs(r - result[0]) < 0.001 for r in result)
+        assert abs(sum(result) - 1.0) < 0.01
+
+    def test_higher_score_higher_probability(self):
+        result = _softmax([0.9, 0.1])
+        assert result[0] > result[1]
+
+    def test_all_zeros_uniform(self):
+        result = _softmax([0.0, 0.0, 0.0])
+        assert result == [0.3333, 0.3333, 0.3333]
+
+    def test_sums_to_one(self):
+        result = _softmax([0.2, 0.5, 0.8, 0.1])
+        assert abs(sum(result) - 1.0) < 0.01
+
+    def test_low_temperature_sharpens(self):
+        sharp = _softmax([0.8, 0.2], temperature=0.01)
+        assert sharp[0] > 0.99
+
+    def test_high_temperature_flattens(self):
+        flat = _softmax([0.8, 0.2], temperature=100.0)
+        assert abs(flat[0] - flat[1]) < 0.01

@@ -6,11 +6,12 @@ configurable weights into a final score and probability.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from storyplanner.quantum_outliner.psyke_adapter import PsykeSignals
-from storyplanner.quantum_outliner.state import Branch, Wavefunction
+from storyplanner.quantum_outliner.state import Branch, QuantumPossibility, Wavefunction
 
 if TYPE_CHECKING:
     pass
@@ -69,15 +70,15 @@ def score_branches(
             factors={k: round(v, 4) for k, v in factors.items()},
         ))
 
-    total = sum(s.score for s in scored) or 1.0
+    probs = _softmax([s.score for s in scored])
     scored = [
         ScoredBranch(
             branch_id=s.branch_id,
             score=s.score,
-            probability=round(s.score / total, 4),
+            probability=p,
             factors=s.factors,
         )
-        for s in scored
+        for s, p in zip(scored, probs)
     ]
 
     scored.sort(key=lambda s: s.score, reverse=True)
@@ -93,6 +94,36 @@ def apply_scores(wf: Wavefunction, scored: list[ScoredBranch]) -> None:
             b.score = s.score
             b.probability = s.probability
             b.factors = dict(s.factors)
+
+
+def compute_probabilities(
+    possibilities: list[QuantumPossibility],
+    *,
+    temperature: float = 1.0,
+) -> None:
+    """Normalize scores to probabilities via softmax. Mutates in place."""
+    probs = _softmax([p.score for p in possibilities], temperature=temperature)
+    for p, prob in zip(possibilities, probs):
+        p.probability = prob
+
+
+def _softmax(
+    scores: list[float], *, temperature: float = 1.0,
+) -> list[float]:
+    """Softmax normalization returning probabilities that sum to 1."""
+    if not scores:
+        return []
+
+    n = len(scores)
+    if all(s == 0.0 for s in scores):
+        uniform = round(1.0 / n, 4)
+        return [uniform] * n
+
+    t = max(temperature, 1e-9)
+    max_s = max(scores)
+    exps = [math.exp((s - max_s) / t) for s in scores]
+    total = sum(exps)
+    return [round(e / total, 4) for e in exps]
 
 
 def compute_factors(

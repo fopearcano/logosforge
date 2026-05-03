@@ -71,6 +71,9 @@ class Branch:
         )
 
 
+QuantumPossibility = Branch
+
+
 @dataclass
 class Wavefunction:
     """A superposition of possible next states for a single anchor.
