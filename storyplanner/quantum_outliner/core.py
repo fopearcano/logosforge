@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from storyplanner.quantum_outliner.collapse import CollapseError, collapse
 from storyplanner.quantum_outliner.possibilities import generate_possibilities
 from storyplanner.quantum_outliner.psyke_adapter import PsykeSignals, gather_psyke_signals
+from storyplanner.quantum_outliner.scoring import apply_scores, score_branches
 from storyplanner.quantum_outliner.relativity import reframe_scene
 from storyplanner.quantum_outliner.state import (
     Branch,
@@ -319,6 +320,12 @@ def _format_wavefunction(
     psyke = None
     if db is not None and project_id is not None:
         psyke = gather_psyke_signals(db, project_id)
+
+    if wf.branches:
+        scored = score_branches(wf, psyke=psyke)
+        apply_scores(wf, scored)
+        wf.branches.sort(key=lambda b: b.probability, reverse=True)
+
     body = _format_lambda(wf, psyke=psyke)
     return QuantumResult(
         kind="possibilities",
@@ -350,6 +357,8 @@ def _format_lambda(
         label = f"▸ Option {i}: {b.title}  [{b.id}]"
         if b.branch_type:
             label += f"  ({b.branch_type})"
+        if b.probability > 0:
+            label += f"  {b.probability:.0%}"
         lines.append(label)
         lines.append(f"  {b.description}")
         if b.structure_beat:
