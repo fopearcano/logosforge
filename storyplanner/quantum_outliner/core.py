@@ -217,10 +217,18 @@ def _resolve_scene_order(
 
 
 def _format_wavefunction(title: str, wf: Wavefunction) -> QuantumResult:
-    lines = [f"Wavefunction {wf.id} — {wf.anchor}", ""]
+    lines = [f"Wavefunction {wf.id} — {wf.anchor}"]
+    if wf.structure_method:
+        lines.append(f"Structure: {wf.structure_method}")
+    lines.append("")
     for i, b in enumerate(wf.branches, 1):
-        lines.append(f"Option {i}: {b.title}  [{b.id}]")
+        label = f"Option {i}: {b.title}  [{b.id}]"
+        if b.branch_type:
+            label += f"  ({b.branch_type})"
+        lines.append(label)
         lines.append(f"  {b.description}")
+        if b.structure_beat:
+            lines.append(f"  Beat: {b.structure_beat}")
         if b.stakes:
             lines.append(f"  Stakes: {b.stakes}")
         if b.consequence:
@@ -245,6 +253,7 @@ def _wf_summary(wf: Wavefunction) -> dict:
         "source_scene_id": wf.source_scene_id,
         "source_scene_order": wf.source_scene_order,
         "target_scene_id": wf.target_scene_id,
+        "structure_method": wf.structure_method,
         "branches": [
             {
                 "id": b.id,
@@ -252,6 +261,9 @@ def _wf_summary(wf: Wavefunction) -> dict:
                 "description": b.description,
                 "stakes": b.stakes,
                 "consequence": b.consequence,
+                "structure_method": b.structure_method,
+                "structure_beat": b.structure_beat,
+                "branch_type": b.branch_type,
             }
             for b in wf.branches
         ],
