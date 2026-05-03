@@ -116,6 +116,7 @@ class TestQuantumWorkerWithLLM:
         assert len(get_state(project.id).active()) == 1
 
     def test_generate_branches_via_worker(self, qapp, db, project):
+        get_state(project.id).structure_mode = "quantum"
         results = []
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"

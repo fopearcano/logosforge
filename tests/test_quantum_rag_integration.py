@@ -120,7 +120,7 @@ class TestClassicalOutput:
                 db, project.id, "Three-Act Structure setup",
             )
 
-        assert "Structure:" in result.body
+        assert "Method:" in result.body
 
 
 class TestQuantumOutput:

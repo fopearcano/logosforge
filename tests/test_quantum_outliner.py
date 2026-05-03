@@ -415,6 +415,7 @@ class TestCoreAgent:
         assert result.kind == "error"
 
     def test_generate_branches_creates_options(self, db, project):
+        get_state(project.id).structure_mode = "quantum"
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:

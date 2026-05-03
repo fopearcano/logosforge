@@ -204,9 +204,31 @@ def generate_possibilities(
         source_scene_id=source_scene_id,
         source_scene_order=source_scene_order,
     )
+    wf.effective_mode = effective_mode
     if rag_methods and effective_mode in ("classical", "hybrid"):
         wf.structure_method = rag_methods[0].title
+        beat = _infer_beat(rag_methods[0], anchor)
+        if beat:
+            wf.structure_beat = beat
     return wf
+
+
+def _infer_beat(method: MethodResult, anchor: str) -> str | None:
+    """Extract the most relevant beat name from the method snippet."""
+    anchor_lower = anchor.lower()
+    if "Beats:" in method.snippet or "Stages:" in method.snippet or "Steps:" in method.snippet or "Points:" in method.snippet:
+        for label in ("Beats:", "Stages:", "Steps:", "Points:", "Parts:", "Template:"):
+            if label in method.snippet:
+                beat_line = method.snippet.split(label, 1)[1].split("\n")[0]
+                beats = [b.strip().rstrip(".") for b in beat_line.split(",")]
+                for beat in beats:
+                    if beat.lower() in anchor_lower or any(
+                        w in anchor_lower for w in beat.lower().split() if len(w) > 3
+                    ):
+                        return beat
+                if beats:
+                    return beats[0]
+    return None
 
 
 def _parse_branches(response: str) -> list[Branch]:

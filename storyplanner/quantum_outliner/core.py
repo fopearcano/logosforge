@@ -217,18 +217,24 @@ def _resolve_scene_order(
 
 
 def _format_wavefunction(title: str, wf: Wavefunction) -> QuantumResult:
-    lines = [f"Wavefunction {wf.id} — {wf.anchor}"]
-    if wf.structure_method:
-        lines.append(f"Structure: {wf.structure_method}")
-    lines.append("")
+    mode = wf.effective_mode or "quantum"
+    if mode in ("classical", "hybrid") and wf.structure_method:
+        body = _format_hybrid(wf)
+    else:
+        body = _format_quantum(wf)
+    return QuantumResult(
+        kind="possibilities",
+        title=title,
+        body=body,
+        payload=_wf_summary(wf),
+    )
+
+
+def _format_quantum(wf: Wavefunction) -> str:
+    lines = [f"Wavefunction {wf.id} — {wf.anchor}", ""]
     for i, b in enumerate(wf.branches, 1):
-        label = f"Option {i}: {b.title}  [{b.id}]"
-        if b.branch_type:
-            label += f"  ({b.branch_type})"
-        lines.append(label)
+        lines.append(f"Option {i}: {b.title}  [{b.id}]")
         lines.append(f"  {b.description}")
-        if b.structure_beat:
-            lines.append(f"  Beat: {b.structure_beat}")
         if b.stakes:
             lines.append(f"  Stakes: {b.stakes}")
         if b.consequence:
@@ -237,12 +243,65 @@ def _format_wavefunction(title: str, wf: Wavefunction) -> QuantumResult:
     lines.append(
         f"To collapse: choose a branch by id (e.g. /quantum collapse {wf.id} <branch_id>)."
     )
-    return QuantumResult(
-        kind="possibilities",
-        title=title,
-        body="\n".join(lines),
-        payload=_wf_summary(wf),
+    return "\n".join(lines)
+
+
+def _format_hybrid(wf: Wavefunction) -> str:
+    lines = [f"Wavefunction {wf.id} — {wf.anchor}", ""]
+
+    lines.append("Classical Axis:")
+    lines.append(f"  Method: {wf.structure_method}")
+    if wf.structure_beat:
+        lines.append(f"  Beat: {wf.structure_beat}")
+    if wf.expected_function:
+        lines.append(f"  Function: {wf.expected_function}")
+    lines.append("")
+
+    lines.append("Quantum Branches:")
+    for i, b in enumerate(wf.branches, 1):
+        label = f"{i}. {b.title}  [{b.id}]"
+        if b.branch_type:
+            label += f"  ({b.branch_type})"
+        lines.append(label)
+        lines.append(f"   {b.description}")
+        if b.structure_beat:
+            lines.append(f"   Beat: {b.structure_beat}")
+        if b.stakes:
+            lines.append(f"   Stakes: {b.stakes}")
+        if b.consequence:
+            lines.append(f"   Consequence: {b.consequence}")
+        lines.append("")
+
+    recommended = _pick_collapse_candidate(wf)
+    lines.append("Collapse Candidates:")
+    if recommended:
+        lines.append(f"  Recommended: {recommended[0]}  [{recommended[1]}]")
+        lines.append(f"  Reason: {recommended[2]}")
+    else:
+        lines.append("  No recommendation — all branches are viable.")
+    lines.append("")
+
+    lines.append(
+        f"To collapse: choose a branch by id (e.g. /quantum collapse {wf.id} <branch_id>)."
     )
+    return "\n".join(lines)
+
+
+def _pick_collapse_candidate(wf: Wavefunction) -> tuple[str, str, str] | None:
+    """Return (title, id, reason) for the best collapse candidate."""
+    if not wf.branches:
+        return None
+
+    for b in wf.branches:
+        if b.branch_type == "intensification":
+            return (b.title, b.id, "follows the structural beat most closely")
+
+    for b in wf.branches:
+        if b.structure_beat and b.branch_type in (None, "intensification"):
+            return (b.title, b.id, f"anchored to {b.structure_beat}")
+
+    best = wf.branches[0]
+    return (best.title, best.id, "first generated option")
 
 
 def _wf_summary(wf: Wavefunction) -> dict:

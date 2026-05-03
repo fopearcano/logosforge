@@ -80,6 +80,7 @@ class Wavefunction:
     structure_method: str | None = None
     structure_beat: str | None = None
     expected_function: str | None = None
+    effective_mode: str | None = None
 
     @classmethod
     def new(
@@ -227,6 +228,7 @@ def deserialize_state(raw: str, project_id: int) -> NarrativeState | None:
             structure_method=wf_raw.get("structure_method"),
             structure_beat=wf_raw.get("structure_beat"),
             expected_function=wf_raw.get("expected_function"),
+            effective_mode=wf_raw.get("effective_mode"),
         )
         state.wavefunctions[wf.id] = wf
 
