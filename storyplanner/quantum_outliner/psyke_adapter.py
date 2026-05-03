@@ -6,12 +6,71 @@ to PSYKE entries when a wavefunction collapses.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from storyplanner.quantum_outliner.state import Branch, StateDelta
 
 if TYPE_CHECKING:
     from storyplanner.db import Database
+
+
+@dataclass(frozen=True)
+class PsykeSignals:
+    """Structured PSYKE state for collapse recommendation scoring."""
+
+    characters: list[dict] = field(default_factory=list)
+    relations: list[dict] = field(default_factory=list)
+    unresolved_arcs: list[dict] = field(default_factory=list)
+    keywords: frozenset[str] = field(default_factory=frozenset)
+
+
+def gather_psyke_signals(db: "Database", project_id: int) -> PsykeSignals:
+    """Extract structured PSYKE state for recommendation scoring."""
+    entries = db.get_all_psyke_entries(project_id)
+    if not entries:
+        return PsykeSignals()
+
+    characters: list[dict] = []
+    all_keywords: set[str] = set()
+    unresolved_arcs: list[dict] = []
+
+    for e in entries:
+        if e.entry_type != "character":
+            continue
+        notes = (e.notes or "").strip()
+        char_info: dict = {"name": e.name, "notes": notes}
+
+        words = set(notes.lower().split())
+        all_keywords.update(w for w in words if len(w) > 3)
+        all_keywords.add(e.name.lower())
+
+        for line in notes.split("\n"):
+            if line.strip().startswith("[arc]"):
+                arc_text = line.strip().removeprefix("[arc]").strip()
+                unresolved_arcs.append({"name": e.name, "arc": arc_text})
+
+        characters.append(char_info)
+
+    relations: list[dict] = []
+    seen_pairs: set[tuple[int, int]] = set()
+    for e in entries:
+        if e.entry_type != "character":
+            continue
+        related = db.get_related_psyke_entries(e.id)
+        for r in related:
+            pair = (min(e.id, r.id), max(e.id, r.id))
+            if pair not in seen_pairs:
+                seen_pairs.add(pair)
+                relations.append({"from": e.name, "to": r.name})
+                all_keywords.add(r.name.lower())
+
+    return PsykeSignals(
+        characters=characters,
+        relations=relations,
+        unresolved_arcs=unresolved_arcs,
+        keywords=frozenset(all_keywords),
+    )
 
 
 def gather_psyke_brief(db: Database, project_id: int, max_entries: int = 12) -> str:

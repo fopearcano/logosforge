@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from storyplanner.quantum_outliner.collapse import CollapseError, collapse
 from storyplanner.quantum_outliner.possibilities import generate_possibilities
+from storyplanner.quantum_outliner.psyke_adapter import PsykeSignals, gather_psyke_signals
 from storyplanner.quantum_outliner.relativity import reframe_scene
 from storyplanner.quantum_outliner.state import (
     Branch,
@@ -60,7 +61,7 @@ def generate_outline(
         structure_mode=mode,
     )
     get_state(project_id).add(wf)
-    return _format_wavefunction("Outline", wf)
+    return _format_wavefunction("Outline", wf, db=db, project_id=project_id)
 
 
 def generate_branches(
@@ -88,7 +89,7 @@ def generate_branches(
         structure_mode=mode,
     )
     get_state(project_id).add(wf)
-    return _format_wavefunction("Possibilities", wf)
+    return _format_wavefunction("Possibilities", wf, db=db, project_id=project_id)
 
 
 def reframe(
@@ -216,10 +217,19 @@ def _resolve_scene_order(
     return scene.sort_order
 
 
-def _format_wavefunction(title: str, wf: Wavefunction) -> QuantumResult:
+def _format_wavefunction(
+    title: str,
+    wf: Wavefunction,
+    *,
+    db: "Database | None" = None,
+    project_id: int | None = None,
+) -> QuantumResult:
     mode = wf.effective_mode or "quantum"
     if mode in ("classical", "hybrid") and wf.structure_method:
-        body = _format_hybrid(wf)
+        psyke = None
+        if db is not None and project_id is not None:
+            psyke = gather_psyke_signals(db, project_id)
+        body = _format_hybrid(wf, psyke=psyke)
     else:
         body = _format_quantum(wf)
     return QuantumResult(
@@ -246,7 +256,7 @@ def _format_quantum(wf: Wavefunction) -> str:
     return "\n".join(lines)
 
 
-def _format_hybrid(wf: Wavefunction) -> str:
+def _format_hybrid(wf: Wavefunction, *, psyke: PsykeSignals | None = None) -> str:
     lines = [f"Wavefunction {wf.id} — {wf.anchor}", ""]
 
     lines.append("Classical Axis:")
@@ -272,11 +282,13 @@ def _format_hybrid(wf: Wavefunction) -> str:
             lines.append(f"   Consequence: {b.consequence}")
         lines.append("")
 
-    recommended = _pick_collapse_candidate(wf)
+    recommended = _pick_collapse_candidate(wf, psyke=psyke)
     lines.append("Collapse Candidates:")
     if recommended:
         lines.append(f"  Recommended: {recommended[0]}  [{recommended[1]}]")
         lines.append(f"  Reason: {recommended[2]}")
+        if recommended[3]:
+            lines.append(f"  Signals: {recommended[3]}")
     else:
         lines.append("  No recommendation — all branches are viable.")
     lines.append("")
@@ -287,21 +299,95 @@ def _format_hybrid(wf: Wavefunction) -> str:
     return "\n".join(lines)
 
 
-def _pick_collapse_candidate(wf: Wavefunction) -> tuple[str, str, str] | None:
-    """Return (title, id, reason) for the best collapse candidate."""
+def _pick_collapse_candidate(
+    wf: Wavefunction,
+    *,
+    psyke: PsykeSignals | None = None,
+) -> tuple[str, str, str, str] | None:
+    """Return (title, id, reason, signals) for the best collapse candidate.
+
+    Scoring considers: branch_type alignment, structural beat match,
+    PSYKE character relevance, relationship tension, and unresolved arcs.
+    """
     if not wf.branches:
         return None
 
+    scores: list[tuple[float, str, list[str]]] = []
+
     for b in wf.branches:
+        score = 0.0
+        signals: list[str] = []
+
         if b.branch_type == "intensification":
-            return (b.title, b.id, "follows the structural beat most closely")
+            score += 3.0
+            signals.append("intensifies structural beat")
+        elif b.branch_type == "resolution":
+            score += 1.5
+        elif b.branch_type == "alternative":
+            score += 1.0
 
-    for b in wf.branches:
-        if b.structure_beat and b.branch_type in (None, "intensification"):
-            return (b.title, b.id, f"anchored to {b.structure_beat}")
+        if b.structure_beat and b.structure_beat == wf.structure_beat:
+            score += 2.0
+            signals.append(f"aligned with {b.structure_beat}")
 
-    best = wf.branches[0]
-    return (best.title, best.id, "first generated option")
+        if wf.expected_function and b.description:
+            func_words = set(wf.expected_function.lower().split())
+            desc_words = set(b.description.lower().split())
+            overlap = func_words & desc_words - {"the", "a", "an", "is", "of"}
+            if overlap:
+                score += 1.5
+                signals.append(f"matches expected function")
+
+        if psyke and psyke.keywords:
+            branch_text = f"{b.title} {b.description} {b.stakes} {b.consequence}".lower()
+            branch_words = set(branch_text.split())
+            char_overlap = psyke.keywords & branch_words
+            if char_overlap:
+                names = [
+                    c["name"] for c in psyke.characters
+                    if c["name"].lower() in char_overlap
+                ]
+                score += min(len(char_overlap) * 0.5, 3.0)
+                if names:
+                    signals.append(f"involves {', '.join(names[:3])}")
+
+            for rel in psyke.relations:
+                rel_names = {rel["from"].lower(), rel["to"].lower()}
+                if rel_names & branch_words:
+                    score += 1.0
+                    signals.append(f"{rel['from']} ↔ {rel['to']} tension")
+                    break
+
+            for arc in psyke.unresolved_arcs:
+                arc_words = set(arc["arc"].lower().split())
+                if arc_words & branch_words - {"the", "a", "an", "is"}:
+                    score += 1.5
+                    signals.append(f"advances {arc['name']}'s arc")
+                    break
+
+        scores.append((score, b.id, signals))
+
+    if not scores:
+        return None
+
+    scores.sort(key=lambda x: x[0], reverse=True)
+    best_score, best_id, best_signals = scores[0]
+
+    best_branch = wf.get_branch(best_id)
+    if best_branch is None:
+        return None
+
+    if best_signals:
+        reason = "; ".join(best_signals[:2])
+    elif best_branch.branch_type == "intensification":
+        reason = "follows the structural beat most closely"
+    elif best_branch.structure_beat:
+        reason = f"anchored to {best_branch.structure_beat}"
+    else:
+        reason = "first generated option"
+
+    signals_str = ", ".join(best_signals) if best_signals else ""
+    return (best_branch.title, best_branch.id, reason, signals_str)
 
 
 def _wf_summary(wf: Wavefunction) -> dict:
