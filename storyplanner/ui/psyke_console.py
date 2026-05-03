@@ -192,7 +192,7 @@ class _ResultsDropdown(QWidget):
 class PsykeConsole(QWidget):
     """Slim search bar with live results dropdown and keyboard navigation."""
 
-    entry_selected = Signal(int)
+    entry_selected = Signal(int, str)
 
     def __init__(
         self,
@@ -286,7 +286,7 @@ class PsykeConsole(QWidget):
         self._dropdown.show()
 
     def _on_item_selected(self, result: SearchResult) -> None:
-        self.entry_selected.emit(result.entry_id)
+        self.entry_selected.emit(result.entry_id, result.name)
         self.deactivate()
 
     def eventFilter(self, obj, event) -> bool:

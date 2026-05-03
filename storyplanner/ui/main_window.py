@@ -385,7 +385,7 @@ class MainWindow(QMainWindow):
         outer_layout.addWidget(main_row, stretch=1)
 
         self._psyke_console = PsykeConsole(self._db, self._project_id)
-        self._psyke_console.entry_selected.connect(self._open_psyke_entry)
+        self._psyke_console.entry_selected.connect(self._on_psyke_entry_selected)
         outer_layout.addWidget(self._psyke_console, stretch=0)
 
         self.setCentralWidget(central)
@@ -725,6 +725,16 @@ class MainWindow(QMainWindow):
                 self._assistant_panel.setVisible(False)
         else:
             self._assistant_panel.setVisible(False)
+
+    def _on_psyke_entry_selected(self, entry_id: int, name: str) -> None:
+        editor = self._detect_active_editor()
+        if editor:
+            cursor = editor.textCursor()
+            cursor.insertText(name)
+            editor.setTextCursor(cursor)
+            editor.setFocus(Qt.FocusReason.OtherFocusReason)
+        else:
+            self._open_psyke_entry(entry_id)
 
     def _open_psyke_entry(self, entry_id: int) -> None:
         self._set_active_section("PSYKE")
