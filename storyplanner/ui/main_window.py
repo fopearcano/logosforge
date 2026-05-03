@@ -740,6 +740,8 @@ class MainWindow(QMainWindow):
             open_scene=self._open_scene_in_editor,
             open_psyke_entry=self._open_psyke_entry,
             get_active_scene_id=self._detect_active_scene_id,
+            get_selected_text=self._detect_selected_text,
+            run_ai_action=self._assistant_panel.run_action,
             on_data_changed=self._on_data_changed,
         )
         handlers.register_all(self._command_registry)

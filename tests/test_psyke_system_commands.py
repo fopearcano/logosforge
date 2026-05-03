@@ -271,12 +271,113 @@ class TestGoCommand:
         assert not result["ok"]
 
 
+class TestAiCommand:
+    def test_ai_rewrite(self, db, project, callbacks):
+        ai_calls = []
+
+        def mock_run(action, text):
+            ai_calls.append((action, text))
+            return True
+
+        h = SystemCommandHandlers(
+            db, project.id,
+            get_selected_text=lambda: "The castle was big.",
+            run_ai_action=mock_run,
+        )
+        ctx = CommandContext(command="ai", args=["rewrite"])
+        result = h.handle_ai(ctx)
+        assert result["ok"]
+        assert result["action"] == "rewrite"
+        assert ai_calls == [("rewrite", "The castle was big.")]
+
+    def test_ai_expand(self, db, project):
+        ai_calls = []
+        h = SystemCommandHandlers(
+            db, project.id,
+            get_selected_text=lambda: "Short text.",
+            run_ai_action=lambda a, t: (ai_calls.append((a, t)) or True),
+        )
+        ctx = CommandContext(command="ai", args=["expand"])
+        result = h.handle_ai(ctx)
+        assert result["ok"]
+        assert ai_calls[0][0] == "expand"
+
+    def test_ai_summarize(self, db, project):
+        ai_calls = []
+        h = SystemCommandHandlers(
+            db, project.id,
+            get_selected_text=lambda: "Long passage here.",
+            run_ai_action=lambda a, t: (ai_calls.append((a, t)) or True),
+        )
+        ctx = CommandContext(command="ai", args=["summarize"])
+        result = h.handle_ai(ctx)
+        assert result["ok"]
+        assert ai_calls[0][0] == "summarize"
+
+    def test_ai_no_action(self, db, project):
+        h = SystemCommandHandlers(db, project.id, run_ai_action=lambda a, t: True)
+        ctx = CommandContext(command="ai", args=[])
+        result = h.handle_ai(ctx)
+        assert not result["ok"]
+        assert "Usage" in result["error"]
+
+    def test_ai_unknown_action(self, db, project):
+        h = SystemCommandHandlers(db, project.id, run_ai_action=lambda a, t: True)
+        ctx = CommandContext(command="ai", args=["destroy"])
+        result = h.handle_ai(ctx)
+        assert not result["ok"]
+        assert "Unknown action" in result["error"]
+
+    def test_ai_no_assistant(self, db, project):
+        h = SystemCommandHandlers(db, project.id)
+        ctx = CommandContext(command="ai", args=["rewrite"])
+        result = h.handle_ai(ctx)
+        assert not result["ok"]
+        assert "not available" in result["error"]
+
+    def test_ai_busy(self, db, project):
+        h = SystemCommandHandlers(
+            db, project.id,
+            get_selected_text=lambda: "text",
+            run_ai_action=lambda a, t: False,
+        )
+        ctx = CommandContext(command="ai", args=["rewrite"])
+        result = h.handle_ai(ctx)
+        assert not result["ok"]
+        assert "busy" in result["error"]
+
+    def test_ai_no_selection(self, db, project):
+        ai_calls = []
+        h = SystemCommandHandlers(
+            db, project.id,
+            get_selected_text=lambda: "",
+            run_ai_action=lambda a, t: (ai_calls.append((a, t)) or True),
+        )
+        ctx = CommandContext(command="ai", args=["rewrite"])
+        result = h.handle_ai(ctx)
+        assert result["ok"]
+        assert ai_calls[0][1] == ""
+
+    def test_ai_case_insensitive(self, db, project):
+        ai_calls = []
+        h = SystemCommandHandlers(
+            db, project.id,
+            get_selected_text=lambda: "text",
+            run_ai_action=lambda a, t: (ai_calls.append((a, t)) or True),
+        )
+        ctx = CommandContext(command="ai", args=["Rewrite"])
+        result = h.handle_ai(ctx)
+        assert result["ok"]
+
+
 class TestRegistration:
     def test_all_registered(self, registry):
         assert registry.has("create")
         assert registry.has("open")
         assert registry.has("go")
         assert registry.has("goto")
+        assert registry.has("ai")
+        assert registry.has("ask")
 
     def test_dispatch_via_registry(self, registry, db, project):
         entry = registry.resolve("create")

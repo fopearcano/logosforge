@@ -151,6 +151,14 @@ SECTION_PLACEHOLDERS: dict[str, str] = {
     "PSYKE": "Ask about story rules, lore, continuity...",
 }
 
+_ACTION_ALIASES: dict[str, str] = {k.lower(): k for k in PRESET_ACTIONS}
+
+
+def _normalize_action(key: str) -> str | None:
+    """Map a user-typed action name to the canonical PRESET_ACTIONS key."""
+    return _ACTION_ALIASES.get(key.lower())
+
+
 class _AssistantWorker(QThread):
     completed = Signal(str, bool)
     failed = Signal(str)
@@ -657,6 +665,41 @@ class AssistantPanel(QWidget):
         if self._panel_mode == "assistant":
             self._prompt_input.setPlaceholderText(placeholder)
         self.refresh_scenes()
+
+    def run_action(self, action_key: str, selected_text: str = "") -> bool:
+        """Trigger a preset AI action programmatically. Returns False if busy."""
+        if self._worker is not None:
+            return False
+        canonical = _normalize_action(action_key)
+        if canonical is None:
+            return False
+
+        scene_ctx = ""
+        if selected_text:
+            scene_ctx = f"[Selected Text]\n{selected_text}"
+        else:
+            scene_id = self._get_auto_scene_id()
+            if scene_id is not None:
+                scene_ctx = gather_scene_context(
+                    self._db, self._project_id, scene_id,
+                )
+
+        if not scene_ctx:
+            self._response_output.setPlainText("No text selected and no active scene.")
+            return False
+
+        action_prompt = PRESET_ACTIONS[canonical]
+        messages = build_messages(
+            action_prompt, scene_ctx,
+            structural_context=gather_structural_context(self._db, self._project_id),
+            system_prompt=self._get_section_system_prompt(),
+        )
+
+        if not self.isVisible():
+            self.setVisible(True)
+        self._response_output.setPlainText("")
+        self._start_request(messages)
+        return True
 
     def _get_section_system_prompt(self) -> str:
         return SECTION_SYSTEM_PROMPTS.get(self._active_section, "")

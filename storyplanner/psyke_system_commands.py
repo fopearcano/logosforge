@@ -1,13 +1,16 @@
-"""PSYKE system command handlers — /create, /open, /go."""
+"""PSYKE system command handlers — /create, /open, /go, /ai."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from storyplanner.assistant import PRESET_ACTIONS
 from storyplanner.psyke_command_registry import CommandContext, CommandRegistry
 
 if TYPE_CHECKING:
     from storyplanner.db import Database
+
+_AI_ACTIONS = {k.lower(): k for k in PRESET_ACTIONS}
 
 
 class SystemCommandHandlers:
@@ -20,22 +23,29 @@ class SystemCommandHandlers:
         *,
         open_scene: Any | None = None,
         open_psyke_entry: Any | None = None,
-        navigate_section: Any | None = None,
         get_active_scene_id: Any | None = None,
+        get_selected_text: Any | None = None,
+        run_ai_action: Any | None = None,
         on_data_changed: Any | None = None,
     ) -> None:
         self._db = db
         self._project_id = project_id
         self._open_scene = open_scene
         self._open_psyke_entry = open_psyke_entry
-        self._navigate_section = navigate_section
         self._get_active_scene_id = get_active_scene_id
+        self._get_selected_text = get_selected_text
+        self._run_ai_action = run_ai_action
         self._on_data_changed = on_data_changed
 
     def register_all(self, registry: CommandRegistry) -> None:
         registry.register("create", self.handle_create, description="Create a PSYKE entry")
         registry.register("open", self.handle_open, description="Open a scene or entry")
         registry.register("go", self.handle_go, description="Navigate scenes", aliases=["goto"])
+        registry.register(
+            "ai", self.handle_ai,
+            description="AI writing actions",
+            aliases=["ask"],
+        )
 
     def handle_create(self, ctx: CommandContext) -> dict:
         entry_type = ctx.first_arg.lower() if ctx.first_arg else "other"
@@ -156,3 +166,22 @@ class SystemCommandHandlers:
         if self._open_scene:
             self._open_scene(target.id)
         return {"ok": True, "scene_id": target.id}
+
+    def handle_ai(self, ctx: CommandContext) -> dict:
+        action = ctx.first_arg.lower() if ctx.first_arg else ""
+        if not action:
+            available = ", ".join(sorted(_AI_ACTIONS.keys()))
+            return {"ok": False, "error": f"Usage: /ai <action>. Available: {available}"}
+
+        if action not in _AI_ACTIONS:
+            available = ", ".join(sorted(_AI_ACTIONS.keys()))
+            return {"ok": False, "error": f"Unknown action '{action}'. Available: {available}"}
+
+        if not self._run_ai_action:
+            return {"ok": False, "error": "AI assistant not available"}
+
+        selected = self._get_selected_text() if self._get_selected_text else ""
+        started = self._run_ai_action(action, selected)
+        if not started:
+            return {"ok": False, "error": "AI is busy or no context available"}
+        return {"ok": True, "action": action}
