@@ -317,13 +317,13 @@ def _format_wavefunction(
     project_id: int | None = None,
 ) -> QuantumResult:
     mode = wf.effective_mode or "quantum"
+    psyke = None
+    if db is not None and project_id is not None:
+        psyke = gather_psyke_signals(db, project_id)
     if mode in ("classical", "hybrid") and wf.structure_method:
-        psyke = None
-        if db is not None and project_id is not None:
-            psyke = gather_psyke_signals(db, project_id)
         body = _format_hybrid(wf, psyke=psyke)
     else:
-        body = _format_quantum(wf)
+        body = _format_lambda(wf, psyke=psyke)
     return QuantumResult(
         kind="possibilities",
         title=title,
@@ -332,20 +332,75 @@ def _format_wavefunction(
     )
 
 
-def _format_quantum(wf: Wavefunction) -> str:
-    lines = [f"Wavefunction {wf.id} — {wf.anchor}", ""]
+def _format_lambda(
+    wf: Wavefunction, *, psyke: PsykeSignals | None = None,
+) -> str:
+    n = len(wf.branches)
+    lines = [
+        f"═══ QUANTUM FIELD ═══",
+        f"Wavefunction {wf.id} — {wf.anchor}",
+        f"Superposition: {n} possible futures",
+        "",
+    ]
+
     for i, b in enumerate(wf.branches, 1):
-        lines.append(f"Option {i}: {b.title}  [{b.id}]")
+        lines.append(f"▸ Option {i}: {b.title}  [{b.id}]")
         lines.append(f"  {b.description}")
         if b.stakes:
             lines.append(f"  Stakes: {b.stakes}")
         if b.consequence:
             lines.append(f"  Consequence: {b.consequence}")
+        if b.state_delta and b.state_delta.character_changes:
+            names = [c.get("name", "") for c in b.state_delta.character_changes if c.get("name")]
+            if names:
+                lines.append(f"  Affects: {', '.join(names[:4])}")
         lines.append("")
+
+    pov_names = _extract_pov_frames(wf, psyke)
+    if pov_names:
+        lines.append(f"POV Frames: {', '.join(pov_names)}")
+        lines.append("  Use /quantum reframe <name> to shift perspective.")
+        lines.append("")
+
     lines.append(
-        f"To collapse: choose a branch by id (e.g. /quantum collapse {wf.id} <branch_id>)."
+        f"Uncertainty: {n} branches in superposition — "
+        f"all futures coexist until collapsed."
+    )
+    lines.append("")
+    lines.append(
+        f"To collapse: choose a branch by id "
+        f"(e.g. /quantum collapse {wf.id} <branch_id>)."
     )
     return "\n".join(lines)
+
+
+def _extract_pov_frames(
+    wf: Wavefunction, psyke: PsykeSignals | None,
+) -> list[str]:
+    """Collect character names available for POV reframing."""
+    names: list[str] = []
+    seen: set[str] = set()
+
+    if psyke:
+        for c in psyke.characters:
+            n = c.get("name", "")
+            if n and n.lower() not in seen:
+                seen.add(n.lower())
+                names.append(n)
+
+    for b in wf.branches:
+        if not b.state_delta:
+            continue
+        for c in b.state_delta.character_changes:
+            n = (c.get("name") or "").strip()
+            if n and n.lower() not in seen:
+                seen.add(n.lower())
+                names.append(n)
+
+    return names[:6]
+
+
+_format_quantum = _format_lambda
 
 
 def _format_hybrid(wf: Wavefunction, *, psyke: PsykeSignals | None = None) -> str:
