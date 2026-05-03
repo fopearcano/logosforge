@@ -32,6 +32,9 @@ class Branch:
     stakes: str
     consequence: str
     state_delta: StateDelta = field(default_factory=StateDelta)
+    structure_method: str | None = None
+    structure_beat: str | None = None
+    branch_type: str | None = None
 
     @classmethod
     def new(
@@ -41,6 +44,9 @@ class Branch:
         stakes: str = "",
         consequence: str = "",
         state_delta: StateDelta | None = None,
+        structure_method: str | None = None,
+        structure_beat: str | None = None,
+        branch_type: str | None = None,
     ) -> "Branch":
         return cls(
             id=uuid.uuid4().hex[:8],
@@ -49,6 +55,9 @@ class Branch:
             stakes=stakes,
             consequence=consequence,
             state_delta=state_delta or StateDelta(),
+            structure_method=structure_method,
+            structure_beat=structure_beat,
+            branch_type=branch_type,
         )
 
 
@@ -68,6 +77,9 @@ class Wavefunction:
     source_scene_id: int | None = None
     source_scene_order: int | None = None
     target_scene_id: int | None = None
+    structure_method: str | None = None
+    structure_beat: str | None = None
+    expected_function: str | None = None
 
     @classmethod
     def new(
@@ -188,6 +200,9 @@ def deserialize_state(raw: str, project_id: int) -> NarrativeState | None:
                 stakes=b_raw.get("stakes", ""),
                 consequence=b_raw.get("consequence", ""),
                 state_delta=delta,
+                structure_method=b_raw.get("structure_method"),
+                structure_beat=b_raw.get("structure_beat"),
+                branch_type=b_raw.get("branch_type"),
             ))
 
         wf = Wavefunction(
@@ -199,6 +214,9 @@ def deserialize_state(raw: str, project_id: int) -> NarrativeState | None:
             source_scene_id=wf_raw.get("source_scene_id"),
             source_scene_order=wf_raw.get("source_scene_order"),
             target_scene_id=wf_raw.get("target_scene_id"),
+            structure_method=wf_raw.get("structure_method"),
+            structure_beat=wf_raw.get("structure_beat"),
+            expected_function=wf_raw.get("expected_function"),
         )
         state.wavefunctions[wf.id] = wf
 
