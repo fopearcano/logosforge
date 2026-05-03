@@ -340,3 +340,133 @@ class TestThreePossibilitiesExample:
 
         psyke_scores = [b["factors"]["psyke_consistency"] for b in branches]
         assert branches[2]["factors"]["psyke_consistency"] < max(psyke_scores)
+
+
+class TestUserWeightsInScoring:
+    """Demonstrates that per-project user weights change branch ranking."""
+
+    def _make_branches(self):
+        b_tense = Branch.new(
+            title="War erupts at the gate",
+            description="A desperate fight breaks out suddenly. Fear and danger threaten all.",
+            stakes="survival of the desperate army",
+            consequence="Sacrifice and pain follow the war.",
+            branch_type="intensification",
+        )
+        b_novel = Branch.new(
+            title="Crystalline portal opens",
+            description="An iridescent shimmer reveals a pathway to an alien dimension.",
+            stakes="curiosity",
+            consequence="Uncharted territory beckons.",
+            branch_type="alternative",
+        )
+        b_overlap = Branch.new(
+            title="War continues at the gate",
+            description="The desperate fight at the gate grinds on without resolution.",
+            stakes="survival of the desperate army",
+            consequence="Sacrifice and pain deepen.",
+        )
+        return b_tense, b_novel, b_overlap
+
+    def test_default_weights_produce_ranking(self, db, project):
+        b_tense, b_novel, b_overlap = self._make_branches()
+        wf = Wavefunction.new(anchor="Fork", branches=[b_tense, b_novel, b_overlap])
+
+        result = _format_wavefunction(
+            "Test", wf, db=db, project_id=project.id,
+        )
+        probs = [b["probability"] for b in result.payload["branches"]]
+        assert probs == sorted(probs, reverse=True)
+
+    def test_tension_weight_favors_tense_branch(self, db, project):
+        b_tense, b_novel, b_overlap = self._make_branches()
+
+        db.set_scoring_weights(project.id, {
+            "structure_fit": 0.05,
+            "psyke_consistency": 0.05,
+            "tension_gain": 0.75,
+            "novelty": 0.10,
+            "goal_alignment": 0.05,
+        })
+
+        wf = Wavefunction.new(anchor="Fork", branches=[b_tense, b_novel, b_overlap])
+        result = _format_wavefunction(
+            "Test", wf, db=db, project_id=project.id,
+        )
+        branches = result.payload["branches"]
+        assert branches[0]["title"] == "War erupts at the gate"
+
+    def test_novelty_weight_favors_novel_branch(self, db, project):
+        b_tense, b_novel, b_overlap = self._make_branches()
+
+        db.set_scoring_weights(project.id, {
+            "structure_fit": 0.05,
+            "psyke_consistency": 0.05,
+            "tension_gain": 0.05,
+            "novelty": 0.80,
+            "goal_alignment": 0.05,
+        })
+
+        wf = Wavefunction.new(anchor="Fork", branches=[b_tense, b_novel, b_overlap])
+        result = _format_wavefunction(
+            "Test", wf, db=db, project_id=project.id,
+        )
+        branches = result.payload["branches"]
+        assert branches[0]["title"] == "Crystalline portal opens"
+
+    def test_different_weights_different_ranking(self, db, project):
+        b_tense, b_novel, b_overlap = self._make_branches()
+
+        db.set_scoring_weights(project.id, {
+            "structure_fit": 0.05,
+            "psyke_consistency": 0.05,
+            "tension_gain": 0.75,
+            "novelty": 0.10,
+            "goal_alignment": 0.05,
+        })
+        wf1 = Wavefunction.new(anchor="Fork", branches=[b_tense, b_novel, b_overlap])
+        r1 = _format_wavefunction("Test", wf1, db=db, project_id=project.id)
+        ranking_tension = [b["title"] for b in r1.payload["branches"]]
+
+        b_tense2, b_novel2, b_overlap2 = self._make_branches()
+        db.set_scoring_weights(project.id, {
+            "structure_fit": 0.05,
+            "psyke_consistency": 0.05,
+            "tension_gain": 0.05,
+            "novelty": 0.80,
+            "goal_alignment": 0.05,
+        })
+        wf2 = Wavefunction.new(anchor="Fork", branches=[b_tense2, b_novel2, b_overlap2])
+        r2 = _format_wavefunction("Test", wf2, db=db, project_id=project.id)
+        ranking_novelty = [b["title"] for b in r2.payload["branches"]]
+
+        assert ranking_tension != ranking_novelty
+        assert ranking_tension[0] == "War erupts at the gate"
+        assert ranking_novelty[0] == "Crystalline portal opens"
+
+    def test_no_stored_weights_uses_defaults(self):
+        b = Branch.new(
+            title="Fight", description="danger and war",
+            stakes="sacrifice", consequence="loss",
+        )
+        wf = Wavefunction.new(anchor="Test", branches=[b])
+        result = _format_wavefunction("Test", wf)
+        assert result.payload["branches"][0]["score"] > 0
+
+    def test_deterministic_given_same_inputs(self, db, project):
+        db.set_scoring_weights(project.id, {
+            "structure_fit": 0.30,
+            "psyke_consistency": 0.10,
+            "tension_gain": 0.30,
+            "novelty": 0.20,
+            "goal_alignment": 0.10,
+        })
+
+        results = []
+        for _ in range(3):
+            bt, bn, bo = self._make_branches()
+            wf = Wavefunction.new(anchor="Fork", branches=[bt, bn, bo])
+            r = _format_wavefunction("Test", wf, db=db, project_id=project.id)
+            results.append([b["probability"] for b in r.payload["branches"]])
+
+        assert results[0] == results[1] == results[2]

@@ -325,8 +325,12 @@ def _format_wavefunction(
     if db is not None and project_id is not None:
         psyke = gather_psyke_signals(db, project_id)
 
+    weights = None
+    if db is not None and project_id is not None:
+        weights = db.get_scoring_weights(project_id)
+
     if wf.branches:
-        scored = score_branches(wf, psyke=psyke)
+        scored = score_branches(wf, psyke=psyke, weights=weights)
         apply_scores(wf, scored)
         wf.branches.sort(key=lambda b: b.probability, reverse=True)
 
