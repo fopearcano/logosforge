@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 
 from storyplanner.db import Database
 from storyplanner.psyke_commands import CommandType, parse as parse_command
-from storyplanner.psyke_search import PsykeSearchIndex, SearchResult
+from storyplanner.psyke_search import PsykeSearchIndex
 from storyplanner.psyke_suggestions import Suggestion, suggest
 from storyplanner.ui import theme
 
@@ -36,9 +36,6 @@ _FADE_MS = 150
 _DEBOUNCE_MS = 100
 _MAX_VISIBLE = 8
 
-_SELECTED_BG = "rgba(255,255,255,0.08)"
-
-
 class _SuggestionItem(QWidget):
     """Single row in the results dropdown."""
 
@@ -46,26 +43,59 @@ class _SuggestionItem(QWidget):
         super().__init__(parent)
         self.setObjectName("psykeResultItem")
         self.suggestion = suggestion
+        self.setFixedHeight(32)
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 4, 10, 4)
-        layout.setSpacing(8)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 10, 0)
+        row.setSpacing(0)
+
+        self._accent_bar = QWidget()
+        self._accent_bar.setFixedWidth(3)
+        self._accent_bar.setObjectName("psykeAccentBar")
+        row.addWidget(self._accent_bar)
 
         icon_label = QLabel(suggestion.icon)
-        icon_label.setFixedWidth(20)
-        layout.addWidget(icon_label)
+        icon_label.setObjectName("psykeResultIcon")
+        icon_label.setFixedWidth(28)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        row.addWidget(icon_label)
+
+        text_col = QVBoxLayout()
+        text_col.setContentsMargins(0, 2, 0, 2)
+        text_col.setSpacing(0)
 
         name_label = QLabel(_highlight(suggestion.text, query))
         name_label.setObjectName("psykeResultName")
-        layout.addWidget(name_label, stretch=1)
+        text_col.addWidget(name_label)
 
-        desc_label = QLabel(suggestion.description)
-        desc_label.setObjectName("psykeResultType")
-        layout.addWidget(desc_label)
+        if suggestion.description:
+            desc_label = QLabel(_esc(suggestion.description))
+            desc_label.setObjectName("psykeResultDesc")
+            text_col.addWidget(desc_label)
+
+        row.addLayout(text_col, stretch=1)
+
+        if suggestion.category in ("command", "entity_action"):
+            badge = QLabel(suggestion.category.replace("_", " "))
+            badge.setObjectName("psykeResultBadge")
+            row.addWidget(badge)
+
+        self._apply_idle_style()
 
     def set_selected(self, selected: bool) -> None:
-        bg = _SELECTED_BG if selected else "transparent"
-        self.setStyleSheet(f"#psykeResultItem {{ background-color: {bg}; }}")
+        if selected:
+            self.setStyleSheet(
+                f"#psykeResultItem {{ background-color: {theme.SELECTION_BG}; }}"
+                f"#psykeAccentBar {{ background-color: {theme.ACCENT}; }}"
+            )
+        else:
+            self._apply_idle_style()
+
+    def _apply_idle_style(self) -> None:
+        self.setStyleSheet(
+            "#psykeResultItem { background-color: transparent; }"
+            "#psykeAccentBar { background-color: transparent; }"
+        )
 
 
 def _highlight(name: str, query: str) -> str:
@@ -205,18 +235,24 @@ class _ResultsDropdown(QWidget):
             f"  border-bottom: none;"
             f"  border-radius: 4px 4px 0 0;"
             f"}}"
-            f"#psykeResultItem {{"
-            f"  background-color: transparent;"
-            f"  padding: 2px 0;"
+            f"#psykeResultIcon {{"
+            f"  font-size: 13px;"
             f"}}"
             f"#psykeResultName {{"
             f"  color: {theme.TEXT_PRIMARY};"
             f"  font-size: 12px;"
+            f"  font-weight: 500;"
             f"}}"
-            f"#psykeResultType {{"
+            f"#psykeResultDesc {{"
             f"  color: {theme.TEXT_MUTED};"
             f"  font-size: 10px;"
-            f"  font-style: italic;"
+            f"}}"
+            f"#psykeResultBadge {{"
+            f"  color: {theme.TEXT_MUTED};"
+            f"  font-size: 9px;"
+            f"  padding: 1px 6px;"
+            f"  border: 1px solid {theme.BORDER};"
+            f"  border-radius: 3px;"
             f"}}"
             f"#psykeResultEmpty {{"
             f"  color: {theme.TEXT_MUTED};"
