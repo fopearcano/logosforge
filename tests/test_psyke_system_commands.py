@@ -385,3 +385,104 @@ class TestRegistration:
         result = entry.handler(ctx)
         assert result["ok"]
         assert result["name"] == "Test"
+
+
+class TestConnectorIntegration:
+    """Verify all data operations route through the Connector executor."""
+
+    def test_create_goes_through_connector(self, db, project, callbacks):
+        h = SystemCommandHandlers(
+            db, project.id,
+            open_psyke_entry=callbacks.open_entry,
+            on_data_changed=callbacks.on_data_changed,
+        )
+        ctx = CommandContext(command="create", args=["character", "Via", "Connector"])
+        result = h.handle_create(ctx)
+        assert result["ok"]
+        entry = db.get_psyke_entry_by_id(result["entry_id"])
+        assert entry is not None
+        assert entry.name == "Via Connector"
+        assert entry.entry_type == "character"
+
+    def test_open_scene_validates_via_connector(self, db, project, callbacks):
+        scene = db.create_scene(project.id, "Test Scene")
+        h = SystemCommandHandlers(
+            db, project.id,
+            open_scene=callbacks.open_scene,
+        )
+        ctx = CommandContext(command="open", args=["scene", str(scene.id)])
+        result = h.handle_open(ctx)
+        assert result["ok"]
+        assert callbacks.opened_scenes == [scene.id]
+
+    def test_open_scene_wrong_project_fails(self, db, callbacks):
+        p1 = db.create_project("Project 1")
+        p2 = db.create_project("Project 2")
+        scene = db.create_scene(p2.id, "Other Scene")
+        h = SystemCommandHandlers(
+            db, p1.id,
+            open_scene=callbacks.open_scene,
+        )
+        ctx = CommandContext(command="open", args=["scene", str(scene.id)])
+        result = h.handle_open(ctx)
+        assert not result["ok"]
+        assert callbacks.opened_scenes == []
+
+    def test_go_next_uses_connector_list(self, db, project, callbacks):
+        s1 = db.create_scene(project.id, "Scene 1")
+        s2 = db.create_scene(project.id, "Scene 2")
+        h = SystemCommandHandlers(
+            db, project.id,
+            open_scene=callbacks.open_scene,
+            get_active_scene_id=lambda: s1.id,
+        )
+        ctx = CommandContext(command="go", args=["scene", "next"])
+        result = h.handle_go(ctx)
+        assert result["ok"]
+        assert result["scene_id"] == s2.id
+
+    def test_go_by_id_validates_via_connector(self, db, project, callbacks):
+        scene = db.create_scene(project.id, "Scene 1")
+        h = SystemCommandHandlers(
+            db, project.id,
+            open_scene=callbacks.open_scene,
+        )
+        ctx = CommandContext(command="go", args=["scene", str(scene.id)])
+        result = h.handle_go(ctx)
+        assert result["ok"]
+        assert callbacks.opened_scenes == [scene.id]
+
+    def test_go_by_id_nonexistent_fails(self, db, project, callbacks):
+        h = SystemCommandHandlers(
+            db, project.id,
+            open_scene=callbacks.open_scene,
+        )
+        ctx = CommandContext(command="go", args=["scene", "99999"])
+        result = h.handle_go(ctx)
+        assert not result["ok"]
+        assert callbacks.opened_scenes == []
+
+    def test_open_psyke_validates_via_connector(self, db, project, callbacks):
+        db.create_psyke_entry(project.id, "Jean Moreau", "character")
+        h = SystemCommandHandlers(
+            db, project.id,
+            open_psyke_entry=callbacks.open_entry,
+        )
+        ctx = CommandContext(command="open", args=["psyke", "jean"])
+        result = h.handle_open(ctx)
+        assert result["ok"]
+        assert result["name"] == "Jean Moreau"
+        assert len(callbacks.opened_entries) == 1
+
+    def test_create_result_structure(self, db, project, callbacks):
+        h = SystemCommandHandlers(
+            db, project.id,
+            open_psyke_entry=callbacks.open_entry,
+            on_data_changed=callbacks.on_data_changed,
+        )
+        ctx = CommandContext(command="create", args=["place", "The", "Grand", "Palace"])
+        result = h.handle_create(ctx)
+        assert result["ok"]
+        assert "entry_id" in result
+        assert result["name"] == "The Grand Palace"
+        assert result["type"] == "place"

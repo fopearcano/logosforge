@@ -1,10 +1,16 @@
-"""PSYKE system command handlers — /create, /open, /go, /ai."""
+"""PSYKE system command handlers — /create, /open, /go, /ai.
+
+All data operations route through the Connector executor for
+validation, structured results, and consistent error handling.
+UI navigation callbacks remain separate — they are view concerns.
+"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
 from storyplanner.assistant import PRESET_ACTIONS
+from storyplanner.connector_executor import execute_action
 from storyplanner.psyke_command_registry import CommandContext, CommandRegistry
 
 if TYPE_CHECKING:
@@ -14,7 +20,7 @@ _AI_ACTIONS = {k.lower(): k for k in PRESET_ACTIONS}
 
 
 class SystemCommandHandlers:
-    """Stateful handler set that holds references to db and UI callbacks."""
+    """Stateful handler set — routes data through Connector, UI through callbacks."""
 
     def __init__(
         self,
@@ -37,6 +43,13 @@ class SystemCommandHandlers:
         self._run_ai_action = run_ai_action
         self._on_data_changed = on_data_changed
 
+    def _exec(self, action: str, args: dict | None = None) -> dict:
+        return execute_action(
+            self._db, self._project_id,
+            {"action": action, "args": args or {}},
+            enforce_settings=False,
+        )
+
     def register_all(self, registry: CommandRegistry) -> None:
         registry.register("create", self.handle_create, description="Create a PSYKE entry")
         registry.register("open", self.handle_open, description="Open a scene or entry")
@@ -57,12 +70,24 @@ class SystemCommandHandlers:
         if not name:
             name = f"New {entry_type.title()}"
 
-        entry = self._db.create_psyke_entry(self._project_id, name, entry_type)
+        result = self._exec("create_psyke_entry", {
+            "name": name,
+            "entry_type": entry_type,
+        })
+        if not result["ok"]:
+            return result
+
+        entry_data = result["result"]
         if self._on_data_changed:
             self._on_data_changed()
         if self._open_psyke_entry:
-            self._open_psyke_entry(entry.id)
-        return {"ok": True, "entry_id": entry.id, "name": entry.name, "type": entry.entry_type}
+            self._open_psyke_entry(entry_data["id"])
+        return {
+            "ok": True,
+            "entry_id": entry_data["id"],
+            "name": entry_data["name"],
+            "type": entry_data["entry_type"],
+        }
 
     def handle_open(self, ctx: CommandContext) -> dict:
         if not ctx.args:
@@ -100,8 +125,8 @@ class SystemCommandHandlers:
         except ValueError:
             return {"ok": False, "error": f"Invalid scene id: '{args[0]}'"}
 
-        scene = self._db.get_scene_by_id(scene_id)
-        if scene is None or scene.project_id != self._project_id:
+        result = self._exec("get_scene", {"scene_id": scene_id})
+        if not result["ok"]:
             return {"ok": False, "error": f"Scene {scene_id} not found"}
 
         if self._open_scene:
@@ -116,13 +141,17 @@ class SystemCommandHandlers:
         from storyplanner.psyke_search import PsykeSearchIndex
 
         index = PsykeSearchIndex(self._db, self._project_id)
-        result = index.resolve_entity(query)
-        if result is None:
+        resolved = index.resolve_entity(query)
+        if resolved is None:
             return {"ok": False, "error": f"No entry matching '{query}'"}
 
+        result = self._exec("get_psyke_entry", {"entry_id": resolved.entry_id})
+        if not result["ok"]:
+            return {"ok": False, "error": f"Entry {resolved.entry_id} not found"}
+
         if self._open_psyke_entry:
-            self._open_psyke_entry(result.entry_id)
-        return {"ok": True, "entry_id": result.entry_id, "name": result.name}
+            self._open_psyke_entry(resolved.entry_id)
+        return {"ok": True, "entry_id": resolved.entry_id, "name": resolved.name}
 
     def _go_scene(self, args: list[str]) -> dict:
         if not args:
@@ -135,14 +164,17 @@ class SystemCommandHandlers:
                 scene_id = int(direction)
             except ValueError:
                 return {"ok": False, "error": f"Unknown direction '{direction}'. Use: next, previous, or a scene id"}
-            scene = self._db.get_scene_by_id(scene_id)
-            if scene is None or scene.project_id != self._project_id:
+            result = self._exec("get_scene", {"scene_id": scene_id})
+            if not result["ok"]:
                 return {"ok": False, "error": f"Scene {scene_id} not found"}
             if self._open_scene:
                 self._open_scene(scene_id)
             return {"ok": True, "scene_id": scene_id}
 
-        scenes = self._db.get_all_scenes(self._project_id)
+        result = self._exec("list_scenes")
+        if not result["ok"]:
+            return result
+        scenes = result["result"]
         if not scenes:
             return {"ok": False, "error": "No scenes in project"}
 
@@ -150,7 +182,7 @@ class SystemCommandHandlers:
         if current_id is None:
             target = scenes[0]
         else:
-            ids = [s.id for s in scenes]
+            ids = [s["id"] for s in scenes]
             try:
                 idx = ids.index(current_id)
             except ValueError:
@@ -164,8 +196,8 @@ class SystemCommandHandlers:
             target = scenes[idx]
 
         if self._open_scene:
-            self._open_scene(target.id)
-        return {"ok": True, "scene_id": target.id}
+            self._open_scene(target["id"])
+        return {"ok": True, "scene_id": target["id"]}
 
     def handle_ai(self, ctx: CommandContext) -> dict:
         action = ctx.first_arg.lower() if ctx.first_arg else ""
