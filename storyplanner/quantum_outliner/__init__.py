@@ -29,11 +29,15 @@ from storyplanner.quantum_outliner.persistence import (
     save_state,
 )
 from storyplanner.quantum_outliner.scoring import (
+    BEAT_PHASE_MAP,
     CollapseRecommendation,
     FACTOR_LABELS,
+    PHASE_MULTIPLIERS,
     PRESET_NAMES,
     SCORING_PRESETS,
+    apply_beat_bias,
     compute_probabilities,
+    get_beat_phase,
     recommend_collapse,
 )
 from storyplanner.quantum_outliner.state import (
@@ -61,10 +65,14 @@ __all__ = [
     "StateDelta",
     "Wavefunction",
     "CollapseRecommendation",
+    "BEAT_PHASE_MAP",
     "FACTOR_LABELS",
+    "PHASE_MULTIPLIERS",
     "PRESET_NAMES",
     "SCORING_PRESETS",
+    "apply_beat_bias",
     "apply_proposal",
+    "get_beat_phase",
     "collapse_branch",
     "compute_probabilities",
     "recommend_collapse",

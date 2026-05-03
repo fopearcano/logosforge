@@ -236,9 +236,9 @@ class TestPresetRankingChanges:
         )
         b_struct = Branch.new(
             title="Midpoint reversal arrives",
-            description="The hero's plan collapses at the midpoint.",
+            description="The hero's plan collapses in a desperate fight at the midpoint.",
             stakes="everything changes",
-            consequence="New direction forced.",
+            consequence="Must find a new path despite the danger and risk.",
             structure_beat="midpoint reversal",
             structure_method="Save the Cat",
             branch_type="intensification",

@@ -72,6 +72,148 @@ SCORING_PRESETS: dict[str, dict[str, float]] = {
 PRESET_NAMES: list[str] = list(SCORING_PRESETS.keys())
 
 
+# ---------------------------------------------------------------------------
+# Beat-phase bias: adjust weights by story position
+# ---------------------------------------------------------------------------
+
+BEAT_PHASE_MAP: dict[str, str] = {
+    # Setup — establishing the world
+    "opening image": "setup",
+    "theme stated": "setup",
+    "set-up": "setup",
+    "setup": "setup",
+    "ordinary world": "setup",
+    "hook": "setup",
+    "ki": "setup",
+    "you": "setup",
+    # Catalyst — call to action
+    "catalyst": "catalyst",
+    "call to adventure": "catalyst",
+    "refusal of the call": "catalyst",
+    "crossing the first threshold": "catalyst",
+    "need": "catalyst",
+    "go": "catalyst",
+    "plot turn 1": "catalyst",
+    "break into two": "catalyst",
+    # Development — exploring the new world
+    "fun and games": "development",
+    "b story": "development",
+    "tests/allies/enemies": "development",
+    "debate": "development",
+    "search": "development",
+    "shō": "development",
+    "meeting the mentor": "development",
+    "pinch 1": "development",
+    # Midpoint — reversal territory
+    "midpoint": "midpoint",
+    "midpoint reversal": "midpoint",
+    "approach to the inmost cave": "midpoint",
+    "find": "midpoint",
+    "ten": "midpoint",
+    # Crisis — darkest hour
+    "bad guys close in": "crisis",
+    "all is lost": "crisis",
+    "dark night of the soul": "crisis",
+    "ordeal": "crisis",
+    "pinch 2": "crisis",
+    "take": "crisis",
+    # Climax — peak confrontation
+    "break into three": "climax",
+    "finale": "climax",
+    "resurrection": "climax",
+    "plot turn 2": "climax",
+    "climax": "climax",
+    "confrontation": "climax",
+    # Resolution — wrapping up
+    "final image": "resolution",
+    "return with the elixir": "resolution",
+    "resolution": "resolution",
+    "the road back": "resolution",
+    "return": "resolution",
+    "change": "resolution",
+    "ketsu": "resolution",
+    "reward": "resolution",
+}
+
+PHASE_MULTIPLIERS: dict[str, dict[str, float]] = {
+    "setup": {
+        "structure_fit": 1.4,
+        "psyke_consistency": 1.0,
+        "tension_gain": 0.8,
+        "novelty": 1.0,
+        "goal_alignment": 1.0,
+    },
+    "catalyst": {
+        "structure_fit": 1.0,
+        "psyke_consistency": 1.0,
+        "tension_gain": 1.0,
+        "novelty": 1.4,
+        "goal_alignment": 1.0,
+    },
+    "development": {
+        "structure_fit": 1.0,
+        "psyke_consistency": 1.3,
+        "tension_gain": 0.9,
+        "novelty": 1.0,
+        "goal_alignment": 1.3,
+    },
+    "midpoint": {
+        "structure_fit": 1.0,
+        "psyke_consistency": 1.0,
+        "tension_gain": 1.4,
+        "novelty": 1.3,
+        "goal_alignment": 0.9,
+    },
+    "crisis": {
+        "structure_fit": 0.9,
+        "psyke_consistency": 1.4,
+        "tension_gain": 1.0,
+        "novelty": 0.9,
+        "goal_alignment": 1.3,
+    },
+    "climax": {
+        "structure_fit": 1.3,
+        "psyke_consistency": 1.0,
+        "tension_gain": 1.4,
+        "novelty": 0.9,
+        "goal_alignment": 1.0,
+    },
+    "resolution": {
+        "structure_fit": 1.3,
+        "psyke_consistency": 1.0,
+        "tension_gain": 0.8,
+        "novelty": 0.9,
+        "goal_alignment": 1.4,
+    },
+}
+
+
+def get_beat_phase(beat: str | None) -> str | None:
+    """Map a beat name to its narrative phase, or None if unrecognized."""
+    if not beat:
+        return None
+    return BEAT_PHASE_MAP.get(beat.strip().lower())
+
+
+def apply_beat_bias(
+    weights: dict[str, float], beat: str | None,
+) -> dict[str, float]:
+    """Apply phase-based multipliers to weights and renormalize to sum=1."""
+    phase = get_beat_phase(beat)
+    if not phase:
+        return weights
+
+    multipliers = PHASE_MULTIPLIERS.get(phase)
+    if not multipliers:
+        return weights
+
+    biased = {k: weights.get(k, 0.0) * multipliers.get(k, 1.0) for k in weights}
+    total = sum(biased.values())
+    if total <= 0:
+        return weights
+    return {k: round(v / total, 4) for k, v in biased.items()}
+
+
 FACTOR_LABELS: dict[str, str] = {
     "structure_fit": "aligns with structural beat",
     "psyke_consistency": "consistent with story bible",
@@ -108,7 +250,7 @@ def score_branches(
     weights: dict[str, float] | None = None,
 ) -> list[ScoredBranch]:
     """Score all branches in a wavefunction. Returns sorted high-to-low."""
-    w = weights or DEFAULT_WEIGHTS
+    w = apply_beat_bias(weights or DEFAULT_WEIGHTS, wf.structure_beat)
 
     scored: list[ScoredBranch] = []
     existing_titles = {b.title.lower() for b in wf.branches}
