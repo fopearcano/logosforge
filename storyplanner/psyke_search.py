@@ -41,6 +41,13 @@ class PsykeSearchIndex:
                         tokens.append(alias)
             self._index.append((entry, tokens))
 
+    def resolve_entity(self, name: str) -> SearchResult | None:
+        """Return the single best match if it scores above the confidence threshold."""
+        results = self.search(name, max_results=1)
+        if results and results[0].score >= 0.6:
+            return results[0]
+        return None
+
     def search(self, query: str, max_results: int = MAX_RESULTS) -> list[SearchResult]:
         query = query.strip().lower()
         if not query:

@@ -49,6 +49,34 @@ class TestScoreFunction:
         assert _score("", "jean") == 0.0
 
 
+class TestResolveEntity:
+    def test_exact_name_resolves(self, index):
+        r = index.resolve_entity("jean moreau")
+        assert r is not None
+        assert r.name == "Jean Moreau"
+
+    def test_alias_resolves(self, index):
+        r = index.resolve_entity("jm")
+        assert r is not None
+        assert r.name == "Jean Moreau"
+
+    def test_partial_resolves(self, index):
+        r = index.resolve_entity("redemp")
+        assert r is not None
+        assert r.name == "Redemption"
+
+    def test_low_score_returns_none(self, index):
+        assert index.resolve_entity("zxy") is None
+
+    def test_empty_returns_none(self, index):
+        assert index.resolve_entity("") is None
+
+    def test_case_insensitive(self, index):
+        r = index.resolve_entity("PALAZZO")
+        assert r is not None
+        assert r.name == "Palazzo Vecchio"
+
+
 class TestPsykeSearchIndex:
     def test_exact_name(self, index):
         results = index.search("Jean Moreau")

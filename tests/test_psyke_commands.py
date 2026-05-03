@@ -114,6 +114,28 @@ class TestEntityCommands:
         assert r.kind == CommandType.ENTITY
         assert r.command == "jean"
 
+    def test_entity_default_action_is_insert(self):
+        r = parse("/john")
+        assert r.kind == CommandType.ENTITY
+        assert r.args == []
+
+    def test_entity_open_action(self):
+        r = parse("/john open")
+        assert r.kind == CommandType.ENTITY
+        assert r.command == "john"
+        assert r.first_arg == "open"
+
+    def test_entity_insert_action(self):
+        r = parse("/john insert")
+        assert r.kind == CommandType.ENTITY
+        assert r.command == "john"
+        assert r.first_arg == "insert"
+
+    def test_insert_is_system_command(self):
+        r = parse("/insert")
+        assert r.kind == CommandType.SYSTEM
+        assert r.command == "insert"
+
 
 class TestParsedCommand:
     def test_first_arg_present(self):

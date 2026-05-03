@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
+from storyplanner.psyke_commands import CommandType, parse as parse_command
 from storyplanner.psyke_search import PsykeSearchIndex, SearchResult
 from storyplanner.ui import theme
 
@@ -232,6 +233,8 @@ class PsykeConsole(QWidget):
     """Slim search bar with live results dropdown and keyboard navigation."""
 
     entry_selected = Signal(int, str)
+    entry_open_requested = Signal(int)
+    command_submitted = Signal(str, list)
 
     def __init__(
         self,
@@ -243,6 +246,8 @@ class PsykeConsole(QWidget):
         self.setFixedHeight(32)
         self.setObjectName("psykeConsole")
 
+        self._db = db
+        self._project_id = project_id
         self._previous_focus: QWidget | None = None
         self._search_index = PsykeSearchIndex(db, project_id)
         self._last_query: str = ""
@@ -379,7 +384,35 @@ class PsykeConsole(QWidget):
                 if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                     if dropdown.confirm_selection():
                         return True
+                    if self._try_execute_input():
+                        return True
         return super().eventFilter(obj, event)
+
+    def _try_execute_input(self) -> bool:
+        text = self._input.text().strip()
+        if not text:
+            return False
+
+        parsed = parse_command(text)
+
+        if parsed.kind == CommandType.SYSTEM:
+            self.command_submitted.emit(parsed.command, parsed.args)
+            self.deactivate()
+            return True
+
+        if parsed.kind == CommandType.ENTITY:
+            resolved = self._search_index.resolve_entity(parsed.command)
+            if resolved is None:
+                return False
+            action = parsed.first_arg.lower() if parsed.first_arg else "insert"
+            if action == "open":
+                self.entry_open_requested.emit(resolved.entry_id)
+            else:
+                self.entry_selected.emit(resolved.entry_id, resolved.name)
+            self.deactivate()
+            return True
+
+        return False
 
     def _maybe_hide_dropdown(self) -> None:
         if not self._input.hasFocus():
