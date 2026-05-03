@@ -160,11 +160,11 @@ def _rename_entity(m: re.Match) -> Intent:
 
 # --- Public API ---
 
-def detect_intent(text: str) -> Intent | None:
+def detect_intent(text: str, *, use_llm: bool = False) -> Intent | None:
     """Attempt to detect a structured intent from natural language.
 
-    Returns the first matching Intent, or None if no rule matches.
-    Rules are evaluated in registration order (most specific first).
+    Rules are evaluated first (fast, deterministic). If none match and
+    use_llm is True, falls back to a local LLM for classification.
     """
     text = text.strip()
     if not text:
@@ -174,6 +174,10 @@ def detect_intent(text: str) -> Intent | None:
         m = pattern.match(text)
         if m:
             return handler(m)
+
+    if use_llm:
+        from storyplanner.psyke_intent_llm import detect_intent_llm
+        return detect_intent_llm(text)
 
     return None
 

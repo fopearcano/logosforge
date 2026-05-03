@@ -527,7 +527,7 @@ class PsykeConsole(QWidget):
         return self._try_intent(text)
 
     def _try_intent(self, text: str) -> bool:
-        intent = detect_intent(text)
+        intent = detect_intent(text, use_llm=True)
         if intent is None:
             return False
         cmd_str = intent_to_command(intent)
