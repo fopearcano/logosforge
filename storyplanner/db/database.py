@@ -124,6 +124,15 @@ class Database:
         settings["scoring_weights"] = weights
         self.save_project_settings(project_id, settings)
 
+    def get_scoring_preset(self, project_id: int) -> str:
+        settings = self.get_project_settings(project_id)
+        return settings.get("scoring_preset", "Balanced")
+
+    def set_scoring_preset(self, project_id: int, preset: str) -> None:
+        settings = self.get_project_settings(project_id)
+        settings["scoring_preset"] = preset
+        self.save_project_settings(project_id, settings)
+
     # -- Characters ----------------------------------------------------------
 
     def get_character_by_id(self, character_id: int) -> Character | None:

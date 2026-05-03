@@ -31,6 +31,46 @@ DEFAULT_WEIGHTS: dict[str, float] = {
     "goal_alignment": 0.15,
 }
 
+SCORING_PRESETS: dict[str, dict[str, float]] = {
+    "Balanced": {
+        "structure_fit": 0.25,
+        "psyke_consistency": 0.25,
+        "tension_gain": 0.20,
+        "novelty": 0.15,
+        "goal_alignment": 0.15,
+    },
+    "Conservative": {
+        "structure_fit": 0.35,
+        "psyke_consistency": 0.35,
+        "tension_gain": 0.10,
+        "novelty": 0.10,
+        "goal_alignment": 0.10,
+    },
+    "Bold": {
+        "structure_fit": 0.10,
+        "psyke_consistency": 0.10,
+        "tension_gain": 0.35,
+        "novelty": 0.35,
+        "goal_alignment": 0.10,
+    },
+    "Character-driven": {
+        "structure_fit": 0.10,
+        "psyke_consistency": 0.35,
+        "tension_gain": 0.10,
+        "novelty": 0.10,
+        "goal_alignment": 0.35,
+    },
+    "Plot-driven": {
+        "structure_fit": 0.35,
+        "psyke_consistency": 0.10,
+        "tension_gain": 0.35,
+        "novelty": 0.10,
+        "goal_alignment": 0.10,
+    },
+}
+
+PRESET_NAMES: list[str] = list(SCORING_PRESETS.keys())
+
 
 FACTOR_LABELS: dict[str, str] = {
     "structure_fit": "aligns with structural beat",

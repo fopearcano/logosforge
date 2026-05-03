@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -20,7 +21,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from storyplanner.quantum_outliner.scoring import DEFAULT_WEIGHTS, FACTOR_LABELS
+from storyplanner.quantum_outliner.scoring import (
+    DEFAULT_WEIGHTS,
+    FACTOR_LABELS,
+    PRESET_NAMES,
+    SCORING_PRESETS,
+)
 from storyplanner.quantum_outliner.state import OutlineMode, get_state
 from storyplanner.ui import theme
 
@@ -38,11 +44,17 @@ _WEIGHT_DISPLAY: dict[str, str] = {
 
 
 class ScoringWeightsPopover(QFrame):
-    """Compact popover with sliders for the five scoring weights."""
+    """Compact popover with preset dropdown and sliders for scoring weights."""
 
     weights_changed = Signal(dict)
+    preset_changed = Signal(str)
 
-    def __init__(self, weights: dict[str, float], parent=None) -> None:
+    def __init__(
+        self,
+        weights: dict[str, float],
+        preset: str = "Balanced",
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("weightsPopover")
         self.setWindowFlags(Qt.WindowType.Popup)
@@ -51,6 +63,7 @@ class ScoringWeightsPopover(QFrame):
         self._sliders: dict[str, QSlider] = {}
         self._value_labels: dict[str, QLabel] = {}
         self._weights = dict(weights)
+        self._applying_preset = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 10, 12, 10)
@@ -59,6 +72,16 @@ class ScoringWeightsPopover(QFrame):
         title = QLabel("Scoring Weights")
         title.setObjectName("weightsTitle")
         layout.addWidget(title)
+
+        self._preset_combo = QComboBox()
+        self._preset_combo.setObjectName("weightsPresetCombo")
+        for name in PRESET_NAMES:
+            self._preset_combo.addItem(name)
+        self._preset_combo.addItem("Custom")
+        idx = PRESET_NAMES.index(preset) if preset in PRESET_NAMES else len(PRESET_NAMES)
+        self._preset_combo.setCurrentIndex(idx)
+        self._preset_combo.currentIndexChanged.connect(self._on_preset_selected)
+        layout.addWidget(self._preset_combo)
 
         for key in DEFAULT_WEIGHTS:
             row = QHBoxLayout()
@@ -94,7 +117,29 @@ class ScoringWeightsPopover(QFrame):
         reset_row.addWidget(reset_btn)
         layout.addLayout(reset_row)
 
+    def _on_preset_selected(self, index: int) -> None:
+        name = self._preset_combo.currentText()
+        if name == "Custom" or name not in SCORING_PRESETS:
+            return
+        self._apply_weights(SCORING_PRESETS[name])
+        self.preset_changed.emit(name)
+
+    def _apply_weights(self, weights: dict[str, float]) -> None:
+        self._applying_preset = True
+        for key, slider in self._sliders.items():
+            slider.blockSignals(True)
+            slider.setValue(int(weights.get(key, 0.0) * 100))
+            slider.blockSignals(False)
+        self._applying_preset = False
+        self._weights = dict(weights)
+        for k, lbl in self._value_labels.items():
+            lbl.setText(f"{weights[k]:.0%}")
+        self.weights_changed.emit(dict(weights))
+
     def _on_slider_changed(self) -> None:
+        if self._applying_preset:
+            return
+
         raw = {k: s.value() for k, s in self._sliders.items()}
         total = sum(raw.values())
         if total == 0:
@@ -106,20 +151,25 @@ class ScoringWeightsPopover(QFrame):
         for k, lbl in self._value_labels.items():
             lbl.setText(f"{normalized[k]:.0%}")
 
+        self._preset_combo.blockSignals(True)
+        self._preset_combo.setCurrentIndex(len(PRESET_NAMES))
+        self._preset_combo.blockSignals(False)
+        self.preset_changed.emit("Custom")
+
         self.weights_changed.emit(dict(normalized))
 
     def _reset_defaults(self) -> None:
-        for key, slider in self._sliders.items():
-            slider.blockSignals(True)
-            slider.setValue(int(DEFAULT_WEIGHTS[key] * 100))
-            slider.blockSignals(False)
-        self._weights = dict(DEFAULT_WEIGHTS)
-        for k, lbl in self._value_labels.items():
-            lbl.setText(f"{DEFAULT_WEIGHTS[k]:.0%}")
-        self.weights_changed.emit(dict(DEFAULT_WEIGHTS))
+        self._preset_combo.blockSignals(True)
+        self._preset_combo.setCurrentIndex(0)
+        self._preset_combo.blockSignals(False)
+        self._apply_weights(DEFAULT_WEIGHTS)
+        self.preset_changed.emit("Balanced")
 
     def get_weights(self) -> dict[str, float]:
         return dict(self._weights)
+
+    def get_preset(self) -> str:
+        return self._preset_combo.currentText()
 
 
 class QuantumTimelineWidget(QWidget):
@@ -577,8 +627,10 @@ class QuantumTimelineWidget(QWidget):
 
     def _show_weights_popover(self) -> None:
         weights = self._db.get_scoring_weights(self._project_id)
-        popover = ScoringWeightsPopover(weights, parent=self)
+        preset = self._db.get_scoring_preset(self._project_id)
+        popover = ScoringWeightsPopover(weights, preset=preset, parent=self)
         popover.weights_changed.connect(self._on_weights_changed)
+        popover.preset_changed.connect(self._on_preset_changed)
         btn_pos = self._weights_btn.mapToGlobal(
             self._weights_btn.rect().bottomRight()
         )
@@ -587,6 +639,9 @@ class QuantumTimelineWidget(QWidget):
 
     def _on_weights_changed(self, weights: dict) -> None:
         self._db.set_scoring_weights(self._project_id, weights)
+
+    def _on_preset_changed(self, preset: str) -> None:
+        self._db.set_scoring_preset(self._project_id, preset)
 
     @staticmethod
     def _status_badge(status: str) -> str:

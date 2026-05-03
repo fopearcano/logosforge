@@ -1324,6 +1324,25 @@ def build_stylesheet() -> str:
         background: {ACCENT_DIM};
         border-radius: 2px;
     }}
+    #weightsPresetCombo {{
+        background-color: {BG_INPUT};
+        color: {TEXT_PRIMARY};
+        border: 1px solid {BORDER};
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-size: 11px;
+        min-height: 18px;
+    }}
+    #weightsPresetCombo:hover {{
+        border-color: {BORDER_FOCUS};
+    }}
+    #weightsPresetCombo QAbstractItemView {{
+        background-color: {BG_PANEL};
+        color: {TEXT_PRIMARY};
+        border: 1px solid {BORDER};
+        selection-background-color: {SELECTION_BG};
+        selection-color: {SELECTION_TEXT};
+    }}
     #weightsBtn {{
         background: transparent;
         color: {TEXT_MUTED};

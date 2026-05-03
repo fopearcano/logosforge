@@ -31,6 +31,8 @@ from storyplanner.quantum_outliner.persistence import (
 from storyplanner.quantum_outliner.scoring import (
     CollapseRecommendation,
     FACTOR_LABELS,
+    PRESET_NAMES,
+    SCORING_PRESETS,
     compute_probabilities,
     recommend_collapse,
 )
@@ -60,6 +62,8 @@ __all__ = [
     "Wavefunction",
     "CollapseRecommendation",
     "FACTOR_LABELS",
+    "PRESET_NAMES",
+    "SCORING_PRESETS",
     "apply_proposal",
     "collapse_branch",
     "compute_probabilities",
