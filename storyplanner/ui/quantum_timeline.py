@@ -12,17 +12,114 @@ from PySide6.QtWidgets import (
     QLabel,
     QMenu,
     QMessageBox,
+    QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSlider,
     QVBoxLayout,
     QWidget,
 )
 
+from storyplanner.quantum_outliner.scoring import DEFAULT_WEIGHTS, FACTOR_LABELS
 from storyplanner.quantum_outliner.state import OutlineMode, get_state
 from storyplanner.ui import theme
 
 if TYPE_CHECKING:
     from storyplanner.db import Database
+
+
+_WEIGHT_DISPLAY: dict[str, str] = {
+    "structure_fit": "Structure",
+    "psyke_consistency": "PSYKE",
+    "tension_gain": "Tension",
+    "novelty": "Novelty",
+    "goal_alignment": "Goal",
+}
+
+
+class ScoringWeightsPopover(QFrame):
+    """Compact popover with sliders for the five scoring weights."""
+
+    weights_changed = Signal(dict)
+
+    def __init__(self, weights: dict[str, float], parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("weightsPopover")
+        self.setWindowFlags(Qt.WindowType.Popup)
+        self.setFixedWidth(230)
+
+        self._sliders: dict[str, QSlider] = {}
+        self._value_labels: dict[str, QLabel] = {}
+        self._weights = dict(weights)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(6)
+
+        title = QLabel("Scoring Weights")
+        title.setObjectName("weightsTitle")
+        layout.addWidget(title)
+
+        for key in DEFAULT_WEIGHTS:
+            row = QHBoxLayout()
+            row.setSpacing(6)
+
+            label = QLabel(_WEIGHT_DISPLAY.get(key, key))
+            label.setToolTip(FACTOR_LABELS.get(key, key))
+            label.setFixedWidth(58)
+            row.addWidget(label)
+
+            slider = QSlider(Qt.Orientation.Horizontal)
+            slider.setRange(0, 100)
+            slider.setValue(int(self._weights.get(key, 0.0) * 100))
+            slider.setObjectName(f"weightSlider_{key}")
+            self._sliders[key] = slider
+            row.addWidget(slider, stretch=1)
+
+            val_lbl = QLabel(f"{self._weights.get(key, 0.0):.0%}")
+            val_lbl.setObjectName("weightsValue")
+            val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self._value_labels[key] = val_lbl
+            row.addWidget(val_lbl)
+
+            layout.addLayout(row)
+
+            slider.valueChanged.connect(self._on_slider_changed)
+
+        reset_row = QHBoxLayout()
+        reset_row.addStretch()
+        reset_btn = QPushButton("Reset")
+        reset_btn.setObjectName("weightsBtn")
+        reset_btn.clicked.connect(self._reset_defaults)
+        reset_row.addWidget(reset_btn)
+        layout.addLayout(reset_row)
+
+    def _on_slider_changed(self) -> None:
+        raw = {k: s.value() for k, s in self._sliders.items()}
+        total = sum(raw.values())
+        if total == 0:
+            normalized = {k: 1.0 / len(raw) for k in raw}
+        else:
+            normalized = {k: round(v / total, 4) for k, v in raw.items()}
+
+        self._weights = normalized
+        for k, lbl in self._value_labels.items():
+            lbl.setText(f"{normalized[k]:.0%}")
+
+        self.weights_changed.emit(dict(normalized))
+
+    def _reset_defaults(self) -> None:
+        for key, slider in self._sliders.items():
+            slider.blockSignals(True)
+            slider.setValue(int(DEFAULT_WEIGHTS[key] * 100))
+            slider.blockSignals(False)
+        self._weights = dict(DEFAULT_WEIGHTS)
+        for k, lbl in self._value_labels.items():
+            lbl.setText(f"{DEFAULT_WEIGHTS[k]:.0%}")
+        self.weights_changed.emit(dict(DEFAULT_WEIGHTS))
+
+    def get_weights(self) -> dict[str, float]:
+        return dict(self._weights)
 
 
 class QuantumTimelineWidget(QWidget):
@@ -43,12 +140,25 @@ class QuantumTimelineWidget(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
+        strip_row = QHBoxLayout()
+        strip_row.setContentsMargins(0, 0, 0, 0)
+        strip_row.setSpacing(0)
+
         self._mode_strip = QLabel()
         self._mode_strip.setObjectName("qtlModeStrip")
         self._mode_strip.setFixedHeight(16)
         self._mode_strip.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self._mode_strip.setVisible(False)
-        outer.addWidget(self._mode_strip)
+        strip_row.addWidget(self._mode_strip, stretch=1)
+
+        self._weights_btn = QPushButton("Weights")
+        self._weights_btn.setObjectName("weightsBtn")
+        self._weights_btn.setFixedHeight(16)
+        self._weights_btn.setVisible(False)
+        self._weights_btn.clicked.connect(self._show_weights_popover)
+        strip_row.addWidget(self._weights_btn)
+
+        outer.addLayout(strip_row)
 
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
@@ -142,6 +252,7 @@ class QuantumTimelineWidget(QWidget):
             )
         has_wfs = bool(state.wavefunctions)
         self._mode_strip.setVisible(has_wfs)
+        self._weights_btn.setVisible(has_wfs and is_lambda)
 
     def _clear(self) -> None:
         while self._h_layout.count():
@@ -463,6 +574,19 @@ class QuantumTimelineWidget(QWidget):
         )
         if reply == QMessageBox.StandardButton.Yes:
             self.collapse_requested.emit(wf_id, branch_id)
+
+    def _show_weights_popover(self) -> None:
+        weights = self._db.get_scoring_weights(self._project_id)
+        popover = ScoringWeightsPopover(weights, parent=self)
+        popover.weights_changed.connect(self._on_weights_changed)
+        btn_pos = self._weights_btn.mapToGlobal(
+            self._weights_btn.rect().bottomRight()
+        )
+        popover.move(btn_pos.x() - popover.width(), btn_pos.y() + 2)
+        popover.show()
+
+    def _on_weights_changed(self, weights: dict) -> None:
+        self._db.set_scoring_weights(self._project_id, weights)
 
     @staticmethod
     def _status_badge(status: str) -> str:

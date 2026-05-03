@@ -32,13 +32,15 @@ DEFAULT_WEIGHTS: dict[str, float] = {
 }
 
 
-_FACTOR_LABELS: dict[str, str] = {
+FACTOR_LABELS: dict[str, str] = {
     "structure_fit": "aligns with structural beat",
     "psyke_consistency": "consistent with story bible",
     "tension_gain": "raises narrative tension",
     "novelty": "offers fresh direction",
     "goal_alignment": "advances protagonist's goal",
 }
+
+_FACTOR_LABELS = FACTOR_LABELS
 
 
 @dataclass(frozen=True)

@@ -21,6 +21,7 @@ class Project(SQLModel, table=True):
     title: str
     description: str = ""
     format_mode: str = "novel"
+    settings_json: str = ""
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 

@@ -1280,6 +1280,62 @@ def build_stylesheet() -> str:
         background: transparent;
         padding: 8px 0;
     }}
+
+    /* -- Scoring weights popover -- */
+    #weightsPopover {{
+        background-color: {BG_PANEL};
+        border: 1px solid {BORDER};
+        border-radius: 8px;
+    }}
+    #weightsPopover QLabel {{
+        color: {TEXT_SECONDARY};
+        font-size: 11px;
+        background: transparent;
+    }}
+    #weightsPopover QLabel#weightsTitle {{
+        color: {TEXT_PRIMARY};
+        font-size: 12px;
+        font-weight: bold;
+    }}
+    #weightsPopover QLabel#weightsValue {{
+        color: {ACCENT_DIM};
+        font-size: 10px;
+        font-weight: bold;
+        min-width: 30px;
+    }}
+    #weightsPopover QSlider::groove:horizontal {{
+        height: 4px;
+        background: {BG_INPUT};
+        border: 1px solid {BORDER};
+        border-radius: 2px;
+    }}
+    #weightsPopover QSlider::handle:horizontal {{
+        width: 10px;
+        height: 10px;
+        margin: -4px 0;
+        background: {ACCENT_DIM};
+        border: 1px solid {ACCENT};
+        border-radius: 5px;
+    }}
+    #weightsPopover QSlider::handle:horizontal:hover {{
+        background: {ACCENT};
+    }}
+    #weightsPopover QSlider::sub-page:horizontal {{
+        background: {ACCENT_DIM};
+        border-radius: 2px;
+    }}
+    #weightsBtn {{
+        background: transparent;
+        color: {TEXT_MUTED};
+        border: 1px solid {BORDER};
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-size: 9px;
+    }}
+    #weightsBtn:hover {{
+        color: {TEXT_PRIMARY};
+        border-color: {BORDER_FOCUS};
+    }}
     """
 
 

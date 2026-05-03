@@ -61,6 +61,11 @@ class Database:
                     text("ALTER TABLE project ADD COLUMN format_mode TEXT DEFAULT 'novel'")
                 )
                 conn.commit()
+            if rows and "settings_json" not in columns:
+                conn.execute(
+                    text("ALTER TABLE project ADD COLUMN settings_json TEXT DEFAULT ''")
+                )
+                conn.commit()
 
     # -- Projects ------------------------------------------------------------
 
@@ -86,6 +91,38 @@ class Database:
             if project:
                 project.format_mode = format_mode
                 session.commit()
+
+    def get_project_settings(self, project_id: int) -> dict:
+        import json
+        with Session(self._engine) as session:
+            project = session.get(Project, project_id)
+            if project and project.settings_json:
+                try:
+                    return json.loads(project.settings_json)
+                except (json.JSONDecodeError, TypeError):
+                    return {}
+            return {}
+
+    def save_project_settings(self, project_id: int, settings: dict) -> None:
+        import json
+        with Session(self._engine) as session:
+            project = session.get(Project, project_id)
+            if project:
+                project.settings_json = json.dumps(settings)
+                session.commit()
+
+    def get_scoring_weights(self, project_id: int) -> dict[str, float]:
+        from storyplanner.quantum_outliner.scoring import DEFAULT_WEIGHTS
+        settings = self.get_project_settings(project_id)
+        stored = settings.get("scoring_weights")
+        if isinstance(stored, dict) and all(k in stored for k in DEFAULT_WEIGHTS):
+            return {k: float(stored[k]) for k in DEFAULT_WEIGHTS}
+        return dict(DEFAULT_WEIGHTS)
+
+    def set_scoring_weights(self, project_id: int, weights: dict[str, float]) -> None:
+        settings = self.get_project_settings(project_id)
+        settings["scoring_weights"] = weights
+        self.save_project_settings(project_id, settings)
 
     # -- Characters ----------------------------------------------------------
 
