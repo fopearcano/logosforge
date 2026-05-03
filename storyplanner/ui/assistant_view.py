@@ -188,6 +188,24 @@ class _AssistantWorker(QThread):
             self.failed.emit(str(e))
 
 
+class _QuantumWorker(QThread):
+    completed = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, fn, *args, **kwargs) -> None:
+        super().__init__()
+        self._fn = fn
+        self._args = args
+        self._kwargs = kwargs
+
+    def run(self) -> None:
+        try:
+            result = self._fn(*self._args, **self._kwargs)
+            self.completed.emit(result)
+        except Exception as e:
+            self.failed.emit(str(e))
+
+
 class AssistantPanel(QWidget):
     """Compact AI writing assistant — docks as a right-side panel."""
 
@@ -213,6 +231,7 @@ class AssistantPanel(QWidget):
         self._get_active_editor = get_active_editor
         self._active_section: str = "Dashboard"
         self._worker: _AssistantWorker | None = None
+        self._quantum_worker: _QuantumWorker | None = None
         self._pending_messages: list[dict] | None = None
 
         self._debounce_timer = QTimer()
@@ -984,6 +1003,33 @@ class AssistantPanel(QWidget):
         body = f"[QUANTUM · {result.title}]\n\n{result.body}"
         self._response_output.setPlainText(body)
 
+    def _start_quantum(self, fn, *args, loading_msg: str = "Working…", **kwargs) -> bool:
+        if self._quantum_worker is not None:
+            return False
+        self._set_quantum_busy(True)
+        self._response_output.setPlainText(loading_msg)
+        self._quantum_worker = _QuantumWorker(fn, *args, **kwargs)
+        self._quantum_worker.completed.connect(self._on_quantum_done)
+        self._quantum_worker.failed.connect(self._on_quantum_error)
+        self._quantum_worker.start()
+        return True
+
+    def _on_quantum_done(self, result) -> None:
+        self._show_quantum_result(result)
+        self._set_quantum_busy(False)
+        if result.kind == "collapse" and self._on_data_changed:
+            self._on_data_changed()
+        self._quantum_worker = None
+
+    def _on_quantum_error(self, error: str) -> None:
+        self._response_output.setPlainText(f"Error:\n\n{error}")
+        self._set_quantum_busy(False)
+        self._quantum_worker = None
+
+    def _set_quantum_busy(self, busy: bool) -> None:
+        for btn in self._quantum_buttons:
+            btn.setEnabled(not busy)
+
     def _on_quantum_outline(self) -> None:
         premise = self._quantum_prompt()
         if not premise:
@@ -991,9 +1037,10 @@ class AssistantPanel(QWidget):
                 "Type a story premise above, then click Outline."
             )
             return
-        self._response_output.setPlainText("Generating wavefunction…")
-        result = quantum_generate_outline(self._db, self._project_id, premise)
-        self._show_quantum_result(result)
+        self._start_quantum(
+            quantum_generate_outline, self._db, self._project_id, premise,
+            loading_msg="Generating wavefunction…",
+        )
 
     def _on_quantum_possibilities(self) -> None:
         situation = self._quantum_prompt()
@@ -1006,11 +1053,10 @@ class AssistantPanel(QWidget):
                     "Type a situation (e.g. 'Hero meets enemy') and click Possibilities."
                 )
                 return
-        self._response_output.setPlainText("Generating possibilities…")
-        result = quantum_generate_branches(
-            self._db, self._project_id, situation,
+        self._start_quantum(
+            quantum_generate_branches, self._db, self._project_id, situation,
+            loading_msg="Generating possibilities…",
         )
-        self._show_quantum_result(result)
 
     def _on_quantum_reframe(self) -> None:
         pov = self._quantum_prompt() or "neutral"
@@ -1026,9 +1072,10 @@ class AssistantPanel(QWidget):
                 "Select text or open a scene to reframe."
             )
             return
-        self._response_output.setPlainText(f"Reframing from {pov}…")
-        result = quantum_reframe(scene_text, pov, self._db, self._project_id)
-        self._show_quantum_result(result)
+        self._start_quantum(
+            quantum_reframe, scene_text, pov, self._db, self._project_id,
+            loading_msg=f"Reframing from {pov}…",
+        )
 
     def _on_quantum_uncertainty(self) -> None:
         result = quantum_detect_weak_scenes(self._db, self._project_id)
@@ -1052,12 +1099,10 @@ class AssistantPanel(QWidget):
                 )
 
     def _on_quantum_collapse(self, wf_id: str, branch_id: str) -> None:
-        result = quantum_collapse_branch(
-            self._db, self._project_id, wf_id, branch_id,
+        self._start_quantum(
+            quantum_collapse_branch, self._db, self._project_id, wf_id, branch_id,
+            loading_msg="Collapsing branch…",
         )
-        self._show_quantum_result(result)
-        if result.kind == "collapse" and self._on_data_changed:
-            self._on_data_changed()
 
     def _on_suggest_beats(self) -> None:
         if self._worker is not None:
