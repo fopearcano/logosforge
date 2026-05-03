@@ -61,6 +61,14 @@ from storyplanner.orchestration import (
     resolve_mode,
 )
 from storyplanner.providers import ProviderConfig
+from storyplanner.quantum_outliner import (
+    collapse_branch as quantum_collapse_branch,
+    detect_weak_scenes as quantum_detect_weak_scenes,
+    generate_branches as quantum_generate_branches,
+    generate_outline as quantum_generate_outline,
+    list_active_wavefunctions as quantum_list_active,
+    reframe as quantum_reframe,
+)
 from storyplanner.settings import get_manager as get_settings
 from storyplanner.ui import theme
 from storyplanner.ui.mode_strip import ModeStrip
@@ -281,25 +289,27 @@ class AssistantPanel(QWidget):
         sep.setStyleSheet(f"color: {theme.BORDER};")
         self._layout.addWidget(sep)
 
-        # Panel mode selector: Assistant | Counterpart
+        # Panel mode selector: Assistant | Counterpart | Quantum
         self._panel_mode = "assistant"
         panel_mode_row = QHBoxLayout()
-        panel_mode_row.setSpacing(0)
+        panel_mode_row.setSpacing(4)
         self._assistant_mode_btn = QPushButton("Assistant")
         self._counterpart_mode_btn = QPushButton("Counterpart")
-        self._assistant_mode_btn.setCheckable(True)
-        self._counterpart_mode_btn.setCheckable(True)
+        self._quantum_mode_btn = QPushButton("Quantum")
+        for btn, mode in (
+            (self._assistant_mode_btn, "assistant"),
+            (self._counterpart_mode_btn, "counterpart"),
+            (self._quantum_mode_btn, "quantum"),
+        ):
+            btn.setCheckable(True)
+            btn.clicked.connect(lambda _, m=mode: self._set_panel_mode(m))
         self._assistant_mode_btn.setChecked(True)
-        self._assistant_mode_btn.clicked.connect(
-            lambda: self._set_panel_mode("assistant")
-        )
-        self._counterpart_mode_btn.clicked.connect(
-            lambda: self._set_panel_mode("counterpart")
-        )
         self._assistant_mode_btn.setStyleSheet(self._seg_btn_style(active=True))
         self._counterpart_mode_btn.setStyleSheet(self._seg_btn_style(active=False))
+        self._quantum_mode_btn.setStyleSheet(self._seg_btn_style(active=False))
         panel_mode_row.addWidget(self._assistant_mode_btn)
         panel_mode_row.addWidget(self._counterpart_mode_btn)
+        panel_mode_row.addWidget(self._quantum_mode_btn)
         panel_mode_row.addStretch()
         self._layout.addLayout(panel_mode_row)
 
@@ -390,6 +400,53 @@ class AssistantPanel(QWidget):
         self._counterpart_buttons.append(cp_more_btn)
         self._counterpart_row.setVisible(False)
         self._layout.addWidget(self._counterpart_row)
+
+        # Quantum actions (hidden by default)
+        self._quantum_row = QWidget()
+        q_grid = QGridLayout(self._quantum_row)
+        q_grid.setContentsMargins(0, 0, 0, 0)
+        q_grid.setSpacing(4)
+        self._quantum_buttons: list[QPushButton] = []
+
+        outline_btn = QPushButton("Outline")
+        outline_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        outline_btn.setToolTip("Generate opening branches from a premise")
+        outline_btn.clicked.connect(self._on_quantum_outline)
+        q_grid.addWidget(outline_btn, 0, 0)
+        self._quantum_buttons.append(outline_btn)
+
+        possibilities_btn = QPushButton("Possibilities")
+        possibilities_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        possibilities_btn.setToolTip("Generate next-move branches for the prompt")
+        possibilities_btn.clicked.connect(self._on_quantum_possibilities)
+        q_grid.addWidget(possibilities_btn, 0, 1)
+        self._quantum_buttons.append(possibilities_btn)
+
+        reframe_btn = QPushButton("Reframe")
+        reframe_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        reframe_btn.setToolTip("Reread the active scene from a different POV")
+        reframe_btn.clicked.connect(self._on_quantum_reframe)
+        q_grid.addWidget(reframe_btn, 1, 0)
+        self._quantum_buttons.append(reframe_btn)
+
+        weak_btn = QPushButton("Uncertainty")
+        weak_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        weak_btn.setToolTip("Find weak/predictable scenes")
+        weak_btn.clicked.connect(self._on_quantum_uncertainty)
+        q_grid.addWidget(weak_btn, 1, 1)
+        self._quantum_buttons.append(weak_btn)
+
+        collapse_btn = QPushButton("Collapse ▾")
+        collapse_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        collapse_btn.setToolTip("Commit a branch — updates PSYKE")
+        self._collapse_menu = QMenu(self)
+        collapse_btn.setMenu(self._collapse_menu)
+        self._collapse_menu.aboutToShow.connect(self._refresh_collapse_menu)
+        q_grid.addWidget(collapse_btn, 2, 0, 1, 2)
+        self._quantum_buttons.append(collapse_btn)
+
+        self._quantum_row.setVisible(False)
+        self._layout.addWidget(self._quantum_row)
 
         # Custom prompt
         self._prompt_input = QPlainTextEdit()
@@ -547,19 +604,27 @@ class AssistantPanel(QWidget):
         )
 
     def _set_panel_mode(self, mode: str) -> None:
+        if mode not in ("assistant", "counterpart", "quantum"):
+            mode = "assistant"
         self._panel_mode = mode
         is_assistant = mode == "assistant"
+        is_counterpart = mode == "counterpart"
+        is_quantum = mode == "quantum"
+
         self._assistant_mode_btn.setChecked(is_assistant)
-        self._counterpart_mode_btn.setChecked(not is_assistant)
+        self._counterpart_mode_btn.setChecked(is_counterpart)
+        self._quantum_mode_btn.setChecked(is_quantum)
         self._assistant_mode_btn.setStyleSheet(self._seg_btn_style(is_assistant))
-        self._counterpart_mode_btn.setStyleSheet(self._seg_btn_style(not is_assistant))
+        self._counterpart_mode_btn.setStyleSheet(self._seg_btn_style(is_counterpart))
+        self._quantum_mode_btn.setStyleSheet(self._seg_btn_style(is_quantum))
 
         # Toggle action rows
         for btn in self._preset_buttons:
             btn.setVisible(is_assistant)
-        self._counterpart_row.setVisible(not is_assistant)
+        self._counterpart_row.setVisible(is_counterpart)
+        self._quantum_row.setVisible(is_quantum)
 
-        # Toggle apply buttons (Counterpart never mutates content)
+        # Apply buttons mutate scene content — only Assistant uses them
         self._replace_content_btn.setVisible(is_assistant)
         self._insert_cursor_btn.setVisible(is_assistant)
         self._append_btn.setVisible(is_assistant)
@@ -573,9 +638,13 @@ class AssistantPanel(QWidget):
                 "Instructions or questions about your story...",
             )
             self._prompt_input.setPlaceholderText(placeholder)
-        else:
+        elif is_counterpart:
             self._prompt_input.setPlaceholderText(
                 "Ask about your scene, request feedback, or reflect..."
+            )
+        else:
+            self._prompt_input.setPlaceholderText(
+                "Premise, situation, or POV name (used by Quantum actions)..."
             )
 
     # -- Settings toggle -------------------------------------------------------
@@ -599,7 +668,7 @@ class AssistantPanel(QWidget):
     def _restore_panel_settings(self) -> None:
         mgr = get_settings()
         mode = str(mgr.get("assistant_panel_mode") or "assistant")
-        if mode in ("assistant", "counterpart"):
+        if mode in ("assistant", "counterpart", "quantum"):
             self._set_panel_mode(mode)
         self._outline_check.setChecked(bool(mgr.get("assistant_include_outline")))
         self._story_memory_check.setChecked(bool(mgr.get("assistant_include_memory")))
@@ -905,6 +974,90 @@ class AssistantPanel(QWidget):
             orch_debug, graph_ctx,
         )
         self._start_request(messages)
+
+    # -- Quantum Outliner handlers ---------------------------------------------
+
+    def _quantum_prompt(self) -> str:
+        return self._prompt_input.toPlainText().strip()
+
+    def _show_quantum_result(self, result) -> None:
+        body = f"[QUANTUM · {result.title}]\n\n{result.body}"
+        self._response_output.setPlainText(body)
+
+    def _on_quantum_outline(self) -> None:
+        premise = self._quantum_prompt()
+        if not premise:
+            self._response_output.setPlainText(
+                "Type a story premise above, then click Outline."
+            )
+            return
+        self._response_output.setPlainText("Generating wavefunction…")
+        result = quantum_generate_outline(self._db, self._project_id, premise)
+        self._show_quantum_result(result)
+
+    def _on_quantum_possibilities(self) -> None:
+        situation = self._quantum_prompt()
+        if not situation:
+            scene_id = self._get_auto_scene_id()
+            if scene_id is not None:
+                situation = f"Continue from active scene #{scene_id}"
+            else:
+                self._response_output.setPlainText(
+                    "Type a situation (e.g. 'Hero meets enemy') and click Possibilities."
+                )
+                return
+        self._response_output.setPlainText("Generating possibilities…")
+        result = quantum_generate_branches(
+            self._db, self._project_id, situation,
+        )
+        self._show_quantum_result(result)
+
+    def _on_quantum_reframe(self) -> None:
+        pov = self._quantum_prompt() or "neutral"
+        scene_text = self._get_selected_text_content()
+        if not scene_text:
+            scene_id = self._get_auto_scene_id()
+            if scene_id is not None:
+                scene = self._db.get_scene_by_id(scene_id)
+                if scene:
+                    scene_text = scene.content or ""
+        if not scene_text:
+            self._response_output.setPlainText(
+                "Select text or open a scene to reframe."
+            )
+            return
+        self._response_output.setPlainText(f"Reframing from {pov}…")
+        result = quantum_reframe(scene_text, pov, self._db, self._project_id)
+        self._show_quantum_result(result)
+
+    def _on_quantum_uncertainty(self) -> None:
+        result = quantum_detect_weak_scenes(self._db, self._project_id)
+        self._show_quantum_result(result)
+
+    def _refresh_collapse_menu(self) -> None:
+        self._collapse_menu.clear()
+        active = quantum_list_active(self._project_id)
+        if not active:
+            action = self._collapse_menu.addAction("(no active wavefunctions)")
+            action.setEnabled(False)
+            return
+        for wf in active:
+            sub = self._collapse_menu.addMenu(f"{wf['anchor'][:40]}")
+            for branch in wf["branches"]:
+                label = f"{branch['title']} [{branch['id']}]"
+                sub.addAction(
+                    label,
+                    lambda wf_id=wf["wavefunction_id"], b_id=branch["id"]:
+                        self._on_quantum_collapse(wf_id, b_id),
+                )
+
+    def _on_quantum_collapse(self, wf_id: str, branch_id: str) -> None:
+        result = quantum_collapse_branch(
+            self._db, self._project_id, wf_id, branch_id,
+        )
+        self._show_quantum_result(result)
+        if result.kind == "collapse" and self._on_data_changed:
+            self._on_data_changed()
 
     def _on_suggest_beats(self) -> None:
         if self._worker is not None:
