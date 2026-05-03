@@ -65,13 +65,24 @@ class Wavefunction:
     branches: list[Branch] = field(default_factory=list)
     collapsed_branch_id: str | None = None
     created_at: float = field(default_factory=time.time)
+    source_scene_id: int | None = None
+    source_scene_order: int | None = None
+    target_scene_id: int | None = None
 
     @classmethod
-    def new(cls, anchor: str, branches: list[Branch] | None = None) -> "Wavefunction":
+    def new(
+        cls,
+        anchor: str,
+        branches: list[Branch] | None = None,
+        source_scene_id: int | None = None,
+        source_scene_order: int | None = None,
+    ) -> "Wavefunction":
         return cls(
             id=uuid.uuid4().hex[:8],
             anchor=anchor,
             branches=branches or [],
+            source_scene_id=source_scene_id,
+            source_scene_order=source_scene_order,
         )
 
     def is_collapsed(self) -> bool:
@@ -185,6 +196,9 @@ def deserialize_state(raw: str, project_id: int) -> NarrativeState | None:
             branches=branches,
             collapsed_branch_id=wf_raw.get("collapsed_branch_id"),
             created_at=wf_raw.get("created_at", time.time()),
+            source_scene_id=wf_raw.get("source_scene_id"),
+            source_scene_order=wf_raw.get("source_scene_order"),
+            target_scene_id=wf_raw.get("target_scene_id"),
         )
         state.wavefunctions[wf.id] = wf
 

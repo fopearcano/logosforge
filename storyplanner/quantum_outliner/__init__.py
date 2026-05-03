@@ -12,6 +12,7 @@ Quick reference:
     list_active_wavefunctions(pid)                → live branches
 """
 
+from storyplanner.quantum_outliner.collapse import apply_proposal
 from storyplanner.quantum_outliner.core import (
     QuantumResult,
     collapse_branch,
@@ -42,6 +43,7 @@ __all__ = [
     "NarrativeState",
     "StateDelta",
     "Wavefunction",
+    "apply_proposal",
     "collapse_branch",
     "detect_weak_scenes",
     "export_quantum_state",

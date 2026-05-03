@@ -42,15 +42,19 @@ def generate_outline(
     premise: str,
     *,
     n: int = 4,
+    source_scene_id: int | None = None,
 ) -> QuantumResult:
     """Generate an outline as a wavefunction of opening branches."""
     if not premise.strip():
         return QuantumResult(
             kind="error", title="Outline", body="Provide a premise first.", payload={},
         )
+    scene_order = _resolve_scene_order(db, project_id, source_scene_id)
     wf = generate_possibilities(
         anchor=f"Story opening: {premise}",
         db=db, project_id=project_id, n=n,
+        source_scene_id=source_scene_id,
+        source_scene_order=scene_order,
     )
     get_state(project_id).add(wf)
     return _format_wavefunction("Outline", wf)
@@ -63,15 +67,19 @@ def generate_branches(
     *,
     n: int = 4,
     extra_context: str = "",
+    source_scene_id: int | None = None,
 ) -> QuantumResult:
     """Generate possible next moves for a given situation."""
     if not situation.strip():
         return QuantumResult(
             kind="error", title="Possibilities", body="Provide a situation first.", payload={},
         )
+    scene_order = _resolve_scene_order(db, project_id, source_scene_id)
     wf = generate_possibilities(
         anchor=situation, db=db, project_id=project_id,
         extra_context=extra_context, n=n,
+        source_scene_id=source_scene_id,
+        source_scene_order=scene_order,
     )
     get_state(project_id).add(wf)
     return _format_wavefunction("Possibilities", wf)
@@ -138,6 +146,7 @@ def collapse_branch(
     chosen = result["chosen"]
     summary = result["psyke_summary"]
     archived = result["archived"]
+    proposals = result.get("proposals", [])
 
     lines = [
         f"COLLAPSED: {chosen['title']}",
@@ -167,6 +176,12 @@ def collapse_branch(
         for p in psyke_parts:
             lines.append(f"  • {p}")
 
+    if proposals:
+        lines.append("")
+        lines.append("Proposed actions (require confirmation):")
+        for prop in proposals:
+            lines.append(f"  → {prop['description']}")
+
     if archived:
         lines.append("")
         lines.append(f"Archived {len(archived)} alternate branch(es).")
@@ -182,6 +197,17 @@ def collapse_branch(
 def list_active_wavefunctions(project_id: int) -> list[dict]:
     state = get_state(project_id)
     return [_wf_summary(w) for w in state.active()]
+
+
+def _resolve_scene_order(
+    db: "Database", project_id: int, scene_id: int | None,
+) -> int | None:
+    if scene_id is None:
+        return None
+    scene = db.get_scene_by_id(scene_id)
+    if scene is None:
+        return None
+    return scene.sort_order
 
 
 def _format_wavefunction(title: str, wf: Wavefunction) -> QuantumResult:
@@ -210,6 +236,9 @@ def _wf_summary(wf: Wavefunction) -> dict:
         "wavefunction_id": wf.id,
         "anchor": wf.anchor,
         "collapsed_branch_id": wf.collapsed_branch_id,
+        "source_scene_id": wf.source_scene_id,
+        "source_scene_order": wf.source_scene_order,
+        "target_scene_id": wf.target_scene_id,
         "branches": [
             {
                 "id": b.id,

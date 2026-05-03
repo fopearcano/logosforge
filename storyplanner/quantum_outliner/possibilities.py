@@ -69,11 +69,14 @@ def generate_possibilities(
     *,
     extra_context: str = "",
     n: int = 4,
+    source_scene_id: int | None = None,
+    source_scene_order: int | None = None,
 ) -> Wavefunction:
     """Generate a wavefunction of N branches for a narrative anchor.
 
     `anchor` is the situation prompt: "Hero meets enemy", "Scene 3 ends".
     PSYKE characters are folded in for grounding when db+project_id given.
+    `source_scene_id` anchors the wavefunction to a timeline position.
     """
     n = max(_MIN_BRANCHES, min(n, _MAX_BRANCHES))
 
@@ -106,7 +109,12 @@ def generate_possibilities(
     if not branches:
         branches = _stub_branches(anchor, n)
 
-    return Wavefunction.new(anchor=anchor, branches=branches)
+    return Wavefunction.new(
+        anchor=anchor,
+        branches=branches,
+        source_scene_id=source_scene_id,
+        source_scene_order=source_scene_order,
+    )
 
 
 def _parse_branches(response: str) -> list[Branch]:

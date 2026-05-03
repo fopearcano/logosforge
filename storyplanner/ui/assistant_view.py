@@ -1043,15 +1043,17 @@ class AssistantPanel(QWidget):
                 "Type a story premise above, then click Outline."
             )
             return
+        scene_id = self._get_auto_scene_id()
         self._start_quantum(
             quantum_generate_outline, self._db, self._project_id, premise,
+            source_scene_id=scene_id,
             loading_msg="Generating wavefunction…",
         )
 
     def _on_quantum_possibilities(self) -> None:
         situation = self._quantum_prompt()
+        scene_id = self._get_auto_scene_id()
         if not situation:
-            scene_id = self._get_auto_scene_id()
             if scene_id is not None:
                 situation = f"Continue from active scene #{scene_id}"
             else:
@@ -1061,6 +1063,7 @@ class AssistantPanel(QWidget):
                 return
         self._start_quantum(
             quantum_generate_branches, self._db, self._project_id, situation,
+            source_scene_id=scene_id,
             loading_msg="Generating possibilities…",
         )
 
