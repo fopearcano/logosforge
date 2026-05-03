@@ -29,16 +29,21 @@ from storyplanner.quantum_outliner.persistence import (
     save_state,
 )
 from storyplanner.quantum_outliner.state import (
+    OUTLINE_MODES,
     STRUCTURE_MODES,
     Branch,
     NarrativeState,
+    OutlineMode,
     StateDelta,
     Wavefunction,
+    get_outline_mode,
     get_state,
     reset_state,
 )
 
 __all__ = [
+    "OUTLINE_MODES",
+    "OutlineMode",
     "QuantumResult",
     "Branch",
     "NarrativeState",
@@ -51,6 +56,7 @@ __all__ = [
     "export_quantum_state",
     "generate_branches",
     "generate_outline",
+    "get_outline_mode",
     "get_state",
     "import_quantum_state",
     "list_active_wavefunctions",

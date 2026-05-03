@@ -10,6 +10,7 @@ import json
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
+from enum import Enum
 
 
 @dataclass
@@ -113,6 +114,19 @@ class Wavefunction:
         return self.get_branch(self.collapsed_branch_id)
 
 
+class OutlineMode(str, Enum):
+    """How QUANTUM treats the Outline.
+
+    CLASSICAL — stable structure, linear time, beats/acts/chapters (RAG-backed).
+    LAMBDA — relativistic POV, uncertainty, wavefunction superposition + collapse.
+    """
+
+    CLASSICAL = "classical"
+    LAMBDA = "lambda"
+
+
+OUTLINE_MODES = tuple(m.value for m in OutlineMode)
+
 STRUCTURE_MODES = ("auto", "classical", "quantum", "hybrid")
 
 
@@ -125,6 +139,7 @@ class NarrativeState:
     selected_pov: str = ""
     linked_scene_id: int | None = None
     structure_mode: str = "hybrid"
+    outline_mode: OutlineMode = OutlineMode.CLASSICAL
 
     def add(self, wf: Wavefunction) -> None:
         self.wavefunctions[wf.id] = wf
@@ -156,6 +171,11 @@ def reset_state(project_id: int) -> None:
     _STATES.pop(project_id, None)
 
 
+def get_outline_mode(project_id: int) -> OutlineMode:
+    """Return the current outline mode for a project."""
+    return get_state(project_id).outline_mode
+
+
 def serialize(wf: Wavefunction) -> str:
     return json.dumps(asdict(wf), indent=2)
 
@@ -166,6 +186,7 @@ def serialize_state(state: NarrativeState) -> str:
         "selected_pov": state.selected_pov,
         "linked_scene_id": state.linked_scene_id,
         "structure_mode": state.structure_mode,
+        "outline_mode": state.outline_mode.value,
         "wavefunctions": [asdict(wf) for wf in state.wavefunctions.values()],
     }
     return json.dumps(data)
@@ -183,11 +204,18 @@ def deserialize_state(raw: str, project_id: int) -> NarrativeState | None:
     if raw_mode not in STRUCTURE_MODES:
         raw_mode = "hybrid"
 
+    raw_outline = data.get("outline_mode", "classical")
+    try:
+        outline_mode = OutlineMode(raw_outline)
+    except ValueError:
+        outline_mode = OutlineMode.CLASSICAL
+
     state = NarrativeState(
         project_id=project_id,
         selected_pov=str(data.get("selected_pov", "")),
         linked_scene_id=data.get("linked_scene_id"),
         structure_mode=raw_mode,
+        outline_mode=outline_mode,
     )
 
     for wf_raw in data.get("wavefunctions", []):
