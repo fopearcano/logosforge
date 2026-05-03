@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from storyplanner.quantum_outliner.state import get_state
+from storyplanner.quantum_outliner.state import OutlineMode, get_state
 from storyplanner.ui import theme
 
 if TYPE_CHECKING:
@@ -42,6 +42,13 @@ class QuantumTimelineWidget(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
+
+        self._mode_strip = QLabel()
+        self._mode_strip.setObjectName("qtlModeStrip")
+        self._mode_strip.setFixedHeight(16)
+        self._mode_strip.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self._mode_strip.setVisible(False)
+        outer.addWidget(self._mode_strip)
 
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
@@ -70,6 +77,9 @@ class QuantumTimelineWidget(QWidget):
         self._clear()
         scenes = self._db.get_all_scenes(self._project_id)
         state = get_state(self._project_id)
+        is_lambda = state.outline_mode is OutlineMode.LAMBDA
+
+        self._update_mode_strip(state)
 
         wf_by_scene: dict[int | None, list] = defaultdict(list)
         for wf in state.wavefunctions.values():
@@ -87,16 +97,20 @@ class QuantumTimelineWidget(QWidget):
         max_branch_rows = 0
         for scene in scenes:
             wfs = wf_by_scene.get(scene.id, [])
-            col = self._build_scene_column(scene, wfs)
+            if is_lambda:
+                col = self._build_scene_column(scene, wfs)
+            else:
+                col = self._build_classical_column(scene, wfs)
             self._h_layout.addWidget(col)
             self._h_layout.addSpacing(2)
-            for wf in wfs:
-                branch_count = len(wf.branches)
-                if branch_count > max_branch_rows:
-                    max_branch_rows = branch_count
+            if is_lambda:
+                for wf in wfs:
+                    branch_count = len(wf.branches)
+                    if branch_count > max_branch_rows:
+                        max_branch_rows = branch_count
 
         unlinked = wf_by_scene.get(None, [])
-        if unlinked:
+        if unlinked and is_lambda:
             col = self._build_unlinked_column(unlinked)
             self._h_layout.addWidget(col)
             for wf in unlinked:
@@ -106,8 +120,28 @@ class QuantumTimelineWidget(QWidget):
 
         self._h_layout.addStretch()
 
-        height = 28 + max(max_branch_rows, 1) * 52 + 8
+        if is_lambda:
+            height = 28 + max(max_branch_rows, 1) * 52 + 8
+        else:
+            height = 54
         self._scroll.setFixedHeight(min(height, 260))
+
+    def _update_mode_strip(self, state) -> None:
+        is_lambda = state.outline_mode is OutlineMode.LAMBDA
+        if is_lambda:
+            self._mode_strip.setText("  Lambda · branching timeline")
+            self._mode_strip.setStyleSheet(
+                f"color: {theme.ACCENT_DIM}; font-size: 9px; font-weight: bold;"
+                f" background: {theme.BG_DARK}; padding-left: 6px;"
+            )
+        else:
+            self._mode_strip.setText("  Classical · linear timeline")
+            self._mode_strip.setStyleSheet(
+                f"color: {theme.TEXT_MUTED}; font-size: 9px;"
+                f" background: {theme.BG_DARK}; padding-left: 6px;"
+            )
+        has_wfs = bool(state.wavefunctions)
+        self._mode_strip.setVisible(has_wfs)
 
     def _clear(self) -> None:
         while self._h_layout.count():
@@ -115,6 +149,38 @@ class QuantumTimelineWidget(QWidget):
             w = item.widget()
             if w:
                 w.deleteLater()
+
+    # --- Classical columns (single row, beat markers only) ---
+
+    def _build_classical_column(self, scene, wavefunctions: list) -> QFrame:
+        col = QFrame()
+        col.setObjectName("qtlColumn")
+        col.setFixedWidth(140)
+        col.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
+
+        layout = QVBoxLayout(col)
+        layout.setContentsMargins(4, 3, 4, 3)
+        layout.setSpacing(2)
+
+        title_text = scene.title or "Untitled"
+        if len(title_text) > 20:
+            title_text = title_text[:18] + "…"
+        title = QLabel(title_text)
+        title.setObjectName("qtlSceneTitle")
+        title.setToolTip(scene.title or "")
+        layout.addWidget(title)
+
+        beat_marker = self._extract_beat_marker(wavefunctions)
+        if beat_marker:
+            marker_lbl = QLabel(beat_marker)
+            marker_lbl.setObjectName("qtlBeatMarker")
+            marker_lbl.setToolTip(beat_marker)
+            layout.addWidget(marker_lbl)
+
+        layout.addStretch()
+        return col
+
+    # --- Lambda columns (full branch fans + uncertainty) ---
 
     def _build_scene_column(self, scene, wavefunctions: list) -> QFrame:
         col = QFrame()
@@ -143,6 +209,14 @@ class QuantumTimelineWidget(QWidget):
 
         if wavefunctions:
             for wf in wavefunctions:
+                active_count = len(wf.branches)
+                if active_count >= 2 and not wf.is_collapsed():
+                    uz = QLabel(f"⟨ψ⟩ {active_count} paths")
+                    uz.setObjectName("qtlUncertainty")
+                    uz.setToolTip(
+                        f"Uncertainty zone: {active_count} branches in superposition"
+                    )
+                    layout.addWidget(uz)
                 lane = self._build_branch_lane(wf)
                 layout.addWidget(lane)
         else:
@@ -169,6 +243,11 @@ class QuantumTimelineWidget(QWidget):
         layout.addWidget(title)
 
         for wf in wavefunctions:
+            active_count = len(wf.branches)
+            if active_count >= 2 and not wf.is_collapsed():
+                uz = QLabel(f"⟨ψ⟩ {active_count} paths")
+                uz.setObjectName("qtlUncertainty")
+                layout.addWidget(uz)
             lane = self._build_branch_lane(wf)
             layout.addWidget(lane)
 

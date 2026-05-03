@@ -1255,6 +1255,18 @@ def build_stylesheet() -> str:
         padding: 0 2px;
         border-radius: 2px;
     }}
+    #qtlModeStrip {{
+        font-size: 9px;
+        background: {BG_DARK};
+        padding: 0 6px;
+    }}
+    #qtlUncertainty {{
+        color: {ACCENT_DIM};
+        font-size: 8px;
+        font-weight: bold;
+        background: transparent;
+        padding: 1px 0;
+    }}
     #qtlEmpty {{
         color: {TEXT_MUTED};
         font-size: 11px;
