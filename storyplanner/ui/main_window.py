@@ -745,6 +745,8 @@ class MainWindow(QMainWindow):
             on_data_changed=self._on_data_changed,
         )
         handlers.register_all(self._command_registry)
+        self._psyke_console.set_registry(self._command_registry)
+        self._psyke_console.set_scene_context(self._get_scene_entry_ids)
 
     def _on_console_command(self, command: str, args: list) -> None:
         entry = self._command_registry.resolve(command)
@@ -867,6 +869,27 @@ class MainWindow(QMainWindow):
         if len(scenes) == 1:
             return scenes[0].id
         return None
+
+    def _get_scene_entry_ids(self) -> set[int] | None:
+        scene_id = self._detect_active_scene_id()
+        if scene_id is None:
+            return None
+        char_ids = set(self._db.get_scene_character_ids(scene_id))
+        place_ids = set(self._db.get_scene_place_ids(scene_id))
+        entry_ids: set[int] = set()
+        for entry in self._db.get_all_psyke_entries(self._project_id):
+            name_lower = entry.name.lower()
+            for cid in char_ids:
+                c = self._db.get_character_by_id(cid)
+                if c and c.name.lower() == name_lower:
+                    entry_ids.add(entry.id)
+                    break
+            for pid in place_ids:
+                p = self._db.get_place_by_id(pid)
+                if p and p.name.lower() == name_lower:
+                    entry_ids.add(entry.id)
+                    break
+        return entry_ids if entry_ids else None
 
     def _detect_active_editor(self):
         from storyplanner.ui.writing_core_view import WritingCoreView

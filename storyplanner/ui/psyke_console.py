@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import (
     QEvent,
@@ -23,7 +24,11 @@ from PySide6.QtWidgets import (
 from storyplanner.db import Database
 from storyplanner.psyke_commands import CommandType, parse as parse_command
 from storyplanner.psyke_search import PsykeSearchIndex, SearchResult
+from storyplanner.psyke_suggestions import Suggestion, suggest
 from storyplanner.ui import theme
+
+if TYPE_CHECKING:
+    from storyplanner.psyke_command_registry import CommandRegistry
 
 _OPACITY_IDLE = 0.4
 _OPACITY_ACTIVE = 1.0
@@ -31,42 +36,32 @@ _FADE_MS = 150
 _DEBOUNCE_MS = 100
 _MAX_VISIBLE = 8
 
-_TYPE_ICONS = {
-    "character": "\U0001F464",
-    "place": "\U0001F3DB",
-    "object": "\U0001F48E",
-    "lore": "\U0001F4DC",
-    "theme": "\U0001F3AD",
-    "other": "\U0001F4CC",
-}
-
 _SELECTED_BG = "rgba(255,255,255,0.08)"
 
 
-class _ResultItem(QWidget):
+class _SuggestionItem(QWidget):
     """Single row in the results dropdown."""
 
-    def __init__(self, result: SearchResult, query: str, parent: QWidget | None = None) -> None:
+    def __init__(self, suggestion: Suggestion, query: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("psykeResultItem")
-        self.result = result
+        self.suggestion = suggestion
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 4, 10, 4)
         layout.setSpacing(8)
 
-        icon = _TYPE_ICONS.get(result.entry_type, "\U0001F4CC")
-        icon_label = QLabel(icon)
+        icon_label = QLabel(suggestion.icon)
         icon_label.setFixedWidth(20)
         layout.addWidget(icon_label)
 
-        name_label = QLabel(_highlight(result.name, query))
+        name_label = QLabel(_highlight(suggestion.text, query))
         name_label.setObjectName("psykeResultName")
         layout.addWidget(name_label, stretch=1)
 
-        type_label = QLabel(result.entry_type)
-        type_label.setObjectName("psykeResultType")
-        layout.addWidget(type_label)
+        desc_label = QLabel(suggestion.description)
+        desc_label.setObjectName("psykeResultType")
+        layout.addWidget(desc_label)
 
     def set_selected(self, selected: bool) -> None:
         bg = _SELECTED_BG if selected else "transparent"
@@ -74,10 +69,12 @@ class _ResultItem(QWidget):
 
 
 def _highlight(name: str, query: str) -> str:
-    """Wrap matched substring in bold tags."""
     if not query:
         return name
-    pattern = re.compile(re.escape(query), re.IGNORECASE)
+    clean = query.lstrip("/")
+    if not clean:
+        return _esc(name)
+    pattern = re.compile(re.escape(clean), re.IGNORECASE)
     match = pattern.search(name)
     if match:
         s, e = match.start(), match.end()
@@ -96,13 +93,13 @@ def _esc(text: str) -> str:
 class _ResultsDropdown(QWidget):
     """Popup list that appears above the console."""
 
-    item_selected = Signal(SearchResult)
+    item_activated = Signal(object)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("psykeResultsDropdown")
         self.setVisible(False)
-        self._items: list[_ResultItem] = []
+        self._items: list[_SuggestionItem] = []
         self._selected_index: int = -1
 
         self._layout = QVBoxLayout(self)
@@ -116,11 +113,11 @@ class _ResultsDropdown(QWidget):
         self._fade_anim = QPropertyAnimation(self._opacity_effect, b"opacity", self)
         self._fade_anim.setDuration(_FADE_MS)
 
-    def show_results(self, results: list[SearchResult], query: str) -> None:
+    def show_suggestions(self, suggestions: list[Suggestion], query: str) -> None:
         self._clear()
         self._selected_index = -1
 
-        if not results:
+        if not suggestions:
             empty = QLabel("No results")
             empty.setObjectName("psykeResultEmpty")
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -128,8 +125,8 @@ class _ResultsDropdown(QWidget):
             self._reveal()
             return
 
-        for r in results[:_MAX_VISIBLE]:
-            item = _ResultItem(r, query)
+        for s in suggestions[:_MAX_VISIBLE]:
+            item = _SuggestionItem(s, query)
             self._layout.addWidget(item)
             self._items.append(item)
 
@@ -160,7 +157,7 @@ class _ResultsDropdown(QWidget):
 
     def confirm_selection(self) -> bool:
         if 0 <= self._selected_index < len(self._items):
-            self.item_selected.emit(self._items[self._selected_index].result)
+            self.item_activated.emit(self._items[self._selected_index].suggestion)
             return True
         return False
 
@@ -252,6 +249,8 @@ class PsykeConsole(QWidget):
         self._search_index = PsykeSearchIndex(db, project_id)
         self._last_query: str = ""
         self._selecting: bool = False
+        self._registry: CommandRegistry | None = None
+        self._get_scene_entry_ids: Any = None
 
         self._debounce = QTimer(self)
         self._debounce.setSingleShot(True)
@@ -281,14 +280,19 @@ class PsykeConsole(QWidget):
 
         self._apply_style()
 
+    def set_registry(self, registry: CommandRegistry) -> None:
+        self._registry = registry
+
+    def set_scene_context(self, getter: Any) -> None:
+        self._get_scene_entry_ids = getter
+
     def _ensure_dropdown(self) -> _ResultsDropdown:
         if self._dropdown is None:
             self._dropdown = _ResultsDropdown(self.window() if self.window() else self)
-            self._dropdown.item_selected.connect(self._on_item_selected)
+            self._dropdown.item_activated.connect(self._on_suggestion_activated)
         return self._dropdown
 
     def activate(self) -> None:
-        """Focus the console, remembering the previously focused widget."""
         from PySide6.QtWidgets import QApplication
 
         current = QApplication.focusWidget()
@@ -298,7 +302,6 @@ class PsykeConsole(QWidget):
         self._input.selectAll()
 
     def deactivate(self) -> None:
-        """Blur the console and restore focus to the previous widget."""
         self._selecting = True
         self._debounce.stop()
         self._input.clear()
@@ -331,9 +334,20 @@ class PsykeConsole(QWidget):
         if query == self._last_query:
             return
         self._last_query = query
-        results = self._search_index.search(query, max_results=_MAX_VISIBLE)
+
+        scene_ids: set[int] | None = None
+        if self._get_scene_entry_ids:
+            scene_ids = self._get_scene_entry_ids()
+
+        suggestions = suggest(
+            query,
+            self._search_index,
+            registry=self._registry,
+            scene_entry_ids=scene_ids,
+            max_results=_MAX_VISIBLE,
+        )
         dropdown = self._ensure_dropdown()
-        dropdown.show_results(results, query)
+        dropdown.show_suggestions(suggestions, query)
         self._position_dropdown()
 
     def _position_dropdown(self) -> None:
@@ -350,8 +364,41 @@ class PsykeConsole(QWidget):
         dropdown.raise_()
         dropdown.show()
 
-    def _on_item_selected(self, result: SearchResult) -> None:
-        self.entry_selected.emit(result.entry_id, result.name)
+    def _on_suggestion_activated(self, suggestion: Suggestion) -> None:
+        if suggestion.category == "command":
+            text = suggestion.text.lstrip("/")
+            parsed = parse_command("/" + text)
+            if parsed.kind == CommandType.SYSTEM:
+                self.command_submitted.emit(parsed.command, parsed.args)
+                self.deactivate()
+                return
+            self._input.setText(suggestion.text)
+            self._input.setCursorPosition(len(suggestion.text))
+            self._last_query = ""
+            self._debounce.start()
+            return
+
+        if suggestion.category == "entity_action":
+            text = suggestion.text.lstrip("/")
+            parts = text.split(None, 1)
+            entity_prefix = parts[0] if parts else ""
+            action = parts[1].lower() if len(parts) > 1 else "insert"
+            resolved = self._search_index.resolve_entity(entity_prefix)
+            if resolved:
+                if action == "open":
+                    self.entry_open_requested.emit(resolved.entry_id)
+                else:
+                    self.entry_selected.emit(resolved.entry_id, resolved.name)
+                self.deactivate()
+                return
+
+        if suggestion.entry_id:
+            entry = self._db.get_psyke_entry_by_id(suggestion.entry_id)
+            if entry:
+                self.entry_selected.emit(entry.id, entry.name)
+                self.deactivate()
+                return
+
         self.deactivate()
 
     def _animate_opacity(self, target: float) -> None:
