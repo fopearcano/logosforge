@@ -131,6 +131,7 @@ class _ResultsDropdown(QWidget):
         self.setVisible(False)
         self._items: list[_SuggestionItem] = []
         self._selected_index: int = -1
+        self._fade_out_connected: bool = False
 
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 4, 0, 4)
@@ -142,6 +143,8 @@ class _ResultsDropdown(QWidget):
 
         self._fade_anim = QPropertyAnimation(self._opacity_effect, b"opacity", self)
         self._fade_anim.setDuration(_FADE_MS)
+
+        self._apply_style()
 
     def show_suggestions(self, suggestions: list[Suggestion], query: str) -> None:
         self._clear()
@@ -168,7 +171,9 @@ class _ResultsDropdown(QWidget):
         self._fade_anim.stop()
         self._fade_anim.setStartValue(self._opacity_effect.opacity())
         self._fade_anim.setEndValue(0.0)
-        self._fade_anim.finished.connect(self._on_fade_out_done)
+        if not self._fade_out_connected:
+            self._fade_anim.finished.connect(self._on_fade_out_done)
+            self._fade_out_connected = True
         self._fade_anim.start()
 
     def move_selection(self, delta: int) -> None:
@@ -198,22 +203,17 @@ class _ResultsDropdown(QWidget):
         return len(self._items) > 0
 
     def _reveal(self) -> None:
-        self._apply_style()
         self.setVisible(True)
         self._fade_anim.stop()
-        try:
+        if self._fade_out_connected:
             self._fade_anim.finished.disconnect(self._on_fade_out_done)
-        except RuntimeError:
-            pass
+            self._fade_out_connected = False
         self._fade_anim.setStartValue(self._opacity_effect.opacity())
         self._fade_anim.setEndValue(1.0)
         self._fade_anim.start()
 
     def _on_fade_out_done(self) -> None:
-        try:
-            self._fade_anim.finished.disconnect(self._on_fade_out_done)
-        except RuntimeError:
-            pass
+        self._fade_out_connected = False
         self._clear()
         self._selected_index = -1
         self.setVisible(False)
@@ -287,6 +287,7 @@ class PsykeConsole(QWidget):
         self._selecting: bool = False
         self._registry: CommandRegistry | None = None
         self._get_scene_entry_ids: Any = None
+        self._index_dirty: bool = True
 
         self._debounce = QTimer(self)
         self._debounce.setSingleShot(True)
@@ -324,8 +325,10 @@ class PsykeConsole(QWidget):
 
     def _ensure_dropdown(self) -> _ResultsDropdown:
         if self._dropdown is None:
-            self._dropdown = _ResultsDropdown(self.window() if self.window() else self)
+            win = self.window() or self
+            self._dropdown = _ResultsDropdown(win)
             self._dropdown.item_activated.connect(self._on_suggestion_activated)
+            self._dropdown_parent = win
         return self._dropdown
 
     def activate(self) -> None:
@@ -341,8 +344,8 @@ class PsykeConsole(QWidget):
         self._selecting = True
         self._debounce.stop()
         self._input.clear()
-        dropdown = self._ensure_dropdown()
-        dropdown.hide_results()
+        if self._dropdown is not None:
+            self._dropdown.hide_results()
         if self._previous_focus is not None:
             self._previous_focus.setFocus(Qt.FocusReason.OtherFocusReason)
             self._previous_focus = None
@@ -352,6 +355,10 @@ class PsykeConsole(QWidget):
 
     def rebuild_index(self) -> None:
         self._search_index.rebuild()
+        self._index_dirty = False
+
+    def mark_index_dirty(self) -> None:
+        self._index_dirty = True
 
     def _on_text_changed(self, text: str) -> None:
         if self._selecting:
@@ -360,7 +367,8 @@ class PsykeConsole(QWidget):
             self._debounce.start()
         else:
             self._debounce.stop()
-            self._ensure_dropdown().hide_results()
+            if self._dropdown is not None:
+                self._dropdown.hide_results()
 
     def _run_search(self) -> None:
         query = self._input.text().strip()
@@ -390,10 +398,13 @@ class PsykeConsole(QWidget):
         dropdown = self._ensure_dropdown()
         if not dropdown.isVisible():
             return
-        dropdown.setParent(self.window())
+        win = self.window()
+        if hasattr(self, "_dropdown_parent") and self._dropdown_parent is not win:
+            dropdown.setParent(win)
+            self._dropdown_parent = win
         dropdown.adjustSize()
         console_geo = self.geometry()
-        mapped = self.mapTo(self.window(), self.rect().topLeft())
+        mapped = self.mapTo(win, self.rect().topLeft())
         dw = console_geo.width()
         dh = dropdown.sizeHint().height()
         dropdown.setGeometry(mapped.x(), mapped.y() - dh, dw, dh)
@@ -447,7 +458,9 @@ class PsykeConsole(QWidget):
         if obj is self._input:
             if event.type() == QEvent.Type.FocusIn:
                 self._animate_opacity(_OPACITY_ACTIVE)
-                self._search_index.rebuild()
+                if self._index_dirty:
+                    self._search_index.rebuild()
+                    self._index_dirty = False
             elif event.type() == QEvent.Type.FocusOut:
                 self._animate_opacity(_OPACITY_IDLE)
                 self._last_query = ""
@@ -498,8 +511,8 @@ class PsykeConsole(QWidget):
         return False
 
     def _maybe_hide_dropdown(self) -> None:
-        if not self._input.hasFocus():
-            self._ensure_dropdown().hide_results()
+        if not self._input.hasFocus() and self._dropdown is not None:
+            self._dropdown.hide_results()
 
     def _apply_style(self) -> None:
         self.setStyleSheet(

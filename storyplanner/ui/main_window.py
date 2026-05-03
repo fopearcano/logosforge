@@ -167,6 +167,8 @@ class MainWindow(QMainWindow):
         self._dirty = False
         self._current_section: str = "Dashboard"
         self._cached_scenes_view: ScenesView | None = None
+        self._cached_scene_entry_scene: int | None = None
+        self._cached_scene_entry_ids: set[int] | None = None
         self._update_title()
         self.resize(900, 600)
         self.setMinimumSize(640, 400)
@@ -874,22 +876,35 @@ class MainWindow(QMainWindow):
         scene_id = self._detect_active_scene_id()
         if scene_id is None:
             return None
+        if (
+            hasattr(self, "_cached_scene_entry_ids")
+            and self._cached_scene_entry_scene == scene_id
+        ):
+            return self._cached_scene_entry_ids
+
         char_ids = set(self._db.get_scene_character_ids(scene_id))
         place_ids = set(self._db.get_scene_place_ids(scene_id))
+
+        linked_names: set[str] = set()
+        for cid in char_ids:
+            c = self._db.get_character_by_id(cid)
+            if c:
+                linked_names.add(c.name.lower())
+        for pid in place_ids:
+            p = self._db.get_place_by_id(pid)
+            if p:
+                linked_names.add(p.name.lower())
+
         entry_ids: set[int] = set()
-        for entry in self._db.get_all_psyke_entries(self._project_id):
-            name_lower = entry.name.lower()
-            for cid in char_ids:
-                c = self._db.get_character_by_id(cid)
-                if c and c.name.lower() == name_lower:
+        if linked_names:
+            for entry in self._db.get_all_psyke_entries(self._project_id):
+                if entry.name.lower() in linked_names:
                     entry_ids.add(entry.id)
-                    break
-            for pid in place_ids:
-                p = self._db.get_place_by_id(pid)
-                if p and p.name.lower() == name_lower:
-                    entry_ids.add(entry.id)
-                    break
-        return entry_ids if entry_ids else None
+
+        result = entry_ids if entry_ids else None
+        self._cached_scene_entry_scene = scene_id
+        self._cached_scene_entry_ids = result
+        return result
 
     def _detect_active_editor(self):
         from storyplanner.ui.writing_core_view import WritingCoreView
@@ -1412,7 +1427,9 @@ class MainWindow(QMainWindow):
         self._update_title()
         self._auto_save()
         self._assistant_panel.refresh_scenes()
-        self._psyke_console.rebuild_index()
+        self._cached_scene_entry_scene = None
+        self._cached_scene_entry_ids = None
+        self._psyke_console.mark_index_dirty()
 
     def _auto_save(self) -> None:
         if not self._current_file:
