@@ -15,12 +15,18 @@ from storyplanner.quantum_outliner.psyke_adapter import PsykeSignals, gather_psy
 from storyplanner.quantum_outliner.relativity import reframe_scene
 from storyplanner.quantum_outliner.state import (
     Branch,
+    OutlineMode,
     Wavefunction,
     get_state,
 )
 from storyplanner.quantum_outliner.uncertainty import (
     WeakScene,
     find_uncertainty_zones,
+)
+from storyplanner.quantum_outliner.writing_methods_rag import (
+    MethodResult,
+    extract_beats,
+    get_relevant_writing_methods,
 )
 
 if TYPE_CHECKING:
@@ -51,7 +57,14 @@ def generate_outline(
         return QuantumResult(
             kind="error", title="Outline", body="Provide a premise first.", payload={},
         )
-    mode = structure_mode or get_state(project_id).structure_mode
+
+    state = get_state(project_id)
+    if state.outline_mode is OutlineMode.CLASSICAL:
+        return _generate_classical_outline(
+            db, project_id, premise, source_scene_id=source_scene_id,
+        )
+
+    mode = structure_mode or state.structure_mode
     scene_order = _resolve_scene_order(db, project_id, source_scene_id)
     wf = generate_possibilities(
         anchor=f"Story opening: {premise}",
@@ -60,7 +73,7 @@ def generate_outline(
         source_scene_order=scene_order,
         structure_mode=mode,
     )
-    get_state(project_id).add(wf)
+    state.add(wf)
     return _format_wavefunction("Outline", wf, db=db, project_id=project_id)
 
 
@@ -79,7 +92,14 @@ def generate_branches(
         return QuantumResult(
             kind="error", title="Possibilities", body="Provide a situation first.", payload={},
         )
-    mode = structure_mode or get_state(project_id).structure_mode
+
+    state = get_state(project_id)
+    if state.outline_mode is OutlineMode.CLASSICAL:
+        return _generate_classical_outline(
+            db, project_id, situation, source_scene_id=source_scene_id,
+        )
+
+    mode = structure_mode or state.structure_mode
     scene_order = _resolve_scene_order(db, project_id, source_scene_id)
     wf = generate_possibilities(
         anchor=situation, db=db, project_id=project_id,
@@ -88,7 +108,7 @@ def generate_branches(
         source_scene_order=scene_order,
         structure_mode=mode,
     )
-    get_state(project_id).add(wf)
+    state.add(wf)
     return _format_wavefunction("Possibilities", wf, db=db, project_id=project_id)
 
 
@@ -215,6 +235,78 @@ def _resolve_scene_order(
     if scene is None:
         return None
     return scene.sort_order
+
+
+def _generate_classical_outline(
+    db: "Database",
+    project_id: int,
+    premise: str,
+    *,
+    source_scene_id: int | None = None,
+) -> QuantumResult:
+    """Produce a deterministic linear outline from Writing Methods RAG."""
+    methods = get_relevant_writing_methods(premise, max_results=1)
+    if not methods:
+        methods = get_relevant_writing_methods("three-act structure", max_results=1)
+
+    if methods:
+        method = methods[0]
+        beats = extract_beats(method.snippet)
+        method_title = method.title
+    else:
+        method_title = "Three-Act Structure"
+        beats = ["Setup", "Confrontation", "Resolution"]
+
+    scene_order = _resolve_scene_order(db, project_id, source_scene_id)
+
+    branch = Branch.new(
+        title=f"{method_title} Outline",
+        description=f"Linear outline for: {premise}",
+        structure_method=method_title,
+        structure_beat=beats[0] if beats else None,
+    )
+    wf = Wavefunction.new(
+        anchor=premise,
+        branches=[branch],
+        source_scene_id=source_scene_id,
+        source_scene_order=scene_order,
+    )
+    wf.structure_method = method_title
+    wf.structure_beat = beats[0] if beats else None
+    wf.effective_mode = "classical"
+    get_state(project_id).add(wf)
+
+    body = _format_classical(method_title, beats, premise)
+    return QuantumResult(
+        kind="classical_outline",
+        title="Outline",
+        body=body,
+        payload={
+            "structure_method": method_title,
+            "beats": beats,
+            "anchor": premise,
+            "wavefunction_id": wf.id,
+            "source_scene_id": source_scene_id,
+        },
+    )
+
+
+def _format_classical(method_title: str, beats: list[str], anchor: str) -> str:
+    lines = [f"Classical Outline — {anchor}", ""]
+    lines.append(f"Method: {method_title}")
+    lines.append("")
+    if beats:
+        lines.append("Beats:")
+        for i, beat in enumerate(beats, 1):
+            lines.append(f"  {i}. {beat}")
+    else:
+        lines.append("(No beats extracted — use a specific method name.)")
+    lines.append("")
+    lines.append(
+        "This is a stable structure outline. "
+        "Switch to Lambda Mode for branching possibilities."
+    )
+    return "\n".join(lines)
 
 
 def _format_wavefunction(

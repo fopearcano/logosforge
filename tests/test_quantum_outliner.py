@@ -8,6 +8,7 @@ import pytest
 from storyplanner.db import Database
 from storyplanner.quantum_outliner import (
     Branch,
+    OutlineMode,
     StateDelta,
     Wavefunction,
     collapse_branch,
@@ -401,6 +402,7 @@ class TestUncertainty:
 
 class TestCoreAgent:
     def test_generate_outline_creates_wavefunction(self, db, project):
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:
@@ -415,6 +417,7 @@ class TestCoreAgent:
         assert result.kind == "error"
 
     def test_generate_branches_creates_options(self, db, project):
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         get_state(project.id).structure_mode = "quantum"
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -429,6 +432,7 @@ class TestCoreAgent:
 
     def test_collapse_branch_returns_summary(self, db, project):
         db.create_psyke_entry(project.id, "Hero", "character")
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:
@@ -457,6 +461,7 @@ class TestCoreAgent:
         assert "Empty" in result.body
 
     def test_collapse_marks_wavefunction_in_state(self, db, project):
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:
@@ -475,6 +480,7 @@ class TestSpecScenarios:
     """The five required scenarios from the spec."""
 
     def test_scenario_1_outline_multiple_branches(self, db, project):
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:
@@ -483,6 +489,7 @@ class TestSpecScenarios:
         assert len(result.payload["branches"]) >= 3
 
     def test_scenario_2_select_branch_collapses(self, db, project):
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:
@@ -516,6 +523,7 @@ class TestSpecScenarios:
         weak_result = detect_weak_scenes(db, project.id, threshold=0.3)
         assert "Filler" in weak_result.body
 
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:

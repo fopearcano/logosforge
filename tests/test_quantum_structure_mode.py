@@ -6,6 +6,7 @@ import pytest
 
 from storyplanner.db import Database
 from storyplanner.quantum_outliner import (
+    OutlineMode,
     STRUCTURE_MODES,
     generate_branches,
     generate_outline,
@@ -45,25 +46,31 @@ class TestStructureModes:
     def test_default_is_hybrid(self, db, project):
         state = get_state(project.id)
         assert state.structure_mode == "hybrid"
+        state.outline_mode = OutlineMode.LAMBDA
 
     def test_switch_modes(self, db, project):
         state = get_state(project.id)
         for mode in STRUCTURE_MODES:
             state.structure_mode = mode
+            state.outline_mode = OutlineMode.LAMBDA
             assert state.structure_mode == mode
+            state.outline_mode = OutlineMode.LAMBDA
 
     def test_mode_persists_in_session(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "classical"
+        state.outline_mode = OutlineMode.LAMBDA
 
         same_state = get_state(project.id)
         assert same_state.structure_mode == "classical"
+        state.outline_mode = OutlineMode.LAMBDA
 
 
 class TestModeSerialization:
     def test_serialize_includes_mode(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "quantum"
+        state.outline_mode = OutlineMode.LAMBDA
         raw = serialize_state(state)
         assert '"structure_mode": "quantum"' in raw
 
@@ -72,22 +79,26 @@ class TestModeSerialization:
         state = deserialize_state(raw, 1)
         assert state is not None
         assert state.structure_mode == "classical"
+        state.outline_mode = OutlineMode.LAMBDA
 
     def test_deserialize_missing_mode_defaults_hybrid(self):
         raw = '{"project_id": 1, "selected_pov": "", "linked_scene_id": null, "wavefunctions": []}'
         state = deserialize_state(raw, 1)
         assert state is not None
         assert state.structure_mode == "hybrid"
+        state.outline_mode = OutlineMode.LAMBDA
 
     def test_deserialize_invalid_mode_defaults_hybrid(self):
         raw = '{"project_id": 1, "selected_pov": "", "linked_scene_id": null, "structure_mode": "invalid_garbage", "wavefunctions": []}'
         state = deserialize_state(raw, 1)
         assert state is not None
         assert state.structure_mode == "hybrid"
+        state.outline_mode = OutlineMode.LAMBDA
 
     def test_round_trip_through_db(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "auto"
+        state.outline_mode = OutlineMode.LAMBDA
         save_state(db, project.id)
         _STATES.clear()
 
@@ -98,6 +109,7 @@ class TestModeSerialization:
         for mode in STRUCTURE_MODES:
             state = get_state(project.id)
             state.structure_mode = mode
+            state.outline_mode = OutlineMode.LAMBDA
             save_state(db, project.id)
             _STATES.clear()
 
@@ -109,6 +121,7 @@ class TestGeneratorReceivesMode:
     def test_generate_outline_uses_state_mode(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "classical"
+        state.outline_mode = OutlineMode.LAMBDA
         db.create_scene(project.id, title="Opening")
 
         with patch(
@@ -123,6 +136,7 @@ class TestGeneratorReceivesMode:
     def test_generate_branches_uses_state_mode(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "quantum"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -136,6 +150,7 @@ class TestGeneratorReceivesMode:
     def test_explicit_mode_overrides_state(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "hybrid"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.core.generate_possibilities"
@@ -154,6 +169,7 @@ class TestGeneratorReceivesMode:
     def test_none_mode_falls_back_to_state(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "auto"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.core.generate_possibilities"

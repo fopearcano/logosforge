@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from storyplanner.db import Database
-from storyplanner.quantum_outliner import generate_branches, get_state
+from storyplanner.quantum_outliner import OutlineMode, generate_branches, get_state
 from storyplanner.quantum_outliner.core import _pick_collapse_candidate
 from storyplanner.quantum_outliner.psyke_adapter import PsykeSignals, gather_psyke_signals
 from storyplanner.quantum_outliner.state import Branch, Wavefunction, _STATES
@@ -225,6 +225,7 @@ class TestCollapseInOutput:
     def test_signals_shown_in_hybrid_format(self, db, project):
         db.create_psyke_entry(project.id, "John", "character", notes="Distrusts authority")
         state = get_state(project.id)
+        state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "hybrid"
 
         with patch(
@@ -240,6 +241,7 @@ class TestCollapseInOutput:
 
     def test_no_psyke_still_has_recommendation(self, db, project):
         state = get_state(project.id)
+        state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "hybrid"
 
         with patch(
@@ -259,6 +261,7 @@ class TestCollapseInOutput:
             notes="Open hostility\n\n[arc] Must resolve hatred",
         )
         state = get_state(project.id)
+        state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "hybrid"
 
         with patch(
@@ -278,6 +281,7 @@ class TestEndToEndPsykeRecommendation:
         e1 = db.create_psyke_entry(project.id, "Mary", "character", notes="Spy for the enemy")
         e2 = db.create_psyke_entry(project.id, "John", "character", notes="Leader")
         state = get_state(project.id)
+        state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "hybrid"
 
         with patch(
@@ -294,6 +298,7 @@ class TestEndToEndPsykeRecommendation:
     def test_no_auto_collapse(self, db, project):
         db.create_psyke_entry(project.id, "Hero", "character", notes="brave warrior")
         state = get_state(project.id)
+        state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "hybrid"
 
         with patch(

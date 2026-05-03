@@ -6,6 +6,7 @@ import pytest
 
 from storyplanner.db import Database
 from storyplanner.quantum_outliner import (
+    OutlineMode,
     generate_branches,
     generate_outline,
     get_state,
@@ -220,6 +221,7 @@ class TestCollapseCandidate:
 class TestEndToEnd:
     def test_hybrid_request_produces_all_sections(self, db, project):
         state = get_state(project.id)
+        state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "hybrid"
 
         with patch(
@@ -236,6 +238,7 @@ class TestEndToEnd:
 
     def test_classical_request_produces_all_sections(self, db, project):
         state = get_state(project.id)
+        state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "classical"
 
         with patch(
@@ -252,6 +255,7 @@ class TestEndToEnd:
 
     def test_quantum_request_has_no_classical_axis(self, db, project):
         state = get_state(project.id)
+        state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "quantum"
 
         with patch(
@@ -265,6 +269,7 @@ class TestEndToEnd:
 
     def test_outline_hybrid_has_structure(self, db, project):
         state = get_state(project.id)
+        state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "hybrid"
 
         with patch(
@@ -280,6 +285,7 @@ class TestEndToEnd:
 
     def test_branch_metadata_present_in_hybrid(self, db, project):
         state = get_state(project.id)
+        state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "hybrid"
 
         with patch(

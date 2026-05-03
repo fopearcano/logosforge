@@ -135,3 +135,17 @@ def reload() -> None:
     """Force reload of the markdown file (useful after edits)."""
     global _sections
     _sections = None
+
+
+_BEAT_LABELS = ("Beats:", "Stages:", "Steps:", "Points:", "Parts:", "Template:")
+
+
+def extract_beats(snippet: str) -> list[str]:
+    """Parse the beat/stage list from a method snippet."""
+    for label in _BEAT_LABELS:
+        if label not in snippet:
+            continue
+        beat_line = snippet.split(label, 1)[1].split("\n")[0]
+        raw = [b.strip().rstrip(".") for b in beat_line.split(",")]
+        return [b for b in raw if b]
+    return []

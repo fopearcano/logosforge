@@ -6,6 +6,7 @@ import pytest
 
 from storyplanner.db import Database
 from storyplanner.quantum_outliner import (
+    OutlineMode,
     generate_branches,
     generate_outline,
     get_state,
@@ -77,7 +78,9 @@ class TestRAGContext:
 class TestClassicalOutput:
     def test_classical_stubs_contain_method(self, db, project):
         state = get_state(project.id)
+        state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "classical"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -96,7 +99,9 @@ class TestClassicalOutput:
 
     def test_classical_wf_has_structure_method(self, db, project):
         state = get_state(project.id)
+        state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "classical"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -110,7 +115,9 @@ class TestClassicalOutput:
 
     def test_classical_body_mentions_structure(self, db, project):
         state = get_state(project.id)
+        state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "classical"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -126,7 +133,9 @@ class TestClassicalOutput:
 class TestQuantumOutput:
     def test_quantum_stubs_have_no_method(self, db, project):
         state = get_state(project.id)
+        state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "quantum"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -143,7 +152,9 @@ class TestQuantumOutput:
 
     def test_quantum_wf_has_no_structure(self, db, project):
         state = get_state(project.id)
+        state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "quantum"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -156,6 +167,7 @@ class TestQuantumOutput:
     def test_quantum_body_has_no_structure_line(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "quantum"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -170,6 +182,7 @@ class TestHybridOutput:
     def test_hybrid_has_branches_and_method(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "hybrid"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -186,6 +199,7 @@ class TestHybridOutput:
     def test_hybrid_stubs_have_branch_types(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "hybrid"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -203,6 +217,7 @@ class TestAutoOutput:
     def test_auto_structural_query_gets_methods(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "auto"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -217,6 +232,7 @@ class TestAutoOutput:
     def test_auto_freeform_query_stays_quantum(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "auto"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -233,6 +249,7 @@ class TestPromptConstruction:
     def test_classical_system_prompt_sent(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "classical"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -247,6 +264,7 @@ class TestPromptConstruction:
     def test_quantum_system_prompt_sent(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "quantum"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -261,6 +279,7 @@ class TestPromptConstruction:
     def test_hybrid_system_prompt_sent(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "hybrid"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -275,6 +294,7 @@ class TestPromptConstruction:
     def test_rag_context_in_user_message(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "classical"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -290,6 +310,7 @@ class TestPromptConstruction:
     def test_quantum_has_no_rag_in_user_message(self, db, project):
         state = get_state(project.id)
         state.structure_mode = "quantum"
+        state.outline_mode = OutlineMode.LAMBDA
 
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"

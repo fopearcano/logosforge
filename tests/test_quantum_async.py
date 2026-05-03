@@ -9,6 +9,7 @@ import pytest
 from storyplanner.db import Database
 from storyplanner.quantum_outliner import (
     Branch,
+    OutlineMode,
     StateDelta,
     Wavefunction,
     generate_branches,
@@ -99,6 +100,7 @@ class TestQuantumWorkerWithLLM:
     """Worker correctly wraps actual quantum functions."""
 
     def test_generate_outline_via_worker(self, qapp, db, project):
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         results = []
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
@@ -117,6 +119,7 @@ class TestQuantumWorkerWithLLM:
 
     def test_generate_branches_via_worker(self, qapp, db, project):
         get_state(project.id).structure_mode = "quantum"
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         results = []
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"

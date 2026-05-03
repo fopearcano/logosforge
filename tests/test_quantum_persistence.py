@@ -11,6 +11,7 @@ from storyplanner.import_data import import_json, validate_import_data
 from storyplanner.quantum_outliner import (
     Branch,
     NarrativeState,
+    OutlineMode,
     StateDelta,
     Wavefunction,
     collapse_branch,
@@ -182,6 +183,7 @@ class TestDBPersistence:
 
 class TestGenerateAndPersist:
     def test_generate_save_reload(self, db, project):
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:
@@ -200,6 +202,7 @@ class TestGenerateAndPersist:
         assert len(loaded.wavefunctions[wf_id].branches) >= 3
 
     def test_multiple_wavefunctions_persist(self, db, project):
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:
@@ -216,6 +219,7 @@ class TestGenerateAndPersist:
         assert len(loaded.active()) == 3
 
     def test_collapse_persists(self, db, project):
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:
@@ -238,6 +242,7 @@ class TestGenerateAndPersist:
 
 class TestExportImport:
     def test_quantum_state_in_export(self, db, project):
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:
@@ -254,6 +259,7 @@ class TestExportImport:
         assert "quantum_state" not in exported
 
     def test_import_restores_quantum_state(self, db, project):
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:

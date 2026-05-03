@@ -7,6 +7,7 @@ import pytest
 
 from storyplanner.db import Database
 from storyplanner.quantum_outliner import (
+    OutlineMode,
     Branch,
     StateDelta,
     Wavefunction,
@@ -43,6 +44,7 @@ def _reset():
 class TestSceneAnchoring:
     def test_generate_branches_records_source_scene(self, db, project):
         scene = db.create_scene(project.id, title="Scene 5", content="Hero enters the cave.")
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:
@@ -61,6 +63,7 @@ class TestSceneAnchoring:
 
     def test_generate_outline_records_source_scene(self, db, project):
         scene = db.create_scene(project.id, title="Prologue")
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:
@@ -72,6 +75,7 @@ class TestSceneAnchoring:
         assert result.payload["source_scene_id"] == scene.id
 
     def test_generate_without_scene_has_null_source(self, db, project):
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:
@@ -85,6 +89,7 @@ class TestSceneAnchoring:
         s2 = db.create_scene(project.id, title="Scene 2")
         s3 = db.create_scene(project.id, title="Scene 3")
 
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:
@@ -96,6 +101,7 @@ class TestSceneAnchoring:
         assert result.payload["source_scene_order"] == s2.sort_order
 
     def test_invalid_scene_id_gives_null_order(self, db, project):
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:
@@ -294,6 +300,7 @@ class TestEndToEnd:
         scenes = db.get_all_scenes(project.id)
         scene_5 = next(s for s in scenes if s.title == "Scene 5")
 
+        get_state(project.id).outline_mode = OutlineMode.LAMBDA
         with patch(
             "storyplanner.quantum_outliner.possibilities.chat_completion"
         ) as mock:
