@@ -1267,6 +1267,13 @@ def build_stylesheet() -> str:
         background: transparent;
         padding: 1px 0;
     }}
+    #qtlProbLabel {{
+        color: {TEXT_MUTED};
+        font-size: 9px;
+        font-weight: bold;
+        background: transparent;
+        padding: 0;
+    }}
     #qtlEmpty {{
         color: {TEXT_MUTED};
         font-size: 11px;

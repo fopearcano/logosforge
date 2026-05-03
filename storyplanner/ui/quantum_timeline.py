@@ -280,6 +280,9 @@ class QuantumTimelineWidget(QWidget):
         node.setProperty("wf_id", wf.id)
         node.setProperty("branch_id", branch.id)
 
+        prob = branch.probability
+        show_prob = prob > 0 and not is_collapsed and not is_archived
+
         if is_collapsed:
             status = "collapsed"
             border_color = theme.ACCENT
@@ -294,7 +297,7 @@ class QuantumTimelineWidget(QWidget):
             bg = theme.BG_HOVER
         else:
             status = "active"
-            border_color = theme.BORDER
+            border_color = self._prob_border_color(prob) if show_prob else theme.BORDER
             bg = theme.BG_INPUT
 
         node.setStyleSheet(
@@ -319,6 +322,15 @@ class QuantumTimelineWidget(QWidget):
         title_lbl.setObjectName("qtlBranchTitle")
         title_lbl.setToolTip(branch.title)
         top_row.addWidget(title_lbl, stretch=1)
+
+        if show_prob:
+            prob_lbl = QLabel(f"{prob:.0%}")
+            prob_lbl.setObjectName("qtlProbLabel")
+            prob_lbl.setToolTip(
+                f"Probability: {prob:.1%}"
+                + (f"\nScore: {branch.score:.2f}" if branch.score else "")
+            )
+            top_row.addWidget(prob_lbl)
 
         badge = QLabel(self._status_badge(status))
         badge.setObjectName("qtlBadge")
@@ -369,9 +381,39 @@ class QuantumTimelineWidget(QWidget):
             cons_lbl.setToolTip(branch.consequence)
             layout.addWidget(cons_lbl)
 
+        if show_prob:
+            bar = QFrame()
+            bar.setObjectName("qtlProbBar")
+            bar_width = max(int(prob * 122), 2)
+            bar.setFixedSize(bar_width, 2)
+            bar_color = self._prob_bar_color(prob)
+            bar.setStyleSheet(
+                f"QFrame#qtlProbBar {{"
+                f"  background: {bar_color};"
+                f"  border: none; border-radius: 1px;"
+                f"}}"
+            )
+            layout.addWidget(bar)
+
         node.mousePressEvent = lambda ev, w=wf.id, b=branch.id: self._on_branch_click(ev, w, b)
 
         return node
+
+    @staticmethod
+    def _prob_bar_color(prob: float) -> str:
+        if prob >= 0.4:
+            return theme.ACCENT
+        if prob >= 0.2:
+            return theme.ACCENT_DIM
+        return theme.TEXT_MUTED
+
+    @staticmethod
+    def _prob_border_color(prob: float) -> str:
+        if prob >= 0.4:
+            return theme.ACCENT_DIM
+        if prob >= 0.2:
+            return theme.BORDER_FOCUS if hasattr(theme, "BORDER_FOCUS") else theme.ACCENT_DIM
+        return theme.BORDER
 
     def _on_branch_click(self, event, wf_id: str, branch_id: str) -> None:
         if event.button() == Qt.MouseButton.RightButton:
