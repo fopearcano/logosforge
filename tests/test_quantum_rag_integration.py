@@ -127,7 +127,7 @@ class TestClassicalOutput:
                 db, project.id, "Three-Act Structure setup",
             )
 
-        assert "Method:" in result.body
+        assert "Gravity:" in result.body
 
 
 class TestQuantumOutput:

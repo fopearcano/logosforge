@@ -222,7 +222,7 @@ class TestPsykeAwareRecommendation:
 
 
 class TestCollapseInOutput:
-    def test_signals_shown_in_hybrid_format(self, db, project):
+    def test_psyke_characters_shown_as_pov(self, db, project):
         db.create_psyke_entry(project.id, "John", "character", notes="Distrusts authority")
         state = get_state(project.id)
         state.outline_mode = OutlineMode.LAMBDA
@@ -236,10 +236,10 @@ class TestCollapseInOutput:
                 db, project.id, "Save the Cat midpoint",
             )
 
-        assert "Collapse Candidates:" in result.body
-        assert "Recommended:" in result.body
+        assert "POV Frames:" in result.body
+        assert "John" in result.body
 
-    def test_no_psyke_still_has_recommendation(self, db, project):
+    def test_gravity_shown_for_structural_query(self, db, project):
         state = get_state(project.id)
         state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "hybrid"
@@ -252,10 +252,10 @@ class TestCollapseInOutput:
                 db, project.id, "Hero's Journey Ordeal",
             )
 
-        assert "Recommended:" in result.body
-        assert "Reason:" in result.body
+        assert "Gravity:" in result.body
+        assert "QUANTUM FIELD" in result.body
 
-    def test_psyke_signals_in_output(self, db, project):
+    def test_psyke_arc_characters_visible(self, db, project):
         db.create_psyke_entry(
             project.id, "Conflict", "character",
             notes="Open hostility\n\n[arc] Must resolve hatred",
@@ -272,14 +272,14 @@ class TestCollapseInOutput:
                 db, project.id, "Save the Cat midpoint",
             )
 
-        assert "Signals:" in result.body
+        assert "POV Frames:" in result.body
+        assert "Conflict" in result.body
 
 
 class TestEndToEndPsykeRecommendation:
-    def test_recommendation_uses_psyke_characters(self, db, project):
+    def test_psyke_characters_in_pov_frames(self, db, project):
         db.create_psyke_entry(project.id, "John", "character", notes="Leader who distrusts")
-        e1 = db.create_psyke_entry(project.id, "Mary", "character", notes="Spy for the enemy")
-        e2 = db.create_psyke_entry(project.id, "John", "character", notes="Leader")
+        db.create_psyke_entry(project.id, "Mary", "character", notes="Spy for the enemy")
         state = get_state(project.id)
         state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "hybrid"
@@ -293,7 +293,8 @@ class TestEndToEndPsykeRecommendation:
             )
 
         assert result.kind == "possibilities"
-        assert "Recommended:" in result.body
+        assert "POV Frames:" in result.body
+        assert "John" in result.body
 
     def test_no_auto_collapse(self, db, project):
         db.create_psyke_entry(project.id, "Hero", "character", notes="brave warrior")

@@ -159,30 +159,32 @@ class TestQuantumFormat:
 
 
 class TestModeRouting:
-    def test_hybrid_mode_uses_hybrid_format(self):
+    def test_hybrid_mode_shows_gravity(self):
         wf = _wf_with_structure()
         result = _format_wavefunction("Test", wf)
-        assert "Classical Axis:" in result.body
+        assert "Gravity: Save the Cat" in result.body
+        assert "QUANTUM FIELD" in result.body
 
     def test_quantum_mode_uses_quantum_format(self):
         wf = _wf_quantum_only()
         result = _format_wavefunction("Test", wf)
         assert "Option 1:" in result.body
-        assert "Classical Axis:" not in result.body
+        assert "Gravity:" not in result.body
 
-    def test_classical_mode_uses_hybrid_format(self):
+    def test_classical_mode_shows_gravity(self):
         wf = _wf_with_structure()
         wf.effective_mode = "classical"
         result = _format_wavefunction("Test", wf)
-        assert "Classical Axis:" in result.body
+        assert "Gravity: Save the Cat" in result.body
 
-    def test_no_structure_method_falls_to_quantum(self):
+    def test_no_structure_method_no_gravity(self):
         wf = _wf_with_structure()
         wf.effective_mode = "hybrid"
         wf.structure_method = None
+        wf.structure_beat = None
         result = _format_wavefunction("Test", wf)
         assert "Option 1:" in result.body
-        assert "Classical Axis:" not in result.body
+        assert "Gravity:" not in result.body
 
 
 class TestCollapseCandidate:
@@ -219,7 +221,7 @@ class TestCollapseCandidate:
 
 
 class TestEndToEnd:
-    def test_hybrid_request_produces_all_sections(self, db, project):
+    def test_hybrid_request_shows_gravity(self, db, project):
         state = get_state(project.id)
         state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "hybrid"
@@ -232,11 +234,11 @@ class TestEndToEnd:
                 db, project.id, "Save the Cat Midpoint scene",
             )
 
-        assert "Classical Axis:" in result.body
-        assert "Quantum Branches:" in result.body
-        assert "Collapse Candidates:" in result.body
+        assert "QUANTUM FIELD" in result.body
+        assert "Gravity:" in result.body
+        assert "Superposition:" in result.body
 
-    def test_classical_request_produces_all_sections(self, db, project):
+    def test_classical_request_shows_gravity(self, db, project):
         state = get_state(project.id)
         state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "classical"
@@ -249,11 +251,10 @@ class TestEndToEnd:
                 db, project.id, "Three-Act Structure midpoint",
             )
 
-        assert "Classical Axis:" in result.body
-        assert "Quantum Branches:" in result.body
-        assert "Collapse Candidates:" in result.body
+        assert "QUANTUM FIELD" in result.body
+        assert "Gravity:" in result.body
 
-    def test_quantum_request_has_no_classical_axis(self, db, project):
+    def test_quantum_request_has_no_gravity(self, db, project):
         state = get_state(project.id)
         state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "quantum"
@@ -265,7 +266,7 @@ class TestEndToEnd:
             result = generate_branches(db, project.id, "The village burns")
 
         assert "Option 1:" in result.body
-        assert "Classical Axis:" not in result.body
+        assert "Gravity:" not in result.body
 
     def test_outline_hybrid_has_structure(self, db, project):
         state = get_state(project.id)
@@ -280,7 +281,7 @@ class TestEndToEnd:
                 db, project.id, "Hero's Journey opening act",
             )
 
-        assert "Classical Axis:" in result.body
+        assert "Gravity:" in result.body
         assert result.payload.get("structure_method") is not None
 
     def test_branch_metadata_present_in_hybrid(self, db, project):

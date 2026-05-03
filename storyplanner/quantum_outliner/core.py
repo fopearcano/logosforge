@@ -316,14 +316,10 @@ def _format_wavefunction(
     db: "Database | None" = None,
     project_id: int | None = None,
 ) -> QuantumResult:
-    mode = wf.effective_mode or "quantum"
     psyke = None
     if db is not None and project_id is not None:
         psyke = gather_psyke_signals(db, project_id)
-    if mode in ("classical", "hybrid") and wf.structure_method:
-        body = _format_hybrid(wf, psyke=psyke)
-    else:
-        body = _format_lambda(wf, psyke=psyke)
+    body = _format_lambda(wf, psyke=psyke)
     return QuantumResult(
         kind="possibilities",
         title=title,
@@ -343,9 +339,21 @@ def _format_lambda(
         "",
     ]
 
+    if wf.structure_method or wf.structure_beat:
+        gravity = wf.structure_method or ""
+        if wf.structure_beat:
+            gravity = f"{gravity} → {wf.structure_beat}" if gravity else wf.structure_beat
+        lines.append(f"Gravity: {gravity}")
+        lines.append("")
+
     for i, b in enumerate(wf.branches, 1):
-        lines.append(f"▸ Option {i}: {b.title}  [{b.id}]")
+        label = f"▸ Option {i}: {b.title}  [{b.id}]"
+        if b.branch_type:
+            label += f"  ({b.branch_type})"
+        lines.append(label)
         lines.append(f"  {b.description}")
+        if b.structure_beat:
+            lines.append(f"  Beat: {b.structure_beat}")
         if b.stakes:
             lines.append(f"  Stakes: {b.stakes}")
         if b.consequence:

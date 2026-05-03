@@ -276,7 +276,7 @@ class TestLambdaEndToEnd:
         assert "John" in result.body
         assert "Mary" in result.body
 
-    def test_lambda_hybrid_still_uses_hybrid_format(self, db, project):
+    def test_lambda_hybrid_shows_gravity(self, db, project):
         state = get_state(project.id)
         state.outline_mode = OutlineMode.LAMBDA
         state.structure_mode = "hybrid"
@@ -289,8 +289,8 @@ class TestLambdaEndToEnd:
                 db, project.id, "Save the Cat midpoint",
             )
 
-        assert "Classical Axis:" in result.body
-        assert "QUANTUM FIELD" not in result.body
+        assert "QUANTUM FIELD" in result.body
+        assert "Gravity:" in result.body
 
     def test_classical_mode_still_deterministic(self, db, project):
         state = get_state(project.id)
