@@ -63,6 +63,7 @@ from storyplanner.orchestration import (
 from storyplanner.providers import ProviderConfig
 from storyplanner.quantum_outliner import (
     STRUCTURE_MODES,
+    OutlineMode,
     collapse_branch as quantum_collapse_branch,
     detect_weak_scenes as quantum_detect_weak_scenes,
     generate_branches as quantum_generate_branches,
@@ -499,6 +500,26 @@ class AssistantPanel(QWidget):
         self._layout.addWidget(self._structure_mode_row)
         self._sync_structure_mode_buttons()
 
+        # Lambda Mode toggle
+        self._lambda_row = QWidget()
+        lm_layout = QHBoxLayout(self._lambda_row)
+        lm_layout.setContentsMargins(0, 1, 0, 1)
+        lm_layout.setSpacing(6)
+        self._lambda_toggle = QPushButton("Lambda Mode")
+        self._lambda_toggle.setCheckable(True)
+        self._lambda_toggle.setFixedHeight(20)
+        self._lambda_toggle.clicked.connect(self._on_lambda_toggle)
+        lm_layout.addWidget(self._lambda_toggle)
+        self._lambda_indicator = QLabel("Mode: Classical")
+        self._lambda_indicator.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: 9px; background: transparent;"
+        )
+        lm_layout.addWidget(self._lambda_indicator)
+        lm_layout.addStretch()
+        self._lambda_row.setVisible(False)
+        self._layout.addWidget(self._lambda_row)
+        self._sync_lambda_toggle()
+
         # Quantum timeline superposition
         self._quantum_timeline = QuantumTimelineWidget(self._db, self._project_id)
         self._quantum_timeline.branch_selected.connect(self._on_timeline_branch_selected)
@@ -683,9 +704,11 @@ class AssistantPanel(QWidget):
         self._counterpart_row.setVisible(is_counterpart)
         self._quantum_row.setVisible(is_quantum)
         self._structure_mode_row.setVisible(is_quantum)
+        self._lambda_row.setVisible(is_quantum)
         self._quantum_timeline.setVisible(is_quantum)
         if is_quantum:
             self._sync_structure_mode_buttons()
+            self._sync_lambda_toggle()
             self._quantum_timeline.refresh()
 
         # Apply buttons mutate scene content — only Assistant uses them
@@ -1071,6 +1094,48 @@ class AssistantPanel(QWidget):
             f"QPushButton {{ background: transparent;"
             f" color: {theme.TEXT_MUTED}; border: 1px solid {theme.BORDER};"
             f" border-radius: 3px; padding: 1px 6px; font-size: 10px; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
+        )
+
+    def _on_lambda_toggle(self) -> None:
+        state = quantum_get_state(self._project_id)
+        if self._lambda_toggle.isChecked():
+            state.outline_mode = OutlineMode.LAMBDA
+        else:
+            state.outline_mode = OutlineMode.CLASSICAL
+        self._sync_lambda_toggle()
+        quantum_save_state(self._db, self._project_id)
+
+    def _sync_lambda_toggle(self) -> None:
+        state = quantum_get_state(self._project_id)
+        is_lambda = state.outline_mode is OutlineMode.LAMBDA
+        self._lambda_toggle.setChecked(is_lambda)
+        self._lambda_toggle.setStyleSheet(self._lambda_btn_style(is_lambda))
+        if is_lambda:
+            self._lambda_indicator.setText("Mode: Lambda")
+            self._lambda_indicator.setStyleSheet(
+                f"color: {theme.ACCENT_DIM}; font-size: 9px;"
+                f" font-weight: bold; background: transparent;"
+            )
+        else:
+            self._lambda_indicator.setText("Mode: Classical")
+            self._lambda_indicator.setStyleSheet(
+                f"color: {theme.TEXT_MUTED}; font-size: 9px; background: transparent;"
+            )
+
+    @staticmethod
+    def _lambda_btn_style(active: bool) -> str:
+        if active:
+            return (
+                f"QPushButton {{ background: {theme.SELECTION_BG};"
+                f" color: {theme.ACCENT}; border: 1px solid {theme.ACCENT_DIM};"
+                f" border-radius: 3px; padding: 1px 8px;"
+                f" font-size: 10px; font-weight: bold; }}"
+            )
+        return (
+            f"QPushButton {{ background: transparent;"
+            f" color: {theme.TEXT_MUTED}; border: 1px solid {theme.BORDER};"
+            f" border-radius: 3px; padding: 1px 8px; font-size: 10px; }}"
             f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
         )
 
