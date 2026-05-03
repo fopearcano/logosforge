@@ -203,4 +203,9 @@ def import_json(db: Database, data: dict) -> int:
 
         _create_outline_nodes(outline_data, None)
 
+    quantum_data = data.get("quantum_state")
+    if quantum_data and isinstance(quantum_data, dict):
+        from storyplanner.quantum_outliner.persistence import import_quantum_state
+        import_quantum_state(db, project_id, quantum_data)
+
     return project_id

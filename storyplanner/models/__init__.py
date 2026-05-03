@@ -7,6 +7,7 @@ from storyplanner.models.models import (
     PsykeEntry,
     PsykeProgression,
     PsykeRelation,
+    QuantumStateRecord,
     Scene,
     SceneCharacterLink,
     SceneCharacterState,
@@ -28,4 +29,5 @@ __all__ = [
     "PsykeProgression",
     "StoryMemoryEntry",
     "OutlineNode",
+    "QuantumStateRecord",
 ]

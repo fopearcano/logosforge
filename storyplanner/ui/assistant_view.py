@@ -67,7 +67,9 @@ from storyplanner.quantum_outliner import (
     generate_branches as quantum_generate_branches,
     generate_outline as quantum_generate_outline,
     list_active_wavefunctions as quantum_list_active,
+    load_state as quantum_load_state,
     reframe as quantum_reframe,
+    save_state as quantum_save_state,
 )
 from storyplanner.settings import get_manager as get_settings
 from storyplanner.ui import theme
@@ -233,6 +235,8 @@ class AssistantPanel(QWidget):
         self._worker: _AssistantWorker | None = None
         self._quantum_worker: _QuantumWorker | None = None
         self._pending_messages: list[dict] | None = None
+
+        quantum_load_state(db, project_id)
 
         self._debounce_timer = QTimer()
         self._debounce_timer.setSingleShot(True)
@@ -1017,6 +1021,8 @@ class AssistantPanel(QWidget):
     def _on_quantum_done(self, result) -> None:
         self._show_quantum_result(result)
         self._set_quantum_busy(False)
+        if result.kind in ("possibilities", "collapse"):
+            quantum_save_state(self._db, self._project_id)
         if result.kind == "collapse" and self._on_data_changed:
             self._on_data_changed()
         self._quantum_worker = None

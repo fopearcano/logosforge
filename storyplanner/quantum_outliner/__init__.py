@@ -21,6 +21,12 @@ from storyplanner.quantum_outliner.core import (
     list_active_wavefunctions,
     reframe,
 )
+from storyplanner.quantum_outliner.persistence import (
+    export_quantum_state,
+    import_quantum_state,
+    load_state,
+    save_state,
+)
 from storyplanner.quantum_outliner.state import (
     Branch,
     NarrativeState,
@@ -38,10 +44,14 @@ __all__ = [
     "Wavefunction",
     "collapse_branch",
     "detect_weak_scenes",
+    "export_quantum_state",
     "generate_branches",
     "generate_outline",
     "get_state",
+    "import_quantum_state",
     "list_active_wavefunctions",
+    "load_state",
     "reframe",
     "reset_state",
+    "save_state",
 ]

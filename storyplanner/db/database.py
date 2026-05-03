@@ -22,6 +22,7 @@ from storyplanner.models import (
     PsykeEntry,
     PsykeProgression,
     PsykeRelation,
+    QuantumStateRecord,
     Scene,
     SceneCharacterLink,
     SceneCharacterState,
@@ -1100,6 +1101,29 @@ class Database:
             ).all()
             for node in nodes:
                 session.delete(node)
+            session.commit()
+
+    # -- Quantum State --------------------------------------------------------
+
+    def get_quantum_state_json(self, project_id: int) -> str:
+        with Session(self._engine) as session:
+            record = session.get(QuantumStateRecord, project_id)
+            return record.state_json if record else ""
+
+    def save_quantum_state_json(self, project_id: int, state_json: str) -> None:
+        from datetime import datetime, timezone
+        with Session(self._engine) as session:
+            record = session.get(QuantumStateRecord, project_id)
+            if record is None:
+                record = QuantumStateRecord(
+                    project_id=project_id,
+                    state_json=state_json,
+                    updated_at=datetime.now(timezone.utc),
+                )
+                session.add(record)
+            else:
+                record.state_json = state_json
+                record.updated_at = datetime.now(timezone.utc)
             session.commit()
 
     @staticmethod

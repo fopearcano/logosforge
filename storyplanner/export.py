@@ -107,7 +107,9 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
             for n in children
         ]
 
-    return {
+    from storyplanner.quantum_outliner.persistence import export_quantum_state
+
+    data = {
         "project": {
             "title": project.title if project else "Untitled",
             "description": project.description if project else "",
@@ -126,6 +128,12 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
         "psyke_entries": psyke_list,
         "outline": _build_outline_tree(None),
     }
+
+    quantum = export_quantum_state(db, project_id)
+    if quantum is not None:
+        data["quantum_state"] = quantum
+
+    return data
 
 
 def export_json(db: Database, project_id: int) -> str:

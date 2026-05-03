@@ -95,6 +95,8 @@ class NarrativeState:
 
     project_id: int
     wavefunctions: dict[str, Wavefunction] = field(default_factory=dict)
+    selected_pov: str = ""
+    linked_scene_id: int | None = None
 
     def add(self, wf: Wavefunction) -> None:
         self.wavefunctions[wf.id] = wf
@@ -128,3 +130,62 @@ def reset_state(project_id: int) -> None:
 
 def serialize(wf: Wavefunction) -> str:
     return json.dumps(asdict(wf), indent=2)
+
+
+def serialize_state(state: NarrativeState) -> str:
+    data = {
+        "project_id": state.project_id,
+        "selected_pov": state.selected_pov,
+        "linked_scene_id": state.linked_scene_id,
+        "wavefunctions": [asdict(wf) for wf in state.wavefunctions.values()],
+    }
+    return json.dumps(data)
+
+
+def deserialize_state(raw: str, project_id: int) -> NarrativeState | None:
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+
+    state = NarrativeState(
+        project_id=project_id,
+        selected_pov=str(data.get("selected_pov", "")),
+        linked_scene_id=data.get("linked_scene_id"),
+    )
+
+    for wf_raw in data.get("wavefunctions", []):
+        if not isinstance(wf_raw, dict):
+            continue
+        branches = []
+        for b_raw in wf_raw.get("branches", []):
+            if not isinstance(b_raw, dict):
+                continue
+            delta_raw = b_raw.get("state_delta") or {}
+            delta = StateDelta(
+                character_changes=delta_raw.get("character_changes", []),
+                new_relations=delta_raw.get("new_relations", []),
+                arc_updates=delta_raw.get("arc_updates", []),
+                notes=delta_raw.get("notes", ""),
+            )
+            branches.append(Branch(
+                id=b_raw.get("id", ""),
+                title=b_raw.get("title", ""),
+                description=b_raw.get("description", ""),
+                stakes=b_raw.get("stakes", ""),
+                consequence=b_raw.get("consequence", ""),
+                state_delta=delta,
+            ))
+
+        wf = Wavefunction(
+            id=wf_raw.get("id", ""),
+            anchor=wf_raw.get("anchor", ""),
+            branches=branches,
+            collapsed_branch_id=wf_raw.get("collapsed_branch_id"),
+            created_at=wf_raw.get("created_at", time.time()),
+        )
+        state.wavefunctions[wf.id] = wf
+
+    return state
