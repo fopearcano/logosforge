@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import re
 
-from PySide6.QtCore import QEvent, QTimer, Qt, Signal
+from PySide6.QtCore import (
+    QEvent,
+    QPropertyAnimation,
+    QTimer,
+    Qt,
+    Signal,
+)
 from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -20,7 +26,8 @@ from storyplanner.ui import theme
 
 _OPACITY_IDLE = 0.4
 _OPACITY_ACTIVE = 1.0
-_DEBOUNCE_MS = 120
+_FADE_MS = 150
+_DEBOUNCE_MS = 100
 _MAX_VISIBLE = 8
 
 _TYPE_ICONS = {
@@ -101,6 +108,13 @@ class _ResultsDropdown(QWidget):
         self._layout.setContentsMargins(0, 4, 0, 4)
         self._layout.setSpacing(0)
 
+        self._opacity_effect = QGraphicsOpacityEffect(self)
+        self._opacity_effect.setOpacity(0.0)
+        self.setGraphicsEffect(self._opacity_effect)
+
+        self._fade_anim = QPropertyAnimation(self._opacity_effect, b"opacity", self)
+        self._fade_anim.setDuration(_FADE_MS)
+
     def show_results(self, results: list[SearchResult], query: str) -> None:
         self._clear()
         self._selected_index = -1
@@ -110,8 +124,7 @@ class _ResultsDropdown(QWidget):
             empty.setObjectName("psykeResultEmpty")
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self._layout.addWidget(empty)
-            self.setVisible(True)
-            self._apply_style()
+            self._reveal()
             return
 
         for r in results[:_MAX_VISIBLE]:
@@ -119,13 +132,16 @@ class _ResultsDropdown(QWidget):
             self._layout.addWidget(item)
             self._items.append(item)
 
-        self.setVisible(True)
-        self._apply_style()
+        self._reveal()
 
     def hide_results(self) -> None:
-        self._clear()
-        self._selected_index = -1
-        self.setVisible(False)
+        if not self.isVisible():
+            return
+        self._fade_anim.stop()
+        self._fade_anim.setStartValue(self._opacity_effect.opacity())
+        self._fade_anim.setEndValue(0.0)
+        self._fade_anim.finished.connect(self._on_fade_out_done)
+        self._fade_anim.start()
 
     def move_selection(self, delta: int) -> None:
         if not self._items:
@@ -153,12 +169,35 @@ class _ResultsDropdown(QWidget):
     def has_items(self) -> bool:
         return len(self._items) > 0
 
+    def _reveal(self) -> None:
+        self._apply_style()
+        self.setVisible(True)
+        self._fade_anim.stop()
+        try:
+            self._fade_anim.finished.disconnect(self._on_fade_out_done)
+        except RuntimeError:
+            pass
+        self._fade_anim.setStartValue(self._opacity_effect.opacity())
+        self._fade_anim.setEndValue(1.0)
+        self._fade_anim.start()
+
+    def _on_fade_out_done(self) -> None:
+        try:
+            self._fade_anim.finished.disconnect(self._on_fade_out_done)
+        except RuntimeError:
+            pass
+        self._clear()
+        self._selected_index = -1
+        self.setVisible(False)
+
     def _clear(self) -> None:
         self._items.clear()
         while self._layout.count():
             child = self._layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
+            w = child.widget()
+            if w:
+                w.setParent(None)
+                w.deleteLater()
 
     def _apply_style(self) -> None:
         self.setStyleSheet(
@@ -206,6 +245,8 @@ class PsykeConsole(QWidget):
 
         self._previous_focus: QWidget | None = None
         self._search_index = PsykeSearchIndex(db, project_id)
+        self._last_query: str = ""
+        self._selecting: bool = False
 
         self._debounce = QTimer(self)
         self._debounce.setSingleShot(True)
@@ -224,97 +265,125 @@ class PsykeConsole(QWidget):
         self._input.textChanged.connect(self._on_text_changed)
         layout.addWidget(self._input)
 
-        self._opacity = QGraphicsOpacityEffect(self)
-        self._opacity.setOpacity(_OPACITY_IDLE)
-        self.setGraphicsEffect(self._opacity)
+        self._opacity_effect = QGraphicsOpacityEffect(self)
+        self._opacity_effect.setOpacity(_OPACITY_IDLE)
+        self.setGraphicsEffect(self._opacity_effect)
 
-        self._dropdown = _ResultsDropdown(self.window() if self.window() else self)
-        self._dropdown.item_selected.connect(self._on_item_selected)
+        self._opacity_anim = QPropertyAnimation(self._opacity_effect, b"opacity", self)
+        self._opacity_anim.setDuration(_FADE_MS)
+
+        self._dropdown: _ResultsDropdown | None = None
 
         self._apply_style()
+
+    def _ensure_dropdown(self) -> _ResultsDropdown:
+        if self._dropdown is None:
+            self._dropdown = _ResultsDropdown(self.window() if self.window() else self)
+            self._dropdown.item_selected.connect(self._on_item_selected)
+        return self._dropdown
 
     def activate(self) -> None:
         """Focus the console, remembering the previously focused widget."""
         from PySide6.QtWidgets import QApplication
+
         current = QApplication.focusWidget()
         if current is not None and current is not self._input:
             self._previous_focus = current
-        self._search_index.rebuild()
         self._input.setFocus(Qt.FocusReason.ShortcutFocusReason)
         self._input.selectAll()
 
     def deactivate(self) -> None:
         """Blur the console and restore focus to the previous widget."""
+        self._selecting = True
+        self._debounce.stop()
         self._input.clear()
-        self._dropdown.hide_results()
+        dropdown = self._ensure_dropdown()
+        dropdown.hide_results()
         if self._previous_focus is not None:
             self._previous_focus.setFocus(Qt.FocusReason.OtherFocusReason)
             self._previous_focus = None
         else:
             self.clearFocus()
+        self._selecting = False
 
     def rebuild_index(self) -> None:
         self._search_index.rebuild()
 
     def _on_text_changed(self, text: str) -> None:
+        if self._selecting:
+            return
         if text.strip():
             self._debounce.start()
         else:
             self._debounce.stop()
-            self._dropdown.hide_results()
+            self._ensure_dropdown().hide_results()
 
     def _run_search(self) -> None:
         query = self._input.text().strip()
         if not query:
-            self._dropdown.hide_results()
+            self._ensure_dropdown().hide_results()
             return
+        if query == self._last_query:
+            return
+        self._last_query = query
         results = self._search_index.search(query, max_results=_MAX_VISIBLE)
-        self._dropdown.show_results(results, query)
+        dropdown = self._ensure_dropdown()
+        dropdown.show_results(results, query)
         self._position_dropdown()
 
     def _position_dropdown(self) -> None:
-        if not self._dropdown.isVisible():
+        dropdown = self._ensure_dropdown()
+        if not dropdown.isVisible():
             return
-        self._dropdown.setParent(self.window())
-        self._dropdown.adjustSize()
+        dropdown.setParent(self.window())
+        dropdown.adjustSize()
         console_geo = self.geometry()
         mapped = self.mapTo(self.window(), self.rect().topLeft())
         dw = console_geo.width()
-        dh = self._dropdown.sizeHint().height()
-        self._dropdown.setGeometry(mapped.x(), mapped.y() - dh, dw, dh)
-        self._dropdown.raise_()
-        self._dropdown.show()
+        dh = dropdown.sizeHint().height()
+        dropdown.setGeometry(mapped.x(), mapped.y() - dh, dw, dh)
+        dropdown.raise_()
+        dropdown.show()
 
     def _on_item_selected(self, result: SearchResult) -> None:
         self.entry_selected.emit(result.entry_id, result.name)
         self.deactivate()
 
+    def _animate_opacity(self, target: float) -> None:
+        self._opacity_anim.stop()
+        self._opacity_anim.setStartValue(self._opacity_effect.opacity())
+        self._opacity_anim.setEndValue(target)
+        self._opacity_anim.start()
+
     def eventFilter(self, obj, event) -> bool:
         if obj is self._input:
             if event.type() == QEvent.Type.FocusIn:
-                self._opacity.setOpacity(_OPACITY_ACTIVE)
+                self._animate_opacity(_OPACITY_ACTIVE)
+                self._search_index.rebuild()
             elif event.type() == QEvent.Type.FocusOut:
-                self._opacity.setOpacity(_OPACITY_IDLE)
-                QTimer.singleShot(150, self._maybe_hide_dropdown)
+                self._animate_opacity(_OPACITY_IDLE)
+                self._last_query = ""
+                QTimer.singleShot(200, self._maybe_hide_dropdown)
             elif event.type() == QEvent.Type.KeyPress:
                 key = event.key()
                 if key == Qt.Key.Key_Escape:
                     self.deactivate()
                     return True
-                if key == Qt.Key.Key_Down and self._dropdown.has_items():
-                    self._dropdown.move_selection(1)
+                dropdown = self._ensure_dropdown()
+                if key == Qt.Key.Key_Down and dropdown.has_items():
+                    dropdown.move_selection(1)
                     return True
-                if key == Qt.Key.Key_Up and self._dropdown.has_items():
-                    self._dropdown.move_selection(-1)
+                if key == Qt.Key.Key_Up and dropdown.has_items():
+                    dropdown.move_selection(-1)
                     return True
                 if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-                    if self._dropdown.confirm_selection():
+                    if dropdown.confirm_selection():
                         return True
         return super().eventFilter(obj, event)
 
     def _maybe_hide_dropdown(self) -> None:
         if not self._input.hasFocus():
-            self._dropdown.hide_results()
+            self._ensure_dropdown().hide_results()
 
     def _apply_style(self) -> None:
         self.setStyleSheet(
