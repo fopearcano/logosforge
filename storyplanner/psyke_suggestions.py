@@ -48,12 +48,13 @@ def suggest(
             query[1:], search_index, registry, scene_entry_ids, max_results,
         )
 
-    return _suggest_search(query, search_index, scene_entry_ids, max_results)
+    return _suggest_search(query, search_index, registry, scene_entry_ids, max_results)
 
 
 def _suggest_search(
     query: str,
     search_index: PsykeSearchIndex,
+    registry: CommandRegistry | None,
     scene_entry_ids: set[int] | None,
     max_results: int,
 ) -> list[Suggestion]:
@@ -72,6 +73,17 @@ def _suggest_search(
                 entry_id=0,
             ))
 
+    parts = query.split(None, 1)
+    head = parts[0].lower()
+    tail = parts[1].strip() if len(parts) > 1 else ""
+
+    suggestions.extend(
+        _suggest_nl_commands(head, tail, registry)
+    )
+    suggestions.extend(
+        _suggest_nl_entity_actions(head, tail, search_index, scene_entry_ids)
+    )
+
     results = search_index.search(query, max_results=max_results + 4)
     for r in results:
         boost = 0.05 if (scene_entry_ids and r.entry_id in scene_entry_ids) else 0.0
@@ -87,6 +99,126 @@ def _suggest_search(
 
     suggestions.sort(key=lambda s: s.score, reverse=True)
     return suggestions[:max_results]
+
+
+def _suggest_nl_commands(
+    head: str,
+    tail: str,
+    registry: CommandRegistry | None,
+) -> list[Suggestion]:
+    """Suggest commands that match a natural-language prefix."""
+    results: list[Suggestion] = []
+    if not registry:
+        return results
+
+    for entry in registry.all_commands():
+        name = entry.name
+        if name != head and not name.startswith(head):
+            continue
+
+        if name == head and tail:
+            subs = _COMMAND_SUBARGS.get(name, [])
+            tail_lower = tail.lower()
+            for sub in subs:
+                if sub.lower().startswith(tail_lower):
+                    results.append(Suggestion(
+                        text=f"{name} {sub}",
+                        description=entry.description,
+                        icon="⌘",
+                        category="nl_command",
+                        score=0.9 + 0.05 * (len(tail_lower) / max(len(sub), 1)),
+                    ))
+        elif name == head:
+            subs = _COMMAND_SUBARGS.get(name, [])
+            if subs:
+                for sub in subs:
+                    results.append(Suggestion(
+                        text=f"{name} {sub}",
+                        description=entry.description,
+                        icon="⌘",
+                        category="nl_command",
+                        score=0.85,
+                    ))
+            else:
+                results.append(Suggestion(
+                    text=name,
+                    description=entry.description,
+                    icon="⌘",
+                    category="nl_command",
+                    score=0.85,
+                ))
+        else:
+            results.append(Suggestion(
+                text=name,
+                description=entry.description,
+                icon="⌘",
+                category="nl_command",
+                score=0.7 + 0.1 * (len(head) / len(name)),
+            ))
+
+    return results
+
+
+_NL_ENTITY_VERBS = frozenset({"insert", "open", "mention", "use", "show", "view"})
+
+
+def _suggest_nl_entity_actions(
+    head: str,
+    tail: str,
+    search_index: PsykeSearchIndex,
+    scene_entry_ids: set[int] | None,
+) -> list[Suggestion]:
+    """Suggest entity actions for NL input like 'john' or 'insert john'."""
+    results: list[Suggestion] = []
+
+    if head in _NL_ENTITY_VERBS and tail:
+        matches = search_index.search(tail, max_results=4)
+        for r in matches:
+            if r.score < 0.4:
+                continue
+            boost = 0.03 if (scene_entry_ids and r.entry_id in scene_entry_ids) else 0.0
+            icon = _type_icon(r.entry_type)
+            action = "open" if head in ("open", "show", "view") else "insert"
+            results.append(Suggestion(
+                text=f"{head} {r.name}",
+                description=f"{r.name} — {action}",
+                icon=icon,
+                category="nl_action",
+                score=r.score * 0.9 + boost,
+                entry_id=r.entry_id,
+            ))
+        return results
+
+    if head not in _NL_ENTITY_VERBS:
+        matches = search_index.search(head, max_results=3)
+        for r in matches:
+            if r.score < 0.6:
+                continue
+            boost = 0.03 if (scene_entry_ids and r.entry_id in scene_entry_ids) else 0.0
+            icon = _type_icon(r.entry_type)
+            if tail:
+                for action in _ENTITY_ACTIONS:
+                    if action.startswith(tail.lower()):
+                        results.append(Suggestion(
+                            text=f"{action} {r.name}",
+                            description=f"{r.name} — {action}",
+                            icon=icon,
+                            category="nl_action",
+                            score=r.score * 0.85 + boost,
+                            entry_id=r.entry_id,
+                        ))
+            else:
+                for action in _ENTITY_ACTIONS:
+                    results.append(Suggestion(
+                        text=f"{action} {r.name}",
+                        description=f"{r.name} — {action}",
+                        icon=icon,
+                        category="nl_action",
+                        score=r.score * 0.80 + boost,
+                        entry_id=r.entry_id,
+                    ))
+
+    return results
 
 
 def _suggest_command(

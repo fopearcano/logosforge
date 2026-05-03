@@ -428,7 +428,7 @@ class PsykeConsole(QWidget):
             self.deactivate()
             return
 
-        if suggestion.category == "command":
+        if suggestion.category in ("command", "nl_command"):
             text = suggestion.text.lstrip("/")
             parsed = parse_command("/" + text)
             if parsed.kind == CommandType.SYSTEM:
@@ -441,19 +441,32 @@ class PsykeConsole(QWidget):
             self._debounce.start()
             return
 
-        if suggestion.category == "entity_action":
+        if suggestion.category in ("entity_action", "nl_action"):
             text = suggestion.text.lstrip("/")
             parts = text.split(None, 1)
-            entity_prefix = parts[0] if parts else ""
-            action = parts[1].lower() if len(parts) > 1 else "insert"
-            resolved = self._search_index.resolve_entity(entity_prefix)
-            if resolved:
-                if action == "open":
-                    self.entry_open_requested.emit(resolved.entry_id)
-                else:
-                    self.entry_selected.emit(resolved.entry_id, resolved.name)
-                self.deactivate()
-                return
+            if len(parts) == 2:
+                word_a, word_b = parts[0].lower(), parts[1]
+                if word_a in ("insert", "mention", "use"):
+                    resolved = self._search_index.resolve_entity(word_b)
+                    if resolved:
+                        self.entry_selected.emit(resolved.entry_id, resolved.name)
+                        self.deactivate()
+                        return
+                if word_a in ("open", "show", "view"):
+                    resolved = self._search_index.resolve_entity(word_b)
+                    if resolved:
+                        self.entry_open_requested.emit(resolved.entry_id)
+                        self.deactivate()
+                        return
+                resolved = self._search_index.resolve_entity(word_a)
+                if resolved:
+                    action = word_b.lower()
+                    if action == "open":
+                        self.entry_open_requested.emit(resolved.entry_id)
+                    else:
+                        self.entry_selected.emit(resolved.entry_id, resolved.name)
+                    self.deactivate()
+                    return
 
         if suggestion.entry_id:
             entry = self._db.get_psyke_entry_by_id(suggestion.entry_id)
