@@ -41,6 +41,7 @@ from storyplanner.export import (
 from storyplanner.import_data import import_json, validate_import_data
 from storyplanner.plugin_manager import get_plugin_manager
 from storyplanner.psyke_command_registry import CommandContext, CommandRegistry
+from storyplanner.psyke_command_validator import ValidationStatus, validate_command
 from storyplanner.psyke_system_commands import SystemCommandHandlers
 from storyplanner.ui.assistant_view import AssistantPanel
 from storyplanner.ui.settings_dialog import SettingsDialog
@@ -751,11 +752,30 @@ class MainWindow(QMainWindow):
         self._psyke_console.set_scene_context(self._get_scene_entry_ids)
 
     def _on_console_command(self, command: str, args: list) -> None:
+        result = validate_command(command, args, registry=self._command_registry)
+
+        if result.status == ValidationStatus.ERROR:
+            QMessageBox.warning(self, "Command Error", result.error)
+            return
+
+        if result.status == ValidationStatus.CONFIRM:
+            reply = QMessageBox.question(
+                self,
+                "Confirm Action",
+                result.confirm_message,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
         entry = self._command_registry.resolve(command)
         if entry is None:
             return
         ctx = CommandContext(command=command, args=args)
-        entry.handler(ctx)
+        handler_result = entry.handler(ctx)
+        if isinstance(handler_result, dict) and not handler_result.get("ok", True):
+            QMessageBox.warning(self, "Command Failed", handler_result.get("error", "Unknown error"))
 
     def _on_psyke_entry_selected(self, entry_id: int, name: str) -> None:
         editor = self._detect_active_editor()
