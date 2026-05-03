@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from storyplanner.psyke_command_registry import CommandRegistry
 
 
 class CommandType(Enum):
@@ -12,7 +16,7 @@ class CommandType(Enum):
     SYSTEM = "system"
 
 
-SYSTEM_COMMANDS = frozenset({
+_BUILTIN_COMMANDS = frozenset({
     "create",
     "open",
     "go",
@@ -22,6 +26,7 @@ SYSTEM_COMMANDS = frozenset({
     "link",
     "export",
     "help",
+    "insert",
 })
 
 
@@ -37,7 +42,7 @@ class ParsedCommand:
         return self.args[0] if self.args else ""
 
 
-def parse(raw_input: str) -> ParsedCommand:
+def parse(raw_input: str, registry: CommandRegistry | None = None) -> ParsedCommand:
     """Parse console input into a structured command.
 
     Formats:
@@ -45,6 +50,9 @@ def parse(raw_input: str) -> ParsedCommand:
         "/create character" → SYSTEM command "create" with args ["character"]
         "/john open"        → ENTITY command "john" with action ["open"]
         "/ai summarize"     → SYSTEM command "ai" with args ["summarize"]
+
+    If a registry is provided, it is used to resolve commands (including
+    plugin-registered ones). Otherwise falls back to the builtin set.
     """
     text = raw_input.strip()
     if not text:
@@ -61,7 +69,12 @@ def parse(raw_input: str) -> ParsedCommand:
     head = parts[0].lower()
     tail = parts[1:]
 
-    if head in SYSTEM_COMMANDS:
+    is_system = (
+        (registry.has(head) if registry else False)
+        or head in _BUILTIN_COMMANDS
+    )
+
+    if is_system:
         return ParsedCommand(
             kind=CommandType.SYSTEM,
             command=head,
