@@ -23,6 +23,7 @@ class PsykeSignals:
     relations: list[dict] = field(default_factory=list)
     unresolved_arcs: list[dict] = field(default_factory=list)
     keywords: frozenset[str] = field(default_factory=frozenset)
+    progressions: list[dict] = field(default_factory=list)
 
 
 def gather_psyke_signals(db: "Database", project_id: int) -> PsykeSignals:
@@ -65,11 +66,22 @@ def gather_psyke_signals(db: "Database", project_id: int) -> PsykeSignals:
                 relations.append({"from": e.name, "to": r.name})
                 all_keywords.add(r.name.lower())
 
+    progressions: list[dict] = []
+    for e in entries:
+        if e.entry_type != "character":
+            continue
+        progs = db.get_psyke_progressions(e.id)
+        for p in progs:
+            prog_words = set(p.text.lower().split())
+            all_keywords.update(w for w in prog_words if len(w) > 3)
+            progressions.append({"name": e.name, "text": p.text})
+
     return PsykeSignals(
         characters=characters,
         relations=relations,
         unresolved_arcs=unresolved_arcs,
         keywords=frozenset(all_keywords),
+        progressions=progressions,
     )
 
 

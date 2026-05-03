@@ -197,10 +197,20 @@ def compute_factors(
 
 def _score_structure_fit(branch: Branch, wf: Wavefunction) -> float:
     score = 0.0
-    if branch.structure_beat and branch.structure_beat == wf.structure_beat:
-        score += 0.5
-    if branch.structure_method and branch.structure_method == wf.structure_method:
-        score += 0.3
+    if branch.structure_beat and wf.structure_beat:
+        if branch.structure_beat == wf.structure_beat:
+            score += 0.5
+        else:
+            b_words = set(branch.structure_beat.lower().split())
+            w_words = set(wf.structure_beat.lower().split())
+            if b_words and w_words:
+                overlap = len(b_words & w_words) / max(len(b_words | w_words), 1)
+                score += overlap * 0.3
+    if branch.structure_method and wf.structure_method:
+        if branch.structure_method == wf.structure_method:
+            score += 0.3
+        elif branch.structure_method.lower() in wf.structure_method.lower():
+            score += 0.15
     if branch.branch_type == "intensification":
         score += 0.2
     elif branch.branch_type in ("alternative", "resolution"):
@@ -216,6 +226,7 @@ def _score_psyke_consistency(
 
     text = f"{branch.title} {branch.description} {branch.stakes} {branch.consequence}".lower()
     words = set(text.split())
+    _stop = {"the", "a", "an", "is", "of", "to", "and", "in", "for"}
 
     score = 0.0
 
@@ -235,9 +246,15 @@ def _score_psyke_consistency(
             break
 
     for arc in psyke.unresolved_arcs:
-        arc_words = set(arc["arc"].lower().split())
-        if arc_words & words - {"the", "a", "an", "is", "of"}:
+        arc_words = set(arc["arc"].lower().split()) - _stop
+        if arc_words & words:
             score += 0.15
+            break
+
+    for prog in psyke.progressions:
+        prog_words = set(prog["text"].lower().split()) - _stop
+        if prog_words & words:
+            score += min(len(prog_words & words) * 0.1, 0.2)
             break
 
     return min(score, 1.0)
