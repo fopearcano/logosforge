@@ -26,6 +26,9 @@ class CommandContext:
     def arg_text(self) -> str:
         return " ".join(self.args)
 
+    def arg_text_after(self, index: int) -> str:
+        return " ".join(self.args[index:]) if index < len(self.args) else ""
+
 
 @dataclass
 class CommandEntry:

@@ -40,6 +40,8 @@ from storyplanner.export import (
 )
 from storyplanner.import_data import import_json, validate_import_data
 from storyplanner.plugin_manager import get_plugin_manager
+from storyplanner.psyke_command_registry import CommandContext, CommandRegistry
+from storyplanner.psyke_system_commands import SystemCommandHandlers
 from storyplanner.ui.assistant_view import AssistantPanel
 from storyplanner.ui.settings_dialog import SettingsDialog
 from storyplanner.ui.act_analysis_view import ActAnalysisView
@@ -387,7 +389,10 @@ class MainWindow(QMainWindow):
         self._psyke_console = PsykeConsole(self._db, self._project_id)
         self._psyke_console.entry_selected.connect(self._on_psyke_entry_selected)
         self._psyke_console.entry_open_requested.connect(self._open_psyke_entry)
+        self._psyke_console.command_submitted.connect(self._on_console_command)
         outer_layout.addWidget(self._psyke_console, stretch=0)
+
+        self._setup_system_commands()
 
         self.setCentralWidget(central)
 
@@ -726,6 +731,25 @@ class MainWindow(QMainWindow):
                 self._assistant_panel.setVisible(False)
         else:
             self._assistant_panel.setVisible(False)
+
+    def _setup_system_commands(self) -> None:
+        self._command_registry = CommandRegistry()
+        handlers = SystemCommandHandlers(
+            self._db,
+            self._project_id,
+            open_scene=self._open_scene_in_editor,
+            open_psyke_entry=self._open_psyke_entry,
+            get_active_scene_id=self._detect_active_scene_id,
+            on_data_changed=self._on_data_changed,
+        )
+        handlers.register_all(self._command_registry)
+
+    def _on_console_command(self, command: str, args: list) -> None:
+        entry = self._command_registry.resolve(command)
+        if entry is None:
+            return
+        ctx = CommandContext(command=command, args=args)
+        entry.handler(ctx)
 
     def _on_psyke_entry_selected(self, entry_id: int, name: str) -> None:
         editor = self._detect_active_editor()
