@@ -1105,6 +1105,7 @@ class AssistantPanel(QWidget):
             state.outline_mode = OutlineMode.CLASSICAL
         self._sync_lambda_toggle()
         quantum_save_state(self._db, self._project_id)
+        self._quantum_timeline.refresh()
 
     def _sync_lambda_toggle(self) -> None:
         state = quantum_get_state(self._project_id)
