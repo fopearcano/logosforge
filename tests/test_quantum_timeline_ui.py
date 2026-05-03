@@ -234,6 +234,97 @@ class TestTimelinePersistence:
         assert list(loaded.wavefunctions.values())[0].anchor == "Keep"
 
 
+class TestBeatMarkers:
+    """Test classical beat marker extraction for scene columns."""
+
+    def test_beat_marker_with_method_and_beat(self):
+        from storyplanner.ui.quantum_timeline import QuantumTimelineWidget
+        wf = _make_wf(anchor="Test")
+        wf.structure_method = "Save the Cat"
+        wf.structure_beat = "Midpoint"
+        marker = QuantumTimelineWidget._extract_beat_marker([wf])
+        assert "Save the Cat" in marker
+        assert "Midpoint" in marker
+        assert "→" in marker
+
+    def test_beat_marker_method_only(self):
+        from storyplanner.ui.quantum_timeline import QuantumTimelineWidget
+        wf = _make_wf(anchor="Test")
+        wf.structure_method = "Story Circle"
+        wf.structure_beat = None
+        marker = QuantumTimelineWidget._extract_beat_marker([wf])
+        assert "Story Circle" in marker
+        assert "→" not in marker
+
+    def test_beat_marker_empty_when_no_structure(self):
+        from storyplanner.ui.quantum_timeline import QuantumTimelineWidget
+        wf = _make_wf(anchor="Test")
+        marker = QuantumTimelineWidget._extract_beat_marker([wf])
+        assert marker == ""
+
+    def test_beat_marker_deduplicates_methods(self):
+        from storyplanner.ui.quantum_timeline import QuantumTimelineWidget
+        wf1 = _make_wf(anchor="A")
+        wf1.structure_method = "Save the Cat"
+        wf1.structure_beat = "Midpoint"
+        wf2 = _make_wf(anchor="B")
+        wf2.structure_method = "Save the Cat"
+        wf2.structure_beat = "Finale"
+        marker = QuantumTimelineWidget._extract_beat_marker([wf1, wf2])
+        assert marker.count("Save the Cat") == 1
+
+    def test_beat_marker_truncates_long_method(self):
+        from storyplanner.ui.quantum_timeline import QuantumTimelineWidget
+        wf = _make_wf(anchor="Test")
+        wf.structure_method = "Seven-Point Story Structure"
+        wf.structure_beat = "Hook"
+        marker = QuantumTimelineWidget._extract_beat_marker([wf])
+        assert len(marker) < 40
+
+
+class TestBranchTypeDisplay:
+    """Test branch_type and structure_beat display helpers."""
+
+    def test_branch_type_short_labels(self):
+        from storyplanner.ui.quantum_timeline import QuantumTimelineWidget
+        assert QuantumTimelineWidget._branch_type_short("deviation") == "dev"
+        assert QuantumTimelineWidget._branch_type_short("alternative") == "alt"
+        assert QuantumTimelineWidget._branch_type_short("intensification") == "int"
+        assert QuantumTimelineWidget._branch_type_short("resolution") == "res"
+
+    def test_branch_type_style_returns_color(self):
+        from storyplanner.ui.quantum_timeline import QuantumTimelineWidget
+        style = QuantumTimelineWidget._branch_type_style("deviation")
+        assert "color:" in style
+        assert "#e06c75" in style
+
+    def test_branch_with_structure_beat(self, db, project):
+        state = get_state(project.id)
+        b = Branch.new(
+            title="False Victory",
+            description="Hero wins at hidden cost",
+            structure_beat="Midpoint",
+            branch_type="intensification",
+        )
+        wf = _make_wf(branches=[b])
+        state.add(wf)
+        assert wf.branches[0].structure_beat == "Midpoint"
+        assert wf.branches[0].branch_type == "intensification"
+
+    def test_branch_without_structure_has_no_beat(self, db, project):
+        state = get_state(project.id)
+        b = _make_branch("Plain Branch")
+        wf = _make_wf(branches=[b])
+        state.add(wf)
+        assert wf.branches[0].structure_beat is None
+        assert wf.branches[0].branch_type is None
+
+    def test_column_width_unchanged(self):
+        from storyplanner.ui.quantum_timeline import QuantumTimelineWidget
+        assert hasattr(QuantumTimelineWidget, "_build_scene_column")
+        assert hasattr(QuantumTimelineWidget, "_extract_beat_marker")
+
+
 class TestWidgetModule:
     """Test that the widget module imports and has expected interface."""
 

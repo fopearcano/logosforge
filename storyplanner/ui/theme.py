@@ -1235,6 +1235,26 @@ def build_stylesheet() -> str:
         background: transparent;
         padding: 0;
     }}
+    #qtlBeatMarker {{
+        color: {ACCENT_DIM};
+        font-size: 9px;
+        font-weight: 600;
+        background: transparent;
+        padding: 0;
+    }}
+    #qtlBranchBeat {{
+        color: {ACCENT_DIM};
+        font-size: 9px;
+        background: transparent;
+        padding: 0;
+    }}
+    #qtlBranchType {{
+        font-size: 8px;
+        font-weight: bold;
+        background: transparent;
+        padding: 0 2px;
+        border-radius: 2px;
+    }}
     #qtlEmpty {{
         color: {TEXT_MUTED};
         font-size: 11px;

@@ -134,6 +134,13 @@ class QuantumTimelineWidget(QWidget):
         title.setToolTip(scene.title or "")
         layout.addWidget(title)
 
+        beat_marker = self._extract_beat_marker(wavefunctions)
+        if beat_marker:
+            marker_lbl = QLabel(beat_marker)
+            marker_lbl.setObjectName("qtlBeatMarker")
+            marker_lbl.setToolTip(beat_marker)
+            layout.addWidget(marker_lbl)
+
         if wavefunctions:
             for wf in wavefunctions:
                 lane = self._build_branch_lane(wf)
@@ -241,6 +248,30 @@ class QuantumTimelineWidget(QWidget):
 
         layout.addLayout(top_row)
 
+        meta_row = QHBoxLayout()
+        meta_row.setSpacing(3)
+        meta_row.setContentsMargins(0, 0, 0, 0)
+
+        if branch.structure_beat:
+            beat_text = branch.structure_beat
+            if len(beat_text) > 14:
+                beat_text = beat_text[:12] + "…"
+            beat_lbl = QLabel(beat_text)
+            beat_lbl.setObjectName("qtlBranchBeat")
+            beat_lbl.setToolTip(f"Beat: {branch.structure_beat}")
+            meta_row.addWidget(beat_lbl)
+
+        if branch.branch_type:
+            type_lbl = QLabel(self._branch_type_short(branch.branch_type))
+            type_lbl.setObjectName("qtlBranchType")
+            type_lbl.setStyleSheet(self._branch_type_style(branch.branch_type))
+            type_lbl.setToolTip(branch.branch_type)
+            meta_row.addWidget(type_lbl)
+
+        meta_row.addStretch()
+        if meta_row.count() > 1:
+            layout.addLayout(meta_row)
+
         if branch.stakes:
             stakes_text = branch.stakes
             if len(stakes_text) > 30:
@@ -332,4 +363,43 @@ class QuantumTimelineWidget(QWidget):
         return (
             f"QLabel {{ color: {color}; font-size: 10px;"
             f" background: transparent; padding: 0; }}"
+        )
+
+    @staticmethod
+    def _extract_beat_marker(wavefunctions: list) -> str:
+        """Build a compact beat marker from wavefunctions linked to a scene."""
+        parts: list[str] = []
+        seen: set[str] = set()
+        for wf in wavefunctions:
+            if wf.structure_method and wf.structure_method not in seen:
+                seen.add(wf.structure_method)
+                method_short = wf.structure_method
+                if len(method_short) > 16:
+                    method_short = method_short[:14] + "…"
+                if wf.structure_beat:
+                    parts.append(f"{method_short} → {wf.structure_beat}")
+                else:
+                    parts.append(method_short)
+        return " | ".join(parts)
+
+    @staticmethod
+    def _branch_type_short(branch_type: str) -> str:
+        return {
+            "deviation": "dev",
+            "alternative": "alt",
+            "intensification": "int",
+            "resolution": "res",
+        }.get(branch_type, branch_type[:3])
+
+    @staticmethod
+    def _branch_type_style(branch_type: str) -> str:
+        color = {
+            "deviation": "#e06c75",
+            "alternative": "#61afef",
+            "intensification": "#e5c07b",
+            "resolution": "#98c379",
+        }.get(branch_type, theme.TEXT_MUTED)
+        return (
+            f"QLabel {{ color: {color}; font-size: 8px; font-weight: bold;"
+            f" background: transparent; padding: 0 2px; }}"
         )
