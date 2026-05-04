@@ -158,6 +158,7 @@ class _SceneEditor(QTextEdit):
         self._auto_height_timer.timeout.connect(self._adjust_height)
         self.textChanged.connect(self._schedule_resize)
         self._scene_id: int | None = None
+        self._smart_quotes = False
         self._focus_fade_enabled = False
         self._fade_block = -1
         self._fade_bg = "#0f1219"
@@ -262,7 +263,46 @@ class _SceneEditor(QTextEdit):
         ):
             self.slash_pressed(self)
             return
+        if self._try_auto_format(event):
+            return
         super().keyPressEvent(event)
+
+    def _try_auto_format(self, event: QKeyEvent) -> bool:
+        ch = event.text()
+        if not ch:
+            return False
+        cursor = self.textCursor()
+        pos_in_block = cursor.positionInBlock()
+        text = cursor.block().text()
+        prev = text[pos_in_block - 1] if pos_in_block > 0 else ""
+
+        if ch == "-" and prev == "-":
+            cursor.movePosition(
+                QTextCursor.MoveOperation.Left,
+                QTextCursor.MoveMode.KeepAnchor, 1,
+            )
+            cursor.insertText("—")
+            return True
+
+        if self._smart_quotes and ch == '"':
+            opens = pos_in_block == 0 or prev in (" ", "\t", "(", "[", "{", "—", "\n")
+            cursor.insertText("“" if opens else "”")
+            return True
+
+        if self._smart_quotes and ch == "'":
+            opens = pos_in_block == 0 or prev in (" ", "\t", "(", "[", "{", "—", "\n")
+            cursor.insertText("‘" if opens else "’")
+            return True
+
+        if ch == "." and pos_in_block >= 2 and text[pos_in_block - 2:pos_in_block] == "..":
+            cursor.movePosition(
+                QTextCursor.MoveOperation.Left,
+                QTextCursor.MoveMode.KeepAnchor, 2,
+            )
+            cursor.insertText("…")
+            return True
+
+        return False
 
     def contextMenuEvent(self, event) -> None:  # noqa: N802
         menu = self.createStandardContextMenu()
@@ -327,6 +367,7 @@ class WritingCoreView(QWidget):
         if self._font_size not in _FONT_SIZE_OPTIONS:
             self._font_size = _BODY_FONT_SIZE
         self._first_line_indent: bool = bool(_settings.get("first_line_indent", False))
+        self._smart_quotes: bool = bool(_settings.get("smart_quotes", False))
         self._editors: dict[int, _SceneEditor] = {}
         self._save_timers: dict[int, QTimer] = {}
         self._scene_widgets: list[QWidget] = []
@@ -439,6 +480,16 @@ class WritingCoreView(QWidget):
         )
         self._indent_btn.clicked.connect(self._toggle_indent)
         tb_layout.addWidget(self._indent_btn)
+
+        self._smart_quotes_btn = QPushButton("“”")
+        self._smart_quotes_btn.setFlat(True)
+        self._smart_quotes_btn.setToolTip("Smart quotes")
+        self._smart_quotes_btn.setStyleSheet(
+            f"color: {theme.TEXT_PRIMARY if self._smart_quotes else theme.TEXT_MUTED};"
+            " font-size: 11px; background: transparent; padding: 2px 8px;"
+        )
+        self._smart_quotes_btn.clicked.connect(self._toggle_smart_quotes)
+        tb_layout.addWidget(self._smart_quotes_btn)
 
         self._typewriter_btn = QPushButton("Typewriter")
         self._typewriter_btn.setFlat(True)
@@ -707,6 +758,7 @@ class WritingCoreView(QWidget):
         editor._on_nav_prev = lambda e=editor: self._navigate_prev_editor(e)
         editor._on_new_block = self._on_new_block_created
         editor._on_psyke_context_action = self._handle_psyke_context
+        editor._smart_quotes = self._smart_quotes
         editor.textChanged.connect(
             lambda sid=scene.id: self._schedule_save(sid)
         )
@@ -1459,11 +1511,22 @@ class WritingCoreView(QWidget):
         self._persist_font_settings()
         self._apply_format_to_all_blocks()
 
+    def _toggle_smart_quotes(self) -> None:
+        self._smart_quotes = not self._smart_quotes
+        self._smart_quotes_btn.setStyleSheet(
+            f"color: {theme.TEXT_PRIMARY if self._smart_quotes else theme.TEXT_MUTED};"
+            " font-size: 11px; background: transparent; padding: 2px 8px;"
+        )
+        for editor in self._editors.values():
+            editor._smart_quotes = self._smart_quotes
+        self._persist_font_settings()
+
     def _persist_font_settings(self) -> None:
         settings = self._db.get_project_settings(self._project_id)
         settings["font_family"] = self._font_family_key
         settings["font_size"] = self._font_size
         settings["first_line_indent"] = self._first_line_indent
+        settings["smart_quotes"] = self._smart_quotes
         self._db.save_project_settings(self._project_id, settings)
 
     # -- Focus mode -----------------------------------------------------------

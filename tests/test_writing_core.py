@@ -577,6 +577,101 @@ def test_typewriter_mode_accessor():
     assert view.is_typewriter_mode() is True
 
 
+# -- Auto-formatting ----------------------------------------------------------
+
+def _type_into_editor(editor, text):
+    """Simulate typing characters one by one into a _SceneEditor."""
+    from PySide6.QtGui import QKeyEvent
+    for ch in text:
+        ev = QKeyEvent(
+            QKeyEvent.Type.KeyPress,
+            0,
+            Qt.KeyboardModifier.NoModifier,
+            ch,
+        )
+        editor.keyPressEvent(ev)
+
+
+def test_auto_em_dash():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    editor.clear()
+    _type_into_editor(editor, "hello--world")
+    assert "—" in editor.toPlainText()
+    assert "--" not in editor.toPlainText()
+
+
+def test_auto_ellipsis():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    editor.clear()
+    _type_into_editor(editor, "wait...")
+    assert "…" in editor.toPlainText()
+    assert "..." not in editor.toPlainText()
+
+
+def test_smart_quotes_off_by_default():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    editor.clear()
+    _type_into_editor(editor, '"hello"')
+    plain = editor.toPlainText()
+    assert "“" not in plain
+    assert '"' in plain
+
+
+def test_smart_quotes_when_enabled():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_smart_quotes()
+    editor = list(view._editors.values())[0]
+    editor.clear()
+    _type_into_editor(editor, '"hello"')
+    plain = editor.toPlainText()
+    assert "“" in plain  # left double quote
+    assert "”" in plain  # right double quote
+
+
+def test_smart_single_quotes():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_smart_quotes()
+    editor = list(view._editors.values())[0]
+    editor.clear()
+    _type_into_editor(editor, "it's")
+    plain = editor.toPlainText()
+    assert "’" in plain  # right single quote (apostrophe)
+
+
+def test_smart_quotes_toggle_persists():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view1 = WritingCoreView(db, proj.id)
+    view1._toggle_smart_quotes()
+    assert view1._smart_quotes is True
+    del view1
+    view2 = WritingCoreView(db, proj.id)
+    assert view2._smart_quotes is True
+
+
+def test_normal_typing_unaffected():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    editor.clear()
+    _type_into_editor(editor, "hello world")
+    assert editor.toPlainText() == "hello world"
+
+
 # -- PSYKE entity awareness ---------------------------------------------------
 
 def _setup_psyke_project(db):
