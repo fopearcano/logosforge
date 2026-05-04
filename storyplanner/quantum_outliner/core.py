@@ -18,6 +18,7 @@ from storyplanner.quantum_outliner.scoring import (
     adapt_weights,
     apply_scores,
     build_comparison,
+    explain_goal_reasoning,
     explain_wavefunction,
     format_branch_chips,
     format_comparison,
@@ -348,7 +349,12 @@ def explain_branches(
             kind="explain", title="Explain",
             body="Wavefunction not found.", payload={},
         )
-    body = explain_wavefunction(wf)
+
+    goals: QuantumGoals | None = None
+    if db is not None:
+        goals = db.get_quantum_goals(project_id)
+
+    body = explain_wavefunction(wf, goals=goals)
 
     decision_log: list[dict] = []
     if db is not None:
@@ -575,6 +581,7 @@ def _format_wavefunction(
         wf, psyke=psyke,
         show_tradeoffs=show_tradeoffs,
         selection_mode=selection_mode,
+        goals=goals,
     )
     if goals is not None:
         body += "\n\n" + format_goals_panel(goals)
@@ -593,6 +600,7 @@ def _format_lambda(
     psyke: PsykeSignals | None = None,
     show_tradeoffs: bool = False,
     selection_mode: str = "weighted",
+    goals: "QuantumGoals | None" = None,
 ) -> str:
     is_pareto_mode = selection_mode == "pareto"
     n = len(wf.branches)
@@ -693,7 +701,8 @@ def _format_lambda(
     else:
         rec = recommend_collapse(wf)
         if rec:
-            lines.append(format_recommendation(rec))
+            rec_branch = wf.get_branch(rec.branch_id) if goals else None
+            lines.append(format_recommendation(rec, goals=goals, branch=rec_branch))
             lines.append("")
 
     lines.append(

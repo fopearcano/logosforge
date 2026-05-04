@@ -807,13 +807,20 @@ class CollapseRecommendation:
 SELECTION_MODES: tuple[str, ...] = ("weighted", "pareto")
 
 
-def format_recommendation(rec: CollapseRecommendation) -> str:
+def format_recommendation(
+    rec: CollapseRecommendation,
+    *,
+    goals: "QuantumGoals | None" = None,
+    branch: "Branch | None" = None,
+) -> str:
     """Format a recommendation with factor-based explanation."""
-    explanation = explain_factors(rec.top_factors)
-    return (
-        f"Recommended: {rec.title}  ({rec.probability:.0%})\n"
-        f"  because: {explanation}"
-    )
+    lines = [f"Recommended: {rec.title}  ({rec.probability:.0%})"]
+    lines.append("  because:")
+    lines.append(f"    - {explain_factors(rec.top_factors)}")
+    if goals is not None and branch is not None:
+        for reason in explain_goal_reasoning(branch, goals):
+            lines.append(f"    - {reason}")
+    return "\n".join(lines)
 
 
 def recommend_pareto(wf: "Wavefunction", *, max_candidates: int = 3) -> list[CollapseRecommendation]:
@@ -1019,7 +1026,42 @@ def ensemble_combine(
     }
 
 
-def explain_wavefunction(wf: "Wavefunction") -> str:
+def explain_goal_reasoning(
+    branch: "Branch",
+    goals: "QuantumGoals",
+) -> list[str]:
+    """Produce concise goal-aware explanation lines for a branch."""
+    lines: list[str] = []
+    reverse_map = {v: k for k, v in GOAL_FACTOR_MAP.items()}
+
+    top_obj = sorted(goals.objectives.items(), key=lambda kv: kv[1], reverse=True)
+    for obj_key, weight in top_obj:
+        if weight < 0.15:
+            continue
+        factor_key = GOAL_FACTOR_MAP.get(obj_key, "")
+        val = branch.factors.get(factor_key, 0.0)
+        if val >= 0.4:
+            descriptor = "high" if val >= 0.7 else "strong"
+            lines.append(f"aligns with goal: {descriptor} {obj_key.replace('_', ' ')}")
+            break
+
+    for factor_key, threshold in goals.min_constraints.items():
+        val = branch.factors.get(factor_key, 0.0)
+        obj_name = reverse_map.get(factor_key, factor_key)
+        if val >= threshold:
+            lines.append(f"maintains {obj_name.replace('_', ' ')} ≥ {threshold:.1f}")
+
+    if goals.horizon > 1 and branch.lookahead_score > 0:
+        lines.append(f"strong lookahead outcome ({goals.horizon}-step)")
+
+    return lines
+
+
+def explain_wavefunction(
+    wf: "Wavefunction",
+    *,
+    goals: "QuantumGoals | None" = None,
+) -> str:
     """Per-branch factor explanation, sorted by probability."""
     branches = sorted(wf.branches, key=lambda b: b.probability, reverse=True)
     scored = [b for b in branches if b.factors]
@@ -1033,9 +1075,13 @@ def explain_wavefunction(wf: "Wavefunction") -> str:
             for v in b.violations:
                 lines.append(f"  BLOCKED: violates \"{v}\"")
         else:
-            explanation = explain_factors(b.factors)
             lines.append(f"{b.title}  [{b.id}]  ({b.probability:.0%})")
-            lines.append(f"  because: {explanation}")
+            lines.append(f"  because:")
+            explanation = explain_factors(b.factors)
+            lines.append(f"    - {explanation}")
+            if goals is not None:
+                for reason in explain_goal_reasoning(b, goals):
+                    lines.append(f"    - {reason}")
     return "\n".join(lines)
 
 
