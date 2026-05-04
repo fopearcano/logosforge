@@ -47,8 +47,7 @@ from storyplanner.ui.command_palette import CommandPalette
 from storyplanner.ui.context_hint_banner import ContextHintBanner
 from storyplanner.ui.entity_hover import EntityHoverHandler, EntityHoverPanel
 from storyplanner.ui.format_toolbar import FormatToolbar
-from storyplanner.ui.manuscript_highlighter import ManuscriptHighlighter
-from storyplanner.ui.psyke_highlighter import PsykeClickHandler
+from storyplanner.ui.psyke_highlighter import PsykeClickHandler, PsykeHighlighter
 from storyplanner.ui.psyke_quick_create import PsykeQuickCreateDialog
 from storyplanner.ui.suggestion_banner import SuggestionBanner
 from storyplanner.temporal_psyke import TemporalGraph
@@ -137,7 +136,7 @@ class _SceneEditor(QTextEdit):
         )
         self.setCursorWidth(2)
         self.setPlaceholderText("Start writing…")
-        self.setAcceptRichText(False)
+        self.setAcceptRichText(True)
         self._auto_height_timer = QTimer(self)
         self._auto_height_timer.setSingleShot(True)
         self._auto_height_timer.setInterval(30)
@@ -282,7 +281,7 @@ class WritingCoreView(QWidget):
         self._save_timers: dict[int, QTimer] = {}
         self._scene_widgets: list[QWidget] = []
         self._header_widgets: list[QWidget] = []
-        self._highlighters: dict[int, ManuscriptHighlighter] = {}
+        self._highlighters: dict[int, PsykeHighlighter] = {}
         self._click_handlers: dict[int, PsykeClickHandler] = {}
         self._hover_handlers: dict[int, EntityHoverHandler] = {}
         self._suggestion_banners: dict[int, SuggestionBanner] = {}
@@ -649,7 +648,7 @@ class WritingCoreView(QWidget):
 
         editor = _SceneEditor()
         editor._scene_id = scene.id
-        editor.setPlainText(scene.content or "")
+        editor.setMarkdown(scene.content or "")
         editor.slash_pressed = self._on_slash_pressed
         editor.set_focus_fade(self._focus_fade, theme.BG_DARK)
         editor._on_nav_next = lambda e=editor: self._navigate_next_editor(e)
@@ -664,7 +663,7 @@ class WritingCoreView(QWidget):
         self._inner_layout.addWidget(editor)
         self._scene_widgets.append(editor)
 
-        highlighter = ManuscriptHighlighter(editor.document())
+        highlighter = PsykeHighlighter(editor.document())
         self._highlighters[scene.id] = highlighter
 
         click_handler = PsykeClickHandler(
@@ -839,19 +838,12 @@ class WritingCoreView(QWidget):
             if self._use_serif
             else ["Segoe UI", "Noto Sans", "sans-serif"]
         )
-        font = QFont()
-        font.setFamilies(families)
-        font.setPixelSize(elem.font_size)
-        font.setBold(elem.bold)
-        font.setItalic(elem.italic)
-        font.setCapitalization(
-            QFont.Capitalization.AllUppercase
-            if elem.all_caps
-            else QFont.Capitalization.MixedCase,
-        )
 
         cfmt = QTextCharFormat()
-        cfmt.setFont(font)
+        cfmt.setFontFamilies(families)
+        cfmt.setProperty(QTextCharFormat.Property.FontPixelSize, elem.font_size)
+        if elem.all_caps:
+            cfmt.setFontCapitalization(QFont.Capitalization.AllUppercase)
         if elem.color_key == "muted":
             cfmt.setForeground(QColor(theme.TEXT_MUTED))
         return bfmt, cfmt
@@ -899,8 +891,8 @@ class WritingCoreView(QWidget):
                         QTextCursor.MoveOperation.EndOfBlock,
                         QTextCursor.MoveMode.KeepAnchor,
                     )
-                    cursor.setBlockFormat(bfmt)
-                    cursor.setCharFormat(cfmt)
+                    cursor.mergeBlockFormat(bfmt)
+                    cursor.mergeCharFormat(cfmt)
                 block = block.next()
 
     def _on_editor_cursor_moved(self, editor: _SceneEditor) -> None:
@@ -1090,7 +1082,7 @@ class WritingCoreView(QWidget):
         editor = self._editors.get(scene_id)
         if editor is None:
             return
-        self._db.update_scene_content(scene_id, editor.toPlainText())
+        self._db.update_scene_content(scene_id, editor.toMarkdown().rstrip())
         self._structural_cache.mark_dirty()
         if self._on_data_changed:
             self._on_data_changed()

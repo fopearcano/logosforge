@@ -76,6 +76,51 @@ def test_editor_content_matches_scene():
     assert view._editors[s3.id].toPlainText() == "The truth revealed."
 
 
+def test_editor_renders_markdown_as_rich_text():
+    db = Database()
+    proj = db.create_project("MD")
+    db.create_scene(proj.id, "S1", content="**bold** and *italic*")
+    view = WritingCoreView(db, proj.id)
+    editors = list(view._editors.values())
+    editor = editors[0]
+    assert editor.toPlainText() == "bold and italic"
+    md = editor.toMarkdown()
+    assert "**bold**" in md
+    assert "*italic*" in md
+
+
+def test_editor_renders_headings():
+    db = Database()
+    proj = db.create_project("HD")
+    db.create_scene(proj.id, "S1", content="# Chapter One\n\nSome text.")
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    assert "Chapter One" in editor.toPlainText()
+    assert "#" not in editor.toPlainText()
+
+
+def test_editor_renders_lists():
+    db = Database()
+    proj = db.create_project("LS")
+    db.create_scene(proj.id, "S1", content="- item one\n- item two")
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    plain = editor.toPlainText()
+    assert "item one" in plain
+    assert "item two" in plain
+
+
+def test_editor_save_preserves_markdown():
+    db = Database()
+    proj = db.create_project("SV")
+    scene = db.create_scene(proj.id, "S1", content="**hello** world")
+    view = WritingCoreView(db, proj.id)
+    view._save_scene(scene.id)
+    saved = db.get_scene_by_id(scene.id)
+    assert "**hello**" in saved.content
+    assert "world" in saved.content
+
+
 def test_empty_project_has_no_editors():
     db = Database()
     proj = db.create_project("Empty")
@@ -277,11 +322,11 @@ def test_manuscript_highlighter_refresh_patterns():
     h.refresh_patterns(["Alice", "Bob"])
 
 
-def test_view_uses_manuscript_highlighter():
+def test_view_uses_psyke_highlighter():
     db = Database()
     proj, s1, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
-    assert isinstance(view._highlighters[s1.id], ManuscriptHighlighter)
+    assert isinstance(view._highlighters[s1.id], PsykeHighlighter)
 
 
 # -- Format Toolbar -----------------------------------------------------------
@@ -291,7 +336,7 @@ def test_format_toolbar_creates():
     assert toolbar.objectName() == "formatToolbar"
 
 
-def test_format_toolbar_bold_wraps():
+def test_format_toolbar_bold_applies():
     editor = _SceneEditor()
     editor.setPlainText("hello world")
     cursor = editor.textCursor()
@@ -301,36 +346,31 @@ def test_format_toolbar_bold_wraps():
 
     toolbar = FormatToolbar()
     toolbar.toggle_bold_on(editor)
-    assert editor.toPlainText() == "hello **world**"
-
-
-def test_format_toolbar_bold_unwraps_surrounding():
-    editor = _SceneEditor()
-    editor.setPlainText("hello **world**")
-    cursor = editor.textCursor()
-    cursor.setPosition(8)
-    cursor.setPosition(13, QTextCursor.MoveMode.KeepAnchor)
-    editor.setTextCursor(cursor)
-
-    toolbar = FormatToolbar()
-    toolbar.toggle_bold_on(editor)
+    md = editor.toMarkdown().strip()
+    assert "**world**" in md
     assert editor.toPlainText() == "hello world"
 
 
-def test_format_toolbar_bold_unwraps_selected():
+def test_format_toolbar_bold_toggles_off():
     editor = _SceneEditor()
-    editor.setPlainText("hello **world**")
+    editor.setPlainText("hello world")
     cursor = editor.textCursor()
     cursor.setPosition(6)
-    cursor.setPosition(15, QTextCursor.MoveMode.KeepAnchor)
+    cursor.setPosition(11, QTextCursor.MoveMode.KeepAnchor)
     editor.setTextCursor(cursor)
 
     toolbar = FormatToolbar()
     toolbar.toggle_bold_on(editor)
-    assert editor.toPlainText() == "hello world"
+    cursor = editor.textCursor()
+    cursor.setPosition(6)
+    cursor.setPosition(11, QTextCursor.MoveMode.KeepAnchor)
+    editor.setTextCursor(cursor)
+    toolbar.toggle_bold_on(editor)
+    md = editor.toMarkdown().strip()
+    assert "**" not in md
 
 
-def test_format_toolbar_italic_wraps():
+def test_format_toolbar_italic_applies():
     editor = _SceneEditor()
     editor.setPlainText("hello world")
     cursor = editor.textCursor()
@@ -340,7 +380,9 @@ def test_format_toolbar_italic_wraps():
 
     toolbar = FormatToolbar()
     toolbar.toggle_italic_on(editor)
-    assert editor.toPlainText() == "hello *world*"
+    md = editor.toMarkdown().strip()
+    assert "*world*" in md
+    assert editor.toPlainText() == "hello world"
 
 
 def test_format_toolbar_heading_cycle():
@@ -353,13 +395,13 @@ def test_format_toolbar_heading_cycle():
     toolbar = FormatToolbar()
     toolbar._active_editor = editor
     toolbar._cycle_heading()
-    assert editor.toPlainText() == "# Title"
+    assert editor.toMarkdown().strip() == "# Title"
     toolbar._cycle_heading()
-    assert editor.toPlainText() == "## Title"
+    assert editor.toMarkdown().strip() == "## Title"
     toolbar._cycle_heading()
-    assert editor.toPlainText() == "### Title"
+    assert editor.toMarkdown().strip() == "### Title"
     toolbar._cycle_heading()
-    assert editor.toPlainText() == "Title"
+    assert editor.toMarkdown().strip() == "Title"
 
 
 def test_format_toolbar_quote_toggle():
@@ -372,9 +414,9 @@ def test_format_toolbar_quote_toggle():
     toolbar = FormatToolbar()
     toolbar._active_editor = editor
     toolbar._toggle_quote()
-    assert editor.toPlainText() == "> Some text"
+    assert "> Some text" in editor.toMarkdown()
     toolbar._toggle_quote()
-    assert editor.toPlainText() == "Some text"
+    assert ">" not in editor.toMarkdown()
 
 
 def test_format_toolbar_track_editor():

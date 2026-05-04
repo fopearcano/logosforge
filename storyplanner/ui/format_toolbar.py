@@ -7,7 +7,7 @@ emits signals for AI assistant actions (rewrite, expand, dialogue).
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont, QTextCursor
+from PySide6.QtGui import QFont, QTextBlockFormat, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QTextEdit,
@@ -160,58 +160,26 @@ class FormatToolbar(QWidget):
     # -- Formatting actions ---------------------------------------------------
 
     def _toggle_bold(self) -> None:
-        self._wrap_toggle("**")
-
-    def _toggle_italic(self) -> None:
-        self._wrap_toggle("*")
-
-    def _wrap_toggle(self, marker: str) -> None:
         editor = self._active_editor
         if not editor:
             return
         cursor = editor.textCursor()
-        text = cursor.selectedText().replace(" ", "\n")
-        if not text:
+        fmt = cursor.charFormat()
+        weight = QFont.Weight.Normal if fmt.fontWeight() >= QFont.Weight.Bold else QFont.Weight.Bold
+        new_fmt = QTextCharFormat()
+        new_fmt.setFontWeight(weight)
+        cursor.mergeCharFormat(new_fmt)
+        editor.setTextCursor(cursor)
+
+    def _toggle_italic(self) -> None:
+        editor = self._active_editor
+        if not editor:
             return
-
-        ml = len(marker)
-        doc = editor.toPlainText()
-        start = cursor.selectionStart()
-        end = cursor.selectionEnd()
-
-        before = doc[max(0, start - ml) : start]
-        after = doc[end : end + ml]
-        if before == marker and after == marker:
-            cursor.setPosition(start - ml)
-            cursor.setPosition(end + ml, QTextCursor.MoveMode.KeepAnchor)
-            cursor.insertText(text)
-            cursor.setPosition(start - ml)
-            cursor.setPosition(
-                start - ml + len(text), QTextCursor.MoveMode.KeepAnchor,
-            )
-            editor.setTextCursor(cursor)
-            return
-
-        if (
-            text.startswith(marker)
-            and text.endswith(marker)
-            and len(text) > 2 * ml
-        ):
-            inner = text[ml:-ml]
-            cursor.insertText(inner)
-            cursor.setPosition(start)
-            cursor.setPosition(
-                start + len(inner), QTextCursor.MoveMode.KeepAnchor,
-            )
-            editor.setTextCursor(cursor)
-            return
-
-        wrapped = f"{marker}{text}{marker}"
-        cursor.insertText(wrapped)
-        cursor.setPosition(start + ml)
-        cursor.setPosition(
-            start + ml + len(text), QTextCursor.MoveMode.KeepAnchor,
-        )
+        cursor = editor.textCursor()
+        fmt = cursor.charFormat()
+        new_fmt = QTextCharFormat()
+        new_fmt.setFontItalic(not fmt.fontItalic())
+        cursor.mergeCharFormat(new_fmt)
         editor.setTextCursor(cursor)
 
     def _cycle_heading(self) -> None:
@@ -219,35 +187,22 @@ class FormatToolbar(QWidget):
         if not editor:
             return
         cursor = editor.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock)
-        cursor.movePosition(
-            QTextCursor.MoveOperation.EndOfBlock,
-            QTextCursor.MoveMode.KeepAnchor,
-        )
-        line = cursor.selectedText()
-
-        if line.startswith("### "):
-            cursor.insertText(line[4:])
-        elif line.startswith("## "):
-            cursor.insertText("### " + line[3:])
-        elif line.startswith("# "):
-            cursor.insertText("## " + line[2:])
-        else:
-            cursor.insertText("# " + line)
+        block_fmt = cursor.blockFormat()
+        level = block_fmt.headingLevel()
+        new_level = (level % 3) + 1 if level < 3 else 0
+        new_fmt = QTextBlockFormat()
+        new_fmt.setHeadingLevel(new_level)
+        cursor.mergeBlockFormat(new_fmt)
+        editor.setTextCursor(cursor)
 
     def _toggle_quote(self) -> None:
         editor = self._active_editor
         if not editor:
             return
         cursor = editor.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock)
-        cursor.movePosition(
-            QTextCursor.MoveOperation.EndOfBlock,
-            QTextCursor.MoveMode.KeepAnchor,
-        )
-        line = cursor.selectedText()
-
-        if line.startswith("> "):
-            cursor.insertText(line[2:])
-        else:
-            cursor.insertText("> " + line)
+        block_fmt = cursor.blockFormat()
+        level = block_fmt.property(QTextBlockFormat.Property.BlockQuoteLevel) or 0
+        new_fmt = QTextBlockFormat()
+        new_fmt.setProperty(QTextBlockFormat.Property.BlockQuoteLevel, 0 if level else 1)
+        cursor.mergeBlockFormat(new_fmt)
+        editor.setTextCursor(cursor)
