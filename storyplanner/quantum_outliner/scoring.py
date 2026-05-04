@@ -314,6 +314,17 @@ _DEFAULT_OBJECTIVES: dict[str, float] = {
 }
 
 
+GOAL_FACTOR_MAP: dict[str, str] = {
+    "tension": "tension_gain",
+    "consistency": "psyke_consistency",
+    "novelty": "novelty",
+    "structure": "structure_fit",
+    "character_focus": "goal_alignment",
+}
+
+_GOAL_PENALTY = 0.0
+
+
 @dataclass
 class QuantumGoals:
     objectives: dict[str, float] = field(default_factory=lambda: dict(_DEFAULT_OBJECTIVES))
@@ -338,6 +349,34 @@ class QuantumGoals:
 
         self.horizon = max(1, min(int(self.horizon), 3))
         return self
+
+
+def compute_goal_score(
+    factors: dict[str, float],
+    goals: QuantumGoals,
+) -> tuple[float, bool]:
+    """Compute goal_score and goal_valid from factors and goals.
+
+    Returns (goal_score, goal_valid).
+    goal_score = sum(objective_weight * mapped_factor).
+    goal_valid = False if any min_constraint is violated.
+    """
+    score = 0.0
+    for obj_key, weight in goals.objectives.items():
+        factor_key = GOAL_FACTOR_MAP.get(obj_key)
+        if factor_key:
+            score += weight * factors.get(factor_key, 0.0)
+
+    valid = True
+    for factor_key, threshold in goals.min_constraints.items():
+        if factors.get(factor_key, 0.0) < threshold:
+            valid = False
+            break
+
+    if not valid:
+        score = _GOAL_PENALTY
+
+    return round(score, 4), valid
 
 
 # ---------------------------------------------------------------------------
@@ -746,6 +785,8 @@ class ScoredBranch:
     factors: dict[str, float]
     violations: list[str] = field(default_factory=list)
     is_pareto_optimal: bool = False
+    goal_score: float = 0.0
+    goal_valid: bool = True
 
 
 def score_branches(
@@ -757,11 +798,15 @@ def score_branches(
     constraints: list[str] | None = None,
     llm_scores: dict[str, dict[str, float]] | None = None,
     ensemble_alpha: float = ENSEMBLE_ALPHA,
+    goals: QuantumGoals | None = None,
 ) -> list[ScoredBranch]:
     """Score all branches in a wavefunction. Returns sorted high-to-low.
 
     When *llm_scores* maps branch-id → factor dict, each branch's heuristic
     factors are blended with the LLM factors using *ensemble_alpha*.
+
+    When *goals* is provided, each branch also receives a goal_score
+    (weighted by objectives) and goal_valid flag (min_constraints check).
     """
     w = apply_beat_bias(weights or DEFAULT_WEIGHTS, wf.structure_beat)
 
@@ -786,12 +831,19 @@ def score_branches(
         if violations:
             score = 0.0
 
+        goal_score = 0.0
+        goal_valid = True
+        if goals is not None:
+            goal_score, goal_valid = compute_goal_score(factors, goals)
+
         scored.append(ScoredBranch(
             branch_id=b.id,
             score=round(score, 4),
             probability=0.0,
             factors={k: round(v, 4) for k, v in factors.items()},
             violations=violations,
+            goal_score=goal_score,
+            goal_valid=goal_valid,
         ))
 
     probs = _softmax([s.score for s in scored])
@@ -808,6 +860,8 @@ def score_branches(
             probability=p,
             factors=s.factors,
             violations=s.violations,
+            goal_score=s.goal_score,
+            goal_valid=s.goal_valid,
         )
         for s, p in zip(scored, probs)
     ]
@@ -821,6 +875,8 @@ def score_branches(
             factors=s.factors,
             violations=s.violations,
             is_pareto_optimal=s.branch_id in pareto_ids,
+            goal_score=s.goal_score,
+            goal_valid=s.goal_valid,
         )
         for s in scored
     ]
@@ -840,6 +896,8 @@ def apply_scores(wf: Wavefunction, scored: list[ScoredBranch]) -> None:
             b.factors = dict(s.factors)
             b.violations = list(s.violations)
             b.is_pareto_optimal = s.is_pareto_optimal
+            b.goal_score = s.goal_score
+            b.goal_valid = s.goal_valid
 
 
 def recommend_collapse(wf: Wavefunction) -> CollapseRecommendation | None:

@@ -41,6 +41,8 @@ class Branch:
     factors: dict[str, float] = field(default_factory=dict)
     violations: list[str] = field(default_factory=list)
     is_pareto_optimal: bool = False
+    goal_score: float = 0.0
+    goal_valid: bool = True
 
     @classmethod
     def new(
