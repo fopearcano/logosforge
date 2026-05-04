@@ -298,6 +298,49 @@ def check_constraints(
 
 
 # ---------------------------------------------------------------------------
+# Goal-driven optimization model
+# ---------------------------------------------------------------------------
+
+_GOAL_OBJECTIVE_KEYS = frozenset({
+    "tension", "consistency", "novelty", "structure", "character_focus",
+})
+
+_DEFAULT_OBJECTIVES: dict[str, float] = {
+    "tension": 0.2,
+    "consistency": 0.2,
+    "novelty": 0.2,
+    "structure": 0.2,
+    "character_focus": 0.2,
+}
+
+
+@dataclass
+class QuantumGoals:
+    objectives: dict[str, float] = field(default_factory=lambda: dict(_DEFAULT_OBJECTIVES))
+    min_constraints: dict[str, float] = field(default_factory=dict)
+    horizon: int = 1
+
+    def validate(self) -> "QuantumGoals":
+        """Clamp and normalize values in-place, return self."""
+        for k in list(self.objectives):
+            if k not in _GOAL_OBJECTIVE_KEYS:
+                del self.objectives[k]
+        for k in _GOAL_OBJECTIVE_KEYS:
+            self.objectives.setdefault(k, 0.2)
+        for k in self.objectives:
+            self.objectives[k] = max(0.0, min(float(self.objectives[k]), 1.0))
+        total = sum(self.objectives.values())
+        if total > 0:
+            self.objectives = {k: round(v / total, 4) for k, v in self.objectives.items()}
+
+        for k in list(self.min_constraints):
+            self.min_constraints[k] = max(0.0, min(float(self.min_constraints[k]), 1.0))
+
+        self.horizon = max(1, min(int(self.horizon), 3))
+        return self
+
+
+# ---------------------------------------------------------------------------
 # Multi-objective scoring — Pareto front
 # ---------------------------------------------------------------------------
 

@@ -204,6 +204,28 @@ class Database:
         settings["ensemble_alpha"] = max(0.0, min(float(alpha), 1.0))
         self.save_project_settings(project_id, settings)
 
+    def get_quantum_goals(self, project_id: int) -> "QuantumGoals":
+        from storyplanner.quantum_outliner.scoring import QuantumGoals
+        settings = self.get_project_settings(project_id)
+        raw = settings.get("quantum_goals")
+        if isinstance(raw, dict):
+            return QuantumGoals(
+                objectives=raw.get("objectives", {}),
+                min_constraints=raw.get("min_constraints", {}),
+                horizon=raw.get("horizon", 1),
+            ).validate()
+        return QuantumGoals()
+
+    def set_quantum_goals(self, project_id: int, goals: "QuantumGoals") -> None:
+        goals.validate()
+        settings = self.get_project_settings(project_id)
+        settings["quantum_goals"] = {
+            "objectives": goals.objectives,
+            "min_constraints": goals.min_constraints,
+            "horizon": goals.horizon,
+        }
+        self.save_project_settings(project_id, settings)
+
     # -- Characters ----------------------------------------------------------
 
     def get_character_by_id(self, character_id: int) -> Character | None:
