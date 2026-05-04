@@ -29,9 +29,14 @@ from storyplanner.quantum_outliner.persistence import (
     load_state,
     save_state,
 )
+from storyplanner.quantum_outliner.llm_evaluator import (
+    evaluate_branches as llm_evaluate_branches,
+    score_with_llm,
+)
 from storyplanner.quantum_outliner.scoring import (
     BEAT_PHASE_MAP,
     CollapseRecommendation,
+    ENSEMBLE_ALPHA,
     FACTOR_CHIP_LABELS,
     FACTOR_LABELS,
     LEARNING_RATE,
@@ -45,6 +50,7 @@ from storyplanner.quantum_outliner.scoring import (
     compute_pareto_front,
     compute_probabilities,
     compute_tradeoff_chips,
+    ensemble_combine,
     explain_factors,
     explain_wavefunction,
     format_branch_chips,
@@ -54,6 +60,7 @@ from storyplanner.quantum_outliner.scoring import (
     parse_constraint,
     recommend_collapse,
     recommend_pareto,
+    score_with_heuristic,
 )
 from storyplanner.quantum_outliner.state import (
     OUTLINE_MODES,
@@ -86,6 +93,7 @@ __all__ = [
     "PHASE_MULTIPLIERS",
     "PRESET_NAMES",
     "SCORING_PRESETS",
+    "ENSEMBLE_ALPHA",
     "adapt_weights",
     "apply_beat_bias",
     "apply_proposal",
@@ -97,6 +105,7 @@ __all__ = [
     "get_beat_phase",
     "collapse_branch",
     "compute_probabilities",
+    "ensemble_combine",
     "explain_branches",
     "explain_factors",
     "explain_wavefunction",
@@ -106,6 +115,9 @@ __all__ = [
     "recommend_collapse",
     "recommend_pareto",
     "SELECTION_MODES",
+    "llm_evaluate_branches",
+    "score_with_heuristic",
+    "score_with_llm",
     "detect_weak_scenes",
     "export_quantum_state",
     "generate_branches",

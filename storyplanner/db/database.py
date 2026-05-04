@@ -191,6 +191,19 @@ class Database:
         settings["selection_mode"] = mode
         self.save_project_settings(project_id, settings)
 
+    def get_ensemble_alpha(self, project_id: int) -> float:
+        settings = self.get_project_settings(project_id)
+        val = settings.get("ensemble_alpha", 0.7)
+        try:
+            return max(0.0, min(float(val), 1.0))
+        except (TypeError, ValueError):
+            return 0.7
+
+    def set_ensemble_alpha(self, project_id: int, alpha: float) -> None:
+        settings = self.get_project_settings(project_id)
+        settings["ensemble_alpha"] = max(0.0, min(float(alpha), 1.0))
+        self.save_project_settings(project_id, settings)
+
     # -- Characters ----------------------------------------------------------
 
     def get_character_by_id(self, character_id: int) -> Character | None:

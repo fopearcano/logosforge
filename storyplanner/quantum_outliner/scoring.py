@@ -513,6 +513,48 @@ def format_pareto_recommendation(candidates: list[CollapseRecommendation]) -> st
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Ensemble scoring — combine heuristic + LLM evaluator
+# ---------------------------------------------------------------------------
+
+ENSEMBLE_ALPHA: float = 0.7
+
+
+def score_with_heuristic(
+    branch: Branch,
+    wf: Wavefunction,
+    *,
+    psyke: PsykeSignals | None = None,
+    protagonist_goal: str = "",
+    sibling_titles: set[str] | None = None,
+) -> dict[str, float]:
+    """Compute heuristic factor scores for a single branch (wrapper around compute_factors)."""
+    return compute_factors(
+        branch, wf,
+        psyke=psyke,
+        protagonist_goal=protagonist_goal,
+        sibling_titles=sibling_titles,
+    )
+
+
+def ensemble_combine(
+    heuristic: dict[str, float],
+    llm: dict[str, float] | None,
+    alpha: float = ENSEMBLE_ALPHA,
+) -> dict[str, float]:
+    """Blend heuristic and LLM factor scores: α·heuristic + (1-α)·llm.
+
+    If *llm* is None, returns heuristic unchanged.
+    """
+    if llm is None:
+        return heuristic
+    a = max(0.0, min(alpha, 1.0))
+    return {
+        k: round(a * heuristic.get(k, 0.0) + (1 - a) * llm.get(k, 0.0), 4)
+        for k in heuristic
+    }
+
+
 def explain_wavefunction(wf: "Wavefunction") -> str:
     """Per-branch factor explanation, sorted by probability."""
     branches = sorted(wf.branches, key=lambda b: b.probability, reverse=True)
@@ -550,8 +592,14 @@ def score_branches(
     protagonist_goal: str = "",
     weights: dict[str, float] | None = None,
     constraints: list[str] | None = None,
+    llm_scores: dict[str, dict[str, float]] | None = None,
+    ensemble_alpha: float = ENSEMBLE_ALPHA,
 ) -> list[ScoredBranch]:
-    """Score all branches in a wavefunction. Returns sorted high-to-low."""
+    """Score all branches in a wavefunction. Returns sorted high-to-low.
+
+    When *llm_scores* maps branch-id → factor dict, each branch's heuristic
+    factors are blended with the LLM factors using *ensemble_alpha*.
+    """
     w = apply_beat_bias(weights or DEFAULT_WEIGHTS, wf.structure_beat)
 
     scored: list[ScoredBranch] = []
@@ -559,12 +607,15 @@ def score_branches(
 
     for b in wf.branches:
         others = existing_titles - {b.title.lower()}
-        factors = compute_factors(
+        heuristic = compute_factors(
             b, wf,
             psyke=psyke,
             protagonist_goal=protagonist_goal,
             sibling_titles=others,
         )
+        llm = llm_scores.get(b.id) if llm_scores else None
+        factors = ensemble_combine(heuristic, llm, ensemble_alpha)
+
         raw = sum(factors[k] * w.get(k, 0.0) for k in factors)
         score = max(0.0, min(raw, 1.0))
 
