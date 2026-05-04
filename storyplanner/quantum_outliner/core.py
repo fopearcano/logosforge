@@ -388,11 +388,15 @@ def _format_wavefunction(
         psyke = gather_psyke_signals(db, project_id)
 
     weights = None
+    constraints = None
     if db is not None and project_id is not None:
         weights = db.get_scoring_weights(project_id)
+        constraints = db.get_constraints(project_id)
 
     if wf.branches:
-        scored = score_branches(wf, psyke=psyke, weights=weights)
+        scored = score_branches(
+            wf, psyke=psyke, weights=weights, constraints=constraints,
+        )
         apply_scores(wf, scored)
         wf.branches.sort(key=lambda b: b.probability, reverse=True)
 
@@ -441,6 +445,9 @@ def _format_lambda(
             names = [c.get("name", "") for c in b.state_delta.character_changes if c.get("name")]
             if names:
                 lines.append(f"  Affects: {', '.join(names[:4])}")
+        if b.violations:
+            for v in b.violations:
+                lines.append(f"  ⚠ BLOCKED: violates \"{v}\"")
         lines.append("")
 
     pov_names = _extract_pov_frames(wf, psyke)

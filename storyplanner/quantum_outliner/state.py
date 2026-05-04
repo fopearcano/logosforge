@@ -39,6 +39,7 @@ class Branch:
     score: float = 0.0
     probability: float = 0.0
     factors: dict[str, float] = field(default_factory=dict)
+    violations: list[str] = field(default_factory=list)
 
     @classmethod
     def new(

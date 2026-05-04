@@ -250,6 +250,53 @@ def adapt_weights(
     return {k: round(v / total, 4) for k, v in updated.items()}
 
 
+# ---------------------------------------------------------------------------
+# Hard constraints — forbid certain narrative outcomes
+# ---------------------------------------------------------------------------
+
+_NEGATIVE_PREFIXES = (
+    "no ", "never ", "forbid ", "ban ", "don't ", "do not ", "not ",
+)
+
+_STOP_WORDS = frozenset({
+    "the", "a", "an", "is", "of", "to", "and", "in", "for",
+    "that", "this", "with", "any", "all", "be", "or",
+})
+
+
+def parse_constraint(raw: str) -> list[str]:
+    """Extract forbidden keywords from a constraint string."""
+    text = raw.strip().lower()
+    for prefix in _NEGATIVE_PREFIXES:
+        if text.startswith(prefix):
+            text = text[len(prefix):]
+            break
+    return [w for w in text.split() if w not in _STOP_WORDS]
+
+
+def check_constraints(
+    branch: "Branch", constraints: list[str],
+) -> list[str]:
+    """Return list of constraints violated by this branch."""
+    if not constraints:
+        return []
+
+    text = (
+        f"{branch.title} {branch.description} "
+        f"{branch.stakes} {branch.consequence}"
+    ).lower()
+    words = text.split()
+
+    violated: list[str] = []
+    for constraint in constraints:
+        keywords = parse_constraint(constraint)
+        if not keywords:
+            continue
+        if all(any(kw in w for w in words) for kw in keywords):
+            violated.append(constraint)
+    return violated
+
+
 FACTOR_LABELS: dict[str, str] = {
     "structure_fit": "aligns with structural beat",
     "psyke_consistency": "consistent with story bible",
@@ -319,9 +366,14 @@ def explain_wavefunction(wf: "Wavefunction") -> str:
 
     lines: list[str] = []
     for b in scored:
-        explanation = explain_factors(b.factors)
-        lines.append(f"{b.title}  [{b.id}]  ({b.probability:.0%})")
-        lines.append(f"  because: {explanation}")
+        if b.violations:
+            lines.append(f"{b.title}  [{b.id}]  (0%)")
+            for v in b.violations:
+                lines.append(f"  BLOCKED: violates \"{v}\"")
+        else:
+            explanation = explain_factors(b.factors)
+            lines.append(f"{b.title}  [{b.id}]  ({b.probability:.0%})")
+            lines.append(f"  because: {explanation}")
     return "\n".join(lines)
 
 
@@ -331,6 +383,7 @@ class ScoredBranch:
     score: float
     probability: float
     factors: dict[str, float]
+    violations: list[str] = field(default_factory=list)
 
 
 def score_branches(
@@ -339,6 +392,7 @@ def score_branches(
     psyke: PsykeSignals | None = None,
     protagonist_goal: str = "",
     weights: dict[str, float] | None = None,
+    constraints: list[str] | None = None,
 ) -> list[ScoredBranch]:
     """Score all branches in a wavefunction. Returns sorted high-to-low."""
     w = apply_beat_bias(weights or DEFAULT_WEIGHTS, wf.structure_beat)
@@ -356,20 +410,33 @@ def score_branches(
         )
         raw = sum(factors[k] * w.get(k, 0.0) for k in factors)
         score = max(0.0, min(raw, 1.0))
+
+        violations = check_constraints(b, constraints or [])
+        if violations:
+            score = 0.0
+
         scored.append(ScoredBranch(
             branch_id=b.id,
             score=round(score, 4),
             probability=0.0,
             factors={k: round(v, 4) for k, v in factors.items()},
+            violations=violations,
         ))
 
     probs = _softmax([s.score for s in scored])
+    # Zero probability for violated branches, renormalize
+    probs = [0.0 if s.violations else p for s, p in zip(scored, probs)]
+    total_p = sum(probs)
+    if total_p > 0:
+        probs = [round(p / total_p, 4) for p in probs]
+
     scored = [
         ScoredBranch(
             branch_id=s.branch_id,
             score=s.score,
             probability=p,
             factors=s.factors,
+            violations=s.violations,
         )
         for s, p in zip(scored, probs)
     ]
@@ -387,6 +454,7 @@ def apply_scores(wf: Wavefunction, scored: list[ScoredBranch]) -> None:
             b.score = s.score
             b.probability = s.probability
             b.factors = dict(s.factors)
+            b.violations = list(s.violations)
 
 
 def recommend_collapse(wf: Wavefunction) -> CollapseRecommendation | None:

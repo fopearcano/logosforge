@@ -142,6 +142,32 @@ class Database:
         settings["weight_learning"] = enabled
         self.save_project_settings(project_id, settings)
 
+    def get_constraints(self, project_id: int) -> list[str]:
+        settings = self.get_project_settings(project_id)
+        raw = settings.get("constraints")
+        if isinstance(raw, list):
+            return [str(c) for c in raw if c]
+        return []
+
+    def set_constraints(self, project_id: int, constraints: list[str]) -> None:
+        settings = self.get_project_settings(project_id)
+        settings["constraints"] = constraints
+        self.save_project_settings(project_id, settings)
+
+    def add_constraint(self, project_id: int, constraint: str) -> None:
+        constraints = self.get_constraints(project_id)
+        constraint = constraint.strip()
+        if constraint and constraint not in constraints:
+            constraints.append(constraint)
+            self.set_constraints(project_id, constraints)
+
+    def remove_constraint(self, project_id: int, constraint: str) -> None:
+        constraints = self.get_constraints(project_id)
+        constraint = constraint.strip()
+        if constraint in constraints:
+            constraints.remove(constraint)
+            self.set_constraints(project_id, constraints)
+
     # -- Characters ----------------------------------------------------------
 
     def get_character_by_id(self, character_id: int) -> Character | None:
