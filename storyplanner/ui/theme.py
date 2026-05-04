@@ -73,6 +73,10 @@ _PALETTES: dict[str, dict[str, str]] = {
         "PSYKE_CHARACTER":  "#7cc4e8",
         "PSYKE_PLACE":      "#d4a876",
         "PSYKE_OBJECT":     "#a0aab4",
+
+        "GRAMMAR_SPELLING": "#ef4444",
+        "GRAMMAR_GRAMMAR":  "#60a5fa",
+        "GRAMMAR_STYLE":    "#78716c",
     },
 
     "Light (Green)": {
@@ -141,6 +145,10 @@ _PALETTES: dict[str, dict[str, str]] = {
         "PSYKE_CHARACTER":  "#1a6b8a",
         "PSYKE_PLACE":      "#8a5a2a",
         "PSYKE_OBJECT":     "#5a6570",
+
+        "GRAMMAR_SPELLING": "#dc2626",
+        "GRAMMAR_GRAMMAR":  "#2563eb",
+        "GRAMMAR_STYLE":    "#a8a29e",
     },
 
     "Light (Warm)": {
@@ -209,6 +217,10 @@ _PALETTES: dict[str, dict[str, str]] = {
         "PSYKE_CHARACTER":  "#7aa0b0",
         "PSYKE_PLACE":      "#c4956a",
         "PSYKE_OBJECT":     "#8a9098",
+
+        "GRAMMAR_SPELLING": "#ef4444",
+        "GRAMMAR_GRAMMAR":  "#60a5fa",
+        "GRAMMAR_STYLE":    "#78716c",
     },
 }
 

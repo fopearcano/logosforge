@@ -946,6 +946,167 @@ def test_grammar_cache_hit():
     assert len(_GRAMMAR_CACHE) == cached_count
 
 
+# -- Grammar highlighting styles ---------------------------------------------
+
+def test_spelling_underline_is_wave():
+    from PySide6.QtGui import QTextCharFormat
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("The quikc brown fox.")
+    view._check_editor_grammar(editor)
+    _wait_grammar(view)
+    sels = editor.extraSelections()
+    assert len(sels) > 0
+    fmt = sels[0].format
+    assert fmt.underlineStyle() == QTextCharFormat.UnderlineStyle.WaveUnderline
+
+
+def test_grammar_underline_is_wave():
+    from PySide6.QtGui import QTextCharFormat
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("He went to the the store.")
+    view._check_editor_grammar(editor)
+    _wait_grammar(view)
+    grammar_sels = [
+        s for s in editor.extraSelections()
+        if s.format.underlineStyle() == QTextCharFormat.UnderlineStyle.WaveUnderline
+    ]
+    assert len(grammar_sels) > 0
+
+
+def test_style_underline_is_dotted():
+    from PySide6.QtGui import QTextCharFormat
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("The ball was thrown by the boy.")
+    view._check_editor_grammar(editor)
+    _wait_grammar(view)
+    dot_sels = [
+        s for s in editor.extraSelections()
+        if s.format.underlineStyle() == QTextCharFormat.UnderlineStyle.DotLine
+    ]
+    assert len(dot_sels) > 0
+
+
+def test_spelling_underline_color_from_theme():
+    from storyplanner.ui import theme as t
+    from PySide6.QtGui import QColor
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("The quikc brown fox.")
+    view._check_editor_grammar(editor)
+    _wait_grammar(view)
+    sels = editor.extraSelections()
+    expected = QColor(t.get("GRAMMAR_SPELLING"))
+    assert sels[0].format.underlineColor() == expected
+
+
+def test_underline_tooltip_has_message():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("He went to the the store.")
+    view._check_editor_grammar(editor)
+    _wait_grammar(view)
+    sels = editor.extraSelections()
+    tips = [s.format.toolTip() for s in sels]
+    assert any("Repeated" in t for t in tips)
+
+
+def test_underline_tooltip_includes_suggestions():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("He went to the the store.")
+    view._check_editor_grammar(editor)
+    _wait_grammar(view)
+    sels = editor.extraSelections()
+    tips = [s.format.toolTip() for s in sels]
+    assert any("the" in t and "→" in t for t in tips)
+
+
+def test_stale_positions_filtered():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    editor._grammar_enabled = True
+    from storyplanner.grammar_checker import Issue
+    editor._grammar_issues = [
+        Issue(start=0, end=3, issue_type="spelling", message="ok"),
+        Issue(start=9999, end=10005, issue_type="spelling", message="stale"),
+    ]
+    editor.apply_grammar_underlines()
+    sels = editor.extraSelections()
+    assert len(sels) == 1
+
+
+def test_grammar_and_psyke_overlap():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    editor = view._editors[s1.id]
+    editor.setPlainText("John went to the the castle.")
+    view._check_editor_grammar(editor)
+    _wait_grammar(view)
+    grammar_sels = editor.extraSelections()
+    assert len(grammar_sels) > 0
+    highlighter = view._highlighters[s1.id]
+    assert highlighter._pattern is not None
+    assert highlighter._pattern.search("John went to the the castle.")
+
+
+def test_grammar_and_psyke_independent_layers():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    editor = view._editors[s1.id]
+    editor.setPlainText("John went to the the castle.")
+    view._check_editor_grammar(editor)
+    _wait_grammar(view)
+    grammar_count = len(editor.extraSelections())
+    assert grammar_count > 0
+    view._toggle_grammar()
+    assert len(editor.extraSelections()) == 0
+    highlighter = view._highlighters[s1.id]
+    assert highlighter._pattern is not None
+
+
+def test_mouse_tracking_enabled():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    assert editor.hasMouseTracking() is True
+
+
 # -- Auto-formatting ----------------------------------------------------------
 
 def _type_into_editor(editor, text):

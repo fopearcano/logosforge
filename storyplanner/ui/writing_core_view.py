@@ -216,6 +216,7 @@ class _SceneEditor(QTextEdit):
         self.setCursorWidth(2)
         self.setPlaceholderText("Start writing…")
         self.setAcceptRichText(True)
+        self.setMouseTracking(True)
         self._auto_height_timer = QTimer(self)
         self._auto_height_timer.setSingleShot(True)
         self._auto_height_timer.setInterval(30)
@@ -422,20 +423,38 @@ class _SceneEditor(QTextEdit):
             self._on_psyke_context_action(action, entry_id, 0)
 
     def apply_grammar_underlines(self) -> None:
-        _UNDERLINE_COLORS = {
-            "spelling": QColor("#ef4444"),
-            "grammar": QColor("#3b82f6"),
-            "style": QColor("#f59e0b"),
+        _STYLES = {
+            "spelling": (
+                QColor(theme.get("GRAMMAR_SPELLING")),
+                QTextCharFormat.UnderlineStyle.WaveUnderline,
+            ),
+            "grammar": (
+                QColor(theme.get("GRAMMAR_GRAMMAR")),
+                QTextCharFormat.UnderlineStyle.WaveUnderline,
+            ),
+            "style": (
+                QColor(theme.get("GRAMMAR_STYLE")),
+                QTextCharFormat.UnderlineStyle.DotLine,
+            ),
         }
+        _DEFAULT = (QColor(theme.get("GRAMMAR_SPELLING")),
+                     QTextCharFormat.UnderlineStyle.WaveUnderline)
+
         selections: list[QTextEdit.ExtraSelection] = []
         doc = self.document()
+        doc_len = doc.characterCount()
         for issue in self._grammar_issues:
+            if issue.start < 0 or issue.end > doc_len:
+                continue
+            color, style = _STYLES.get(issue.issue_type, _DEFAULT)
             sel = QTextEdit.ExtraSelection()
             fmt = QTextCharFormat()
-            color = _UNDERLINE_COLORS.get(issue.issue_type, QColor("#ef4444"))
-            fmt.setUnderlineStyle(QTextCharFormat.UnderlineStyle.WaveUnderline)
+            fmt.setUnderlineStyle(style)
             fmt.setUnderlineColor(color)
-            fmt.setToolTip(issue.message)
+            tip = issue.message
+            if issue.suggestions:
+                tip += f"  →  {', '.join(issue.suggestions[:3])}"
+            fmt.setToolTip(tip)
             cursor = QTextCursor(doc)
             cursor.setPosition(issue.start)
             cursor.setPosition(issue.end, QTextCursor.MoveMode.KeepAnchor)
