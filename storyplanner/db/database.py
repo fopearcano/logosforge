@@ -133,6 +133,15 @@ class Database:
         settings["scoring_preset"] = preset
         self.save_project_settings(project_id, settings)
 
+    def get_weight_learning(self, project_id: int) -> bool:
+        settings = self.get_project_settings(project_id)
+        return settings.get("weight_learning", True)
+
+    def set_weight_learning(self, project_id: int, enabled: bool) -> None:
+        settings = self.get_project_settings(project_id)
+        settings["weight_learning"] = enabled
+        self.save_project_settings(project_id, settings)
+
     # -- Characters ----------------------------------------------------------
 
     def get_character_by_id(self, character_id: int) -> Character | None:

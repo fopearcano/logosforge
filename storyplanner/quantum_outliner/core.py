@@ -13,6 +13,7 @@ from storyplanner.quantum_outliner.collapse import CollapseError, collapse
 from storyplanner.quantum_outliner.possibilities import generate_possibilities
 from storyplanner.quantum_outliner.psyke_adapter import PsykeSignals, gather_psyke_signals
 from storyplanner.quantum_outliner.scoring import (
+    adapt_weights,
     apply_scores,
     explain_wavefunction,
     format_recommendation,
@@ -220,12 +221,52 @@ def collapse_branch(
         lines.append("")
         lines.append(f"Archived {len(archived)} alternate branch(es).")
 
+    adapted = _adapt_weights_on_collapse(
+        db, project_id, wavefunction_id, branch_id,
+    )
+    if adapted:
+        lines.append("")
+        lines.append("Weights adjusted (learning ON).")
+
     return QuantumResult(
         kind="collapse",
         title="Collapse",
         body="\n".join(lines),
         payload=result,
     )
+
+
+def _adapt_weights_on_collapse(
+    db: "Database",
+    project_id: int,
+    wavefunction_id: str,
+    branch_id: str,
+) -> bool:
+    """Adapt scoring weights from the user's collapse choice. Returns True if adapted."""
+    if not db.get_weight_learning(project_id):
+        return False
+
+    state = get_state(project_id)
+    wf = state.get(wavefunction_id)
+    if wf is None:
+        return False
+
+    chosen = wf.get_branch(branch_id)
+    if chosen is None or not chosen.factors:
+        return False
+
+    unchosen = [b for b in wf.branches if b.id != branch_id and b.factors]
+    if not unchosen:
+        return False
+
+    current = db.get_scoring_weights(project_id)
+    updated = adapt_weights(current, chosen.factors, [b.factors for b in unchosen])
+    if updated == current:
+        return False
+
+    db.set_scoring_weights(project_id, updated)
+    db.set_scoring_preset(project_id, "Custom")
+    return True
 
 
 def explain_branches(

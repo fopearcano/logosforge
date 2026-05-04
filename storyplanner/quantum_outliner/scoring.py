@@ -214,6 +214,42 @@ def apply_beat_bias(
     return {k: round(v / total, 4) for k, v in biased.items()}
 
 
+# ---------------------------------------------------------------------------
+# Weight adaptation — learn from user collapse choices
+# ---------------------------------------------------------------------------
+
+LEARNING_RATE: float = 0.05
+
+
+def adapt_weights(
+    current_weights: dict[str, float],
+    chosen_factors: dict[str, float],
+    unchosen_factors: list[dict[str, float]],
+    learning_rate: float = LEARNING_RATE,
+) -> dict[str, float]:
+    """Nudge weights toward the factor pattern of the chosen branch.
+
+    For each factor, the signal is (chosen - mean_unchosen). Positive signal
+    means the user preferred a branch strong on that factor, so we increase
+    its weight. Result is clamped to [0, 1] and renormalized to sum = 1.
+    """
+    if not unchosen_factors or not chosen_factors:
+        return current_weights
+
+    n = len(unchosen_factors)
+    updated = {}
+    for k, w in current_weights.items():
+        chosen_val = chosen_factors.get(k, 0.0)
+        mean_unchosen = sum(f.get(k, 0.0) for f in unchosen_factors) / n
+        signal = chosen_val - mean_unchosen
+        updated[k] = max(0.0, min(w + learning_rate * signal, 1.0))
+
+    total = sum(updated.values())
+    if total <= 0:
+        return current_weights
+    return {k: round(v / total, 4) for k, v in updated.items()}
+
+
 FACTOR_LABELS: dict[str, str] = {
     "structure_fit": "aligns with structural beat",
     "psyke_consistency": "consistent with story bible",
