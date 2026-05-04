@@ -64,6 +64,11 @@ _PALETTES: dict[str, dict[str, str]] = {
         "SCROLLBAR_BG":  "#0f1219",
         "SCROLLBAR_HANDLE": "#2a3344",
         "SCROLLBAR_HOVER": "#3b4a60",
+
+        "PSYKE_TEXT":        "#5ee8b4",
+        "PSYKE_BRIGHT":     "#8df5d2",
+        "PSYKE_MATCH":      "#a0fae0",
+        "PSYKE_SELECTED_BG": "#0f2b24",
     },
 
     "Light (Green)": {
@@ -123,6 +128,11 @@ _PALETTES: dict[str, dict[str, str]] = {
         "SCROLLBAR_BG":  "#edf2ee",
         "SCROLLBAR_HANDLE": "#a3bca8",
         "SCROLLBAR_HOVER": "#7fa88a",
+
+        "PSYKE_TEXT":        "#0d7a4a",
+        "PSYKE_BRIGHT":     "#06613a",
+        "PSYKE_MATCH":      "#047040",
+        "PSYKE_SELECTED_BG": "#d0f0e0",
     },
 
     "Light (Warm)": {
@@ -182,6 +192,11 @@ _PALETTES: dict[str, dict[str, str]] = {
         "SCROLLBAR_BG":  "#1c1612",
         "SCROLLBAR_HANDLE": "#3a2f27",
         "SCROLLBAR_HOVER": "#4a3c32",
+
+        "PSYKE_TEXT":        "#6aad8a",
+        "PSYKE_BRIGHT":     "#8ac4a0",
+        "PSYKE_MATCH":      "#a0d4b0",
+        "PSYKE_SELECTED_BG": "#1e2e24",
     },
 }
 

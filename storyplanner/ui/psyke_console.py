@@ -90,8 +90,9 @@ class _SuggestionItem(QWidget):
     def set_selected(self, selected: bool) -> None:
         if selected:
             self.setStyleSheet(
-                f"#psykeResultItem {{ background-color: {theme.SELECTION_BG}; }}"
-                f"#psykeAccentBar {{ background-color: {theme.ACCENT}; }}"
+                f"#psykeResultItem {{ background-color: {theme.PSYKE_SELECTED_BG}; }}"
+                f"#psykeAccentBar {{ background-color: {theme.PSYKE_BRIGHT}; }}"
+                f"#psykeResultName {{ color: {theme.PSYKE_BRIGHT}; }}"
             )
         else:
             self._apply_idle_style()
@@ -100,6 +101,7 @@ class _SuggestionItem(QWidget):
         self.setStyleSheet(
             "#psykeResultItem { background-color: transparent; }"
             "#psykeAccentBar { background-color: transparent; }"
+            f"#psykeResultName {{ color: {theme.PSYKE_TEXT}; }}"
         )
 
 
@@ -115,7 +117,8 @@ def _highlight(name: str, query: str) -> str:
         s, e = match.start(), match.end()
         return (
             f"{_esc(name[:s])}"
-            f"<b style='color: {theme.ACCENT};'>{_esc(name[s:e])}</b>"
+            f"<span style='color: {theme.PSYKE_MATCH}; text-decoration: underline;'>"
+            f"{_esc(name[s:e])}</span>"
             f"{_esc(name[e:])}"
         )
     return _esc(name)
@@ -244,7 +247,7 @@ class _ResultsDropdown(QWidget):
             f"  font-size: 13px;"
             f"}}"
             f"#psykeResultName {{"
-            f"  color: {theme.TEXT_PRIMARY};"
+            f"  color: {theme.PSYKE_TEXT};"
             f"  font-size: 12px;"
             f"  font-weight: 500;"
             f"}}"
