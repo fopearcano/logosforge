@@ -17,6 +17,16 @@ from storyplanner.plugin_base import (
 from storyplanner.plugin_registry import register_plugin
 
 
+_SPEECH_VERBS = (
+    "said|asked|replied|whispered|shouted|muttered|snapped|"
+    "snarled|growled|called|screamed|yelled|cried|exclaimed|"
+    "demanded|pleaded|groaned|sighed|murmured|hissed|barked|"
+    "stammered|declared|announced|added|continued|insisted|"
+    "answered|responded|warned|promised|threatened|mocked|"
+    "suggested|agreed|protested|urged|scoffed|laughed"
+)
+
+
 class DialogueTensionPlugin(LogosforgePlugin):
 
     @property
@@ -133,7 +143,7 @@ class DialogueTensionPlugin(LogosforgePlugin):
             return True
         if line.startswith('—') or line.startswith('--'):
             return True
-        if re.match(r'^[A-Z][a-z]+\s+(said|asked|replied|whispered|shouted)', line):
+        if re.match(rf'^[A-Z][a-z]+\s+({_SPEECH_VERBS})', line):
             return True
         if '"' in line or '“' in line:
             quote_chars = line.count('"') + line.count('“') + line.count('”')
@@ -164,18 +174,16 @@ class DialogueTensionPlugin(LogosforgePlugin):
 
     def _detect_speakers(self, content: str, names: list[str]) -> set[str]:
         speakers: set[str] = set()
+        lines = content.split("\n")
         for name in names:
-            pattern = rf'{re.escape(name)}\s+(said|asked|replied|whispered|shouted|muttered|snapped)'
+            pattern = rf'{re.escape(name)}\s+({_SPEECH_VERBS})'
             if re.search(pattern, content):
                 speakers.add(name)
-            if re.search(rf'"{re.escape(name)}', content):
-                speakers.add(name)
-            if re.search(rf'{re.escape(name)}.*"', content) and re.search(rf'"[^"]*"', content):
-                lines = content.split("\n")
-                for line in lines:
-                    if name in line and ('"' in line or '“' in line):
-                        speakers.add(name)
-                        break
+                continue
+            for line in lines:
+                if name in line and ('”' in line or '“' in line or '”' in line):
+                    speakers.add(name)
+                    break
         return speakers
 
 
