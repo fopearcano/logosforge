@@ -182,3 +182,129 @@ class TestDropdownRefreshed:
 
         # Items were rebuilt, not appended
         assert second_count <= first_count
+
+
+# ---------------------------------------------------------------------------
+# Stale index / entries not appearing — regression tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def empty_console(app, db, project):
+    """Console created BEFORE any PSYKE entries exist."""
+    from storyplanner.ui.psyke_console import PsykeConsole
+
+    c = PsykeConsole(db, project.id)
+    return c
+
+
+class TestEntriesAppearInSearch:
+    """Verify entries created after console construction are searchable."""
+
+    def test_entries_added_after_init_appear(self, empty_console, db, project):
+        """Create entries after console init, mark dirty, search finds them."""
+        db.create_psyke_entry(project.id, "John", "character")
+        empty_console.mark_index_dirty()
+
+        empty_console._input.setText("jo")
+        empty_console._run_search()
+        dropdown = empty_console._ensure_dropdown()
+        assert dropdown.has_items()
+        names = [item.suggestion.text for item in dropdown._items]
+        assert any("John" in n for n in names)
+
+    def test_stale_index_after_clean_misses_new_entries(self, empty_console, db, project):
+        """After index is clean, new entries without mark_dirty are not found."""
+        # Force a clean rebuild first so _index_dirty is False
+        empty_console.rebuild_index()
+        assert not empty_console._index_dirty
+
+        db.create_psyke_entry(project.id, "Alice", "character")
+        # Deliberately do NOT mark dirty
+
+        empty_console._input.setText("ali")
+        empty_console._run_search()
+        dropdown = empty_console._ensure_dropdown()
+        entity_items = [i for i in dropdown._items if i.suggestion.category == "entity"]
+        assert len(entity_items) == 0
+
+    def test_alias_match(self, empty_console, db, project):
+        """Aliases are indexed and searchable."""
+        db.create_psyke_entry(
+            project.id, "Jonathan Harker", "character", aliases="Jon, Johnny"
+        )
+        empty_console.mark_index_dirty()
+
+        empty_console._input.setText("johnny")
+        empty_console._run_search()
+        dropdown = empty_console._ensure_dropdown()
+        names = [item.suggestion.text for item in dropdown._items]
+        assert any("Jonathan" in n or "Harker" in n for n in names)
+
+    def test_partial_substring_match(self, empty_console, db, project):
+        """Partial substring matches work (case-insensitive)."""
+        db.create_psyke_entry(project.id, "Castle Noir", "place")
+        empty_console.mark_index_dirty()
+
+        empty_console._input.setText("cas")
+        empty_console._run_search()
+        dropdown = empty_console._ensure_dropdown()
+        names = [item.suggestion.text for item in dropdown._items]
+        assert any("Castle" in n for n in names)
+
+    def test_case_insensitive_match(self, empty_console, db, project):
+        db.create_psyke_entry(project.id, "KING ARTHUR", "character")
+        empty_console.mark_index_dirty()
+
+        empty_console._input.setText("king")
+        empty_console._run_search()
+        dropdown = empty_console._ensure_dropdown()
+        names = [item.suggestion.text for item in dropdown._items]
+        assert any("KING" in n for n in names)
+
+    def test_multiple_entries_all_appear(self, empty_console, db, project):
+        """Multiple matches returned for overlapping prefix."""
+        db.create_psyke_entry(project.id, "John", "character")
+        db.create_psyke_entry(project.id, "Joanna", "character")
+        db.create_psyke_entry(project.id, "Joseph", "character")
+        empty_console.mark_index_dirty()
+
+        empty_console._input.setText("jo")
+        empty_console._run_search()
+        dropdown = empty_console._ensure_dropdown()
+        entity_items = [i for i in dropdown._items if i.suggestion.category == "entity"]
+        assert len(entity_items) >= 3
+
+    def test_dirty_rebuild_during_active_search(self, empty_console, db, project):
+        """Index rebuilds mid-session when new entries are added."""
+        db.create_psyke_entry(project.id, "Alice", "character")
+        empty_console.mark_index_dirty()
+        empty_console._input.setText("ali")
+        empty_console._run_search()
+        dropdown = empty_console._ensure_dropdown()
+        assert dropdown.has_items()
+
+        # Add more entries while console is active
+        db.create_psyke_entry(project.id, "Bob", "character")
+        empty_console.mark_index_dirty()
+        empty_console._input.setText("bob")
+        empty_console._run_search()
+        names = [item.suggestion.text for item in dropdown._items]
+        assert any("Bob" in n for n in names)
+
+    def test_project_id_isolation(self, app, db):
+        """Entries from other projects don't appear."""
+        from storyplanner.ui.psyke_console import PsykeConsole
+
+        p1 = db.create_project("Project 1")
+        p2 = db.create_project("Project 2")
+        db.create_psyke_entry(p1.id, "John", "character")
+        db.create_psyke_entry(p2.id, "Jane", "character")
+
+        console = PsykeConsole(db, p1.id)
+        console.rebuild_index()
+        console._input.setText("jan")
+        console._run_search()
+        dropdown = console._ensure_dropdown()
+        entity_items = [i for i in dropdown._items if i.suggestion.category == "entity"]
+        assert len(entity_items) == 0

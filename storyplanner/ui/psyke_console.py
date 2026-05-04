@@ -374,6 +374,11 @@ class PsykeConsole(QWidget):
                 self._dropdown.hide_results()
 
     def _run_search(self) -> None:
+        if self._index_dirty:
+            self._search_index.rebuild()
+            self._index_dirty = False
+            self._last_query = ""
+
         query = self._input.text().strip()
         if not query:
             self._ensure_dropdown().hide_results()
