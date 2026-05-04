@@ -81,7 +81,8 @@ _TRIGRAM_PROFILES: dict[str, dict[str, float]] = {
         "del": 1.2, " in": 1.1, "ell": 1.0, "lla": 1.0, "per": 0.9,
         " pe": 0.9, "one": 0.8, "ent": 0.8, " co": 0.8, "con": 0.7,
         "ato": 0.7, "non": 0.6, " no": 0.6, "ion": 0.6, "to ": 0.6,
-        "ato": 0.5, "ita": 0.5, "ato": 0.5, " un": 0.5, "zio": 0.5,
+        "tta": 0.5, "ita": 0.5, "gli": 0.5, " un": 0.5, "zio": 0.5,
+        " ne": 0.4, "nel": 0.4, "ell": 0.4, "ere": 0.4, "nte": 0.4,
     },
 }
 
