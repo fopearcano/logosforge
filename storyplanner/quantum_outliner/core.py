@@ -472,6 +472,13 @@ def _format_lambda(
             lines.append("")
             separator_placed = True
 
+        if is_pareto_mode and b.violations:
+            lines.append(f"  ✗ {b.title}  [{b.id}]  — INVALID")
+            for v in b.violations:
+                lines.append(f"    violates \"{v}\"")
+            lines.append("")
+            continue
+
         label = f"▸ Option {i}: {b.title}  [{b.id}]"
         if b.branch_type:
             label += f"  ({b.branch_type})"
@@ -509,7 +516,12 @@ def _format_lambda(
     if is_pareto_mode:
         pareto_recs = recommend_pareto(wf)
         if pareto_recs:
+            excluded = sum(1 for b in wf.branches if b.violations)
             lines.append(format_pareto_recommendation(pareto_recs))
+            if excluded:
+                lines.append(
+                    f"  ({excluded} option(s) excluded by constraints)"
+                )
             lines.append("")
     else:
         rec = recommend_collapse(wf)
