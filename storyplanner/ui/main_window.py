@@ -389,10 +389,23 @@ class MainWindow(QMainWindow):
 
         outer_layout.addWidget(main_row, stretch=1)
 
-        self._psyke_console = PsykeConsole(self._db, self._project_id, parent=central)
+        # -- PSYKE Console (global bottom bar) --------------------------------
+        console_row = QWidget()
+        console_row.setFixedHeight(46)
+        console_layout = QHBoxLayout(console_row)
+        console_layout.setContentsMargins(0, 4, 0, 6)
+        console_layout.setSpacing(0)
+
+        self._psyke_console = PsykeConsole(self._db, self._project_id)
         self._psyke_console.entry_selected.connect(self._on_psyke_entry_selected)
         self._psyke_console.entry_open_requested.connect(self._open_psyke_entry)
         self._psyke_console.command_submitted.connect(self._on_console_command)
+
+        console_layout.addStretch(1)
+        console_layout.addWidget(self._psyke_console, stretch=0)
+        console_layout.addStretch(1)
+
+        outer_layout.addWidget(console_row, stretch=0)
 
         self._setup_system_commands()
 

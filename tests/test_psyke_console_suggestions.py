@@ -316,7 +316,7 @@ class TestEntriesAppearInSearch:
 
 
 class TestConsoleCenterBottomLayout:
-    """Verify the console floats at center-bottom of its parent."""
+    """Verify the console width is responsive to parent/window size."""
 
     def _make_console(self, app, db, project, parent_w, parent_h):
         from storyplanner.ui.psyke_console import PsykeConsole
@@ -331,8 +331,6 @@ class TestConsoleCenterBottomLayout:
         c, parent = self._make_console(app, db, project, 1200, 800)
         expected_w = int(1200 * 0.50)
         assert c.width() == expected_w
-        assert c.x() == (1200 - expected_w) // 2
-        assert c.y() == 800 - c.height() - 10
 
     def test_reposition_clamps_to_min_width(self, app, db, project):
         c, parent = self._make_console(app, db, project, 400, 600)
@@ -344,14 +342,11 @@ class TestConsoleCenterBottomLayout:
 
     def test_reposition_responsive_on_resize(self, app, db, project):
         c, parent = self._make_console(app, db, project, 1000, 800)
-        x1 = c.x()
+        w1 = c.width()
         parent.resize(1400, 800)
         c.reposition()
-        assert c.x() != x1
+        assert c.width() != w1
 
-    def test_console_stays_within_parent(self, app, db, project):
+    def test_console_width_bounded(self, app, db, project):
         c, parent = self._make_console(app, db, project, 1200, 800)
-        assert c.x() >= 0
-        assert c.x() + c.width() <= 1200
-        assert c.y() >= 0
-        assert c.y() + c.height() <= 800
+        assert 320 <= c.width() <= 720

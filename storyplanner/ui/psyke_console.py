@@ -370,16 +370,13 @@ class PsykeConsole(QWidget):
         self._index_dirty = True
 
     def reposition(self) -> None:
-        """Place the console at horizontal center, fixed to bottom."""
-        parent = self.parentWidget()
-        if parent is None:
+        """Update console width based on window size."""
+        win = self.window()
+        if win is None:
             return
-        pw = parent.width()
+        pw = win.width()
         cw = max(_CONSOLE_MIN_WIDTH, min(int(pw * _CONSOLE_WIDTH_RATIO), _CONSOLE_MAX_WIDTH))
-        x = (pw - cw) // 2
-        y = parent.height() - self.height() - _CONSOLE_BOTTOM_MARGIN
-        self.setGeometry(x, y, cw, self.height())
-        self.raise_()
+        self.setFixedWidth(cw)
 
     def _on_text_changed(self, text: str) -> None:
         if self._selecting:
