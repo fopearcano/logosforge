@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, Qt, QTimer
+from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
     QFont,
@@ -126,6 +126,69 @@ class _BlockData(QTextBlockUserData):
     def __init__(self, element: str = "") -> None:
         super().__init__()
         self.element = element
+
+
+_GRAMMAR_CACHE: dict[int, list[GrammarIssue]] = {}
+_GRAMMAR_CACHE_MAX = 512
+
+
+class _GrammarWorker(QThread):
+    """Runs grammar checks off the main thread."""
+
+    finished = Signal(int, object)
+
+    def __init__(self, generation: int, scenes: dict[int, str]) -> None:
+        super().__init__()
+        self._generation = generation
+        self._scenes = scenes
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
+
+    def run(self) -> None:
+        results: dict[int, list[GrammarIssue]] = {}
+        for scene_id, text in self._scenes.items():
+            if self._cancelled:
+                return
+            if not text.strip():
+                results[scene_id] = []
+                continue
+            paragraphs = text.split("\n")
+            scene_issues: list[GrammarIssue] = []
+            offset = 0
+            for para in paragraphs:
+                if self._cancelled:
+                    return
+                para_hash = hash(para)
+                cached = _GRAMMAR_CACHE.get(para_hash)
+                if cached is not None:
+                    for issue in cached:
+                        scene_issues.append(GrammarIssue(
+                            start=issue.start + offset,
+                            end=issue.end + offset,
+                            issue_type=issue.issue_type,
+                            message=issue.message,
+                            suggestions=issue.suggestions,
+                        ))
+                else:
+                    if para.strip():
+                        para_issues = check_text(para)
+                        if len(_GRAMMAR_CACHE) >= _GRAMMAR_CACHE_MAX:
+                            _GRAMMAR_CACHE.clear()
+                        _GRAMMAR_CACHE[para_hash] = para_issues
+                        for issue in para_issues:
+                            scene_issues.append(GrammarIssue(
+                                start=issue.start + offset,
+                                end=issue.end + offset,
+                                issue_type=issue.issue_type,
+                                message=issue.message,
+                                suggestions=issue.suggestions,
+                            ))
+                offset += len(para) + 1
+            results[scene_id] = scene_issues
+        if not self._cancelled:
+            self.finished.emit(self._generation, results)
 
 
 class _SceneEditor(QTextEdit):
@@ -476,6 +539,8 @@ class WritingCoreView(QWidget):
         self._grammar_timer.setSingleShot(True)
         self._grammar_timer.setInterval(800)
         self._grammar_timer.timeout.connect(self._run_grammar_check)
+        self._grammar_worker: _GrammarWorker | None = None
+        self._grammar_generation: int = 0
 
         self._command_palette: CommandPalette | None = None
         self._palette_source_editor: _SceneEditor | None = None
@@ -1740,28 +1805,58 @@ class WritingCoreView(QWidget):
         )
         for editor in self._editors.values():
             editor._grammar_enabled = self._grammar_checking
-            if self._grammar_checking:
-                self._check_editor_grammar(editor)
-            else:
+            if not self._grammar_checking:
                 editor._grammar_issues = []
                 editor.apply_grammar_underlines()
+        if self._grammar_checking:
+            self._start_grammar_worker()
+        else:
+            self._cancel_grammar_worker()
         self._persist_font_settings()
 
     def _run_grammar_check(self) -> None:
         if not self._grammar_checking:
             return
-        for editor in self._editors.values():
-            self._check_editor_grammar(editor)
+        self._start_grammar_worker()
+
+    def _cancel_grammar_worker(self) -> None:
+        if self._grammar_worker is not None:
+            self._grammar_worker.cancel()
+            if self._grammar_worker.isRunning():
+                self._grammar_worker.wait()
+            self._grammar_worker = None
+
+    def _start_grammar_worker(self) -> None:
+        self._grammar_generation += 1
+        if self._grammar_worker is not None:
+            self._grammar_worker.cancel()
+            if self._grammar_worker.isRunning():
+                self._grammar_worker.wait()
+        scenes: dict[int, str] = {}
+        for sid, editor in self._editors.items():
+            scenes[sid] = editor.toPlainText()
+        worker = _GrammarWorker(self._grammar_generation, scenes)
+        worker.finished.connect(self._on_grammar_results)
+        self._grammar_worker = worker
+        worker.start()
+
+    def _on_grammar_results(
+        self, generation: int, results: dict[int, list[GrammarIssue]],
+    ) -> None:
+        if generation != self._grammar_generation:
+            return
+        if not self._grammar_checking:
+            return
+        for sid, issues in results.items():
+            editor = self._editors.get(sid)
+            if editor is None:
+                continue
+            editor._grammar_issues = issues
+            editor.apply_grammar_underlines()
+        self._grammar_worker = None
 
     def _check_editor_grammar(self, editor: _SceneEditor) -> None:
-        text = editor.toPlainText()
-        if not text.strip():
-            editor._grammar_issues = []
-            editor.apply_grammar_underlines()
-            return
-        issues = check_text(text)
-        editor._grammar_issues = issues
-        editor.apply_grammar_underlines()
+        self._start_grammar_worker()
 
     @property
     def grammar_issues(self) -> dict[int, list[GrammarIssue]]:

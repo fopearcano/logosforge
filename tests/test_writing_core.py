@@ -708,6 +708,14 @@ def test_collect_text_sample():
 
 # -- Grammar checking --------------------------------------------------------
 
+def _wait_grammar(view):
+    """Wait for the async grammar worker to finish and deliver results."""
+    w = view._grammar_worker
+    if w is not None:
+        w.wait()
+        QApplication.processEvents()
+
+
 def test_grammar_off_by_default():
     db = Database()
     proj, *_ = _setup_project(db)
@@ -725,6 +733,7 @@ def test_grammar_toggle_enables():
     assert view._grammar_checking is True
     for editor in view._editors.values():
         assert editor._grammar_enabled is True
+    _wait_grammar(view)
 
 
 def test_grammar_toggle_disables():
@@ -732,6 +741,7 @@ def test_grammar_toggle_disables():
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
     view._toggle_grammar()
+    _wait_grammar(view)
     view._toggle_grammar()
     assert view._grammar_checking is False
     for editor in view._editors.values():
@@ -744,9 +754,11 @@ def test_grammar_detects_typo():
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
     view._toggle_grammar()
+    _wait_grammar(view)
     editor = list(view._editors.values())[0]
     editor.setPlainText("The quikc brown fox jumped over the lazy dog.")
     view._check_editor_grammar(editor)
+    _wait_grammar(view)
     spelling = [i for i in editor._grammar_issues if i.issue_type == "spelling"]
     assert any("quikc" in i.message for i in spelling)
 
@@ -756,9 +768,11 @@ def test_grammar_detects_doubled_word():
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
     view._toggle_grammar()
+    _wait_grammar(view)
     editor = list(view._editors.values())[0]
     editor.setPlainText("He went to the the store.")
     view._check_editor_grammar(editor)
+    _wait_grammar(view)
     grammar = [i for i in editor._grammar_issues if i.issue_type == "grammar"]
     assert any("Repeated" in i.message for i in grammar)
 
@@ -768,9 +782,11 @@ def test_grammar_suggestion_available():
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
     view._toggle_grammar()
+    _wait_grammar(view)
     editor = list(view._editors.values())[0]
     editor.setPlainText("He went to the the store.")
     view._check_editor_grammar(editor)
+    _wait_grammar(view)
     grammar = [i for i in editor._grammar_issues
                 if i.issue_type == "grammar" and "Repeated" in i.message]
     assert len(grammar) > 0
@@ -782,9 +798,11 @@ def test_grammar_apply_suggestion():
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
     view._toggle_grammar()
+    _wait_grammar(view)
     editor = list(view._editors.values())[0]
     editor.setPlainText("He went to the the store.")
     view._check_editor_grammar(editor)
+    _wait_grammar(view)
     grammar = [i for i in editor._grammar_issues
                 if i.issue_type == "grammar" and "Repeated" in i.message]
     editor._apply_suggestion(grammar[0], grammar[0].suggestions[0])
@@ -796,9 +814,11 @@ def test_grammar_clean_text_no_issues():
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
     view._toggle_grammar()
+    _wait_grammar(view)
     editor = list(view._editors.values())[0]
     editor.setPlainText("The man walked to the door and opened it slowly.")
     view._check_editor_grammar(editor)
+    _wait_grammar(view)
     spelling = [i for i in editor._grammar_issues if i.issue_type == "spelling"]
     grammar = [i for i in editor._grammar_issues if i.issue_type == "grammar"]
     assert len(spelling) == 0
@@ -810,6 +830,7 @@ def test_grammar_persists_setting():
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
     view._toggle_grammar()
+    _wait_grammar(view)
     settings = db.get_project_settings(proj.id)
     assert settings["grammar_checking"] is True
 
@@ -831,9 +852,11 @@ def test_grammar_issues_property():
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
     view._toggle_grammar()
+    _wait_grammar(view)
     editor = list(view._editors.values())[0]
     editor.setPlainText("He went to the the store.")
     view._check_editor_grammar(editor)
+    _wait_grammar(view)
     issues = view.grammar_issues
     assert len(issues) > 0
 
@@ -843,9 +866,11 @@ def test_grammar_underlines_applied():
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
     view._toggle_grammar()
+    _wait_grammar(view)
     editor = list(view._editors.values())[0]
     editor.setPlainText("The quikc brown fox.")
     view._check_editor_grammar(editor)
+    _wait_grammar(view)
     selections = editor.extraSelections()
     assert len(selections) > 0
 
@@ -855,9 +880,11 @@ def test_grammar_underlines_cleared_on_disable():
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
     view._toggle_grammar()
+    _wait_grammar(view)
     editor = list(view._editors.values())[0]
     editor.setPlainText("The quikc brown fox.")
     view._check_editor_grammar(editor)
+    _wait_grammar(view)
     assert len(editor.extraSelections()) > 0
     view._toggle_grammar()
     assert len(editor.extraSelections()) == 0
@@ -868,10 +895,55 @@ def test_grammar_empty_text_no_crash():
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
     view._toggle_grammar()
+    _wait_grammar(view)
     editor = list(view._editors.values())[0]
     editor.setPlainText("")
     view._check_editor_grammar(editor)
+    _wait_grammar(view)
     assert editor._grammar_issues == []
+
+
+def test_grammar_cancels_stale_worker():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("The quikc brown fox.")
+    view._start_grammar_worker()
+    first_gen = view._grammar_generation
+    editor.setPlainText("He went to the the store.")
+    view._start_grammar_worker()
+    assert view._grammar_generation == first_gen + 1
+    _wait_grammar(view)
+    grammar = [i for i in editor._grammar_issues if i.issue_type == "grammar"]
+    assert any("Repeated" in i.message for i in grammar)
+
+
+def test_grammar_worker_is_async():
+    from storyplanner.ui.writing_core_view import _GrammarWorker
+    from PySide6.QtCore import QThread
+    assert issubclass(_GrammarWorker, QThread)
+
+
+def test_grammar_cache_hit():
+    from storyplanner.ui.writing_core_view import _GRAMMAR_CACHE
+    _GRAMMAR_CACHE.clear()
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("The quikc brown fox.")
+    view._check_editor_grammar(editor)
+    _wait_grammar(view)
+    assert len(_GRAMMAR_CACHE) > 0
+    cached_count = len(_GRAMMAR_CACHE)
+    view._check_editor_grammar(editor)
+    _wait_grammar(view)
+    assert len(_GRAMMAR_CACHE) == cached_count
 
 
 # -- Auto-formatting ----------------------------------------------------------
