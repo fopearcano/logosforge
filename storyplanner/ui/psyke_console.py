@@ -344,6 +344,7 @@ class PsykeConsole(QWidget):
     def deactivate(self) -> None:
         self._selecting = True
         self._debounce.stop()
+        self._last_query = ""
         self._input.clear()
         if self._dropdown is not None:
             self._dropdown.hide_results()
@@ -368,6 +369,7 @@ class PsykeConsole(QWidget):
             self._debounce.start()
         else:
             self._debounce.stop()
+            self._last_query = ""
             if self._dropdown is not None:
                 self._dropdown.hide_results()
 
