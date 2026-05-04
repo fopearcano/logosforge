@@ -36,7 +36,7 @@ def _setup_project(db):
 # -- Canvas layout -----------------------------------------------------------
 
 def test_canvas_max_width():
-    assert _CANVAS_MAX_WIDTH >= 700
+    assert _CANVAS_MAX_WIDTH >= 600
     assert _CANVAS_MAX_WIDTH <= 850
 
 
@@ -155,14 +155,14 @@ def test_focus_mode_toggle():
     assert view._focus_bar.isHidden()
 
 
-def test_focus_mode_widens_canvas():
+def test_focus_mode_narrows_canvas():
     db = Database()
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
     normal_max = view._inner.maximumWidth()
     view.toggle_focus_mode()
     focus_max = view._inner.maximumWidth()
-    assert focus_max > normal_max
+    assert focus_max < normal_max
 
 
 def test_focus_mode_callback():

@@ -54,11 +54,11 @@ from storyplanner.temporal_psyke import TemporalGraph
 from storyplanner.writing_formats import ALL_FORMATS, FORMAT_ORDER, WritingFormat
 
 
-_CANVAS_MAX_WIDTH = 720
-_CANVAS_PADDING_H = 48
+_CANVAS_MAX_WIDTH = 680
+_CANVAS_PADDING_H = 64
 _BODY_FONT_SIZE = 18
-_BODY_LINE_HEIGHT = 1.65
-_FOCUS_LINE_HEIGHT = 1.75
+_BODY_LINE_HEIGHT = 1.8
+_FOCUS_LINE_HEIGHT = 1.9
 _FADE_ALPHA_PARA = 70
 _FADE_ALPHA_SCENE = 110
 
@@ -456,7 +456,7 @@ class WritingCoreView(QWidget):
         self._canvas = QWidget()
         self._canvas.setObjectName("writingCanvas")
         self._canvas_layout = QVBoxLayout(self._canvas)
-        self._canvas_layout.setContentsMargins(0, 32, 0, 64)
+        self._canvas_layout.setContentsMargins(0, 48, 0, 120)
         self._canvas_layout.setSpacing(0)
 
         self._inner = QWidget()
@@ -635,7 +635,7 @@ class WritingCoreView(QWidget):
 
     def _add_scene_block(self, scene, *, is_first: bool = False) -> None:
         if not is_first:
-            self._inner_layout.addSpacing(44)
+            self._inner_layout.addSpacing(56)
 
         title_text = (scene.title or "").strip()
         if title_text and title_text.lower() not in ("untitled", "untitled scene"):
@@ -1399,10 +1399,10 @@ class WritingCoreView(QWidget):
         scene_alpha = 130 if self._focus_mode else _FADE_ALPHA_SCENE
 
         if self._focus_mode:
-            self._canvas_layout.setContentsMargins(0, 24, 0, 64)
-            self._inner.setMaximumWidth(_CANVAS_MAX_WIDTH + 60)
+            self._canvas_layout.setContentsMargins(0, 64, 0, 160)
+            self._inner.setMaximumWidth(_CANVAS_MAX_WIDTH - 40)
         else:
-            self._canvas_layout.setContentsMargins(0, 32, 0, 64)
+            self._canvas_layout.setContentsMargins(0, 48, 0, 120)
             self._inner.setMaximumWidth(_CANVAS_MAX_WIDTH)
 
         for editor in self._editors.values():
