@@ -44,6 +44,7 @@ class Branch:
     goal_score: float = 0.0
     goal_valid: bool = True
     lookahead_score: float = 0.0
+    unified_score: float = 0.0
 
     @classmethod
     def new(

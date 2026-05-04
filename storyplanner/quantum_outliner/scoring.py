@@ -478,6 +478,38 @@ def compute_blended_goal_score(
 
 
 # ---------------------------------------------------------------------------
+# Unified scoring — blend probability + goal + lookahead
+# ---------------------------------------------------------------------------
+
+UNIFIED_WEIGHTS: dict[str, float] = {
+    "probability": 0.5,
+    "goal_score": 0.3,
+    "lookahead_score": 0.2,
+}
+
+
+def compute_unified_score(
+    probability: float,
+    goal_score: float,
+    lookahead_score: float,
+    *,
+    weights: dict[str, float] | None = None,
+) -> float:
+    """Compute final unified score from all sub-scores.
+
+    Falls back gracefully: if goal/lookahead are 0 (no goals configured),
+    the score is driven by probability alone (normalized).
+    """
+    w = weights or UNIFIED_WEIGHTS
+    w_prob = w.get("probability", 0.5)
+    w_goal = w.get("goal_score", 0.3)
+    w_look = w.get("lookahead_score", 0.2)
+
+    raw = w_prob * probability + w_goal * goal_score + w_look * lookahead_score
+    return round(max(0.0, min(raw, 1.0)), 4)
+
+
+# ---------------------------------------------------------------------------
 # Multi-objective scoring — Pareto front
 # ---------------------------------------------------------------------------
 
@@ -489,11 +521,22 @@ PARETO_OBJECTIVES: list[str] = [
     "goal_alignment",
 ]
 
+EXTENDED_PARETO_OBJECTIVES: list[str] = [
+    "goal_score",
+    "lookahead_score",
+    "psyke_consistency",
+]
 
-def _dominates(a: dict[str, float], b: dict[str, float]) -> bool:
+
+def _dominates(
+    a: dict[str, float],
+    b: dict[str, float],
+    objectives: list[str] | None = None,
+) -> bool:
     """Return True if *a* dominates *b* (>= on all objectives, > on at least one)."""
+    keys = objectives or PARETO_OBJECTIVES
     dominated, better = True, False
-    for k in PARETO_OBJECTIVES:
+    for k in keys:
         va, vb = a.get(k, 0.0), b.get(k, 0.0)
         if va < vb:
             dominated = False
@@ -503,26 +546,44 @@ def _dominates(a: dict[str, float], b: dict[str, float]) -> bool:
     return dominated and better
 
 
-def compute_pareto_front(scored: list[ScoredBranch]) -> list[str]:
+def compute_pareto_front(
+    scored: list["ScoredBranch"],
+    *,
+    objectives: list[str] | None = None,
+) -> list[str]:
     """Return branch IDs that belong to the Pareto-optimal (non-dominated) set.
 
     Violated branches (score=0 due to constraints) are excluded from the front.
+    When *objectives* is provided, dominance is computed over those keys
+    (looked up in each ScoredBranch's factors + goal_score/lookahead_score).
     """
     candidates = [s for s in scored if not s.violations]
     if not candidates:
         return []
 
+    use_extended = objectives is not None
+
+    def _vector(s: "ScoredBranch") -> dict[str, float]:
+        v = dict(s.factors)
+        if use_extended:
+            v["goal_score"] = s.goal_score
+            v["lookahead_score"] = s.lookahead_score
+        return v
+
+    vectors = [_vector(s) for s in candidates]
+    keys = objectives or PARETO_OBJECTIVES
+
     front: list[str] = []
-    for i, a in enumerate(candidates):
+    for i, a_vec in enumerate(vectors):
         is_dominated = False
-        for j, b in enumerate(candidates):
+        for j, b_vec in enumerate(vectors):
             if i == j:
                 continue
-            if _dominates(b.factors, a.factors):
+            if _dominates(b_vec, a_vec, keys):
                 is_dominated = True
                 break
         if not is_dominated:
-            front.append(a.branch_id)
+            front.append(candidates[i].branch_id)
     return front
 
 
@@ -886,6 +947,7 @@ class ScoredBranch:
     goal_score: float = 0.0
     goal_valid: bool = True
     lookahead_score: float = 0.0
+    unified_score: float = 0.0
 
 
 def score_branches(
@@ -898,6 +960,7 @@ def score_branches(
     llm_scores: dict[str, dict[str, float]] | None = None,
     ensemble_alpha: float = ENSEMBLE_ALPHA,
     goals: QuantumGoals | None = None,
+    unified_weights: dict[str, float] | None = None,
 ) -> list[ScoredBranch]:
     """Score all branches in a wavefunction. Returns sorted high-to-low.
 
@@ -905,7 +968,11 @@ def score_branches(
     factors are blended with the LLM factors using *ensemble_alpha*.
 
     When *goals* is provided, each branch also receives a goal_score
-    (weighted by objectives) and goal_valid flag (min_constraints check).
+    (weighted by objectives), goal_valid flag, lookahead_score, and
+    unified_score blending all sub-scores.
+
+    Pareto front uses extended objectives (goal_score, lookahead_score,
+    psyke_consistency) when goals are active.
     """
     w = apply_beat_bias(weights or DEFAULT_WEIGHTS, wf.structure_beat)
 
@@ -966,11 +1033,19 @@ def score_branches(
             goal_score=s.goal_score,
             goal_valid=s.goal_valid,
             lookahead_score=s.lookahead_score,
+            unified_score=(
+                0.0 if s.violations else
+                compute_unified_score(
+                    p, s.goal_score, s.lookahead_score,
+                    weights=unified_weights,
+                )
+            ) if goals is not None else p,
         )
         for s, p in zip(scored, probs)
     ]
 
-    pareto_ids = set(compute_pareto_front(scored))
+    pareto_objs = EXTENDED_PARETO_OBJECTIVES if goals is not None else None
+    pareto_ids = set(compute_pareto_front(scored, objectives=pareto_objs))
     scored = [
         ScoredBranch(
             branch_id=s.branch_id,
@@ -982,11 +1057,12 @@ def score_branches(
             goal_score=s.goal_score,
             goal_valid=s.goal_valid,
             lookahead_score=s.lookahead_score,
+            unified_score=s.unified_score,
         )
         for s in scored
     ]
 
-    scored.sort(key=lambda s: s.score, reverse=True)
+    scored.sort(key=lambda s: s.unified_score, reverse=True)
     return scored
 
 
@@ -1004,6 +1080,7 @@ def apply_scores(wf: Wavefunction, scored: list[ScoredBranch]) -> None:
             b.goal_score = s.goal_score
             b.goal_valid = s.goal_valid
             b.lookahead_score = s.lookahead_score
+            b.unified_score = s.unified_score
 
 
 def recommend_collapse(wf: Wavefunction) -> CollapseRecommendation | None:
