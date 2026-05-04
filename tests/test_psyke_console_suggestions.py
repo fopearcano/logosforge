@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 
 from storyplanner.db import Database
 from storyplanner.psyke_command_registry import CommandRegistry
@@ -308,3 +308,50 @@ class TestEntriesAppearInSearch:
         dropdown = console._ensure_dropdown()
         entity_items = [i for i in dropdown._items if i.suggestion.category == "entity"]
         assert len(entity_items) == 0
+
+
+# ---------------------------------------------------------------------------
+# Layout — center-bottom floating positioning
+# ---------------------------------------------------------------------------
+
+
+class TestConsoleCenterBottomLayout:
+    """Verify the console floats at center-bottom of its parent."""
+
+    def _make_console(self, app, db, project, parent_w, parent_h):
+        from storyplanner.ui.psyke_console import PsykeConsole
+
+        parent = QWidget()
+        parent.resize(parent_w, parent_h)
+        c = PsykeConsole(db, project.id, parent=parent)
+        c.reposition()
+        return c, parent
+
+    def test_reposition_centers_horizontally(self, app, db, project):
+        c, parent = self._make_console(app, db, project, 1200, 800)
+        expected_w = int(1200 * 0.50)
+        assert c.width() == expected_w
+        assert c.x() == (1200 - expected_w) // 2
+        assert c.y() == 800 - c.height() - 10
+
+    def test_reposition_clamps_to_min_width(self, app, db, project):
+        c, parent = self._make_console(app, db, project, 400, 600)
+        assert c.width() == 320
+
+    def test_reposition_clamps_to_max_width(self, app, db, project):
+        c, parent = self._make_console(app, db, project, 2400, 800)
+        assert c.width() == 720
+
+    def test_reposition_responsive_on_resize(self, app, db, project):
+        c, parent = self._make_console(app, db, project, 1000, 800)
+        x1 = c.x()
+        parent.resize(1400, 800)
+        c.reposition()
+        assert c.x() != x1
+
+    def test_console_stays_within_parent(self, app, db, project):
+        c, parent = self._make_console(app, db, project, 1200, 800)
+        assert c.x() >= 0
+        assert c.x() + c.width() <= 1200
+        assert c.y() >= 0
+        assert c.y() + c.height() <= 800

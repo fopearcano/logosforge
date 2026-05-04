@@ -389,11 +389,10 @@ class MainWindow(QMainWindow):
 
         outer_layout.addWidget(main_row, stretch=1)
 
-        self._psyke_console = PsykeConsole(self._db, self._project_id)
+        self._psyke_console = PsykeConsole(self._db, self._project_id, parent=central)
         self._psyke_console.entry_selected.connect(self._on_psyke_entry_selected)
         self._psyke_console.entry_open_requested.connect(self._open_psyke_entry)
         self._psyke_console.command_submitted.connect(self._on_console_command)
-        outer_layout.addWidget(self._psyke_console, stretch=0)
 
         self._setup_system_commands()
 
@@ -700,11 +699,16 @@ class MainWindow(QMainWindow):
             self.sidebar_buttons[label].setChecked(label == name)
         self._assistant_panel.set_active_section_name(name)
 
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._psyke_console.reposition()
+
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._apply_layout_for_width(event.size().width())
         if self._assistant_overlay:
             self._position_overlay_assistant()
+        self._psyke_console.reposition()
 
     def _apply_layout_for_width(self, w: int) -> None:
         if w >= 1400:

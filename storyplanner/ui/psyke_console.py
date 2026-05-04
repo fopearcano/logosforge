@@ -36,6 +36,10 @@ _OPACITY_ACTIVE = 1.0
 _FADE_MS = 150
 _DEBOUNCE_MS = 100
 _MAX_VISIBLE = 8
+_CONSOLE_WIDTH_RATIO = 0.50
+_CONSOLE_MIN_WIDTH = 320
+_CONSOLE_MAX_WIDTH = 720
+_CONSOLE_BOTTOM_MARGIN = 10
 
 class _SuggestionItem(QWidget):
     """Single row in the results dropdown."""
@@ -277,7 +281,7 @@ class PsykeConsole(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setFixedHeight(32)
+        self.setFixedHeight(36)
         self.setObjectName("psykeConsole")
 
         self._db = db
@@ -361,6 +365,18 @@ class PsykeConsole(QWidget):
 
     def mark_index_dirty(self) -> None:
         self._index_dirty = True
+
+    def reposition(self) -> None:
+        """Place the console at horizontal center, fixed to bottom."""
+        parent = self.parentWidget()
+        if parent is None:
+            return
+        pw = parent.width()
+        cw = max(_CONSOLE_MIN_WIDTH, min(int(pw * _CONSOLE_WIDTH_RATIO), _CONSOLE_MAX_WIDTH))
+        x = (pw - cw) // 2
+        y = parent.height() - self.height() - _CONSOLE_BOTTOM_MARGIN
+        self.setGeometry(x, y, cw, self.height())
+        self.raise_()
 
     def _on_text_changed(self, text: str) -> None:
         if self._selecting:
@@ -574,14 +590,15 @@ class PsykeConsole(QWidget):
         self.setStyleSheet(
             f"#psykeConsole {{"
             f"  background-color: {theme.BG_DARK};"
-            f"  border-top: 1px solid {theme.BORDER};"
+            f"  border: 1px solid {theme.BORDER};"
+            f"  border-radius: 8px;"
             f"}}"
             f"#psykeConsoleInput {{"
             f"  background-color: transparent;"
             f"  border: none;"
             f"  color: {theme.TEXT_MUTED};"
-            f"  font-size: 12px;"
-            f"  padding: 4px 6px;"
+            f"  font-size: 13px;"
+            f"  padding: 4px 8px;"
             f"}}"
             f"#psykeConsoleInput:focus {{"
             f"  color: {theme.TEXT_PRIMARY};"
