@@ -40,6 +40,7 @@ class Branch:
     probability: float = 0.0
     factors: dict[str, float] = field(default_factory=dict)
     violations: list[str] = field(default_factory=list)
+    is_pareto_optimal: bool = False
 
     @classmethod
     def new(

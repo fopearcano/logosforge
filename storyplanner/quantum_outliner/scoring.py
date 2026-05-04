@@ -297,6 +297,55 @@ def check_constraints(
     return violated
 
 
+# ---------------------------------------------------------------------------
+# Multi-objective scoring — Pareto front
+# ---------------------------------------------------------------------------
+
+PARETO_OBJECTIVES: list[str] = [
+    "structure_fit",
+    "psyke_consistency",
+    "tension_gain",
+    "novelty",
+    "goal_alignment",
+]
+
+
+def _dominates(a: dict[str, float], b: dict[str, float]) -> bool:
+    """Return True if *a* dominates *b* (>= on all objectives, > on at least one)."""
+    dominated, better = True, False
+    for k in PARETO_OBJECTIVES:
+        va, vb = a.get(k, 0.0), b.get(k, 0.0)
+        if va < vb:
+            dominated = False
+            break
+        if va > vb:
+            better = True
+    return dominated and better
+
+
+def compute_pareto_front(scored: list[ScoredBranch]) -> list[str]:
+    """Return branch IDs that belong to the Pareto-optimal (non-dominated) set.
+
+    Violated branches (score=0 due to constraints) are excluded from the front.
+    """
+    candidates = [s for s in scored if not s.violations]
+    if not candidates:
+        return []
+
+    front: list[str] = []
+    for i, a in enumerate(candidates):
+        is_dominated = False
+        for j, b in enumerate(candidates):
+            if i == j:
+                continue
+            if _dominates(b.factors, a.factors):
+                is_dominated = True
+                break
+        if not is_dominated:
+            front.append(a.branch_id)
+    return front
+
+
 FACTOR_LABELS: dict[str, str] = {
     "structure_fit": "aligns with structural beat",
     "psyke_consistency": "consistent with story bible",
@@ -384,6 +433,7 @@ class ScoredBranch:
     probability: float
     factors: dict[str, float]
     violations: list[str] = field(default_factory=list)
+    is_pareto_optimal: bool = False
 
 
 def score_branches(
@@ -441,6 +491,19 @@ def score_branches(
         for s, p in zip(scored, probs)
     ]
 
+    pareto_ids = set(compute_pareto_front(scored))
+    scored = [
+        ScoredBranch(
+            branch_id=s.branch_id,
+            score=s.score,
+            probability=s.probability,
+            factors=s.factors,
+            violations=s.violations,
+            is_pareto_optimal=s.branch_id in pareto_ids,
+        )
+        for s in scored
+    ]
+
     scored.sort(key=lambda s: s.score, reverse=True)
     return scored
 
@@ -455,6 +518,7 @@ def apply_scores(wf: Wavefunction, scored: list[ScoredBranch]) -> None:
             b.probability = s.probability
             b.factors = dict(s.factors)
             b.violations = list(s.violations)
+            b.is_pareto_optimal = s.is_pareto_optimal
 
 
 def recommend_collapse(wf: Wavefunction) -> CollapseRecommendation | None:
