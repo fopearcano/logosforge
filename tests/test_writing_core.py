@@ -756,6 +756,50 @@ def test_psyke_jump_callback_none():
     view._on_psyke_jump(999)
 
 
+def test_resolve_term_at_finds_entry():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    result = view._resolve_term_at("John looked at Mary", 2)
+    assert result == e1.id
+
+
+def test_resolve_term_at_returns_none_outside_term():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    result = view._resolve_term_at("John looked at Mary", 8)
+    assert result is None
+
+
+def test_context_action_resolve():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    result = view._handle_psyke_context("resolve", "Mary whispered", 2)
+    assert result == e2.id
+
+
+def test_context_action_open():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    jumped = []
+    view = WritingCoreView(
+        db, proj.id,
+        on_open_psyke_entry=lambda eid: jumped.append(eid),
+    )
+    view._handle_psyke_context("open", e1.id)
+    assert jumped == [e1.id]
+
+
+def test_editor_has_psyke_context_callback():
+    db = Database()
+    proj, s1, s2, e1, e2 = _setup_psyke_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    assert editor._on_psyke_context_action is not None
+
+
 def test_handlers_cleared_on_refresh():
     db = Database()
     proj, s1, s2, e1, e2 = _setup_psyke_project(db)

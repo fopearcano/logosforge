@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QTextEdit,
     QPushButton,
     QScrollArea,
@@ -137,6 +138,7 @@ class _SceneEditor(QTextEdit):
     _on_nav_next = None
     _on_nav_prev = None
     _on_new_block = None
+    _on_psyke_context_action = None
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -261,6 +263,34 @@ class _SceneEditor(QTextEdit):
             self.slash_pressed(self)
             return
         super().keyPressEvent(event)
+
+    def contextMenuEvent(self, event) -> None:  # noqa: N802
+        menu = self.createStandardContextMenu()
+        entry_id = self._resolve_psyke_at(event.pos())
+        if entry_id is not None:
+            psyke_sep = menu.insertSeparator(menu.actions()[0] if menu.actions() else None)
+            open_act = menu.addAction("Open in Story Bible")
+            menu.removeAction(open_act)
+            menu.insertAction(psyke_sep, open_act)
+            open_act.triggered.connect(
+                lambda _, eid=entry_id: self._fire_psyke_action("open", eid),
+            )
+        menu.exec(event.globalPos())
+        menu.deleteLater()
+
+    def _resolve_psyke_at(self, pos) -> int | None:
+        if self._on_psyke_context_action is None:
+            return None
+        cursor = self.cursorForPosition(pos)
+        block = cursor.block()
+        col = cursor.positionInBlock()
+        text = block.text()
+        cb = self._on_psyke_context_action
+        return cb("resolve", text, col)
+
+    def _fire_psyke_action(self, action: str, entry_id: int) -> None:
+        if self._on_psyke_context_action:
+            self._on_psyke_context_action(action, entry_id, 0)
 
 
 
@@ -676,6 +706,7 @@ class WritingCoreView(QWidget):
         editor._on_nav_next = lambda e=editor: self._navigate_next_editor(e)
         editor._on_nav_prev = lambda e=editor: self._navigate_prev_editor(e)
         editor._on_new_block = self._on_new_block_created
+        editor._on_psyke_context_action = self._handle_psyke_context
         editor.textChanged.connect(
             lambda sid=scene.id: self._schedule_save(sid)
         )
@@ -1604,6 +1635,24 @@ class WritingCoreView(QWidget):
 
     def _on_entity_hover_hide(self) -> None:
         self._entity_hover_panel.schedule_hide()
+
+    def _handle_psyke_context(self, action: str, *args):
+        if action == "resolve":
+            text, col = args[0], args[1]
+            return self._resolve_term_at(text, col)
+        if action == "open":
+            entry_id = args[0]
+            self._on_psyke_jump(entry_id)
+        return None
+
+    def _resolve_term_at(self, text: str, col: int) -> int | None:
+        hl = next(iter(self._highlighters.values()), None)
+        if hl is None or hl._pattern is None:
+            return None
+        for m in hl._pattern.finditer(text):
+            if m.start() <= col <= m.end():
+                return self._psyke_term_map.get(m.group().lower())
+        return None
 
     # -- Auto-link suggestions -------------------------------------------------
 
