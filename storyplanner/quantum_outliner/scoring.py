@@ -460,6 +460,9 @@ class CollapseRecommendation:
         return format_recommendation(self)
 
 
+SELECTION_MODES: tuple[str, ...] = ("weighted", "pareto")
+
+
 def format_recommendation(rec: CollapseRecommendation) -> str:
     """Format a recommendation with factor-based explanation."""
     explanation = explain_factors(rec.top_factors)
@@ -467,6 +470,47 @@ def format_recommendation(rec: CollapseRecommendation) -> str:
         f"Recommended: {rec.title}  ({rec.probability:.0%})\n"
         f"  because: {explanation}"
     )
+
+
+def recommend_pareto(wf: "Wavefunction", *, max_candidates: int = 3) -> list[CollapseRecommendation]:
+    """Return up to *max_candidates* Pareto-optimal branches as recommendations.
+
+    Unlike recommend_collapse (single best), this presents the non-dominated
+    set without forcing a ranking.
+    """
+    candidates = [
+        b for b in wf.branches
+        if b.is_pareto_optimal and b.probability > 0 and not b.violations
+    ]
+    if not candidates:
+        return []
+
+    candidates.sort(key=lambda b: b.probability, reverse=True)
+    candidates = candidates[:max_candidates]
+
+    recs: list[CollapseRecommendation] = []
+    for b in candidates:
+        top_factors = sorted(b.factors.items(), key=lambda kv: kv[1], reverse=True)[:2]
+        explanation = explain_factors(top_factors)
+        recs.append(CollapseRecommendation(
+            branch_id=b.id,
+            title=b.title,
+            probability=b.probability,
+            reason=explanation,
+            top_factors=top_factors,
+        ))
+    return recs
+
+
+def format_pareto_recommendation(candidates: list[CollapseRecommendation]) -> str:
+    """Format Pareto candidates as a multi-line recommendation block."""
+    if not candidates:
+        return "No Pareto-optimal candidates available."
+    lines = ["Pareto-optimal candidates:"]
+    for rec in candidates:
+        explanation = explain_factors(rec.top_factors)
+        lines.append(f"  ● {rec.title}  [{rec.branch_id}]  — {explanation}")
+    return "\n".join(lines)
 
 
 def explain_wavefunction(wf: "Wavefunction") -> str:

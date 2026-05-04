@@ -177,6 +177,20 @@ class Database:
         settings["show_tradeoffs"] = enabled
         self.save_project_settings(project_id, settings)
 
+    def get_selection_mode(self, project_id: int) -> str:
+        settings = self.get_project_settings(project_id)
+        mode = settings.get("selection_mode", "weighted")
+        if mode not in ("weighted", "pareto"):
+            return "weighted"
+        return mode
+
+    def set_selection_mode(self, project_id: int, mode: str) -> None:
+        if mode not in ("weighted", "pareto"):
+            mode = "weighted"
+        settings = self.get_project_settings(project_id)
+        settings["selection_mode"] = mode
+        self.save_project_settings(project_id, settings)
+
     # -- Characters ----------------------------------------------------------
 
     def get_character_by_id(self, character_id: int) -> Character | None:

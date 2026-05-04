@@ -17,8 +17,10 @@ from storyplanner.quantum_outliner.scoring import (
     apply_scores,
     explain_wavefunction,
     format_branch_chips,
+    format_pareto_recommendation,
     format_recommendation,
     recommend_collapse,
+    recommend_pareto,
     score_branches,
 )
 from storyplanner.quantum_outliner.relativity import reframe_scene
@@ -391,10 +393,12 @@ def _format_wavefunction(
     weights = None
     constraints = None
     show_tradeoffs = False
+    selection_mode = "weighted"
     if db is not None and project_id is not None:
         weights = db.get_scoring_weights(project_id)
         constraints = db.get_constraints(project_id)
         show_tradeoffs = db.get_show_tradeoffs(project_id)
+        selection_mode = db.get_selection_mode(project_id)
 
     if wf.branches:
         scored = score_branches(
@@ -403,7 +407,11 @@ def _format_wavefunction(
         apply_scores(wf, scored)
         wf.branches.sort(key=lambda b: b.probability, reverse=True)
 
-    body = _format_lambda(wf, psyke=psyke, show_tradeoffs=show_tradeoffs)
+    body = _format_lambda(
+        wf, psyke=psyke,
+        show_tradeoffs=show_tradeoffs,
+        selection_mode=selection_mode,
+    )
     return QuantumResult(
         kind="possibilities",
         title=title,
@@ -417,14 +425,18 @@ def _format_lambda(
     *,
     psyke: PsykeSignals | None = None,
     show_tradeoffs: bool = False,
+    selection_mode: str = "weighted",
 ) -> str:
+    is_pareto_mode = selection_mode == "pareto"
     n = len(wf.branches)
     lines = [
         f"═══ QUANTUM FIELD ═══",
         f"Wavefunction {wf.id} — {wf.anchor}",
         f"Superposition: {n} possible futures",
-        "",
     ]
+    if is_pareto_mode:
+        lines.append("Mode: Pareto")
+    lines.append("")
 
     if wf.structure_method or wf.structure_beat:
         gravity = wf.structure_method or ""
@@ -434,14 +446,38 @@ def _format_lambda(
         lines.append("")
 
     all_factors = [b.factors for b in wf.branches if b.factors and not b.violations]
+    show_chips = show_tradeoffs or is_pareto_mode
 
-    for i, b in enumerate(wf.branches, 1):
+    if is_pareto_mode:
+        ordered = (
+            sorted(
+                [b for b in wf.branches if b.is_pareto_optimal and not b.violations],
+                key=lambda b: b.probability, reverse=True,
+            )
+            + sorted(
+                [b for b in wf.branches if not b.is_pareto_optimal or b.violations],
+                key=lambda b: b.probability, reverse=True,
+            )
+        )
+        pareto_count = sum(
+            1 for b in wf.branches if b.is_pareto_optimal and not b.violations
+        )
+    else:
+        ordered = wf.branches
+
+    separator_placed = False
+    for i, b in enumerate(ordered, 1):
+        if is_pareto_mode and not separator_placed and i > pareto_count and pareto_count > 0:
+            lines.append("  ─ ─ ─")
+            lines.append("")
+            separator_placed = True
+
         label = f"▸ Option {i}: {b.title}  [{b.id}]"
         if b.branch_type:
             label += f"  ({b.branch_type})"
         if b.probability > 0:
             label += f"  {b.probability:.0%}"
-        if show_tradeoffs and b.is_pareto_optimal and not b.violations:
+        if show_chips and b.is_pareto_optimal and not b.violations:
             label += "  ●"
         lines.append(label)
         lines.append(f"  {b.description}")
@@ -458,7 +494,7 @@ def _format_lambda(
         if b.violations:
             for v in b.violations:
                 lines.append(f"  ⚠ BLOCKED: violates \"{v}\"")
-        elif show_tradeoffs and b.factors and all_factors:
+        elif show_chips and b.factors and all_factors:
             chips = format_branch_chips(b.factors, all_factors, is_pareto=False)
             if chips:
                 lines.append(f"  {chips}")
@@ -470,10 +506,16 @@ def _format_lambda(
         lines.append("  Use /quantum reframe <name> to shift perspective.")
         lines.append("")
 
-    rec = recommend_collapse(wf)
-    if rec:
-        lines.append(format_recommendation(rec))
-        lines.append("")
+    if is_pareto_mode:
+        pareto_recs = recommend_pareto(wf)
+        if pareto_recs:
+            lines.append(format_pareto_recommendation(pareto_recs))
+            lines.append("")
+    else:
+        rec = recommend_collapse(wf)
+        if rec:
+            lines.append(format_recommendation(rec))
+            lines.append("")
 
     lines.append(
         f"Uncertainty: {n} branches in superposition — "
