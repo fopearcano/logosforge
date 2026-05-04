@@ -191,6 +191,109 @@ class _GrammarWorker(QThread):
             self.finished.emit(self._generation, results)
 
 
+class _GrammarPopup(QWidget):
+    """Floating popup for grammar/spelling issue fixes."""
+
+    suggestion_chosen = Signal(object, str)  # (issue, replacement)
+    issue_ignored = Signal(object)  # issue
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowFlags(
+            Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint,
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
+        self.setObjectName("grammarPopup")
+
+        self._issue: GrammarIssue | None = None
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(8, 6, 8, 6)
+        self._layout.setSpacing(4)
+
+        self._msg_label = QLabel()
+        self._msg_label.setObjectName("grammarPopupMsg")
+        self._msg_label.setWordWrap(True)
+        self._layout.addWidget(self._msg_label)
+
+        self._btn_row = QHBoxLayout()
+        self._btn_row.setSpacing(4)
+        self._layout.addLayout(self._btn_row)
+
+        self._suggestion_btns: list[QPushButton] = []
+
+        self._ignore_btn = QPushButton("Ignore")
+        self._ignore_btn.setFlat(True)
+        self._ignore_btn.setObjectName("grammarPopupIgnore")
+        self._ignore_btn.clicked.connect(self._on_ignore)
+
+        self.setStyleSheet(f"""
+            #grammarPopup {{
+                background: {theme.BG_PANEL};
+                border: 1px solid {theme.BG_HOVER};
+                border-radius: 6px;
+            }}
+            #grammarPopupMsg {{
+                color: {theme.TEXT_SECONDARY};
+                font-size: 11px;
+            }}
+            #grammarPopupIgnore {{
+                color: {theme.TEXT_MUTED};
+                font-size: 11px;
+                padding: 2px 6px;
+            }}
+            QPushButton {{
+                color: {theme.TEXT_PRIMARY};
+                background: {theme.BG_INPUT};
+                border: 1px solid {theme.BG_HOVER};
+                border-radius: 4px;
+                font-size: 12px;
+                padding: 3px 10px;
+            }}
+            QPushButton:hover {{
+                background: {theme.BG_HOVER};
+            }}
+        """)
+        self.setMaximumWidth(320)
+
+    def show_for_issue(self, issue: GrammarIssue, global_pos) -> None:
+        self._issue = issue
+
+        type_label = issue.issue_type.capitalize()
+        self._msg_label.setText(f"<b>{type_label}:</b> {issue.message}")
+
+        for btn in self._suggestion_btns:
+            self._btn_row.removeWidget(btn)
+            btn.deleteLater()
+        self._suggestion_btns.clear()
+
+        if self._ignore_btn.parent():
+            self._btn_row.removeWidget(self._ignore_btn)
+
+        for suggestion in issue.suggestions[:4]:
+            btn = QPushButton(suggestion)
+            btn.clicked.connect(
+                lambda _, s=suggestion: self._on_suggestion(s),
+            )
+            self._btn_row.addWidget(btn)
+            self._suggestion_btns.append(btn)
+
+        self._btn_row.addWidget(self._ignore_btn)
+
+        self.adjustSize()
+        self.move(global_pos)
+        self.show()
+
+    def _on_suggestion(self, replacement: str) -> None:
+        if self._issue is not None:
+            self.suggestion_chosen.emit(self._issue, replacement)
+        self.hide()
+
+    def _on_ignore(self) -> None:
+        if self._issue is not None:
+            self.issue_ignored.emit(self._issue)
+        self.hide()
+
+
 class _SceneEditor(QTextEdit):
     """Borderless editor with focus-fade overlay and cross-scene navigation.
 
@@ -226,6 +329,10 @@ class _SceneEditor(QTextEdit):
         self._smart_quotes = False
         self._grammar_issues: list[GrammarIssue] = []
         self._grammar_enabled = False
+        self._ignored_issues: set[tuple[str, str]] = set()
+        self._grammar_popup = _GrammarPopup()
+        self._grammar_popup.suggestion_chosen.connect(self._on_popup_suggestion)
+        self._grammar_popup.issue_ignored.connect(self._on_popup_ignore)
         self._focus_fade_enabled = False
         self._fade_block = -1
         self._fade_bg = "#0f1219"
@@ -371,25 +478,25 @@ class _SceneEditor(QTextEdit):
 
         return False
 
-    def contextMenuEvent(self, event) -> None:  # noqa: N802
-        menu = self.createStandardContextMenu()
-        first_action = menu.actions()[0] if menu.actions() else None
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if (
+            self._grammar_enabled
+            and event.button() == Qt.MouseButton.LeftButton
+        ):
+            issue = self._issue_at_cursor(event.pos())
+            if issue is not None:
+                self._show_grammar_popup(issue, event.globalPos())
+                return
+        super().mousePressEvent(event)
 
+    def contextMenuEvent(self, event) -> None:  # noqa: N802
         issue = self._issue_at_cursor(event.pos()) if self._grammar_enabled else None
         if issue is not None:
-            issue_sep = menu.insertSeparator(first_action)
-            header = menu.addAction(f"  {issue.message}")
-            header.setEnabled(False)
-            menu.removeAction(header)
-            menu.insertAction(issue_sep, header)
-            for suggestion in issue.suggestions[:5]:
-                fix_act = menu.addAction(f"  → {suggestion}")
-                menu.removeAction(fix_act)
-                menu.insertAction(issue_sep, fix_act)
-                fix_act.triggered.connect(
-                    lambda _, s=suggestion, iss=issue: self._apply_suggestion(iss, s),
-                )
+            self._show_grammar_popup(issue, event.globalPos())
+            return
 
+        menu = self.createStandardContextMenu()
+        first_action = menu.actions()[0] if menu.actions() else None
         entry_id = self._resolve_psyke_at(event.pos())
         if entry_id is not None:
             psyke_sep = menu.insertSeparator(first_action)
@@ -402,11 +509,22 @@ class _SceneEditor(QTextEdit):
         menu.exec(event.globalPos())
         menu.deleteLater()
 
+    def _show_grammar_popup(self, issue: GrammarIssue, global_pos) -> None:
+        self._grammar_popup.show_for_issue(issue, global_pos)
+
     def _apply_suggestion(self, issue: GrammarIssue, replacement: str) -> None:
         cursor = QTextCursor(self.document())
         cursor.setPosition(issue.start)
         cursor.setPosition(issue.end, QTextCursor.MoveMode.KeepAnchor)
         cursor.insertText(replacement)
+
+    def _on_popup_suggestion(self, issue: GrammarIssue, replacement: str) -> None:
+        self._apply_suggestion(issue, replacement)
+
+    def _on_popup_ignore(self, issue: GrammarIssue) -> None:
+        key = (issue.issue_type, issue.message)
+        self._ignored_issues.add(key)
+        self.apply_grammar_underlines()
 
     def _resolve_psyke_at(self, pos) -> int | None:
         if self._on_psyke_context_action is None:
@@ -446,6 +564,9 @@ class _SceneEditor(QTextEdit):
         for issue in self._grammar_issues:
             if issue.start < 0 or issue.end > doc_len:
                 continue
+            key = (issue.issue_type, issue.message)
+            if key in self._ignored_issues:
+                continue
             color, style = _STYLES.get(issue.issue_type, _DEFAULT)
             sel = QTextEdit.ExtraSelection()
             fmt = QTextCharFormat()
@@ -468,7 +589,9 @@ class _SceneEditor(QTextEdit):
         abs_pos = cursor.position()
         for issue in self._grammar_issues:
             if issue.start <= abs_pos < issue.end:
-                return issue
+                key = (issue.issue_type, issue.message)
+                if key not in self._ignored_issues:
+                    return issue
         return None
 
 

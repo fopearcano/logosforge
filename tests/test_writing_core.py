@@ -1107,6 +1107,145 @@ def test_mouse_tracking_enabled():
     assert editor.hasMouseTracking() is True
 
 
+# -- Grammar popup & ignore --------------------------------------------------
+
+def test_grammar_popup_exists():
+    from storyplanner.ui.writing_core_view import _GrammarPopup
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    assert isinstance(editor._grammar_popup, _GrammarPopup)
+
+
+def test_grammar_popup_show_for_issue():
+    from storyplanner.grammar_checker import Issue
+    from storyplanner.ui.writing_core_view import _GrammarPopup
+    popup = _GrammarPopup()
+    issue = Issue(start=0, end=5, issue_type="spelling", message="Unknown word: 'quikc'",
+                  suggestions=["quick", "quiche"])
+    popup.show_for_issue(issue, QPoint(100, 100))
+    assert popup.isVisible()
+    assert "quikc" in popup._msg_label.text()
+    assert len(popup._suggestion_btns) == 2
+    popup.hide()
+
+
+def test_grammar_popup_suggestion_replaces_text():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("He went to the the store.")
+    view._check_editor_grammar(editor)
+    _wait_grammar(view)
+    grammar = [i for i in editor._grammar_issues
+                if i.issue_type == "grammar" and "Repeated" in i.message]
+    assert len(grammar) > 0
+    editor._on_popup_suggestion(grammar[0], grammar[0].suggestions[0])
+    assert "the the" not in editor.toPlainText()
+
+
+def test_grammar_ignore_removes_underline():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("The quikc brown fox.")
+    view._check_editor_grammar(editor)
+    _wait_grammar(view)
+    before = len(editor.extraSelections())
+    assert before > 0
+    spelling = [i for i in editor._grammar_issues if i.issue_type == "spelling"]
+    assert len(spelling) > 0
+    editor._on_popup_ignore(spelling[0])
+    after = len(editor.extraSelections())
+    assert after < before
+
+
+def test_grammar_ignore_persists_across_checks():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("The quikc brown fox.")
+    view._check_editor_grammar(editor)
+    _wait_grammar(view)
+    spelling = [i for i in editor._grammar_issues if i.issue_type == "spelling"
+                and "quikc" in i.message]
+    assert len(spelling) > 0
+    editor._on_popup_ignore(spelling[0])
+    view._check_editor_grammar(editor)
+    _wait_grammar(view)
+    visible = editor.extraSelections()
+    tips = [s.format.toolTip() for s in visible]
+    assert not any("quikc" in t for t in tips)
+
+
+def test_grammar_ignore_does_not_affect_other_issues():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("The quikc boy went to the the store.")
+    view._check_editor_grammar(editor)
+    _wait_grammar(view)
+    total_before = len(editor.extraSelections())
+    spelling = [i for i in editor._grammar_issues if "quikc" in i.message]
+    assert len(spelling) > 0
+    editor._on_popup_ignore(spelling[0])
+    remaining = len(editor.extraSelections())
+    assert remaining > 0
+    assert remaining < total_before
+
+
+def test_grammar_issue_at_cursor_skips_ignored():
+    from storyplanner.grammar_checker import Issue
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    editor._grammar_enabled = True
+    editor._grammar_issues = [
+        Issue(start=0, end=5, issue_type="spelling", message="Unknown word: 'quikc'"),
+    ]
+    editor._ignored_issues.add(("spelling", "Unknown word: 'quikc'"))
+    result = editor._issue_at_cursor(QPoint(0, 0))
+    assert result is None
+
+
+def test_grammar_popup_ignore_btn_exists():
+    from storyplanner.ui.writing_core_view import _GrammarPopup
+    popup = _GrammarPopup()
+    assert popup._ignore_btn is not None
+    assert popup._ignore_btn.text() == "Ignore"
+
+
+def test_grammar_context_menu_shows_popup():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("The quikc brown fox.")
+    view._check_editor_grammar(editor)
+    _wait_grammar(view)
+    issues = [i for i in editor._grammar_issues if "quikc" in i.message]
+    assert len(issues) > 0
+    editor._show_grammar_popup(issues[0], QPoint(100, 100))
+    assert editor._grammar_popup.isVisible()
+    editor._grammar_popup.hide()
+
+
 # -- Auto-formatting ----------------------------------------------------------
 
 def _type_into_editor(editor, text):
