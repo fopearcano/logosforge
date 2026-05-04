@@ -74,6 +74,52 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 
 
+_LANGUAGE_NAMES: dict[str, str] = {
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "pt": "Portuguese",
+}
+
+
+def _detect_response_language(messages: list[dict]) -> str:
+    from storyplanner.grammar_checker import detect_language
+
+    for msg in messages:
+        if msg["role"] == "user":
+            text = msg["content"]
+            if len(text) >= 30:
+                return detect_language(text)
+            break
+    return "en"
+
+
+def _inject_language_instruction(
+    messages: list[dict], language: str,
+) -> list[dict]:
+    if language == "en":
+        return messages
+    lang_name = _LANGUAGE_NAMES.get(language, language)
+    instruction = (
+        f"\n\nIMPORTANT: Respond in {lang_name}. The user is writing in "
+        f"{lang_name} — all your prose, feedback, suggestions, and "
+        f"explanations must be in {lang_name}. Never translate code, "
+        f"JSON keys, or structured output formats."
+    )
+    result = []
+    for msg in messages:
+        if msg["role"] == "system":
+            result.append({
+                "role": "system",
+                "content": msg["content"] + instruction,
+            })
+        else:
+            result.append(msg)
+    return result
+
+
 def build_messages(
     action_prompt: str,
     scene_context: str,
@@ -244,6 +290,7 @@ def chat_completion(
     model: str = "",
     timeout: int = 120,
     use_cache: bool = True,
+    response_language: str = "",
 ) -> tuple[str, bool]:
     if provider is None:
         provider = ProviderConfig(
@@ -251,6 +298,9 @@ def chat_completion(
             base_url=base_url or DEFAULT_BASE_URL,
             model=model,
         )
+
+    lang = response_language or _detect_response_language(messages)
+    messages = _inject_language_instruction(messages, lang)
 
     key: str | None = None
     if use_cache:
