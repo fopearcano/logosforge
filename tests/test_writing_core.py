@@ -539,7 +539,7 @@ def test_typewriter_mode_toggle():
     assert view._typewriter_mode is False
     view.toggle_typewriter_mode()
     assert view._typewriter_mode is True
-    assert "Exit" in view._typewriter_btn.text()
+    assert view._typewriter_btn.text() == "Typewriter"
     view.toggle_typewriter_mode()
     assert view._typewriter_mode is False
     assert view._typewriter_btn.text() == "Typewriter"

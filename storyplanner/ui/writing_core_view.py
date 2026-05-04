@@ -1459,9 +1459,16 @@ class WritingCoreView(QWidget):
 
     def toggle_typewriter_mode(self) -> None:
         self._typewriter_mode = not self._typewriter_mode
-        self._typewriter_btn.setText(
-            "Exit Typewriter" if self._typewriter_mode else "Typewriter",
-        )
+        if self._typewriter_mode:
+            self._typewriter_btn.setStyleSheet(
+                f"color: {theme.TEXT_PRIMARY}; font-size: 11px;"
+                " background: transparent; padding: 2px 8px;"
+            )
+        else:
+            self._typewriter_btn.setStyleSheet(
+                f"color: {theme.TEXT_MUTED}; font-size: 11px;"
+                " background: transparent; padding: 2px 8px;"
+            )
 
     def is_typewriter_mode(self) -> bool:
         return self._typewriter_mode
