@@ -21,6 +21,7 @@ from storyplanner.quantum_outliner.core import (
     explain_branches,
     generate_branches,
     generate_outline,
+    get_decision_history,
     list_active_wavefunctions,
     reframe,
 )
@@ -138,6 +139,7 @@ __all__ = [
     "export_quantum_state",
     "generate_branches",
     "generate_outline",
+    "get_decision_history",
     "get_outline_mode",
     "get_state",
     "import_quantum_state",

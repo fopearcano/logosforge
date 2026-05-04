@@ -1220,6 +1220,29 @@ class Database:
                 session.delete(node)
             session.commit()
 
+    # -- Decision Log --------------------------------------------------------
+
+    def get_decision_log(self, project_id: int) -> list[dict]:
+        settings = self.get_project_settings(project_id)
+        raw = settings.get("decision_log")
+        if isinstance(raw, list):
+            return raw
+        return []
+
+    def append_decision(self, project_id: int, entry: dict) -> None:
+        settings = self.get_project_settings(project_id)
+        log = settings.get("decision_log")
+        if not isinstance(log, list):
+            log = []
+        log.append(entry)
+        settings["decision_log"] = log
+        self.save_project_settings(project_id, settings)
+
+    def clear_decision_log(self, project_id: int) -> None:
+        settings = self.get_project_settings(project_id)
+        settings["decision_log"] = []
+        self.save_project_settings(project_id, settings)
+
     # -- Quantum State --------------------------------------------------------
 
     def get_quantum_state_json(self, project_id: int) -> str:

@@ -6,6 +6,7 @@ output formatting so the UI can render results consistently.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -170,18 +171,53 @@ def detect_weak_scenes(
     )
 
 
+def _build_decision_entry(
+    db: "Database",
+    project_id: int,
+    wavefunction_id: str,
+    branch: Branch,
+) -> dict:
+    """Snapshot the scoring rationale for a chosen branch."""
+    mode = db.get_selection_mode(project_id)
+    top_factors = sorted(
+        branch.factors.items(), key=lambda kv: kv[1], reverse=True,
+    )[:3] if branch.factors else []
+    return {
+        "timestamp": time.time(),
+        "wavefunction_id": wavefunction_id,
+        "chosen_id": branch.id,
+        "chosen_title": branch.title,
+        "probability": branch.probability,
+        "top_factors": top_factors,
+        "mode": mode,
+    }
+
+
 def collapse_branch(
     db: "Database",
     project_id: int,
     wavefunction_id: str,
     branch_id: str,
 ) -> QuantumResult:
+    state = get_state(project_id)
+    wf = state.get(wavefunction_id)
+    pre_branch: Branch | None = None
+    if wf is not None:
+        pre_branch = wf.get_branch(branch_id)
+
     try:
         result = collapse(db, project_id, wavefunction_id, branch_id)
     except CollapseError as exc:
         return QuantumResult(
             kind="error", title="Collapse failed", body=str(exc), payload={},
         )
+
+    if pre_branch is not None:
+        entry = _build_decision_entry(
+            db, project_id, wavefunction_id, pre_branch,
+        )
+        db.append_decision(project_id, entry)
+        result["decision"] = entry
 
     chosen = result["chosen"]
     summary = result["psyke_summary"]
@@ -274,9 +310,33 @@ def _adapt_weights_on_collapse(
     return True
 
 
+def _format_decision_log(log: list[dict], wf_id: str | None = None) -> str:
+    """Render decision history as compact text."""
+    entries = log if wf_id is None else [
+        e for e in log if e.get("wavefunction_id") == wf_id
+    ]
+    if not entries:
+        return ""
+    lines = ["", "Decision history:"]
+    for e in entries:
+        mode_tag = e.get("mode", "weighted")
+        prob = e.get("probability", 0)
+        title = e.get("chosen_title", e.get("chosen_id", "?"))
+        factors = e.get("top_factors", [])
+        factor_str = ", ".join(
+            f"{k} {v:.2f}" for k, v in factors
+        ) if factors else "—"
+        lines.append(
+            f"  • {title}  {prob:.0%}  [{mode_tag}]  ({factor_str})"
+        )
+    return "\n".join(lines)
+
+
 def explain_branches(
     project_id: int,
     wavefunction_id: str,
+    *,
+    db: "Database | None" = None,
 ) -> QuantumResult:
     """Return factor-based explanation for all branches in a wavefunction."""
     state = get_state(project_id)
@@ -287,9 +347,47 @@ def explain_branches(
             body="Wavefunction not found.", payload={},
         )
     body = explain_wavefunction(wf)
+
+    decision_log: list[dict] = []
+    if db is not None:
+        decision_log = db.get_decision_log(project_id)
+        history_text = _format_decision_log(decision_log, wf_id=wavefunction_id)
+        if history_text:
+            body += history_text
+
     return QuantumResult(
         kind="explain", title="Explain",
-        body=body, payload={"wavefunction_id": wf.id},
+        body=body,
+        payload={
+            "wavefunction_id": wf.id,
+            "decision_log": [
+                e for e in decision_log
+                if e.get("wavefunction_id") == wavefunction_id
+            ],
+        },
+    )
+
+
+def get_decision_history(
+    db: "Database",
+    project_id: int,
+) -> QuantumResult:
+    """Return the full decision log for a project."""
+    log = db.get_decision_log(project_id)
+    if not log:
+        return QuantumResult(
+            kind="history",
+            title="Decision History",
+            body="No decisions recorded yet.",
+            payload={"decision_log": []},
+        )
+    body = f"Decision log ({len(log)} collapse(s)):"
+    body += _format_decision_log(log)
+    return QuantumResult(
+        kind="history",
+        title="Decision History",
+        body=body,
+        payload={"decision_log": log},
     )
 
 
