@@ -14,6 +14,8 @@ from storyplanner.quantum_outliner.possibilities import generate_possibilities
 from storyplanner.quantum_outliner.psyke_adapter import PsykeSignals, gather_psyke_signals
 from storyplanner.quantum_outliner.scoring import (
     apply_scores,
+    explain_wavefunction,
+    format_recommendation,
     recommend_collapse,
     score_branches,
 )
@@ -226,6 +228,25 @@ def collapse_branch(
     )
 
 
+def explain_branches(
+    project_id: int,
+    wavefunction_id: str,
+) -> QuantumResult:
+    """Return factor-based explanation for all branches in a wavefunction."""
+    state = get_state(project_id)
+    wf = state.get(wavefunction_id)
+    if wf is None:
+        return QuantumResult(
+            kind="explain", title="Explain",
+            body="Wavefunction not found.", payload={},
+        )
+    body = explain_wavefunction(wf)
+    return QuantumResult(
+        kind="explain", title="Explain",
+        body=body, payload={"wavefunction_id": wf.id},
+    )
+
+
 def list_active_wavefunctions(project_id: int) -> list[dict]:
     state = get_state(project_id)
     return [_wf_summary(w) for w in state.active()]
@@ -389,8 +410,7 @@ def _format_lambda(
 
     rec = recommend_collapse(wf)
     if rec:
-        lines.append(f"Recommended: {rec.title}  ({rec.probability:.0%})")
-        lines.append(f"  {rec.reason}")
+        lines.append(format_recommendation(rec))
         lines.append("")
 
     lines.append(
@@ -401,6 +421,9 @@ def _format_lambda(
     lines.append(
         f"To collapse: choose a branch by id "
         f"(e.g. /quantum collapse {wf.id} <branch_id>)."
+    )
+    lines.append(
+        f"To explain: /quantum explain {wf.id}"
     )
     return "\n".join(lines)
 

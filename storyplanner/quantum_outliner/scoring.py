@@ -225,6 +225,33 @@ FACTOR_LABELS: dict[str, str] = {
 _FACTOR_LABELS = FACTOR_LABELS
 
 
+def _factor_descriptor(value: float) -> str:
+    if value >= 0.7:
+        return "high"
+    if value >= 0.4:
+        return "strong"
+    if value >= 0.2:
+        return "moderate"
+    return "some"
+
+
+def explain_factors(
+    factors: dict[str, float] | list[tuple[str, float]],
+    top_n: int = 2,
+) -> str:
+    """Concise explanation from the top contributing factors.
+
+    >>> explain_factors({"tension_gain": 0.9, "novelty": 0.5, "structure_fit": 0.1})
+    'high tension_gain + strong novelty'
+    """
+    if isinstance(factors, dict):
+        items = sorted(factors.items(), key=lambda kv: kv[1], reverse=True)[:top_n]
+    else:
+        items = list(factors)[:top_n]
+    parts = [f"{_factor_descriptor(v)} {k}" for k, v in items if v > 0]
+    return " + ".join(parts) if parts else "balanced across all factors"
+
+
 @dataclass(frozen=True)
 class CollapseRecommendation:
     branch_id: str
@@ -232,6 +259,34 @@ class CollapseRecommendation:
     probability: float
     reason: str
     top_factors: list[tuple[str, float]]
+
+    def explain(self) -> str:
+        """Format as 'Recommended: Title (pct)\\n  because: ...'."""
+        return format_recommendation(self)
+
+
+def format_recommendation(rec: CollapseRecommendation) -> str:
+    """Format a recommendation with factor-based explanation."""
+    explanation = explain_factors(rec.top_factors)
+    return (
+        f"Recommended: {rec.title}  ({rec.probability:.0%})\n"
+        f"  because: {explanation}"
+    )
+
+
+def explain_wavefunction(wf: "Wavefunction") -> str:
+    """Per-branch factor explanation, sorted by probability."""
+    branches = sorted(wf.branches, key=lambda b: b.probability, reverse=True)
+    scored = [b for b in branches if b.factors]
+    if not scored:
+        return "No scoring data available. Generate branches first."
+
+    lines: list[str] = []
+    for b in scored:
+        explanation = explain_factors(b.factors)
+        lines.append(f"{b.title}  [{b.id}]  ({b.probability:.0%})")
+        lines.append(f"  because: {explanation}")
+    return "\n".join(lines)
 
 
 @dataclass(frozen=True)
