@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.auto_link import AutoLinkSuggester, Suggestion
+from storyplanner.grammar_checker import detect_language
 from storyplanner.context_assistant import ContextAssistant, ContextHint, HintRateLimiter
 from storyplanner.creative_layer import compute_review_metrics
 from storyplanner.db import Database
@@ -373,6 +374,7 @@ class WritingCoreView(QWidget):
         self._pending_scroll: int = _settings.get("scroll_pos", 0)
         self._pending_cursor_scene: int | None = _settings.get("cursor_scene_id")
         self._pending_cursor_pos: int = _settings.get("cursor_pos", 0)
+        self._current_language: str = _settings.get("current_language", "en")
         self._editors: dict[int, _SceneEditor] = {}
         self._save_timers: dict[int, QTimer] = {}
         self._scene_widgets: list[QWidget] = []
@@ -409,6 +411,11 @@ class WritingCoreView(QWidget):
         self._session_save_timer.setSingleShot(True)
         self._session_save_timer.setInterval(1000)
         self._session_save_timer.timeout.connect(self._persist_session_state)
+
+        self._lang_detect_timer = QTimer(self)
+        self._lang_detect_timer.setSingleShot(True)
+        self._lang_detect_timer.setInterval(3000)
+        self._lang_detect_timer.timeout.connect(self._run_language_detection)
 
         self._command_palette: CommandPalette | None = None
         self._palette_source_editor: _SceneEditor | None = None
@@ -1188,6 +1195,7 @@ class WritingCoreView(QWidget):
         self._auto_link_timer.start()
         if self._context_assistant_enabled:
             self._context_assist_timer.start()
+        self._lang_detect_timer.start()
         self._update_word_count()
 
     def _save_scene(self, scene_id: int) -> None:
@@ -1546,6 +1554,7 @@ class WritingCoreView(QWidget):
         settings["focus_mode"] = self._focus_mode
         settings["typewriter_mode"] = self._typewriter_mode
         settings["scroll_pos"] = self._scroll.verticalScrollBar().value()
+        settings["current_language"] = self._current_language
         editor = self._active_editor
         if editor and editor._scene_id is not None:
             settings["cursor_scene_id"] = editor._scene_id
@@ -1620,6 +1629,32 @@ class WritingCoreView(QWidget):
         label = f"{total:,} words"
         self._word_count_label.setText(label)
         self._focus_word_label.setText(label)
+
+    # -- Language detection ---------------------------------------------------
+
+    @property
+    def current_language(self) -> str:
+        return self._current_language
+
+    def _run_language_detection(self) -> None:
+        sample = self._collect_text_sample()
+        if len(sample.strip()) < 50:
+            return
+        detected = detect_language(sample)
+        if detected != self._current_language:
+            self._current_language = detected
+            self._session_save_timer.start()
+
+    def _collect_text_sample(self) -> str:
+        parts: list[str] = []
+        total = 0
+        for editor in self._editors.values():
+            text = editor.toPlainText()
+            parts.append(text)
+            total += len(text)
+            if total >= 2000:
+                break
+        return " ".join(parts)[:2000]
 
     # -- Typewriter mode ------------------------------------------------------
 

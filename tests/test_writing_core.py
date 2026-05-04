@@ -642,6 +642,68 @@ def test_session_state_includes_all_keys():
     assert settings["focus_mode"] is True
     assert settings["typewriter_mode"] is True
     assert "scroll_pos" in settings
+    assert "current_language" in settings
+
+
+# -- Language detection -------------------------------------------------------
+
+def test_language_defaults_english():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view.current_language == "en"
+
+
+def test_language_loads_from_settings():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    settings = db.get_project_settings(proj.id)
+    settings["current_language"] = "es"
+    db.save_project_settings(proj.id, settings)
+    view = WritingCoreView(db, proj.id)
+    assert view.current_language == "es"
+
+
+def test_language_detection_updates_state():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText(
+        "El rápido zorro marrón saltó sobre el perro perezoso en el campo. "
+        "La casa era grande y bonita con muchas ventanas abiertas al jardín."
+    )
+    view._run_language_detection()
+    assert view.current_language == "es"
+
+
+def test_language_detection_persists():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._current_language = "fr"
+    view._persist_session_state()
+    settings = db.get_project_settings(proj.id)
+    assert settings["current_language"] == "fr"
+
+
+def test_language_detection_skips_short_text():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    for editor in view._editors.values():
+        editor.setPlainText("Hi")
+    view._run_language_detection()
+    assert view.current_language == "en"
+
+
+def test_collect_text_sample():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    sample = view._collect_text_sample()
+    assert len(sample) > 0
+    assert len(sample) <= 2000
 
 
 # -- Auto-formatting ----------------------------------------------------------
