@@ -356,6 +356,69 @@ FACTOR_LABELS: dict[str, str] = {
 
 _FACTOR_LABELS = FACTOR_LABELS
 
+FACTOR_CHIP_LABELS: dict[str, str] = {
+    "structure_fit": "structure",
+    "psyke_consistency": "consistency",
+    "tension_gain": "tension",
+    "novelty": "novelty",
+    "goal_alignment": "goal",
+}
+
+_CHIP_THRESHOLD = 0.1
+
+
+def compute_tradeoff_chips(
+    branch_factors: dict[str, float],
+    all_factors: list[dict[str, float]],
+    *,
+    max_chips: int = 3,
+) -> list[str]:
+    """Return compact tradeoff chips like '↑ tension', '↓ consistency'.
+
+    Compares one branch's factors against the mean across all branches.
+    Only factors deviating by more than _CHIP_THRESHOLD are shown.
+    """
+    if not all_factors or not branch_factors:
+        return []
+
+    n = len(all_factors)
+    means = {
+        k: sum(f.get(k, 0.0) for f in all_factors) / n
+        for k in PARETO_OBJECTIVES
+    }
+
+    deltas: list[tuple[float, str]] = []
+    for k in PARETO_OBJECTIVES:
+        delta = branch_factors.get(k, 0.0) - means[k]
+        if abs(delta) >= _CHIP_THRESHOLD:
+            deltas.append((delta, k))
+
+    deltas.sort(key=lambda d: abs(d[0]), reverse=True)
+
+    chips: list[str] = []
+    for delta, k in deltas[:max_chips]:
+        arrow = "↑" if delta > 0 else "↓"
+        chips.append(f"{arrow} {FACTOR_CHIP_LABELS[k]}")
+    return chips
+
+
+def format_branch_chips(
+    branch_factors: dict[str, float],
+    all_factors: list[dict[str, float]],
+    *,
+    is_pareto: bool = False,
+    max_chips: int = 3,
+) -> str:
+    """Format chips + optional Pareto badge into a single inline string."""
+    chips = compute_tradeoff_chips(
+        branch_factors, all_factors, max_chips=max_chips,
+    )
+    parts: list[str] = []
+    if is_pareto:
+        parts.append("●")
+    parts.extend(chips)
+    return "  ".join(parts) if parts else ""
+
 
 def _factor_descriptor(value: float) -> str:
     if value >= 0.7:

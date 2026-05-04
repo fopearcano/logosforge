@@ -16,6 +16,7 @@ from storyplanner.quantum_outliner.scoring import (
     adapt_weights,
     apply_scores,
     explain_wavefunction,
+    format_branch_chips,
     format_recommendation,
     recommend_collapse,
     score_branches,
@@ -389,9 +390,11 @@ def _format_wavefunction(
 
     weights = None
     constraints = None
+    show_tradeoffs = False
     if db is not None and project_id is not None:
         weights = db.get_scoring_weights(project_id)
         constraints = db.get_constraints(project_id)
+        show_tradeoffs = db.get_show_tradeoffs(project_id)
 
     if wf.branches:
         scored = score_branches(
@@ -400,7 +403,7 @@ def _format_wavefunction(
         apply_scores(wf, scored)
         wf.branches.sort(key=lambda b: b.probability, reverse=True)
 
-    body = _format_lambda(wf, psyke=psyke)
+    body = _format_lambda(wf, psyke=psyke, show_tradeoffs=show_tradeoffs)
     return QuantumResult(
         kind="possibilities",
         title=title,
@@ -410,7 +413,10 @@ def _format_wavefunction(
 
 
 def _format_lambda(
-    wf: Wavefunction, *, psyke: PsykeSignals | None = None,
+    wf: Wavefunction,
+    *,
+    psyke: PsykeSignals | None = None,
+    show_tradeoffs: bool = False,
 ) -> str:
     n = len(wf.branches)
     lines = [
@@ -427,12 +433,16 @@ def _format_lambda(
         lines.append(f"Gravity: {gravity}")
         lines.append("")
 
+    all_factors = [b.factors for b in wf.branches if b.factors and not b.violations]
+
     for i, b in enumerate(wf.branches, 1):
         label = f"▸ Option {i}: {b.title}  [{b.id}]"
         if b.branch_type:
             label += f"  ({b.branch_type})"
         if b.probability > 0:
             label += f"  {b.probability:.0%}"
+        if show_tradeoffs and b.is_pareto_optimal and not b.violations:
+            label += "  ●"
         lines.append(label)
         lines.append(f"  {b.description}")
         if b.structure_beat:
@@ -448,6 +458,10 @@ def _format_lambda(
         if b.violations:
             for v in b.violations:
                 lines.append(f"  ⚠ BLOCKED: violates \"{v}\"")
+        elif show_tradeoffs and b.factors and all_factors:
+            chips = format_branch_chips(b.factors, all_factors, is_pareto=False)
+            if chips:
+                lines.append(f"  {chips}")
         lines.append("")
 
     pov_names = _extract_pov_frames(wf, psyke)
@@ -672,6 +686,7 @@ def _wf_summary(wf: Wavefunction) -> dict:
                 "score": b.score,
                 "probability": b.probability,
                 "factors": b.factors,
+                "is_pareto_optimal": b.is_pareto_optimal,
             }
             for b in wf.branches
         ],

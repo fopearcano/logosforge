@@ -168,6 +168,15 @@ class Database:
             constraints.remove(constraint)
             self.set_constraints(project_id, constraints)
 
+    def get_show_tradeoffs(self, project_id: int) -> bool:
+        settings = self.get_project_settings(project_id)
+        return settings.get("show_tradeoffs", False)
+
+    def set_show_tradeoffs(self, project_id: int, enabled: bool) -> None:
+        settings = self.get_project_settings(project_id)
+        settings["show_tradeoffs"] = enabled
+        self.save_project_settings(project_id, settings)
+
     # -- Characters ----------------------------------------------------------
 
     def get_character_by_id(self, character_id: int) -> Character | None:
