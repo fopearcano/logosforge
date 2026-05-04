@@ -380,6 +380,104 @@ def compute_goal_score(
 
 
 # ---------------------------------------------------------------------------
+# Lookahead evaluation — lightweight simulation of future steps
+# ---------------------------------------------------------------------------
+
+_LOOKAHEAD_FIRST_BREADTH = 3
+_LOOKAHEAD_DEEP_BREADTH = 2
+_LOOKAHEAD_BLEND = 0.4
+
+_FACTOR_DRIFT: dict[str, float] = {
+    "tension_gain": -0.05,
+    "psyke_consistency": 0.0,
+    "novelty": -0.1,
+    "structure_fit": -0.05,
+    "goal_alignment": 0.0,
+}
+
+_VARIANT_SPREAD = 0.15
+
+
+def _project_factors(
+    factors: dict[str, float], variant_idx: int, breadth: int,
+) -> dict[str, float]:
+    """Project factors one step forward with deterministic variation."""
+    center = (breadth - 1) / 2.0
+    offset = (variant_idx - center) / max(center, 1.0) if breadth > 1 else 0.0
+
+    projected: dict[str, float] = {}
+    for k, v in factors.items():
+        drift = _FACTOR_DRIFT.get(k, 0.0)
+        spread = offset * _VARIANT_SPREAD
+        projected[k] = max(0.0, min(1.0, v + drift + spread))
+    return projected
+
+
+def _simulate_ahead(
+    factors: dict[str, float],
+    goals: QuantumGoals,
+    remaining: int,
+    total_horizon: int,
+) -> float:
+    """Recursively simulate future steps, return average expected value."""
+    is_first_level = remaining == total_horizon - 1
+    breadth = _LOOKAHEAD_FIRST_BREADTH if is_first_level else _LOOKAHEAD_DEEP_BREADTH
+
+    projections = [_project_factors(factors, i, breadth) for i in range(breadth)]
+
+    scores: list[float] = []
+    for proj in projections:
+        if remaining > 1:
+            scores.append(_simulate_ahead(proj, goals, remaining - 1, total_horizon))
+        else:
+            s, valid = compute_goal_score(proj, goals)
+            scores.append(s if valid else 0.0)
+
+    return sum(scores) / len(scores) if scores else 0.0
+
+
+def evaluate_lookahead(
+    factors: dict[str, float],
+    goals: QuantumGoals,
+) -> float:
+    """Compute expected future value via lightweight simulation.
+
+    Returns the immediate goal_score when horizon=1 (no extra lookahead).
+    For horizon=2+, simulates follow-up steps and returns the average
+    expected value over projected paths.
+    """
+    extra_steps = goals.horizon - 1
+    if extra_steps <= 0:
+        score, valid = compute_goal_score(factors, goals)
+        return score if valid else 0.0
+
+    return round(_simulate_ahead(factors, goals, extra_steps, goals.horizon), 4)
+
+
+def compute_blended_goal_score(
+    factors: dict[str, float],
+    goals: QuantumGoals,
+) -> tuple[float, float, bool]:
+    """Compute immediate goal_score, lookahead_score, and blend them.
+
+    Returns (blended_goal_score, lookahead_score, goal_valid).
+    When horizon=1, blended = immediate (no lookahead effect).
+    """
+    immediate, valid = compute_goal_score(factors, goals)
+    if not valid:
+        return 0.0, 0.0, False
+
+    if goals.horizon <= 1:
+        return immediate, immediate, valid
+
+    lookahead = evaluate_lookahead(factors, goals)
+    blended = round(
+        (1 - _LOOKAHEAD_BLEND) * immediate + _LOOKAHEAD_BLEND * lookahead, 4,
+    )
+    return blended, lookahead, valid
+
+
+# ---------------------------------------------------------------------------
 # Multi-objective scoring — Pareto front
 # ---------------------------------------------------------------------------
 
@@ -787,6 +885,7 @@ class ScoredBranch:
     is_pareto_optimal: bool = False
     goal_score: float = 0.0
     goal_valid: bool = True
+    lookahead_score: float = 0.0
 
 
 def score_branches(
@@ -833,8 +932,11 @@ def score_branches(
 
         goal_score = 0.0
         goal_valid = True
+        lookahead_score = 0.0
         if goals is not None:
-            goal_score, goal_valid = compute_goal_score(factors, goals)
+            goal_score, lookahead_score, goal_valid = compute_blended_goal_score(
+                factors, goals,
+            )
 
         scored.append(ScoredBranch(
             branch_id=b.id,
@@ -844,6 +946,7 @@ def score_branches(
             violations=violations,
             goal_score=goal_score,
             goal_valid=goal_valid,
+            lookahead_score=lookahead_score,
         ))
 
     probs = _softmax([s.score for s in scored])
@@ -862,6 +965,7 @@ def score_branches(
             violations=s.violations,
             goal_score=s.goal_score,
             goal_valid=s.goal_valid,
+            lookahead_score=s.lookahead_score,
         )
         for s, p in zip(scored, probs)
     ]
@@ -877,6 +981,7 @@ def score_branches(
             is_pareto_optimal=s.branch_id in pareto_ids,
             goal_score=s.goal_score,
             goal_valid=s.goal_valid,
+            lookahead_score=s.lookahead_score,
         )
         for s in scored
     ]
@@ -898,6 +1003,7 @@ def apply_scores(wf: Wavefunction, scored: list[ScoredBranch]) -> None:
             b.is_pareto_optimal = s.is_pareto_optimal
             b.goal_score = s.goal_score
             b.goal_valid = s.goal_valid
+            b.lookahead_score = s.lookahead_score
 
 
 def recommend_collapse(wf: Wavefunction) -> CollapseRecommendation | None:

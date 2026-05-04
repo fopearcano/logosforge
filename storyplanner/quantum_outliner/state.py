@@ -43,6 +43,7 @@ class Branch:
     is_pareto_optimal: bool = False
     goal_score: float = 0.0
     goal_valid: bool = True
+    lookahead_score: float = 0.0
 
     @classmethod
     def new(
