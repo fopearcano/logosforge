@@ -66,9 +66,9 @@ class ManuscriptHighlighter(PsykeHighlighter):
         self._build_manuscript_formats()
         self.rehighlight()
 
-    def refresh_patterns(self, terms: list[str]) -> None:
+    def refresh_patterns(self, terms: list[str], **kwargs) -> None:
         self._build_manuscript_formats()
-        super().refresh_patterns(terms)
+        super().refresh_patterns(terms, **kwargs)
 
     def highlightBlock(self, text: str) -> None:  # noqa: N802
         if not text:

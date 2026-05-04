@@ -329,6 +329,72 @@ def test_view_uses_psyke_highlighter():
     assert isinstance(view._highlighters[s1.id], PsykeHighlighter)
 
 
+# -- PSYKE color-coded highlighting -------------------------------------------
+
+def test_psyke_highlighter_has_type_formats():
+    doc = QTextDocument()
+    h = PsykeHighlighter(doc)
+    assert "character" in h._formats
+    assert "place" in h._formats
+    assert "object" in h._formats
+
+
+def test_psyke_highlighter_uses_term_types():
+    doc = QTextDocument()
+    doc.setPlainText("Alice went to Castle")
+    h = PsykeHighlighter(doc)
+    h.refresh_patterns(
+        ["Alice", "Castle"],
+        term_types={"alice": "character", "castle": "place"},
+    )
+    assert h._term_types["alice"] == "character"
+    assert h._term_types["castle"] == "place"
+
+
+def test_psyke_highlighter_different_colors_per_type():
+    doc = QTextDocument()
+    h = PsykeHighlighter(doc)
+    char_fmt = h._formats["character"]
+    place_fmt = h._formats["place"]
+    obj_fmt = h._formats["object"]
+    assert char_fmt.foreground().color() != place_fmt.foreground().color()
+    assert place_fmt.foreground().color() != obj_fmt.foreground().color()
+
+
+def test_psyke_highlighter_unknown_type_uses_default():
+    doc = QTextDocument()
+    doc.setPlainText("Prophecy of doom")
+    h = PsykeHighlighter(doc)
+    h.refresh_patterns(["Prophecy"], term_types={"prophecy": "concept"})
+    assert h._term_types["prophecy"] == "concept"
+    assert "concept" not in h._formats
+
+
+def test_psyke_highlighting_with_aliases():
+    doc = QTextDocument()
+    doc.setPlainText("Jon walked to the Tower")
+    h = PsykeHighlighter(doc)
+    h.refresh_patterns(
+        ["Jonathan", "Jon", "Tower"],
+        term_types={"jonathan": "character", "jon": "character", "tower": "place"},
+    )
+    assert h._pattern is not None
+    assert h._pattern.search("Jon walked to the Tower")
+
+
+def test_view_passes_term_types_to_highlighter():
+    db = Database()
+    proj = db.create_project("HL")
+    db.create_scene(proj.id, "S1", content="Alice visited Castle")
+    db.create_psyke_entry(proj.id, "Alice", "character")
+    db.create_psyke_entry(proj.id, "Castle", "place")
+    view = WritingCoreView(db, proj.id)
+    view.refresh_psyke_terms()
+    highlighter = list(view._highlighters.values())[0]
+    assert highlighter._term_types.get("alice") == "character"
+    assert highlighter._term_types.get("castle") == "place"
+
+
 # -- Format Toolbar -----------------------------------------------------------
 
 def test_format_toolbar_creates():

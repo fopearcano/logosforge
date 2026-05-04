@@ -737,6 +737,7 @@ class WritingCoreView(QWidget):
     def refresh_psyke_terms(self) -> None:
         entries = self._db.get_all_psyke_entries(self._project_id)
         terms: list[str] = []
+        term_types: dict[str, str] = {}
         self._psyke_term_map.clear()
         self._psyke_entry_cache.clear()
         for e in entries:
@@ -744,14 +745,16 @@ class WritingCoreView(QWidget):
             if e.name.strip():
                 terms.append(e.name)
                 self._psyke_term_map[e.name.lower()] = e.id
+                term_types[e.name.lower()] = e.entry_type
             if e.aliases:
                 for alias in e.aliases.split(","):
                     alias = alias.strip()
                     if alias:
                         terms.append(alias)
                         self._psyke_term_map[alias.lower()] = e.id
+                        term_types[alias.lower()] = e.entry_type
         for highlighter in self._highlighters.values():
-            highlighter.refresh_patterns(terms)
+            highlighter.refresh_patterns(terms, term_types=term_types)
         for handler in self._click_handlers.values():
             handler.set_term_map(self._psyke_term_map)
         for handler in self._hover_handlers.values():

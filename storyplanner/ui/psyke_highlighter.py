@@ -6,6 +6,7 @@ import re
 
 from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtGui import (
+    QColor,
     QMouseEvent,
     QSyntaxHighlighter,
     QTextCharFormat,
@@ -15,26 +16,46 @@ from PySide6.QtWidgets import QTextEdit
 
 from storyplanner.ui import theme
 
+_TYPE_COLOR_KEYS = {
+    "character": "PSYKE_CHARACTER",
+    "place": "PSYKE_PLACE",
+    "object": "PSYKE_OBJECT",
+}
+
 
 class PsykeHighlighter(QSyntaxHighlighter):
-    """Highlights PSYKE entry names and aliases in the scene editor."""
+    """Highlights PSYKE entry names with per-type color coding."""
 
     def __init__(self, document: QTextDocument) -> None:
         super().__init__(document)
         self._pattern: re.Pattern | None = None
-        self._fmt = QTextCharFormat()
-        self._update_format()
+        self._term_types: dict[str, str] = {}
+        self._formats: dict[str, QTextCharFormat] = {}
+        self._default_fmt = QTextCharFormat()
+        self._build_formats()
 
-    def _update_format(self) -> None:
-        from PySide6.QtGui import QColor
-        color = QColor(theme.get("ACCENT"))
-        self._fmt = QTextCharFormat()
-        self._fmt.setUnderlineStyle(QTextCharFormat.UnderlineStyle.SingleUnderline)
-        self._fmt.setUnderlineColor(color)
-        self._fmt.setForeground(color)
+    def _build_formats(self) -> None:
+        for entry_type, color_key in _TYPE_COLOR_KEYS.items():
+            color = QColor(theme.get(color_key))
+            fmt = QTextCharFormat()
+            fmt.setUnderlineStyle(QTextCharFormat.UnderlineStyle.SingleUnderline)
+            fmt.setUnderlineColor(color)
+            fmt.setForeground(color)
+            self._formats[entry_type] = fmt
 
-    def refresh_patterns(self, terms: list[str]) -> None:
-        self._update_format()
+        fallback = QColor(theme.get("ACCENT"))
+        self._default_fmt = QTextCharFormat()
+        self._default_fmt.setUnderlineStyle(QTextCharFormat.UnderlineStyle.SingleUnderline)
+        self._default_fmt.setUnderlineColor(fallback)
+        self._default_fmt.setForeground(fallback)
+
+    def refresh_patterns(
+        self,
+        terms: list[str],
+        term_types: dict[str, str] | None = None,
+    ) -> None:
+        self._build_formats()
+        self._term_types = term_types or {}
         if not terms:
             self._pattern = None
             self.rehighlight()
@@ -54,7 +75,10 @@ class PsykeHighlighter(QSyntaxHighlighter):
         if self._pattern is None:
             return
         for match in self._pattern.finditer(text):
-            self.setFormat(match.start(), match.end() - match.start(), self._fmt)
+            term_lower = match.group().lower()
+            entry_type = self._term_types.get(term_lower, "")
+            fmt = self._formats.get(entry_type, self._default_fmt)
+            self.setFormat(match.start(), match.end() - match.start(), fmt)
 
 
 class PsykeClickHandler(QObject):
