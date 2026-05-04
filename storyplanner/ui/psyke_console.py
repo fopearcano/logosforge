@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import TYPE_CHECKING, Any
+
+logger = logging.getLogger(__name__)
 
 from PySide6.QtCore import (
     QEvent,
@@ -291,7 +294,6 @@ class PsykeConsole(QWidget):
         self._project_id = project_id
         self._previous_focus: QWidget | None = None
         self._search_index = PsykeSearchIndex(db, project_id)
-        self._last_query: str = ""
         self._selecting: bool = False
         self._registry: CommandRegistry | None = None
         self._get_scene_entry_ids: Any = None
@@ -351,7 +353,6 @@ class PsykeConsole(QWidget):
     def deactivate(self) -> None:
         self._selecting = True
         self._debounce.stop()
-        self._last_query = ""
         self._input.clear()
         if self._dropdown is not None:
             self._dropdown.hide_results()
@@ -381,11 +382,11 @@ class PsykeConsole(QWidget):
     def _on_text_changed(self, text: str) -> None:
         if self._selecting:
             return
+        logger.debug("PSYKE input changed: %r", text)
         if text.strip():
             self._debounce.start()
         else:
             self._debounce.stop()
-            self._last_query = ""
             if self._dropdown is not None:
                 self._dropdown.hide_results()
 
@@ -393,15 +394,11 @@ class PsykeConsole(QWidget):
         if self._index_dirty:
             self._search_index.rebuild()
             self._index_dirty = False
-            self._last_query = ""
 
         query = self._input.text().strip()
         if not query:
             self._ensure_dropdown().hide_results()
             return
-        if query == self._last_query:
-            return
-        self._last_query = query
 
         scene_ids: set[int] | None = None
         if self._get_scene_entry_ids:
@@ -414,6 +411,7 @@ class PsykeConsole(QWidget):
             scene_entry_ids=scene_ids,
             max_results=_MAX_VISIBLE,
         )
+        logger.debug("PSYKE search %r → %d results", query, len(suggestions))
         dropdown = self._ensure_dropdown()
         dropdown.show_suggestions(suggestions, query)
         self._position_dropdown()
@@ -460,7 +458,6 @@ class PsykeConsole(QWidget):
                 return
             self._input.setText(suggestion.text)
             self._input.setCursorPosition(len(suggestion.text))
-            self._last_query = ""
             self._debounce.start()
             return
 
@@ -515,7 +512,6 @@ class PsykeConsole(QWidget):
                     self._index_dirty = False
             elif event.type() == QEvent.Type.FocusOut:
                 self._animate_opacity(_OPACITY_IDLE)
-                self._last_query = ""
                 QTimer.singleShot(200, self._maybe_hide_dropdown)
             elif event.type() == QEvent.Type.KeyPress:
                 key = event.key()

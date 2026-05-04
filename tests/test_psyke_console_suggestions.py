@@ -58,67 +58,62 @@ class TestSuggestionsUpdateOnEveryInput:
         """Core regression: typing 'jo', clearing, retyping 'jo' must show results."""
         console._input.setText("jo")
         console._run_search()
-        assert console._last_query == "jo"
+        dropdown = console._ensure_dropdown()
+        assert dropdown.has_items()
 
         # User clears the input
         console._input.setText("")
         console._on_text_changed("")
-        assert console._last_query == ""
 
-        # User retypes the same query
+        # User retypes the same query — must still show results
         console._input.setText("jo")
         console._run_search()
-        dropdown = console._ensure_dropdown()
         assert dropdown.has_items()
 
     def test_delete_partial_and_retype(self, console):
         """Type 'joa', delete to 'j', retype 'joa'."""
         console._input.setText("joa")
         console._run_search()
-        assert console._last_query == "joa"
+        dropdown = console._ensure_dropdown()
+        assert dropdown.has_items()
 
         # Delete to 'j'
         console._input.setText("j")
-        console._on_text_changed("j")
         console._run_search()
-        assert console._last_query == "j"
 
         # Retype 'joa' — must update
         console._input.setText("joa")
         console._run_search()
-        assert console._last_query == "joa"
-        dropdown = console._ensure_dropdown()
         assert dropdown.has_items()
 
     def test_multiple_rapid_changes(self, console):
-        """Simulate rapid input changes — each unique query updates."""
+        """Simulate rapid input changes — each one triggers search."""
         queries = ["j", "jo", "joh", "john"]
+        dropdown = console._ensure_dropdown()
         for q in queries:
             console._input.setText(q)
             console._run_search()
-            assert console._last_query == q
+            assert dropdown.has_items()
 
     def test_empty_does_not_block_next(self, console):
-        """Clearing input resets _last_query, unblocking subsequent searches."""
-        console._input.setText("cas")
-        console._run_search()
-        assert console._last_query == "cas"
-
-        console._input.setText("")
-        console._on_text_changed("")
-        assert console._last_query == ""
-
+        """Clearing input then retyping same query still shows results."""
         console._input.setText("cas")
         console._run_search()
         dropdown = console._ensure_dropdown()
         assert dropdown.has_items()
 
-    def test_deactivate_resets_query(self, console):
+        console._input.setText("")
+        console._on_text_changed("")
+
+        console._input.setText("cas")
+        console._run_search()
+        assert dropdown.has_items()
+
+    def test_deactivate_resets_state(self, console):
         """After deactivate(), same query should work again."""
         console._input.setText("jo")
         console._run_search()
         console.deactivate()
-        assert console._last_query == ""
 
         console._input.setText("jo")
         console._run_search()
