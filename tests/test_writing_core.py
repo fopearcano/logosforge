@@ -49,7 +49,7 @@ def test_body_font_size():
 
 
 def test_line_height():
-    assert 1.65 <= _BODY_LINE_HEIGHT <= 1.8
+    assert 1.4 <= _BODY_LINE_HEIGHT <= 1.6
 
 
 def test_focus_line_height_larger():
@@ -219,6 +219,29 @@ def test_font_settings_persist_across_sessions():
     assert view2._font_size == 20
     assert view2._font_combo.currentData() == "serif"
     assert view2._size_combo.currentData() == 20
+
+
+def test_first_line_indent_toggle():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view._first_line_indent is False
+    view._toggle_indent()
+    assert view._first_line_indent is True
+    settings = db.get_project_settings(proj.id)
+    assert settings["first_line_indent"] is True
+    view._toggle_indent()
+    assert view._first_line_indent is False
+
+
+def test_first_line_indent_persists():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view1 = WritingCoreView(db, proj.id)
+    view1._toggle_indent()
+    del view1
+    view2 = WritingCoreView(db, proj.id)
+    assert view2._first_line_indent is True
 
 
 # -- Auto-save ----------------------------------------------------------------

@@ -70,8 +70,8 @@ _FONT_PRESET_LABELS: dict[str, str] = {
 }
 _FONT_PRESET_ORDER = ["serif", "sans", "mono"]
 _FONT_SIZE_OPTIONS = [14, 15, 16, 17, 18, 19, 20, 22, 24]
-_BODY_LINE_HEIGHT = 1.8
-_FOCUS_LINE_HEIGHT = 1.9
+_BODY_LINE_HEIGHT = 1.5
+_FOCUS_LINE_HEIGHT = 1.6
 _FADE_ALPHA_PARA = 70
 _FADE_ALPHA_SCENE = 110
 
@@ -296,6 +296,7 @@ class WritingCoreView(QWidget):
         self._font_size: int = _settings.get("font_size", _BODY_FONT_SIZE)
         if self._font_size not in _FONT_SIZE_OPTIONS:
             self._font_size = _BODY_FONT_SIZE
+        self._first_line_indent: bool = bool(_settings.get("first_line_indent", False))
         self._editors: dict[int, _SceneEditor] = {}
         self._save_timers: dict[int, QTimer] = {}
         self._scene_widgets: list[QWidget] = []
@@ -398,6 +399,16 @@ class WritingCoreView(QWidget):
         self._size_combo.setCurrentIndex(_sz_idx)
         self._size_combo.currentIndexChanged.connect(self._on_font_size_changed)
         tb_layout.addWidget(self._size_combo)
+
+        self._indent_btn = QPushButton("Indent")
+        self._indent_btn.setFlat(True)
+        self._indent_btn.setToolTip("First-line paragraph indent")
+        self._indent_btn.setStyleSheet(
+            f"color: {theme.TEXT_PRIMARY if self._first_line_indent else theme.TEXT_MUTED};"
+            " font-size: 11px; background: transparent; padding: 2px 8px;"
+        )
+        self._indent_btn.clicked.connect(self._toggle_indent)
+        tb_layout.addWidget(self._indent_btn)
 
         self._typewriter_btn = QPushButton("Typewriter")
         self._typewriter_btn.setFlat(True)
@@ -835,6 +846,10 @@ class WritingCoreView(QWidget):
             lh * 100,
             QTextBlockFormat.LineHeightTypes.ProportionalHeight.value,
         )
+        indent = elem.first_line_indent
+        if self._first_line_indent and elem.font_size == _BODY_FONT_SIZE:
+            indent = max(indent, 28)
+        bfmt.setTextIndent(indent)
 
         families = _FONT_PRESETS.get(self._font_family_key, _FONT_PRESETS["sans"])
 
@@ -1404,10 +1419,20 @@ class WritingCoreView(QWidget):
             self._persist_font_settings()
             self._apply_typography()
 
+    def _toggle_indent(self) -> None:
+        self._first_line_indent = not self._first_line_indent
+        self._indent_btn.setStyleSheet(
+            f"color: {theme.TEXT_PRIMARY if self._first_line_indent else theme.TEXT_MUTED};"
+            " font-size: 11px; background: transparent; padding: 2px 8px;"
+        )
+        self._persist_font_settings()
+        self._apply_format_to_all_blocks()
+
     def _persist_font_settings(self) -> None:
         settings = self._db.get_project_settings(self._project_id)
         settings["font_family"] = self._font_family_key
         settings["font_size"] = self._font_size
+        settings["first_line_indent"] = self._first_line_indent
         self._db.save_project_settings(self._project_id, settings)
 
     # -- Focus mode -----------------------------------------------------------

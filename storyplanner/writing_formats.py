@@ -34,6 +34,7 @@ class ElementStyle:
     right_margin: int = 0
     top_spacing: int = 0
     bottom_spacing: int = 12
+    first_line_indent: int = 0
     line_height: float = 1.5
     color_key: str = "text"
 
@@ -74,8 +75,8 @@ NOVEL = WritingFormat(
             name="body",
             shortcut="Ctrl+3",
             font_size=18,
-            line_height=1.8,
-            bottom_spacing=6,
+            line_height=1.5,
+            bottom_spacing=10,
         ),
     ],
 )
