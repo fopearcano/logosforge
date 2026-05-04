@@ -22,15 +22,19 @@ class SearchResult:
 class PsykeSearchIndex:
     """In-memory search index over PSYKE entries for a project."""
 
-    def __init__(self, db: Database, project_id: int) -> None:
+    def __init__(self, db: Database, project_id: int, *, lazy: bool = False) -> None:
         self._db = db
         self._project_id = project_id
         self._entries: list[PsykeEntry] = []
         self._index: list[tuple[PsykeEntry, list[str]]] = []
-        self.rebuild()
+        if not lazy:
+            self.rebuild()
 
     def rebuild(self) -> None:
-        self._entries = self._db.get_all_psyke_entries(self._project_id)
+        self.rebuild_from(self._db.get_all_psyke_entries(self._project_id))
+
+    def rebuild_from(self, entries: list[PsykeEntry]) -> None:
+        self._entries = entries
         self._index = []
         for entry in self._entries:
             tokens = [entry.name.lower()]

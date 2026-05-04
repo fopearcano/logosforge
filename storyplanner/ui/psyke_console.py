@@ -293,7 +293,8 @@ class PsykeConsole(QWidget):
         self._db = db
         self._project_id = project_id
         self._previous_focus: QWidget | None = None
-        self._search_index = PsykeSearchIndex(db, project_id)
+        self._psyke_entries_cache: list | None = None
+        self._search_index = PsykeSearchIndex(db, project_id, lazy=True)
         self._selecting: bool = False
         self._registry: CommandRegistry | None = None
         self._get_scene_entry_ids: Any = None
@@ -365,15 +366,25 @@ class PsykeConsole(QWidget):
 
     def set_project(self, project_id: int) -> None:
         self._project_id = project_id
-        self._search_index = PsykeSearchIndex(self._db, project_id)
-        self._index_dirty = False
+        self._search_index._project_id = project_id
+        self._psyke_entries_cache = None
+        self._index_dirty = True
 
     def rebuild_index(self) -> None:
-        self._search_index.rebuild()
+        self._refresh_cache()
         self._index_dirty = False
 
     def mark_index_dirty(self) -> None:
+        self._psyke_entries_cache = None
         self._index_dirty = True
+
+    def _refresh_cache(self) -> list:
+        if self._psyke_entries_cache is None:
+            self._psyke_entries_cache = self._db.get_all_psyke_entries(
+                self._project_id,
+            )
+            self._search_index.rebuild_from(self._psyke_entries_cache)
+        return self._psyke_entries_cache
 
     def reposition(self) -> None:
         """Update console width based on window size."""
@@ -397,7 +408,7 @@ class PsykeConsole(QWidget):
 
     def _run_search(self) -> None:
         if self._index_dirty:
-            self._search_index.rebuild()
+            self._refresh_cache()
             self._index_dirty = False
 
         query = self._input.text().strip()
@@ -513,7 +524,7 @@ class PsykeConsole(QWidget):
             if event.type() == QEvent.Type.FocusIn:
                 self._animate_opacity(_OPACITY_ACTIVE)
                 if self._index_dirty:
-                    self._search_index.rebuild()
+                    self._refresh_cache()
                     self._index_dirty = False
             elif event.type() == QEvent.Type.FocusOut:
                 self._animate_opacity(_OPACITY_IDLE)

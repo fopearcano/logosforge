@@ -340,6 +340,97 @@ class TestEntriesAppearInSearch:
 
 
 # ---------------------------------------------------------------------------
+# Entries cache
+# ---------------------------------------------------------------------------
+
+
+class TestEntriesCache:
+    """Verify the entries cache avoids redundant DB queries."""
+
+    def test_cache_populated_on_first_search(self, empty_console, db, project):
+        """First search loads entries into cache."""
+        db.create_psyke_entry(project.id, "John", "character")
+        empty_console.mark_index_dirty()
+
+        assert empty_console._psyke_entries_cache is None
+        empty_console._input.setText("jo")
+        empty_console._run_search()
+        assert empty_console._psyke_entries_cache is not None
+        assert len(empty_console._psyke_entries_cache) == 1
+
+    def test_cache_reused_across_searches(self, empty_console, db, project):
+        """Consecutive searches reuse the same cache object."""
+        db.create_psyke_entry(project.id, "John", "character")
+        empty_console.mark_index_dirty()
+
+        empty_console._input.setText("jo")
+        empty_console._run_search()
+        first_cache = empty_console._psyke_entries_cache
+
+        empty_console._input.setText("john")
+        empty_console._run_search()
+        assert empty_console._psyke_entries_cache is first_cache
+
+    def test_mark_dirty_invalidates_cache(self, empty_console, db, project):
+        """mark_index_dirty clears the cache."""
+        db.create_psyke_entry(project.id, "John", "character")
+        empty_console.mark_index_dirty()
+
+        empty_console._input.setText("jo")
+        empty_console._run_search()
+        assert empty_console._psyke_entries_cache is not None
+
+        empty_console.mark_index_dirty()
+        assert empty_console._psyke_entries_cache is None
+
+    def test_new_entry_appears_after_dirty(self, empty_console, db, project):
+        """Entry added after cache load appears after mark_index_dirty."""
+        db.create_psyke_entry(project.id, "John", "character")
+        empty_console.mark_index_dirty()
+        empty_console._input.setText("jo")
+        empty_console._run_search()
+
+        db.create_psyke_entry(project.id, "Joanna", "character")
+        empty_console.mark_index_dirty()
+        empty_console._input.setText("jo")
+        empty_console._run_search()
+
+        assert len(empty_console._psyke_entries_cache) == 2
+        dropdown = empty_console._ensure_dropdown()
+        entity_items = [i for i in dropdown._items if i.suggestion.category == "entity"]
+        assert len(entity_items) >= 2
+
+    def test_set_project_invalidates_cache(self, app, db):
+        """Switching projects clears cache and loads new entries."""
+        from storyplanner.ui.psyke_console import PsykeConsole
+
+        p1 = db.create_project("Project 1")
+        p2 = db.create_project("Project 2")
+        db.create_psyke_entry(p1.id, "John", "character")
+        db.create_psyke_entry(p2.id, "Jane", "character")
+
+        console = PsykeConsole(db, p1.id)
+        console.rebuild_index()
+        assert any(e.name == "John" for e in console._psyke_entries_cache)
+
+        console.set_project(p2.id)
+        assert console._psyke_entries_cache is None
+
+        console._input.setText("jan")
+        console._run_search()
+        assert any(e.name == "Jane" for e in console._psyke_entries_cache)
+        assert not any(e.name == "John" for e in console._psyke_entries_cache)
+
+    def test_lazy_init_no_db_hit(self, app, db, project):
+        """Console constructor with lazy index does not query DB."""
+        from storyplanner.ui.psyke_console import PsykeConsole
+
+        console = PsykeConsole(db, project.id)
+        assert console._psyke_entries_cache is None
+        assert len(console._search_index._index) == 0
+
+
+# ---------------------------------------------------------------------------
 # Layout — center-bottom floating positioning
 # ---------------------------------------------------------------------------
 
