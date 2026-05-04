@@ -178,19 +178,47 @@ def test_focus_mode_callback():
     assert calls == [True, False]
 
 
-# -- Font toggle --------------------------------------------------------------
+# -- Font & size selector -----------------------------------------------------
 
-def test_serif_toggle():
+def test_font_family_selector():
     db = Database()
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
-    assert view._use_serif is False
-    view._toggle_font()
-    assert view._use_serif is True
-    assert view._font_toggle.text() == "Sans"
-    view._toggle_font()
-    assert view._use_serif is False
-    assert view._font_toggle.text() == "Serif"
+    assert view._font_family_key == "sans"
+    assert view._font_combo.currentData() == "sans"
+    view._font_combo.setCurrentIndex(0)  # serif
+    assert view._font_family_key == "serif"
+    settings = db.get_project_settings(proj.id)
+    assert settings["font_family"] == "serif"
+    view._font_combo.setCurrentIndex(2)  # mono
+    assert view._font_family_key == "mono"
+
+
+def test_font_size_selector():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view._font_size == 18
+    view._size_combo.setCurrentIndex(0)  # 14
+    assert view._font_size == 14
+    settings = db.get_project_settings(proj.id)
+    assert settings["font_size"] == 14
+    view._size_combo.setCurrentIndex(8)  # 24
+    assert view._font_size == 24
+
+
+def test_font_settings_persist_across_sessions():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view1 = WritingCoreView(db, proj.id)
+    view1._font_combo.setCurrentIndex(0)  # serif
+    view1._size_combo.setCurrentIndex(6)  # 20
+    del view1
+    view2 = WritingCoreView(db, proj.id)
+    assert view2._font_family_key == "serif"
+    assert view2._font_size == 20
+    assert view2._font_combo.currentData() == "serif"
+    assert view2._size_combo.currentData() == 20
 
 
 # -- Auto-save ----------------------------------------------------------------

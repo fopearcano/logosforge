@@ -57,6 +57,19 @@ from storyplanner.writing_formats import ALL_FORMATS, FORMAT_ORDER, WritingForma
 _CANVAS_MAX_WIDTH = 680
 _CANVAS_PADDING_H = 64
 _BODY_FONT_SIZE = 18
+
+_FONT_PRESETS: dict[str, list[str]] = {
+    "serif": ["Georgia", "Noto Serif", "serif"],
+    "sans": ["Segoe UI", "Noto Sans", "sans-serif"],
+    "mono": ["Fira Code", "Consolas", "monospace"],
+}
+_FONT_PRESET_LABELS: dict[str, str] = {
+    "serif": "Serif",
+    "sans": "Sans-serif",
+    "mono": "Monospace",
+}
+_FONT_PRESET_ORDER = ["serif", "sans", "mono"]
+_FONT_SIZE_OPTIONS = [14, 15, 16, 17, 18, 19, 20, 22, 24]
 _BODY_LINE_HEIGHT = 1.8
 _FOCUS_LINE_HEIGHT = 1.9
 _FADE_ALPHA_PARA = 70
@@ -276,7 +289,13 @@ class WritingCoreView(QWidget):
         fmt_name = (project.format_mode if project else "novel") or "novel"
         self._format: WritingFormat = ALL_FORMATS.get(fmt_name, ALL_FORMATS["novel"])
         self._focus_mode = False
-        self._use_serif = False
+        _settings = db.get_project_settings(project_id)
+        self._font_family_key: str = _settings.get("font_family", "sans")
+        if self._font_family_key not in _FONT_PRESETS:
+            self._font_family_key = "sans"
+        self._font_size: int = _settings.get("font_size", _BODY_FONT_SIZE)
+        if self._font_size not in _FONT_SIZE_OPTIONS:
+            self._font_size = _BODY_FONT_SIZE
         self._editors: dict[int, _SceneEditor] = {}
         self._save_timers: dict[int, QTimer] = {}
         self._scene_widgets: list[QWidget] = []
@@ -362,14 +381,25 @@ class WritingCoreView(QWidget):
 
         tb_layout.addStretch()
 
-        self._font_toggle = QPushButton("Serif")
-        self._font_toggle.setFlat(True)
-        self._font_toggle.setStyleSheet(
-            f"color: {theme.TEXT_MUTED}; font-size: 11px;"
-            " background: transparent; padding: 2px 8px;"
-        )
-        self._font_toggle.clicked.connect(self._toggle_font)
-        tb_layout.addWidget(self._font_toggle)
+        self._font_combo = QComboBox()
+        self._font_combo.setObjectName("writingFontCombo")
+        self._font_combo.setFixedWidth(100)
+        for key in _FONT_PRESET_ORDER:
+            self._font_combo.addItem(_FONT_PRESET_LABELS[key], key)
+        _fc_idx = _FONT_PRESET_ORDER.index(self._font_family_key)
+        self._font_combo.setCurrentIndex(_fc_idx)
+        self._font_combo.currentIndexChanged.connect(self._on_font_family_changed)
+        tb_layout.addWidget(self._font_combo)
+
+        self._size_combo = QComboBox()
+        self._size_combo.setObjectName("writingSizeCombo")
+        self._size_combo.setFixedWidth(58)
+        for sz in _FONT_SIZE_OPTIONS:
+            self._size_combo.addItem(f"{sz}", sz)
+        _sz_idx = _FONT_SIZE_OPTIONS.index(self._font_size)
+        self._size_combo.setCurrentIndex(_sz_idx)
+        self._size_combo.currentIndexChanged.connect(self._on_font_size_changed)
+        tb_layout.addWidget(self._size_combo)
 
         self._flow_btn = QPushButton("Flow")
         self._flow_btn.setFlat(True)
@@ -836,15 +866,14 @@ class WritingCoreView(QWidget):
             QTextBlockFormat.LineHeightTypes.ProportionalHeight.value,
         )
 
-        families = (
-            ["Georgia", "Noto Serif", "serif"]
-            if self._use_serif
-            else ["Segoe UI", "Noto Sans", "sans-serif"]
-        )
+        families = _FONT_PRESETS.get(self._font_family_key, _FONT_PRESETS["sans"])
 
         cfmt = QTextCharFormat()
         cfmt.setFontFamilies(families)
-        cfmt.setProperty(QTextCharFormat.Property.FontPixelSize, elem.font_size)
+        font_size = elem.font_size
+        if elem.font_size == _BODY_FONT_SIZE:
+            font_size = self._font_size
+        cfmt.setProperty(QTextCharFormat.Property.FontPixelSize, font_size)
         if elem.all_caps:
             cfmt.setFontCapitalization(QFont.Capitalization.AllUppercase)
         if elem.color_key == "muted":
@@ -1138,10 +1167,11 @@ class WritingCoreView(QWidget):
     # -- Typography -----------------------------------------------------------
 
     def _apply_typography(self) -> None:
-        serif = self._use_serif
-        family = "Georgia, 'Noto Serif', serif" if serif else "'Segoe UI', 'Noto Sans', sans-serif"
+        families = _FONT_PRESETS.get(self._font_family_key, _FONT_PRESETS["sans"])
+        family = ", ".join(f"'{f}'" if " " in f else f for f in families)
         lh = _FOCUS_LINE_HEIGHT if self._focus_mode else _BODY_LINE_HEIGHT
-        line_spacing_px = int(_BODY_FONT_SIZE * lh)
+        font_size = self._font_size
+        line_spacing_px = int(font_size * lh)
 
         text_color = (
             "#e0d8cc" if theme.current_palette() == "Dark"
@@ -1159,7 +1189,7 @@ class WritingCoreView(QWidget):
             f"  border: none;"
             f"  padding: 0;"
             f"  font-family: {family};"
-            f"  font-size: {_BODY_FONT_SIZE}px;"
+            f"  font-size: {font_size}px;"
             f"  selection-background-color: {sel_bg};"
             f"  selection-color: {theme.SELECTION_TEXT};"
             f"}}"
@@ -1350,8 +1380,12 @@ class WritingCoreView(QWidget):
             f"}}"
         )
 
+        _combo_ids = (
+            "#writingFormatCombo, #writingElementCombo,"
+            " #writingFontCombo, #writingSizeCombo"
+        )
         combo_style = (
-            f"#writingFormatCombo, #writingElementCombo {{"
+            f"{_combo_ids} {{"
             f"  background: transparent;"
             f"  color: {theme.TEXT_MUTED};"
             f"  border: 1px solid {theme.BORDER};"
@@ -1359,12 +1393,14 @@ class WritingCoreView(QWidget):
             f"  padding: 2px 8px;"
             f"  font-size: 11px;"
             f"}}"
-            f"#writingFormatCombo:hover, #writingElementCombo:hover {{"
+            f"{_combo_ids.replace(',', ':hover,')}:hover {{"
             f"  color: {theme.TEXT_PRIMARY};"
             f"  border-color: {theme.TEXT_MUTED};"
             f"}}"
             f"#writingFormatCombo QAbstractItemView,"
-            f"#writingElementCombo QAbstractItemView {{"
+            f"#writingElementCombo QAbstractItemView,"
+            f"#writingFontCombo QAbstractItemView,"
+            f"#writingSizeCombo QAbstractItemView {{"
             f"  background: {theme.BG_PANEL};"
             f"  color: {theme.TEXT_PRIMARY};"
             f"  border: 1px solid {theme.BORDER};"
@@ -1384,10 +1420,25 @@ class WritingCoreView(QWidget):
 
         self._apply_format_to_all_blocks()
 
-    def _toggle_font(self) -> None:
-        self._use_serif = not self._use_serif
-        self._font_toggle.setText("Sans" if self._use_serif else "Serif")
-        self._apply_typography()
+    def _on_font_family_changed(self, index: int) -> None:
+        key = self._font_combo.itemData(index)
+        if key and key in _FONT_PRESETS:
+            self._font_family_key = key
+            self._persist_font_settings()
+            self._apply_typography()
+
+    def _on_font_size_changed(self, index: int) -> None:
+        size = self._size_combo.itemData(index)
+        if size and size in _FONT_SIZE_OPTIONS:
+            self._font_size = size
+            self._persist_font_settings()
+            self._apply_typography()
+
+    def _persist_font_settings(self) -> None:
+        settings = self._db.get_project_settings(self._project_id)
+        settings["font_family"] = self._font_family_key
+        settings["font_size"] = self._font_size
+        self._db.save_project_settings(self._project_id, settings)
 
     # -- Focus mode -----------------------------------------------------------
 
