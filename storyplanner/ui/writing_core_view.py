@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.auto_link import AutoLinkSuggester, Suggestion
-from storyplanner.grammar_checker import detect_language
+from storyplanner.grammar_checker import Issue as GrammarIssue, check_text, detect_language
 from storyplanner.context_assistant import ContextAssistant, ContextHint, HintRateLimiter
 from storyplanner.creative_layer import compute_review_metrics
 from storyplanner.db import Database
@@ -160,6 +160,8 @@ class _SceneEditor(QTextEdit):
         self.textChanged.connect(self._schedule_resize)
         self._scene_id: int | None = None
         self._smart_quotes = False
+        self._grammar_issues: list[GrammarIssue] = []
+        self._grammar_enabled = False
         self._focus_fade_enabled = False
         self._fade_block = -1
         self._fade_bg = "#0f1219"
@@ -307,9 +309,26 @@ class _SceneEditor(QTextEdit):
 
     def contextMenuEvent(self, event) -> None:  # noqa: N802
         menu = self.createStandardContextMenu()
+        first_action = menu.actions()[0] if menu.actions() else None
+
+        issue = self._issue_at_cursor(event.pos()) if self._grammar_enabled else None
+        if issue is not None:
+            issue_sep = menu.insertSeparator(first_action)
+            header = menu.addAction(f"  {issue.message}")
+            header.setEnabled(False)
+            menu.removeAction(header)
+            menu.insertAction(issue_sep, header)
+            for suggestion in issue.suggestions[:5]:
+                fix_act = menu.addAction(f"  → {suggestion}")
+                menu.removeAction(fix_act)
+                menu.insertAction(issue_sep, fix_act)
+                fix_act.triggered.connect(
+                    lambda _, s=suggestion, iss=issue: self._apply_suggestion(iss, s),
+                )
+
         entry_id = self._resolve_psyke_at(event.pos())
         if entry_id is not None:
-            psyke_sep = menu.insertSeparator(menu.actions()[0] if menu.actions() else None)
+            psyke_sep = menu.insertSeparator(first_action)
             open_act = menu.addAction("Open in Story Bible")
             menu.removeAction(open_act)
             menu.insertAction(psyke_sep, open_act)
@@ -318,6 +337,12 @@ class _SceneEditor(QTextEdit):
             )
         menu.exec(event.globalPos())
         menu.deleteLater()
+
+    def _apply_suggestion(self, issue: GrammarIssue, replacement: str) -> None:
+        cursor = QTextCursor(self.document())
+        cursor.setPosition(issue.start)
+        cursor.setPosition(issue.end, QTextCursor.MoveMode.KeepAnchor)
+        cursor.insertText(replacement)
 
     def _resolve_psyke_at(self, pos) -> int | None:
         if self._on_psyke_context_action is None:
@@ -333,7 +358,36 @@ class _SceneEditor(QTextEdit):
         if self._on_psyke_context_action:
             self._on_psyke_context_action(action, entry_id, 0)
 
+    def apply_grammar_underlines(self) -> None:
+        _UNDERLINE_COLORS = {
+            "spelling": QColor("#ef4444"),
+            "grammar": QColor("#3b82f6"),
+            "style": QColor("#f59e0b"),
+        }
+        selections: list[QTextEdit.ExtraSelection] = []
+        doc = self.document()
+        for issue in self._grammar_issues:
+            sel = QTextEdit.ExtraSelection()
+            fmt = QTextCharFormat()
+            color = _UNDERLINE_COLORS.get(issue.issue_type, QColor("#ef4444"))
+            fmt.setUnderlineStyle(QTextCharFormat.UnderlineStyle.WaveUnderline)
+            fmt.setUnderlineColor(color)
+            fmt.setToolTip(issue.message)
+            cursor = QTextCursor(doc)
+            cursor.setPosition(issue.start)
+            cursor.setPosition(issue.end, QTextCursor.MoveMode.KeepAnchor)
+            sel.cursor = cursor
+            sel.format = fmt
+            selections.append(sel)
+        self.setExtraSelections(selections)
 
+    def _issue_at_cursor(self, pos) -> GrammarIssue | None:
+        cursor = self.cursorForPosition(pos)
+        abs_pos = cursor.position()
+        for issue in self._grammar_issues:
+            if issue.start <= abs_pos < issue.end:
+                return issue
+        return None
 
 
 class WritingCoreView(QWidget):
@@ -375,6 +429,7 @@ class WritingCoreView(QWidget):
         self._pending_cursor_scene: int | None = _settings.get("cursor_scene_id")
         self._pending_cursor_pos: int = _settings.get("cursor_pos", 0)
         self._current_language: str = _settings.get("current_language", "en")
+        self._grammar_checking: bool = bool(_settings.get("grammar_checking", False))
         self._editors: dict[int, _SceneEditor] = {}
         self._save_timers: dict[int, QTimer] = {}
         self._scene_widgets: list[QWidget] = []
@@ -416,6 +471,11 @@ class WritingCoreView(QWidget):
         self._lang_detect_timer.setSingleShot(True)
         self._lang_detect_timer.setInterval(3000)
         self._lang_detect_timer.timeout.connect(self._run_language_detection)
+
+        self._grammar_timer = QTimer(self)
+        self._grammar_timer.setSingleShot(True)
+        self._grammar_timer.setInterval(800)
+        self._grammar_timer.timeout.connect(self._run_grammar_check)
 
         self._command_palette: CommandPalette | None = None
         self._palette_source_editor: _SceneEditor | None = None
@@ -507,6 +567,16 @@ class WritingCoreView(QWidget):
         )
         self._smart_quotes_btn.clicked.connect(self._toggle_smart_quotes)
         tb_layout.addWidget(self._smart_quotes_btn)
+
+        self._grammar_btn = QPushButton("Aa")
+        self._grammar_btn.setFlat(True)
+        self._grammar_btn.setToolTip("Grammar & spell check")
+        self._grammar_btn.setStyleSheet(
+            f"color: {theme.TEXT_PRIMARY if self._grammar_checking else theme.TEXT_MUTED};"
+            " font-size: 11px; background: transparent; padding: 2px 8px;"
+        )
+        self._grammar_btn.clicked.connect(self._toggle_grammar)
+        tb_layout.addWidget(self._grammar_btn)
 
         self._typewriter_btn = QPushButton("Typewriter")
         self._typewriter_btn.setFlat(True)
@@ -777,6 +847,7 @@ class WritingCoreView(QWidget):
         editor._on_new_block = self._on_new_block_created
         editor._on_psyke_context_action = self._handle_psyke_context
         editor._smart_quotes = self._smart_quotes
+        editor._grammar_enabled = self._grammar_checking
         editor.textChanged.connect(
             lambda sid=scene.id: self._schedule_save(sid)
         )
@@ -1196,6 +1267,8 @@ class WritingCoreView(QWidget):
         if self._context_assistant_enabled:
             self._context_assist_timer.start()
         self._lang_detect_timer.start()
+        if self._grammar_checking:
+            self._grammar_timer.start()
         self._update_word_count()
 
     def _save_scene(self, scene_id: int) -> None:
@@ -1547,6 +1620,7 @@ class WritingCoreView(QWidget):
         settings["font_size"] = self._font_size
         settings["first_line_indent"] = self._first_line_indent
         settings["smart_quotes"] = self._smart_quotes
+        settings["grammar_checking"] = self._grammar_checking
         self._db.save_project_settings(self._project_id, settings)
 
     def _persist_session_state(self) -> None:
@@ -1655,6 +1729,47 @@ class WritingCoreView(QWidget):
             if total >= 2000:
                 break
         return " ".join(parts)[:2000]
+
+    # -- Grammar checking -----------------------------------------------------
+
+    def _toggle_grammar(self) -> None:
+        self._grammar_checking = not self._grammar_checking
+        self._grammar_btn.setStyleSheet(
+            f"color: {theme.TEXT_PRIMARY if self._grammar_checking else theme.TEXT_MUTED};"
+            " font-size: 11px; background: transparent; padding: 2px 8px;"
+        )
+        for editor in self._editors.values():
+            editor._grammar_enabled = self._grammar_checking
+            if self._grammar_checking:
+                self._check_editor_grammar(editor)
+            else:
+                editor._grammar_issues = []
+                editor.apply_grammar_underlines()
+        self._persist_font_settings()
+
+    def _run_grammar_check(self) -> None:
+        if not self._grammar_checking:
+            return
+        for editor in self._editors.values():
+            self._check_editor_grammar(editor)
+
+    def _check_editor_grammar(self, editor: _SceneEditor) -> None:
+        text = editor.toPlainText()
+        if not text.strip():
+            editor._grammar_issues = []
+            editor.apply_grammar_underlines()
+            return
+        issues = check_text(text)
+        editor._grammar_issues = issues
+        editor.apply_grammar_underlines()
+
+    @property
+    def grammar_issues(self) -> dict[int, list[GrammarIssue]]:
+        return {
+            sid: editor._grammar_issues
+            for sid, editor in self._editors.items()
+            if editor._grammar_issues
+        }
 
     # -- Typewriter mode ------------------------------------------------------
 
