@@ -1002,6 +1002,7 @@ class MainWindow(QMainWindow):
 
         new_project_id = import_json(self._db, data)
         self._project_id = new_project_id
+        self._psyke_console.set_project(new_project_id)
         self._current_file = None
         self._cached_scenes_view = None
         self._mark_clean()
@@ -1298,6 +1299,7 @@ class MainWindow(QMainWindow):
     def _on_new_project(self) -> None:
         project = self._db.create_project("Untitled")
         self._project_id = project.id
+        self._psyke_console.set_project(project.id)
         self._current_file = None
         self._cached_scenes_view = None
         self._mark_clean()
@@ -1399,6 +1401,7 @@ class MainWindow(QMainWindow):
 
         new_project_id = import_json(self._db, data)
         self._project_id = new_project_id
+        self._psyke_console.set_project(new_project_id)
         self._current_file = path
         self._cached_scenes_view = None
         self._mark_clean()
@@ -1421,6 +1424,7 @@ class MainWindow(QMainWindow):
         if data is None:
             return False
         self._project_id = import_json(self._db, data)
+        self._psyke_console.set_project(self._project_id)
         self._current_file = path
         self._cached_scenes_view = None
         self._mark_clean()

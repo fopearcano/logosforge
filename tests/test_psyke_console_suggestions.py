@@ -304,6 +304,40 @@ class TestEntriesAppearInSearch:
         entity_items = [i for i in dropdown._items if i.suggestion.category == "entity"]
         assert len(entity_items) == 0
 
+    def test_set_project_switches_index(self, app, db):
+        """After set_project(), search returns entries from the new project."""
+        from storyplanner.ui.psyke_console import PsykeConsole
+
+        p1 = db.create_project("Project 1")
+        p2 = db.create_project("Project 2")
+        db.create_psyke_entry(p1.id, "John", "character")
+        db.create_psyke_entry(p2.id, "Jane", "character")
+
+        console = PsykeConsole(db, p1.id)
+        console.rebuild_index()
+
+        # John is in p1
+        console._input.setText("jo")
+        console._run_search()
+        dropdown = console._ensure_dropdown()
+        entity_items = [i for i in dropdown._items if i.suggestion.category == "entity"]
+        assert len(entity_items) >= 1
+
+        # Switch to p2
+        console.set_project(p2.id)
+
+        # Jane is in p2, John is not
+        console._input.setText("jan")
+        console._run_search()
+        entity_items = [i for i in dropdown._items if i.suggestion.category == "entity"]
+        assert len(entity_items) >= 1
+        assert any("Jane" in i.suggestion.text for i in entity_items)
+
+        console._input.setText("jo")
+        console._run_search()
+        entity_items = [i for i in dropdown._items if i.suggestion.category == "entity"]
+        assert len(entity_items) == 0
+
 
 # ---------------------------------------------------------------------------
 # Layout — center-bottom floating positioning

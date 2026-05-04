@@ -363,6 +363,11 @@ class PsykeConsole(QWidget):
             self.clearFocus()
         self._selecting = False
 
+    def set_project(self, project_id: int) -> None:
+        self._project_id = project_id
+        self._search_index = PsykeSearchIndex(self._db, project_id)
+        self._index_dirty = False
+
     def rebuild_index(self) -> None:
         self._search_index.rebuild()
         self._index_dirty = False
