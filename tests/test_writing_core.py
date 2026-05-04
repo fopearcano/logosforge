@@ -706,6 +706,103 @@ def test_collect_text_sample():
     assert len(sample) <= 2000
 
 
+# -- Language override -------------------------------------------------------
+
+def test_language_override_defaults_auto():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view.language_override == "auto"
+
+
+def test_language_combo_exists():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert hasattr(view, "_lang_combo")
+    assert view._lang_combo.count() == 6
+
+
+def test_language_combo_options():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    codes = [view._lang_combo.itemData(i) for i in range(view._lang_combo.count())]
+    assert codes == ["auto", "en", "it", "es", "fr", "de"]
+
+
+def test_language_override_sets_language():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._lang_combo.setCurrentIndex(3)
+    assert view.language_override == "es"
+    assert view.current_language == "es"
+
+
+def test_language_override_persists():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._lang_combo.setCurrentIndex(2)
+    settings = db.get_project_settings(proj.id)
+    assert settings["language_override"] == "it"
+
+
+def test_language_override_restores_from_settings():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    settings = db.get_project_settings(proj.id)
+    settings["language_override"] = "fr"
+    db.save_project_settings(proj.id, settings)
+    view = WritingCoreView(db, proj.id)
+    assert view.language_override == "fr"
+    assert view.current_language == "fr"
+    assert view._lang_combo.currentIndex() == 4
+
+
+def test_language_override_skips_detection():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._lang_combo.setCurrentIndex(1)
+    assert view.current_language == "en"
+    editor = list(view._editors.values())[0]
+    editor.setPlainText(
+        "El rápido zorro marrón saltó sobre el perro perezoso en el campo. "
+        "La casa era grande y bonita con muchas ventanas abiertas al jardín."
+    )
+    view._run_language_detection()
+    assert view.current_language == "en"
+
+
+def test_language_auto_resumes_detection():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._lang_combo.setCurrentIndex(3)
+    assert view.current_language == "es"
+    view._lang_combo.setCurrentIndex(0)
+    assert view.language_override == "auto"
+    editor = list(view._editors.values())[0]
+    editor.setPlainText(
+        "Der schnelle braune Fuchs sprang über den faulen Hund auf dem Feld. "
+        "Das Haus war groß und schön mit vielen offenen Fenstern zum Garten."
+    )
+    view._run_language_detection()
+    assert view.current_language == "de"
+
+
+def test_language_override_invalid_resets_auto():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    settings = db.get_project_settings(proj.id)
+    settings["language_override"] = "xx"
+    db.save_project_settings(proj.id, settings)
+    view = WritingCoreView(db, proj.id)
+    assert view.language_override == "auto"
+
+
 # -- Grammar checking --------------------------------------------------------
 
 def _wait_grammar(view):

@@ -72,6 +72,14 @@ _FONT_PRESET_LABELS: dict[str, str] = {
 }
 _FONT_PRESET_ORDER = ["serif", "sans", "mono"]
 _FONT_SIZE_OPTIONS = [14, 15, 16, 17, 18, 19, 20, 22, 24]
+_LANGUAGE_OPTIONS = [
+    ("auto", "Auto"),
+    ("en", "English"),
+    ("it", "Italian"),
+    ("es", "Spanish"),
+    ("fr", "French"),
+    ("de", "German"),
+]
 _BODY_LINE_HEIGHT = 1.5
 _FOCUS_LINE_HEIGHT = 1.6
 _FADE_ALPHA_PARA = 70
@@ -634,6 +642,12 @@ class WritingCoreView(QWidget):
         self._pending_cursor_scene: int | None = _settings.get("cursor_scene_id")
         self._pending_cursor_pos: int = _settings.get("cursor_pos", 0)
         self._current_language: str = _settings.get("current_language", "en")
+        self._language_override: str = _settings.get("language_override", "auto")
+        valid_codes = {code for code, _ in _LANGUAGE_OPTIONS}
+        if self._language_override not in valid_codes:
+            self._language_override = "auto"
+        if self._language_override != "auto":
+            self._current_language = self._language_override
         self._grammar_checking: bool = bool(_settings.get("grammar_checking", False))
         self._editors: dict[int, _SceneEditor] = {}
         self._save_timers: dict[int, QTimer] = {}
@@ -784,6 +798,19 @@ class WritingCoreView(QWidget):
         )
         self._grammar_btn.clicked.connect(self._toggle_grammar)
         tb_layout.addWidget(self._grammar_btn)
+
+        self._lang_combo = QComboBox()
+        self._lang_combo.setObjectName("writingLangCombo")
+        self._lang_combo.setFixedWidth(80)
+        self._lang_combo.setToolTip("Language for grammar checking")
+        _lc_idx = 0
+        for i, (code, label) in enumerate(_LANGUAGE_OPTIONS):
+            self._lang_combo.addItem(label, code)
+            if code == self._language_override:
+                _lc_idx = i
+        self._lang_combo.setCurrentIndex(_lc_idx)
+        self._lang_combo.currentIndexChanged.connect(self._on_language_changed)
+        tb_layout.addWidget(self._lang_combo)
 
         self._typewriter_btn = QPushButton("Typewriter")
         self._typewriter_btn.setFlat(True)
@@ -1828,6 +1855,7 @@ class WritingCoreView(QWidget):
         settings["first_line_indent"] = self._first_line_indent
         settings["smart_quotes"] = self._smart_quotes
         settings["grammar_checking"] = self._grammar_checking
+        settings["language_override"] = self._language_override
         self._db.save_project_settings(self._project_id, settings)
 
     def _persist_session_state(self) -> None:
@@ -1917,7 +1945,25 @@ class WritingCoreView(QWidget):
     def current_language(self) -> str:
         return self._current_language
 
+    @property
+    def language_override(self) -> str:
+        return self._language_override
+
+    def _on_language_changed(self, index: int) -> None:
+        code = self._lang_combo.itemData(index)
+        if code == self._language_override:
+            return
+        self._language_override = code
+        if code == "auto":
+            self._run_language_detection()
+        else:
+            self._current_language = code
+            self._session_save_timer.start()
+        self._persist_font_settings()
+
     def _run_language_detection(self) -> None:
+        if self._language_override != "auto":
+            return
         sample = self._collect_text_sample()
         if len(sample.strip()) < 50:
             return
