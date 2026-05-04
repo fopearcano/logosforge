@@ -299,13 +299,11 @@ class WritingCoreView(QWidget):
         self._editors: dict[int, _SceneEditor] = {}
         self._save_timers: dict[int, QTimer] = {}
         self._scene_widgets: list[QWidget] = []
-        self._header_widgets: list[QWidget] = []
         self._highlighters: dict[int, PsykeHighlighter] = {}
         self._click_handlers: dict[int, PsykeClickHandler] = {}
         self._hover_handlers: dict[int, EntityHoverHandler] = {}
         self._suggestion_banners: dict[int, SuggestionBanner] = {}
         self._context_hint_banners: dict[int, ContextHintBanner] = {}
-        self._flow_mode = False
         self._typewriter_mode = False
         self._review_mode = False
         self._review_overlay: QWidget | None = None
@@ -400,16 +398,6 @@ class WritingCoreView(QWidget):
         self._size_combo.setCurrentIndex(_sz_idx)
         self._size_combo.currentIndexChanged.connect(self._on_font_size_changed)
         tb_layout.addWidget(self._size_combo)
-
-        self._flow_btn = QPushButton("Flow")
-        self._flow_btn.setFlat(True)
-        self._flow_btn.setToolTip("Hide structural headers")
-        self._flow_btn.setStyleSheet(
-            f"color: {theme.TEXT_MUTED}; font-size: 11px;"
-            " background: transparent; padding: 2px 8px;"
-        )
-        self._flow_btn.clicked.connect(self.toggle_flow_mode)
-        tb_layout.addWidget(self._flow_btn)
 
         self._typewriter_btn = QPushButton("Typewriter")
         self._typewriter_btn.setFlat(True)
@@ -619,17 +607,12 @@ class WritingCoreView(QWidget):
         self.refresh_psyke_terms()
         self._refresh_suggestions()
 
-        if self._flow_mode:
-            for w in self._header_widgets:
-                w.setVisible(False)
-
     def _clear_canvas(self) -> None:
         self._format_toolbar.untrack_all()
         self._entity_hover_panel.hide()
         self._editors.clear()
         self._save_timers.clear()
         self._scene_widgets.clear()
-        self._header_widgets.clear()
         self._highlighters.clear()
         self._click_handlers.clear()
         self._hover_handlers.clear()
@@ -651,7 +634,6 @@ class WritingCoreView(QWidget):
         self._inner_layout.addWidget(label)
         self._inner_layout.addSpacing(12)
         self._scene_widgets.append(label)
-        self._header_widgets.append(label)
 
     def _add_chapter_header(self, chapter: str) -> None:
         label = QLabel(chapter)
@@ -661,7 +643,6 @@ class WritingCoreView(QWidget):
         self._inner_layout.addWidget(label)
         self._inner_layout.addSpacing(16)
         self._scene_widgets.append(label)
-        self._header_widgets.append(label)
 
     def _add_scene_block(self, scene, *, is_first: bool = False) -> None:
         if not is_first:
@@ -789,17 +770,6 @@ class WritingCoreView(QWidget):
             handler.set_term_map(self._psyke_term_map)
         for handler in self._hover_handlers.values():
             handler.set_term_map(self._psyke_term_map)
-
-    # -- Flow mode (hide headers) ----------------------------------------------
-
-    def toggle_flow_mode(self) -> None:
-        self._flow_mode = not self._flow_mode
-        for w in self._header_widgets:
-            w.setVisible(not self._flow_mode)
-        self._flow_btn.setText("Structure" if self._flow_mode else "Flow")
-
-    def is_flow_mode(self) -> bool:
-        return self._flow_mode
 
     # -- Format / element system -----------------------------------------------
 

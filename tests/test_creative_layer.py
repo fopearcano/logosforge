@@ -232,43 +232,6 @@ def test_psyke_no_entries_no_pattern():
     assert hl._pattern is None
 
 
-# -- WritingCoreView integration: Flow mode --------------------------------
-
-def test_flow_mode_default_off():
-    db, proj, *_ = _make_project_with_scenes()
-    view = WritingCoreView(db, proj.id)
-    assert view.is_flow_mode() is False
-
-
-def test_flow_mode_toggle():
-    db, proj, *_ = _make_project_with_scenes()
-    view = WritingCoreView(db, proj.id)
-    view.toggle_flow_mode()
-    assert view.is_flow_mode() is True
-    assert view._flow_btn.text() == "Structure"
-    view.toggle_flow_mode()
-    assert view.is_flow_mode() is False
-    assert view._flow_btn.text() == "Flow"
-
-
-def test_flow_mode_hides_headers():
-    db, proj, *_ = _make_project_with_scenes()
-    view = WritingCoreView(db, proj.id)
-    assert len(view._header_widgets) > 0
-    view.toggle_flow_mode()
-    for w in view._header_widgets:
-        assert w.isHidden()
-
-
-def test_flow_mode_restores_headers():
-    db, proj, *_ = _make_project_with_scenes()
-    view = WritingCoreView(db, proj.id)
-    view.toggle_flow_mode()
-    view.toggle_flow_mode()
-    for w in view._header_widgets:
-        assert not w.isHidden()
-
-
 # -- WritingCoreView integration: Review mode ------------------------------
 
 def test_review_mode_default_off():
