@@ -303,11 +303,11 @@ class PsykeConsole(QWidget):
         self._debounce.timeout.connect(self._run_search)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 0, 8, 0)
+        layout.setContentsMargins(4, 0, 4, 0)
         layout.setSpacing(0)
 
         self._input = QLineEdit()
-        self._input.setPlaceholderText("\U0001F4D6  Search PSYKE…")
+        self._input.setPlaceholderText("Search PSYKE…")
         self._input.setObjectName("psykeConsoleInput")
         self._input.setClearButtonEnabled(True)
         self._input.installEventFilter(self)
