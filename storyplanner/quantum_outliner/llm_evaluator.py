@@ -1,4 +1,4 @@
-"""LLM branch evaluator — brief critique-to-score via chat completion.
+"""LLM branch evaluator — standardised critique-to-score via chat completion.
 
 Returns factor scores (0–1) for each of the five scoring objectives.
 Falls back to None on any LLM or parse failure so the caller can use
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from storyplanner.assistant import chat_completion
@@ -23,16 +24,29 @@ logger = logging.getLogger(__name__)
 _TIMEOUT = 30
 
 _SYSTEM_PROMPT = (
-    "You evaluate narrative branches. Score each factor 0.0–1.0.\n"
-    "Return ONLY JSON, no markdown, no explanation.\n"
-    '{"structure_fit":0.0,"psyke_consistency":0.0,'
-    '"tension_gain":0.0,"novelty":0.0,"goal_alignment":0.0}'
+    "You are scoring narrative options. Return JSON only:\n"
+    "{\n"
+    '  "structure_fit": 0-1,\n'
+    '  "psyke_consistency": 0-1,\n'
+    '  "tension_gain": 0-1,\n'
+    '  "novelty": 0-1,\n'
+    '  "goal_alignment": 0-1\n'
+    "}\n"
+    "Criteria:\n"
+    "- structure_fit: how well the option matches the current story beat/structure\n"
+    "- psyke_consistency: how consistent with established characters, places, arcs\n"
+    "- tension_gain: how much narrative tension this raises\n"
+    "- novelty: how fresh and surprising this direction is\n"
+    "- goal_alignment: how well this advances the protagonist's goals\n"
+    "Return ONLY the JSON object. No markdown, no explanation."
 )
 
 _FACTOR_KEYS = frozenset({
     "structure_fit", "psyke_consistency", "tension_gain",
     "novelty", "goal_alignment",
 })
+
+_TRAILING_COMMA = re.compile(r",\s*([}\]])")
 
 
 def _build_provider() -> ProviderConfig:
@@ -45,25 +59,72 @@ def _build_provider() -> ProviderConfig:
     )
 
 
-def _format_branch_prompt(branch: "Branch", context: str) -> str:
-    parts = []
-    if context:
-        parts.append(f"Context: {context}")
-    parts.append(f"Title: {branch.title}")
-    parts.append(f"Description: {branch.description}")
+def build_eval_prompt(
+    branch: "Branch",
+    *,
+    beat: str | None = None,
+    method: str | None = None,
+    psyke_brief: str = "",
+) -> str:
+    """Build the structured user prompt for LLM evaluation."""
+    sections: list[str] = []
+
+    context_lines: list[str] = []
+    if beat:
+        context_lines.append(f"- Beat: {beat}")
+    if method:
+        context_lines.append(f"- Method: {method}")
+    if psyke_brief:
+        context_lines.append(f"- Story bible:\n{psyke_brief}")
+    if context_lines:
+        sections.append("Context:\n" + "\n".join(context_lines))
+
+    option_lines = [f"Title: {branch.title}", f"Description: {branch.description}"]
     if branch.stakes:
-        parts.append(f"Stakes: {branch.stakes}")
+        option_lines.append(f"Stakes: {branch.stakes}")
     if branch.consequence:
-        parts.append(f"Consequence: {branch.consequence}")
-    return "\n".join(parts)
+        option_lines.append(f"Consequence: {branch.consequence}")
+    sections.append("Option:\n" + "\n".join(option_lines))
+
+    return "\n\n".join(sections)
 
 
-def _parse_factors(response: str) -> dict[str, float] | None:
-    text = response.strip()
+def _strip_fences(text: str) -> str:
+    """Remove markdown code fences wrapping JSON."""
+    text = text.strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[-1]
         if text.endswith("```"):
             text = text[:-3].strip()
+    return text
+
+
+def _extract_json_object(text: str) -> str | None:
+    """Find the first {...} substring in text."""
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
+
+
+def _parse_factors(response: str) -> dict[str, float] | None:
+    """Parse LLM response into factor dict. Returns None on any failure."""
+    text = _strip_fences(response)
+
+    extracted = _extract_json_object(text)
+    if extracted is not None:
+        text = extracted
+
+    text = _TRAILING_COMMA.sub(r"\1", text)
+    text = text.replace("'", '"')
 
     try:
         data = json.loads(text)
@@ -91,11 +152,29 @@ def score_with_llm(
     branch: "Branch",
     context: str = "",
     *,
+    beat: str | None = None,
+    method: str | None = None,
+    psyke_brief: str = "",
     provider: ProviderConfig | None = None,
 ) -> dict[str, float] | None:
-    """Call LLM to score a single branch. Returns None on any failure."""
+    """Call LLM to score a single branch. Returns None on any failure.
+
+    Accepts either a plain *context* string (legacy) or structured keyword
+    arguments (*beat*, *method*, *psyke_brief*).  Structured arguments are
+    preferred; if none are provided the plain *context* string is used.
+    """
     prov = provider or _build_provider()
-    user_msg = _format_branch_prompt(branch, context)
+
+    if beat or method or psyke_brief:
+        user_msg = build_eval_prompt(
+            branch, beat=beat, method=method, psyke_brief=psyke_brief,
+        )
+    elif context:
+        user_msg = build_eval_prompt(branch)
+        user_msg = f"Context:\n- {context}\n\n{user_msg}"
+    else:
+        user_msg = build_eval_prompt(branch)
+
     messages = [
         {"role": "system", "content": _SYSTEM_PROMPT},
         {"role": "user", "content": user_msg},
@@ -114,13 +193,20 @@ def evaluate_branches(
     branches: list["Branch"],
     context: str = "",
     *,
+    beat: str | None = None,
+    method: str | None = None,
+    psyke_brief: str = "",
     provider: ProviderConfig | None = None,
 ) -> dict[str, dict[str, float]]:
     """Score multiple branches via LLM. Returns {branch_id: factors} for successes only."""
     prov = provider or _build_provider()
     results: dict[str, dict[str, float]] = {}
     for b in branches:
-        factors = score_with_llm(b, context, provider=prov)
+        factors = score_with_llm(
+            b, context,
+            beat=beat, method=method, psyke_brief=psyke_brief,
+            provider=prov,
+        )
         if factors is not None:
             results[b.id] = factors
     return results

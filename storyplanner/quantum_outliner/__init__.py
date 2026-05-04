@@ -30,6 +30,7 @@ from storyplanner.quantum_outliner.persistence import (
     save_state,
 )
 from storyplanner.quantum_outliner.llm_evaluator import (
+    build_eval_prompt,
     evaluate_branches as llm_evaluate_branches,
     score_with_llm,
 )
@@ -115,6 +116,7 @@ __all__ = [
     "recommend_collapse",
     "recommend_pareto",
     "SELECTION_MODES",
+    "build_eval_prompt",
     "llm_evaluate_branches",
     "score_with_heuristic",
     "score_with_llm",
