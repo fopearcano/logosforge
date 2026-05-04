@@ -846,6 +846,112 @@ def test_grammar_toggle_disables():
         assert editor._grammar_issues == []
 
 
+def test_grammar_btn_label():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view._grammar_btn.text() == "Grammar Check"
+
+
+def test_grammar_is_grammar_checking_property():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view.is_grammar_checking is False
+    view._toggle_grammar()
+    _wait_grammar(view)
+    assert view.is_grammar_checking is True
+    view._toggle_grammar()
+    assert view.is_grammar_checking is False
+
+
+def test_grammar_off_no_worker_spawned():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view._grammar_checking is False
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("The quikc brown fox.")
+    view._run_grammar_check()
+    assert view._grammar_worker is None
+
+
+def test_grammar_off_timer_not_started():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view._grammar_checking is False
+    assert view._grammar_timer.isActive() is False
+
+
+def test_grammar_off_no_underlines():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("The quikc brown fox.")
+    assert len(editor.extraSelections()) == 0
+
+
+def test_grammar_toggle_off_stops_timer():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    view._grammar_timer.start()
+    assert view._grammar_timer.isActive() is True
+    view._toggle_grammar()
+    assert view._grammar_timer.isActive() is False
+
+
+def test_grammar_toggle_off_cancels_worker():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    view._toggle_grammar()
+    assert view._grammar_worker is None
+
+
+def test_grammar_toggle_off_clears_all_editors():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    for editor in view._editors.values():
+        editor.setPlainText("The quikc brown fox.")
+    view._check_editor_grammar(list(view._editors.values())[0])
+    _wait_grammar(view)
+    view._toggle_grammar()
+    for editor in view._editors.values():
+        assert editor._grammar_issues == []
+        assert len(editor.extraSelections()) == 0
+
+
+def test_grammar_schedule_save_skips_timer_when_off():
+    db = Database()
+    proj, s1, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view._grammar_checking is False
+    view._schedule_save(s1.id)
+    assert view._grammar_timer.isActive() is False
+
+
+def test_grammar_schedule_save_starts_timer_when_on():
+    db = Database()
+    proj, s1, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._toggle_grammar()
+    _wait_grammar(view)
+    view._grammar_timer.stop()
+    view._schedule_save(s1.id)
+    assert view._grammar_timer.isActive() is True
+    view._toggle_grammar()
+
+
 def test_grammar_detects_typo():
     db = Database()
     proj, *_ = _setup_project(db)

@@ -789,9 +789,9 @@ class WritingCoreView(QWidget):
         self._smart_quotes_btn.clicked.connect(self._toggle_smart_quotes)
         tb_layout.addWidget(self._smart_quotes_btn)
 
-        self._grammar_btn = QPushButton("Aa")
+        self._grammar_btn = QPushButton("Grammar Check")
         self._grammar_btn.setFlat(True)
-        self._grammar_btn.setToolTip("Grammar & spell check")
+        self._grammar_btn.setToolTip("Toggle grammar & spell checking")
         self._grammar_btn.setStyleSheet(
             f"color: {theme.TEXT_PRIMARY if self._grammar_checking else theme.TEXT_MUTED};"
             " font-size: 11px; background: transparent; padding: 2px 8px;"
@@ -1985,6 +1985,10 @@ class WritingCoreView(QWidget):
 
     # -- Grammar checking -----------------------------------------------------
 
+    @property
+    def is_grammar_checking(self) -> bool:
+        return self._grammar_checking
+
     def _toggle_grammar(self) -> None:
         self._grammar_checking = not self._grammar_checking
         self._grammar_btn.setStyleSheet(
@@ -1999,6 +2003,7 @@ class WritingCoreView(QWidget):
         if self._grammar_checking:
             self._start_grammar_worker()
         else:
+            self._grammar_timer.stop()
             self._cancel_grammar_worker()
         self._persist_font_settings()
 
