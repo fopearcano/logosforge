@@ -324,6 +324,109 @@ GOAL_FACTOR_MAP: dict[str, str] = {
 
 _GOAL_PENALTY = 0.0
 
+GOAL_PRESETS: dict[str, dict] = {
+    "Balanced": {
+        "objectives": {"tension": 0.2, "consistency": 0.2, "novelty": 0.2,
+                       "structure": 0.2, "character_focus": 0.2},
+        "min_constraints": {},
+        "horizon": 1,
+    },
+    "High Tension": {
+        "objectives": {"tension": 0.5, "consistency": 0.1, "novelty": 0.15,
+                       "structure": 0.1, "character_focus": 0.15},
+        "min_constraints": {"tension_gain": 0.3},
+        "horizon": 2,
+    },
+    "Character-first": {
+        "objectives": {"tension": 0.1, "consistency": 0.3, "novelty": 0.1,
+                       "structure": 0.1, "character_focus": 0.4},
+        "min_constraints": {"psyke_consistency": 0.5},
+        "horizon": 1,
+    },
+    "Experimental": {
+        "objectives": {"tension": 0.15, "consistency": 0.05, "novelty": 0.5,
+                       "structure": 0.1, "character_focus": 0.2},
+        "min_constraints": {},
+        "horizon": 2,
+    },
+}
+
+GOAL_PRESET_NAMES: list[str] = list(GOAL_PRESETS.keys())
+
+
+def goals_from_preset(name: str) -> QuantumGoals:
+    """Create a QuantumGoals instance from a named preset."""
+    preset = GOAL_PRESETS.get(name)
+    if preset is None:
+        return QuantumGoals()
+    return QuantumGoals(
+        objectives=dict(preset["objectives"]),
+        min_constraints=dict(preset["min_constraints"]),
+        horizon=preset["horizon"],
+    ).validate()
+
+
+def parse_goal_constraint(text: str) -> tuple[str, float] | None:
+    """Parse 'factor >= threshold' into (factor_key, threshold).
+
+    Accepts objective names (tension, consistency, etc.) or factor names
+    (tension_gain, psyke_consistency, etc.). Returns None on parse failure.
+    """
+    text = text.strip()
+    if ">=" not in text:
+        return None
+    parts = text.split(">=")
+    if len(parts) != 2:
+        return None
+    name = parts[0].strip().lower().replace(" ", "_")
+    try:
+        val = float(parts[1].strip())
+    except ValueError:
+        return None
+    val = max(0.0, min(val, 1.0))
+
+    if name in GOAL_FACTOR_MAP:
+        return GOAL_FACTOR_MAP[name], val
+    if name in GOAL_FACTOR_MAP.values():
+        return name, val
+    return None
+
+
+def format_goals_panel(goals: QuantumGoals) -> str:
+    """Render a compact text panel showing current goal configuration."""
+    lines = ["═══ GOALS ═══", ""]
+    lines.append("Objectives:")
+    for key in ("tension", "consistency", "novelty", "structure", "character_focus"):
+        val = goals.objectives.get(key, 0.2)
+        bar_len = int(val * 20)
+        bar = "█" * bar_len + "░" * (20 - bar_len)
+        lines.append(f"  {key:<16} {bar} {val:.0%}")
+    lines.append("")
+
+    if goals.min_constraints:
+        lines.append("Constraints:")
+        for k, v in goals.min_constraints.items():
+            lines.append(f"  {k} >= {v:.2f}")
+        lines.append("")
+
+    lines.append(f"Horizon: {goals.horizon}")
+    lines.append("")
+
+    matched = None
+    for name, preset in GOAL_PRESETS.items():
+        pg = goals_from_preset(name)
+        if (pg.objectives == goals.objectives
+                and pg.min_constraints == goals.min_constraints
+                and pg.horizon == goals.horizon):
+            matched = name
+            break
+    if matched:
+        lines.append(f"Preset: {matched}")
+    else:
+        lines.append("Preset: Custom")
+
+    return "\n".join(lines)
+
 
 @dataclass
 class QuantumGoals:

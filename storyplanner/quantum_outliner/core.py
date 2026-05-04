@@ -14,12 +14,14 @@ from storyplanner.quantum_outliner.collapse import CollapseError, collapse
 from storyplanner.quantum_outliner.possibilities import generate_possibilities
 from storyplanner.quantum_outliner.psyke_adapter import PsykeSignals, gather_psyke_signals
 from storyplanner.quantum_outliner.scoring import (
+    QuantumGoals,
     adapt_weights,
     apply_scores,
     build_comparison,
     explain_wavefunction,
     format_branch_chips,
     format_comparison,
+    format_goals_panel,
     format_pareto_recommendation,
     format_recommendation,
     recommend_collapse,
@@ -553,15 +555,18 @@ def _format_wavefunction(
     constraints = None
     show_tradeoffs = False
     selection_mode = "weighted"
+    goals: QuantumGoals | None = None
     if db is not None and project_id is not None:
         weights = db.get_scoring_weights(project_id)
         constraints = db.get_constraints(project_id)
         show_tradeoffs = db.get_show_tradeoffs(project_id)
         selection_mode = db.get_selection_mode(project_id)
+        goals = db.get_quantum_goals(project_id)
 
     if wf.branches:
         scored = score_branches(
             wf, psyke=psyke, weights=weights, constraints=constraints,
+            goals=goals,
         )
         apply_scores(wf, scored)
         wf.branches.sort(key=lambda b: b.probability, reverse=True)
@@ -571,6 +576,9 @@ def _format_wavefunction(
         show_tradeoffs=show_tradeoffs,
         selection_mode=selection_mode,
     )
+    if goals is not None:
+        body += "\n\n" + format_goals_panel(goals)
+
     return QuantumResult(
         kind="possibilities",
         title=title,
