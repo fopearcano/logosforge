@@ -577,6 +577,73 @@ def test_typewriter_mode_accessor():
     assert view.is_typewriter_mode() is True
 
 
+# -- Session state persistence ------------------------------------------------
+
+def test_focus_mode_persists():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view1 = WritingCoreView(db, proj.id)
+    view1.toggle_focus_mode()
+    assert view1._focus_mode is True
+    view1._persist_session_state()
+    del view1
+    view2 = WritingCoreView(db, proj.id)
+    view2.refresh()
+    assert view2._focus_mode is True
+
+
+def test_typewriter_mode_persists():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view1 = WritingCoreView(db, proj.id)
+    view1.toggle_typewriter_mode()
+    view1._persist_session_state()
+    del view1
+    view2 = WritingCoreView(db, proj.id)
+    view2.refresh()
+    assert view2._typewriter_mode is True
+
+
+def test_cursor_position_persists():
+    db = Database()
+    proj, s1, s2, s3 = _setup_project(db)
+    view1 = WritingCoreView(db, proj.id)
+    editor = view1._editors[s2.id]
+    cursor = editor.textCursor()
+    cursor.setPosition(5)
+    editor.setTextCursor(cursor)
+    view1._active_editor = editor
+    view1._persist_session_state()
+    del view1
+    view2 = WritingCoreView(db, proj.id)
+    view2.refresh()
+    assert view2._active_editor is not None
+    assert view2._active_editor._scene_id == s2.id
+    assert view2._active_editor.textCursor().position() == 5
+
+
+def test_scroll_position_persists():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view1 = WritingCoreView(db, proj.id)
+    view1._persist_session_state()
+    settings = db.get_project_settings(proj.id)
+    assert "scroll_pos" in settings
+
+
+def test_session_state_includes_all_keys():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view.toggle_focus_mode()
+    view.toggle_typewriter_mode()
+    view._persist_session_state()
+    settings = db.get_project_settings(proj.id)
+    assert settings["focus_mode"] is True
+    assert settings["typewriter_mode"] is True
+    assert "scroll_pos" in settings
+
+
 # -- Auto-formatting ----------------------------------------------------------
 
 def _type_into_editor(editor, text):

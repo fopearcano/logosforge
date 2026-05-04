@@ -358,8 +358,9 @@ class WritingCoreView(QWidget):
         project = db.get_project_by_id(project_id)
         fmt_name = (project.format_mode if project else "novel") or "novel"
         self._format: WritingFormat = ALL_FORMATS.get(fmt_name, ALL_FORMATS["novel"])
-        self._focus_mode = False
         _settings = db.get_project_settings(project_id)
+        self._focus_mode = False
+        self._pending_focus = bool(_settings.get("focus_mode", False))
         self._font_family_key: str = _settings.get("font_family", "sans")
         if self._font_family_key not in _FONT_PRESETS:
             self._font_family_key = "sans"
@@ -368,6 +369,10 @@ class WritingCoreView(QWidget):
             self._font_size = _BODY_FONT_SIZE
         self._first_line_indent: bool = bool(_settings.get("first_line_indent", False))
         self._smart_quotes: bool = bool(_settings.get("smart_quotes", False))
+        self._pending_typewriter: bool = bool(_settings.get("typewriter_mode", False))
+        self._pending_scroll: int = _settings.get("scroll_pos", 0)
+        self._pending_cursor_scene: int | None = _settings.get("cursor_scene_id")
+        self._pending_cursor_pos: int = _settings.get("cursor_pos", 0)
         self._editors: dict[int, _SceneEditor] = {}
         self._save_timers: dict[int, QTimer] = {}
         self._scene_widgets: list[QWidget] = []
@@ -399,6 +404,11 @@ class WritingCoreView(QWidget):
         self._context_assist_timer.setInterval(2000)
         self._context_assist_timer.timeout.connect(self._run_context_analysis)
         self._context_assistant_enabled = True
+
+        self._session_save_timer = QTimer(self)
+        self._session_save_timer.setSingleShot(True)
+        self._session_save_timer.setInterval(1000)
+        self._session_save_timer.timeout.connect(self._persist_session_state)
 
         self._command_palette: CommandPalette | None = None
         self._palette_source_editor: _SceneEditor | None = None
@@ -698,6 +708,7 @@ class WritingCoreView(QWidget):
         self._apply_typography()
         self.refresh_psyke_terms()
         self._refresh_suggestions()
+        self._restore_session_state()
 
     def _clear_canvas(self) -> None:
         self._format_toolbar.untrack_all()
@@ -1013,6 +1024,7 @@ class WritingCoreView(QWidget):
                 self._element_combo.setCurrentIndex(i)
                 break
         self._element_combo.blockSignals(False)
+        self._session_save_timer.start()
 
     def _on_new_block_created(
         self, editor: _SceneEditor, previous_element: str | None,
@@ -1529,6 +1541,39 @@ class WritingCoreView(QWidget):
         settings["smart_quotes"] = self._smart_quotes
         self._db.save_project_settings(self._project_id, settings)
 
+    def _persist_session_state(self) -> None:
+        settings = self._db.get_project_settings(self._project_id)
+        settings["focus_mode"] = self._focus_mode
+        settings["typewriter_mode"] = self._typewriter_mode
+        settings["scroll_pos"] = self._scroll.verticalScrollBar().value()
+        editor = self._active_editor
+        if editor and editor._scene_id is not None:
+            settings["cursor_scene_id"] = editor._scene_id
+            settings["cursor_pos"] = editor.textCursor().position()
+        self._db.save_project_settings(self._project_id, settings)
+
+    def _restore_session_state(self) -> None:
+        if self._pending_focus:
+            self._pending_focus = False
+            self.toggle_focus_mode()
+
+        if self._pending_typewriter:
+            self._pending_typewriter = False
+            self.toggle_typewriter_mode()
+
+        scene_id = self._pending_cursor_scene
+        if scene_id and scene_id in self._editors:
+            editor = self._editors[scene_id]
+            cursor = editor.textCursor()
+            pos = min(self._pending_cursor_pos, editor.document().characterCount() - 1)
+            cursor.setPosition(max(0, pos))
+            editor.setTextCursor(cursor)
+            self._active_editor = editor
+
+        scroll_val = self._pending_scroll
+        if scroll_val:
+            QTimer.singleShot(50, lambda: self._scroll.verticalScrollBar().setValue(scroll_val))
+
     # -- Focus mode -----------------------------------------------------------
 
     def toggle_focus_mode(self) -> None:
@@ -1555,6 +1600,8 @@ class WritingCoreView(QWidget):
 
         self._apply_typography()
         self._update_word_count()
+
+        self._session_save_timer.start()
 
         if self._on_focus_mode_changed:
             self._on_focus_mode_changed(self._focus_mode)
@@ -1588,6 +1635,7 @@ class WritingCoreView(QWidget):
                 f"color: {theme.TEXT_MUTED}; font-size: 11px;"
                 " background: transparent; padding: 2px 8px;"
             )
+        self._session_save_timer.start()
 
     def is_typewriter_mode(self) -> bool:
         return self._typewriter_mode
@@ -1657,6 +1705,7 @@ class WritingCoreView(QWidget):
         if ft.isVisible() and ft._active_editor is not None:
             ft._reposition(ft._active_editor)
         self._entity_hover_panel.schedule_hide()
+        self._session_save_timer.start()
 
     # -- PSYKE entity interaction ---------------------------------------------
 
