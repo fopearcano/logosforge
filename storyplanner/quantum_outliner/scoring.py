@@ -486,6 +486,11 @@ def compute_goal_score(
 # Lookahead evaluation — lightweight simulation of future steps
 # ---------------------------------------------------------------------------
 
+from storyplanner.quantum_outliner.lookahead_cache import (
+    MAX_BRANCHES_PER_NODE,
+    MAX_DEPTH,
+)
+
 _LOOKAHEAD_FIRST_BREADTH = 3
 _LOOKAHEAD_DEEP_BREADTH = 2
 _LOOKAHEAD_BLEND = 0.4
@@ -521,17 +526,27 @@ def _simulate_ahead(
     goals: QuantumGoals,
     remaining: int,
     total_horizon: int,
+    _depth: int = 0,
 ) -> float:
     """Recursively simulate future steps, return average expected value."""
+    if _depth >= MAX_DEPTH:
+        s, valid = compute_goal_score(factors, goals)
+        return s if valid else 0.0
+
     is_first_level = remaining == total_horizon - 1
-    breadth = _LOOKAHEAD_FIRST_BREADTH if is_first_level else _LOOKAHEAD_DEEP_BREADTH
+    breadth = min(
+        _LOOKAHEAD_FIRST_BREADTH if is_first_level else _LOOKAHEAD_DEEP_BREADTH,
+        MAX_BRANCHES_PER_NODE,
+    )
 
     projections = [_project_factors(factors, i, breadth) for i in range(breadth)]
 
     scores: list[float] = []
     for proj in projections:
         if remaining > 1:
-            scores.append(_simulate_ahead(proj, goals, remaining - 1, total_horizon))
+            scores.append(
+                _simulate_ahead(proj, goals, remaining - 1, total_horizon, _depth + 1),
+            )
         else:
             s, valid = compute_goal_score(proj, goals)
             scores.append(s if valid else 0.0)
@@ -547,9 +562,9 @@ def evaluate_lookahead(
 
     Returns the immediate goal_score when horizon=1 (no extra lookahead).
     For horizon=2+, simulates follow-up steps and returns the average
-    expected value over projected paths.
+    expected value over projected paths. Depth is hard-capped at MAX_DEPTH.
     """
-    extra_steps = goals.horizon - 1
+    extra_steps = min(goals.horizon - 1, MAX_DEPTH)
     if extra_steps <= 0:
         score, valid = compute_goal_score(factors, goals)
         return score if valid else 0.0
@@ -565,7 +580,10 @@ def compute_blended_goal_score(
 
     Returns (blended_goal_score, lookahead_score, goal_valid).
     When horizon=1, blended = immediate (no lookahead effect).
+    Uses the global lookahead cache for horizon >= 2.
     """
+    from storyplanner.quantum_outliner.lookahead_cache import evaluate_lookahead_cached
+
     immediate, valid = compute_goal_score(factors, goals)
     if not valid:
         return 0.0, 0.0, False
@@ -573,7 +591,7 @@ def compute_blended_goal_score(
     if goals.horizon <= 1:
         return immediate, immediate, valid
 
-    lookahead = evaluate_lookahead(factors, goals)
+    lookahead = evaluate_lookahead_cached(factors, goals)
     blended = round(
         (1 - _LOOKAHEAD_BLEND) * immediate + _LOOKAHEAD_BLEND * lookahead, 4,
     )

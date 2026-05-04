@@ -13,6 +13,15 @@ Quick reference:
 """
 
 from storyplanner.quantum_outliner.collapse import apply_proposal
+from storyplanner.quantum_outliner.lookahead_cache import (
+    MAX_BRANCHES_PER_NODE,
+    MAX_DEPTH,
+    LookaheadCache,
+    evaluate_lookahead_cached,
+    get_cache,
+    invalidate_lookahead,
+    submit_lookahead_async,
+)
 from storyplanner.quantum_outliner.core import (
     QuantumResult,
     collapse_branch,
@@ -100,6 +109,9 @@ from storyplanner.quantum_outliner.state import (
 )
 
 __all__ = [
+    "LookaheadCache",
+    "MAX_BRANCHES_PER_NODE",
+    "MAX_DEPTH",
     "OUTLINE_MODES",
     "OutlineMode",
     "QuantumPossibility",
@@ -131,6 +143,10 @@ __all__ = [
     "compute_goal_score",
     "compute_pareto_front",
     "evaluate_lookahead",
+    "evaluate_lookahead_cached",
+    "get_cache",
+    "invalidate_lookahead",
+    "submit_lookahead_async",
     "compute_tradeoff_chips",
     "FACTOR_CHIP_LABELS",
     "format_branch_chips",

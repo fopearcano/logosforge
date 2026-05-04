@@ -225,6 +225,8 @@ class Database:
             "horizon": goals.horizon,
         }
         self.save_project_settings(project_id, settings)
+        from storyplanner.quantum_outliner.lookahead_cache import invalidate_lookahead
+        invalidate_lookahead()
 
     # -- Characters ----------------------------------------------------------
 
@@ -787,6 +789,8 @@ class Database:
             session.add(entry)
             session.commit()
             session.refresh(entry)
+            from storyplanner.quantum_outliner.lookahead_cache import invalidate_lookahead
+            invalidate_lookahead()
             return entry
 
     def update_psyke_entry(
@@ -811,6 +815,8 @@ class Database:
                 entry.details_json = json.dumps(details)
             session.commit()
             session.refresh(entry)
+            from storyplanner.quantum_outliner.lookahead_cache import invalidate_lookahead
+            invalidate_lookahead()
             return entry
 
     def get_psyke_entry_details(self, entry_id: int) -> dict:
@@ -869,6 +875,8 @@ class Database:
             session.add(PsykeRelation(entry_id=entry_id, related_entry_id=related_entry_id))
             session.add(PsykeRelation(entry_id=related_entry_id, related_entry_id=entry_id))
             session.commit()
+            from storyplanner.quantum_outliner.lookahead_cache import invalidate_lookahead
+            invalidate_lookahead()
 
     def remove_psyke_relation(self, entry_id: int, related_entry_id: int) -> None:
         with Session(self._engine) as session:
@@ -918,6 +926,8 @@ class Database:
             session.add(prog)
             session.commit()
             session.refresh(prog)
+            from storyplanner.quantum_outliner.lookahead_cache import invalidate_lookahead
+            invalidate_lookahead()
             return prog
 
     def update_psyke_progression(
@@ -932,6 +942,8 @@ class Database:
             prog.scene_id = scene_id
             session.commit()
             session.refresh(prog)
+            from storyplanner.quantum_outliner.lookahead_cache import invalidate_lookahead
+            invalidate_lookahead()
             return prog
 
     def delete_psyke_progression(self, progression_id: int) -> None:
