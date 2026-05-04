@@ -213,9 +213,7 @@ class ScenesView(QWidget):
         right.addWidget(self._content_label)
 
         self._ai_hint_bar = self._build_ai_hint_bar()
-        self._ai_hint_bar.setVisible(
-            not preferences.get_flag("has_seen_ai_hint")
-        )
+        self._ai_hint_bar.setVisible(False)
         right.addWidget(self._ai_hint_bar)
 
         writing_col = QHBoxLayout()
@@ -292,7 +290,7 @@ class ScenesView(QWidget):
         self._content_input.customContextMenuRequested.connect(
             self._show_editor_context_menu
         )
-        self._refresh_psyke_terms()
+        QTimer.singleShot(0, self._refresh_psyke_terms)
 
         # -- Detail fields (hidden in focus mode) ----------------------------
         self._detail_fields = QWidget()
@@ -392,10 +390,10 @@ class ScenesView(QWidget):
         )
         psyke_create_shortcut.activated.connect(self._quick_create_psyke)
 
-        self._load_characters_and_states()
-        self._load_places()
         self._refresh_filters()
         self._refresh_list()
+        QTimer.singleShot(0, self._load_characters_and_states)
+        QTimer.singleShot(0, self._load_places)
 
     # -- Populate checkable lists --------------------------------------------
 
