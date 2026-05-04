@@ -514,6 +514,126 @@ def format_pareto_recommendation(candidates: list[CollapseRecommendation]) -> st
 
 
 # ---------------------------------------------------------------------------
+# A/B/C comparison — side-by-side top branches
+# ---------------------------------------------------------------------------
+
+_COMPARISON_LABELS = ("A", "B", "C")
+
+MAX_COMPARE = 3
+
+
+@dataclass(frozen=True)
+class ComparisonEntry:
+    label: str
+    branch_id: str
+    title: str
+    description: str
+    probability: float
+    factors: dict[str, float]
+    is_pareto_optimal: bool
+    violations: list[str]
+
+
+@dataclass(frozen=True)
+class ComparisonTable:
+    entries: list[ComparisonEntry]
+    factor_deltas: dict[str, list[str]]
+
+
+def select_comparison_branches(
+    wf: "Wavefunction",
+    branch_ids: list[str] | None = None,
+    *,
+    max_branches: int = MAX_COMPARE,
+) -> list[Branch]:
+    """Pick up to *max_branches* branches for comparison.
+
+    If *branch_ids* is given, use those (in order).  Otherwise pick the
+    top branches by probability, preferring non-violated ones.
+    """
+    cap = min(max_branches, MAX_COMPARE)
+    if branch_ids:
+        by_id = {b.id: b for b in wf.branches}
+        return [by_id[bid] for bid in branch_ids[:cap] if bid in by_id]
+
+    viable = sorted(
+        [b for b in wf.branches if not b.violations],
+        key=lambda b: b.probability, reverse=True,
+    )
+    return viable[:cap]
+
+
+def build_comparison(
+    wf: "Wavefunction",
+    branch_ids: list[str] | None = None,
+) -> ComparisonTable:
+    """Build a structured comparison of up to 3 branches."""
+    selected = select_comparison_branches(wf, branch_ids)
+    if not selected:
+        return ComparisonTable(entries=[], factor_deltas={})
+
+    entries: list[ComparisonEntry] = []
+    for idx, b in enumerate(selected):
+        entries.append(ComparisonEntry(
+            label=_COMPARISON_LABELS[idx],
+            branch_id=b.id,
+            title=b.title,
+            description=b.description,
+            probability=b.probability,
+            factors=dict(b.factors),
+            is_pareto_optimal=b.is_pareto_optimal,
+            violations=list(b.violations),
+        ))
+
+    factor_deltas: dict[str, list[str]] = {}
+    if len(entries) >= 2:
+        for k in PARETO_OBJECTIVES:
+            vals = [e.factors.get(k, 0.0) for e in entries]
+            hi, lo = max(vals), min(vals)
+            arrows: list[str] = []
+            for v in vals:
+                if hi - lo < 0.05:
+                    arrows.append("=")
+                elif v == hi:
+                    arrows.append("↑")
+                elif v == lo:
+                    arrows.append("↓")
+                else:
+                    arrows.append("–")
+            factor_deltas[k] = arrows
+
+    return ComparisonTable(entries=entries, factor_deltas=factor_deltas)
+
+
+def format_comparison(table: ComparisonTable) -> str:
+    """Render a compact text comparison table."""
+    if not table.entries:
+        return "No branches available for comparison."
+
+    lines: list[str] = ["═══ COMPARE ═══", ""]
+
+    for e in table.entries:
+        pareto_mark = "  ●" if e.is_pareto_optimal else ""
+        lines.append(f"  [{e.label}] {e.title}  [{e.branch_id}]  {e.probability:.0%}{pareto_mark}")
+        lines.append(f"      {e.description}")
+        lines.append("")
+
+    if table.factor_deltas:
+        header_labels = "  ".join(f"[{e.label}]" for e in table.entries)
+        lines.append(f"  Factor            {header_labels}")
+        lines.append(f"  {'─' * (20 + 5 * len(table.entries))}")
+        for k in PARETO_OBJECTIVES:
+            arrows = table.factor_deltas.get(k, [])
+            chip = FACTOR_CHIP_LABELS.get(k, k)
+            padded = chip.ljust(16)
+            cols = "  ".join(f" {a} " for a in arrows)
+            lines.append(f"  {padded}  {cols}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Ensemble scoring — combine heuristic + LLM evaluator
 # ---------------------------------------------------------------------------
 

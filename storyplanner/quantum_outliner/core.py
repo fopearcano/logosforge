@@ -15,8 +15,10 @@ from storyplanner.quantum_outliner.psyke_adapter import PsykeSignals, gather_psy
 from storyplanner.quantum_outliner.scoring import (
     adapt_weights,
     apply_scores,
+    build_comparison,
     explain_wavefunction,
     format_branch_chips,
+    format_comparison,
     format_pareto_recommendation,
     format_recommendation,
     recommend_collapse,
@@ -377,6 +379,65 @@ def _format_classical(method_title: str, beats: list[str], anchor: str) -> str:
         "Switch to Lambda Mode for branching possibilities."
     )
     return "\n".join(lines)
+
+
+def compare_branches(
+    wf_id: str,
+    branch_ids: list[str] | None = None,
+    *,
+    db: "Database | None" = None,
+    project_id: int | None = None,
+) -> QuantumResult:
+    """Build a compact A/B/C comparison of top branches."""
+    from storyplanner.quantum_outliner.state import _STATES
+
+    wf = _STATES.get(wf_id)
+    if wf is None:
+        return QuantumResult(
+            kind="error",
+            title="Compare",
+            body=f"Wavefunction {wf_id} not found.",
+            payload={},
+        )
+
+    psyke = None
+    weights = None
+    constraints = None
+    if db is not None and project_id is not None:
+        psyke = gather_psyke_signals(db, project_id)
+        weights = db.get_scoring_weights(project_id)
+        constraints = db.get_constraints(project_id)
+
+    if wf.branches:
+        scored = score_branches(wf, psyke=psyke, weights=weights, constraints=constraints)
+        apply_scores(wf, scored)
+        wf.branches.sort(key=lambda b: b.probability, reverse=True)
+
+    table = build_comparison(wf, branch_ids)
+    body = format_comparison(table)
+    payload = {
+        "wavefunction_id": wf.id,
+        "comparison": [
+            {
+                "label": e.label,
+                "branch_id": e.branch_id,
+                "title": e.title,
+                "description": e.description,
+                "probability": e.probability,
+                "factors": e.factors,
+                "is_pareto_optimal": e.is_pareto_optimal,
+                "violations": e.violations,
+            }
+            for e in table.entries
+        ],
+        "factor_deltas": table.factor_deltas,
+    }
+    return QuantumResult(
+        kind="comparison",
+        title="Compare",
+        body=body,
+        payload=payload,
+    )
 
 
 def _format_wavefunction(
