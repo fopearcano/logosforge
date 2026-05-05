@@ -178,6 +178,55 @@ class TestDropdownRefreshed:
         # Items were rebuilt, not appended
         assert second_count <= first_count
 
+    def test_selection_reset_on_new_results(self, console):
+        """Selection index resets to -1 when new results are shown."""
+        console._input.setText("jo")
+        console._run_search()
+        dropdown = console._ensure_dropdown()
+        dropdown.move_selection(1)
+        assert dropdown._selected_index == 0
+
+        console._input.setText("cas")
+        console._run_search()
+        assert dropdown._selected_index == -1
+
+    def test_show_during_hide_preserves_items(self, console):
+        """Calling show_suggestions while fade-out is running keeps new items."""
+        console._input.setText("jo")
+        console._run_search()
+        dropdown = console._ensure_dropdown()
+
+        # Simulate hide starting (fade-out in progress)
+        dropdown.hide_results()
+
+        # Immediately show new results (user typed fast)
+        console._input.setText("cas")
+        console._run_search()
+
+        # New items must be intact, not wiped by fade-out completion
+        assert dropdown.has_items()
+        names = [i.suggestion.text for i in dropdown._items]
+        assert any("Castle" in n for n in names)
+
+    def test_generation_prevents_stale_clear(self, console):
+        """_on_fade_out_done does not clear items from a newer generation."""
+        console._input.setText("jo")
+        console._run_search()
+        dropdown = console._ensure_dropdown()
+
+        # Record state before hide
+        dropdown._hide_generation = dropdown._generation
+
+        # Show new results (bumps generation)
+        console._input.setText("cas")
+        console._run_search()
+
+        # Simulate fade-out callback from old hide
+        dropdown._on_fade_out_done()
+
+        # Items from latest show must survive
+        assert dropdown.has_items()
+
 
 # ---------------------------------------------------------------------------
 # Stale index / entries not appearing — regression tests

@@ -143,6 +143,8 @@ class _ResultsDropdown(QWidget):
         self._items: list[_SuggestionItem] = []
         self._selected_index: int = -1
         self._fade_out_connected: bool = False
+        self._generation: int = 0
+        self._hide_generation: int = -1
 
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 4, 0, 4)
@@ -158,6 +160,11 @@ class _ResultsDropdown(QWidget):
         self._apply_style()
 
     def show_suggestions(self, suggestions: list[Suggestion], query: str) -> None:
+        self._generation += 1
+        self._fade_anim.stop()
+        if self._fade_out_connected:
+            self._fade_anim.finished.disconnect(self._on_fade_out_done)
+            self._fade_out_connected = False
         self._clear()
         self._selected_index = -1
 
@@ -179,6 +186,7 @@ class _ResultsDropdown(QWidget):
     def hide_results(self) -> None:
         if not self.isVisible():
             return
+        self._hide_generation = self._generation
         self._fade_anim.stop()
         self._fade_anim.setStartValue(self._opacity_effect.opacity())
         self._fade_anim.setEndValue(0.0)
@@ -225,6 +233,8 @@ class _ResultsDropdown(QWidget):
 
     def _on_fade_out_done(self) -> None:
         self._fade_out_connected = False
+        if self._generation != self._hide_generation:
+            return
         self._clear()
         self._selected_index = -1
         self.setVisible(False)
