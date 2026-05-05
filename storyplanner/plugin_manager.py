@@ -176,6 +176,10 @@ class PluginManager:
             return
         entry_path = plugin.path / plugin.entry_point
         try:
+            plugin_dir = str(plugin.path)
+            if plugin_dir not in sys.path:
+                sys.path.insert(0, plugin_dir)
+
             spec = importlib.util.spec_from_file_location(
                 f"logosforge_plugin_{plugin.id}", str(entry_path),
             )
