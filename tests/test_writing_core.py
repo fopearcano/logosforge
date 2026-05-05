@@ -186,12 +186,22 @@ def test_font_family_selector():
     view = WritingCoreView(db, proj.id)
     assert view._font_family_key == "sans"
     assert view._font_combo.currentData() == "sans"
-    view._font_combo.setCurrentIndex(0)  # serif
+
+    def _select(key: str) -> None:
+        for i in range(view._font_combo.count()):
+            if view._font_combo.itemData(i) == key:
+                view._font_combo.setCurrentIndex(i)
+                return
+        raise AssertionError(f"font key {key!r} not in combo")
+
+    _select("serif")
     assert view._font_family_key == "serif"
     settings = db.get_project_settings(proj.id)
     assert settings["font_family"] == "serif"
-    view._font_combo.setCurrentIndex(2)  # mono
+    _select("mono")
     assert view._font_family_key == "mono"
+    _select("courier_new")
+    assert view._font_family_key == "courier_new"
 
 
 def test_font_size_selector():
@@ -562,10 +572,8 @@ def test_typewriter_mode_toggle():
     assert view._typewriter_mode is False
     view.toggle_typewriter_mode()
     assert view._typewriter_mode is True
-    assert view._typewriter_btn.text() == "Typewriter"
     view.toggle_typewriter_mode()
     assert view._typewriter_mode is False
-    assert view._typewriter_btn.text() == "Typewriter"
 
 
 def test_typewriter_mode_accessor():
@@ -592,7 +600,8 @@ def test_focus_mode_persists():
     assert view2._focus_mode is True
 
 
-def test_typewriter_mode_persists():
+def test_typewriter_mode_default_off():
+    """Typewriter mode is always OFF by default; the saved state is not restored."""
     db = Database()
     proj, *_ = _setup_project(db)
     view1 = WritingCoreView(db, proj.id)
@@ -601,7 +610,7 @@ def test_typewriter_mode_persists():
     del view1
     view2 = WritingCoreView(db, proj.id)
     view2.refresh()
-    assert view2._typewriter_mode is True
+    assert view2._typewriter_mode is False
 
 
 def test_cursor_position_persists():
@@ -715,27 +724,11 @@ def test_language_override_defaults_auto():
     assert view.language_override == "auto"
 
 
-def test_language_combo_exists():
-    db = Database()
-    proj, *_ = _setup_project(db)
-    view = WritingCoreView(db, proj.id)
-    assert hasattr(view, "_lang_combo")
-    assert view._lang_combo.count() == 6
-
-
-def test_language_combo_options():
-    db = Database()
-    proj, *_ = _setup_project(db)
-    view = WritingCoreView(db, proj.id)
-    codes = [view._lang_combo.itemData(i) for i in range(view._lang_combo.count())]
-    assert codes == ["auto", "en", "it", "es", "fr", "de"]
-
-
 def test_language_override_sets_language():
     db = Database()
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
-    view._lang_combo.setCurrentIndex(3)
+    view._on_language_changed("es")
     assert view.language_override == "es"
     assert view.current_language == "es"
 
@@ -744,7 +737,7 @@ def test_language_override_persists():
     db = Database()
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
-    view._lang_combo.setCurrentIndex(2)
+    view._on_language_changed("it")
     settings = db.get_project_settings(proj.id)
     assert settings["language_override"] == "it"
 
@@ -758,14 +751,13 @@ def test_language_override_restores_from_settings():
     view = WritingCoreView(db, proj.id)
     assert view.language_override == "fr"
     assert view.current_language == "fr"
-    assert view._lang_combo.currentIndex() == 4
 
 
 def test_language_override_skips_detection():
     db = Database()
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
-    view._lang_combo.setCurrentIndex(1)
+    view._on_language_changed("en")
     assert view.current_language == "en"
     editor = list(view._editors.values())[0]
     editor.setPlainText(
@@ -780,9 +772,9 @@ def test_language_auto_resumes_detection():
     db = Database()
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
-    view._lang_combo.setCurrentIndex(3)
+    view._on_language_changed("es")
     assert view.current_language == "es"
-    view._lang_combo.setCurrentIndex(0)
+    view._on_language_changed("auto")
     assert view.language_override == "auto"
     editor = list(view._editors.values())[0]
     editor.setPlainText(
@@ -846,11 +838,14 @@ def test_grammar_toggle_disables():
         assert editor._grammar_issues == []
 
 
-def test_grammar_btn_label():
+def test_grammar_toolbar_button_removed():
+    """Grammar Check now lives in the Edit menu, not the Manuscript top bar."""
     db = Database()
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
-    assert view._grammar_btn.text() == "Grammar Check"
+    assert not hasattr(view, "_grammar_btn")
+    assert not hasattr(view, "_lang_combo")
+    assert not hasattr(view, "_typewriter_btn")
 
 
 def test_grammar_is_grammar_checking_property():
@@ -2089,3 +2084,139 @@ def test_element_change_uses_active_editor():
     data = editor.textCursor().block().userData()
     assert isinstance(data, _BlockData)
     assert data.element == "character"
+
+
+# -- Top menu: text color, paragraph menu, font list, no fade ---------------
+
+def test_top_menu_no_fade():
+    """Top bar opacity is 1.0; no auto-fade-out on hover-leave."""
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view._topbar_opacity.opacity() == 1.0
+    assert not hasattr(view, "_topbar_anim") or view.__dict__.get("_topbar_anim") is None
+
+
+def test_color_button_exists():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert hasattr(view, "_color_btn")
+    assert view._color_btn.text() == "A"
+
+
+def test_apply_text_color_to_selection():
+    from PySide6.QtGui import QColor
+    db = Database()
+    proj, s1, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._active_editor = editor
+    cursor = editor.textCursor()
+    cursor.select(QTextCursor.SelectionType.Document)
+    editor.setTextCursor(cursor)
+    view._apply_text_color("#D9534F")
+    fmt = editor.textCursor().charFormat()
+    assert fmt.foreground().color() == QColor("#D9534F")
+
+
+def test_paragraph_button_exists():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert hasattr(view, "_paragraph_btn")
+
+
+def test_apply_alignment_center():
+    db = Database()
+    proj, s1, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._active_editor = editor
+    view._apply_alignment(Qt.AlignmentFlag.AlignHCenter)
+    bfmt = editor.textCursor().blockFormat()
+    assert bfmt.alignment() == Qt.AlignmentFlag.AlignHCenter
+
+
+def test_apply_alignment_right_and_justify():
+    db = Database()
+    proj, s1, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._active_editor = editor
+    view._apply_alignment(Qt.AlignmentFlag.AlignRight)
+    assert editor.textCursor().blockFormat().alignment() == Qt.AlignmentFlag.AlignRight
+    view._apply_alignment(Qt.AlignmentFlag.AlignJustify)
+    assert editor.textCursor().blockFormat().alignment() == Qt.AlignmentFlag.AlignJustify
+
+
+def test_change_block_indent():
+    db = Database()
+    proj, s1, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._active_editor = editor
+    view._change_block_indent(1)
+    assert editor.textCursor().blockFormat().indent() == 1
+    view._change_block_indent(1)
+    assert editor.textCursor().blockFormat().indent() == 2
+    view._change_block_indent(-1)
+    assert editor.textCursor().blockFormat().indent() == 1
+    view._change_block_indent(-5)
+    assert editor.textCursor().blockFormat().indent() == 0
+
+
+def test_toggle_bullet_list():
+    from PySide6.QtGui import QTextListFormat
+    db = Database()
+    proj, s1, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._active_editor = editor
+    view._toggle_list(QTextListFormat.Style.ListDisc)
+    assert editor.textCursor().currentList() is not None
+    assert (
+        editor.textCursor().currentList().format().style()
+        == QTextListFormat.Style.ListDisc
+    )
+
+
+def test_toggle_numbered_list():
+    from PySide6.QtGui import QTextListFormat
+    db = Database()
+    proj, s1, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._active_editor = editor
+    view._toggle_list(QTextListFormat.Style.ListDecimal)
+    lst = editor.textCursor().currentList()
+    assert lst is not None
+    assert lst.format().style() == QTextListFormat.Style.ListDecimal
+
+
+def test_font_list_includes_courier():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    keys = [
+        view._font_combo.itemData(i)
+        for i in range(view._font_combo.count())
+    ]
+    assert "courier_new" in keys
+    assert "courier" in keys
+    assert "georgia" in keys
+    assert "helvetica" in keys
+    assert view._font_combo.count() >= 12
+
+
+def test_font_courier_persists():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    for i in range(view._font_combo.count()):
+        if view._font_combo.itemData(i) == "courier_new":
+            view._font_combo.setCurrentIndex(i)
+            break
+    assert view._font_family_key == "courier_new"
+    settings = db.get_project_settings(proj.id)
+    assert settings["font_family"] == "courier_new"

@@ -1184,6 +1184,34 @@ class MainWindow(QMainWindow):
         prefs_action.triggered.connect(self._open_settings)
         edit_menu.addAction(prefs_action)
 
+        edit_menu.addSeparator()
+
+        self._grammar_check_action = QAction("Grammar Check", self)
+        self._grammar_check_action.setCheckable(True)
+        self._grammar_check_action.triggered.connect(self._on_toggle_grammar_check)
+        edit_menu.addAction(self._grammar_check_action)
+
+        lang_menu = edit_menu.addMenu("Grammar Language")
+        self._grammar_lang_actions: list[QAction] = []
+        for code, label in (
+            ("auto", "Auto"),
+            ("en", "English"),
+            ("it", "Italian"),
+            ("es", "Spanish"),
+            ("fr", "French"),
+            ("de", "German"),
+        ):
+            act = QAction(label, self)
+            act.setCheckable(True)
+            act.setData(code)
+            act.triggered.connect(
+                lambda _checked=False, c=code: self._on_grammar_language(c)
+            )
+            lang_menu.addAction(act)
+            self._grammar_lang_actions.append(act)
+
+        edit_menu.aboutToShow.connect(self._sync_grammar_menu_state)
+
         # -- View ---------------------------------------------------------------
         view_menu = menu_bar.addMenu("View")
 
@@ -1361,6 +1389,45 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         dlg.exec()
+
+    # -- Grammar menu (moved out of Manuscript top bar) ----------------------
+
+    def _writing_view(self):
+        from storyplanner.ui.writing_core_view import WritingCoreView
+        view = self.content_area
+        if isinstance(view, WritingCoreView):
+            return view
+        return None
+
+    def _sync_grammar_menu_state(self) -> None:
+        view = self._writing_view()
+        enabled = view is not None
+        self._grammar_check_action.setEnabled(enabled)
+        for act in self._grammar_lang_actions:
+            act.setEnabled(enabled)
+        if view is None:
+            self._grammar_check_action.setChecked(False)
+            for act in self._grammar_lang_actions:
+                act.setChecked(False)
+            return
+        self._grammar_check_action.setChecked(view.is_grammar_checking())
+        current = view.language_override
+        for act in self._grammar_lang_actions:
+            act.setChecked(act.data() == current)
+
+    def _on_toggle_grammar_check(self, checked: bool) -> None:
+        view = self._writing_view()
+        if view is None:
+            self._grammar_check_action.setChecked(False)
+            return
+        if view.is_grammar_checking() != checked:
+            view._toggle_grammar()
+
+    def _on_grammar_language(self, code: str) -> None:
+        view = self._writing_view()
+        if view is None:
+            return
+        view._on_language_changed(code)
 
     def _show_about(self) -> None:
         QMessageBox.about(

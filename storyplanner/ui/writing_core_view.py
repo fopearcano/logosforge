@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import (
+    QAction,
     QColor,
     QFont,
     QKeyEvent,
@@ -20,6 +21,7 @@ from PySide6.QtGui import (
     QTextBlockUserData,
     QTextCharFormat,
     QTextCursor,
+    QTextListFormat,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -63,14 +65,53 @@ _BODY_FONT_SIZE = 18
 _FONT_PRESETS: dict[str, list[str]] = {
     "serif": ["Georgia", "Noto Serif", "serif"],
     "sans": ["Segoe UI", "Noto Sans", "sans-serif"],
+    "georgia": ["Georgia", "serif"],
+    "times": ["Times New Roman", "Times", "serif"],
+    "garamond": ["Garamond", "EB Garamond", "serif"],
+    "baskerville": ["Baskerville", "Libre Baskerville", "serif"],
+    "palatino": ["Palatino", "Palatino Linotype", "Book Antiqua", "serif"],
+    "charter": ["Charter", "Bitstream Charter", "serif"],
+    "arial": ["Arial", "Liberation Sans", "sans-serif"],
+    "helvetica": ["Helvetica", "Arial", "sans-serif"],
+    "verdana": ["Verdana", "DejaVu Sans", "sans-serif"],
+    "courier_new": ["Courier New", "Courier", "monospace"],
+    "courier": ["Courier", "Courier New", "monospace"],
     "mono": ["Fira Code", "Consolas", "monospace"],
 }
 _FONT_PRESET_LABELS: dict[str, str] = {
     "serif": "Serif",
     "sans": "Sans-serif",
+    "georgia": "Georgia",
+    "times": "Times New Roman",
+    "garamond": "Garamond",
+    "baskerville": "Baskerville",
+    "palatino": "Palatino",
+    "charter": "Charter",
+    "arial": "Arial",
+    "helvetica": "Helvetica",
+    "verdana": "Verdana",
+    "courier_new": "Courier New",
+    "courier": "Courier",
     "mono": "Monospace",
 }
-_FONT_PRESET_ORDER = ["serif", "sans", "mono"]
+_FONT_PRESET_ORDER = [
+    "serif", "sans", "georgia", "times", "garamond", "baskerville",
+    "palatino", "charter", "arial", "helvetica", "verdana",
+    "courier_new", "courier", "mono",
+]
+_TEXT_COLOR_PALETTE: list[tuple[str, str]] = [
+    ("Default", ""),
+    ("White", "#FFFFFF"),
+    ("Off-white", "#F5F1E8"),
+    ("Black", "#000000"),
+    ("Gray", "#808080"),
+    ("Red", "#D9534F"),
+    ("Orange", "#F0AD4E"),
+    ("Yellow", "#F1C40F"),
+    ("Green", "#5CB85C"),
+    ("Blue", "#3B8BEB"),
+    ("Purple", "#9B59B6"),
+]
 _FONT_SIZE_OPTIONS = [14, 15, 16, 17, 18, 19, 20, 22, 24]
 _LANGUAGE_OPTIONS = [
     ("auto", "Auto"),
@@ -637,7 +678,7 @@ class WritingCoreView(QWidget):
             self._font_size = _BODY_FONT_SIZE
         self._first_line_indent: bool = bool(_settings.get("first_line_indent", False))
         self._smart_quotes: bool = bool(_settings.get("smart_quotes", False))
-        self._pending_typewriter: bool = bool(_settings.get("typewriter_mode", False))
+        self._pending_typewriter: bool = False
         self._pending_scroll: int = _settings.get("scroll_pos", 0)
         self._pending_cursor_scene: int | None = _settings.get("cursor_scene_id")
         self._pending_cursor_pos: int = _settings.get("cursor_pos", 0)
@@ -649,6 +690,7 @@ class WritingCoreView(QWidget):
         if self._language_override != "auto":
             self._current_language = self._language_override
         self._grammar_checking: bool = bool(_settings.get("grammar_checking", False))
+        self._current_text_color: str = ""
         self._editors: dict[int, _SceneEditor] = {}
         self._save_timers: dict[int, QTimer] = {}
         self._scene_widgets: list[QWidget] = []
@@ -703,7 +745,6 @@ class WritingCoreView(QWidget):
         self._element_shortcuts: list[QShortcut] = []
         self._focus_fade = True
         self._tw_anim: QPropertyAnimation | None = None
-        self._topbar_anim: QPropertyAnimation | None = None
         self._structural_cache = StructuralCache()
 
         self._build_ui()
@@ -751,7 +792,7 @@ class WritingCoreView(QWidget):
 
         self._font_combo = QComboBox()
         self._font_combo.setObjectName("writingFontCombo")
-        self._font_combo.setFixedWidth(100)
+        self._font_combo.setFixedWidth(140)
         for key in _FONT_PRESET_ORDER:
             self._font_combo.addItem(_FONT_PRESET_LABELS[key], key)
         _fc_idx = _FONT_PRESET_ORDER.index(self._font_family_key)
@@ -768,6 +809,25 @@ class WritingCoreView(QWidget):
         self._size_combo.setCurrentIndex(_sz_idx)
         self._size_combo.currentIndexChanged.connect(self._on_font_size_changed)
         tb_layout.addWidget(self._size_combo)
+
+        self._color_btn = QPushButton("A")
+        self._color_btn.setFlat(True)
+        self._color_btn.setToolTip("Text color")
+        self._color_btn.setFixedWidth(28)
+        self._color_btn.clicked.connect(self._show_color_menu)
+        self._update_color_button_style()
+        tb_layout.addWidget(self._color_btn)
+
+        self._paragraph_btn = QPushButton("¶")
+        self._paragraph_btn.setFlat(True)
+        self._paragraph_btn.setToolTip("Paragraph: alignment, indent, lists")
+        self._paragraph_btn.setFixedWidth(28)
+        self._paragraph_btn.setStyleSheet(
+            f"color: {theme.TEXT_PRIMARY}; font-size: 14px;"
+            " background: transparent; padding: 2px 4px;"
+        )
+        self._paragraph_btn.clicked.connect(self._show_paragraph_menu)
+        tb_layout.addWidget(self._paragraph_btn)
 
         self._indent_btn = QPushButton("Indent")
         self._indent_btn.setFlat(True)
@@ -789,39 +849,6 @@ class WritingCoreView(QWidget):
         self._smart_quotes_btn.clicked.connect(self._toggle_smart_quotes)
         tb_layout.addWidget(self._smart_quotes_btn)
 
-        self._grammar_btn = QPushButton("Grammar Check")
-        self._grammar_btn.setFlat(True)
-        self._grammar_btn.setToolTip("Toggle grammar & spell checking")
-        self._grammar_btn.setStyleSheet(
-            f"color: {theme.TEXT_PRIMARY if self._grammar_checking else theme.TEXT_MUTED};"
-            " font-size: 11px; background: transparent; padding: 2px 8px;"
-        )
-        self._grammar_btn.clicked.connect(self._toggle_grammar)
-        tb_layout.addWidget(self._grammar_btn)
-
-        self._lang_combo = QComboBox()
-        self._lang_combo.setObjectName("writingLangCombo")
-        self._lang_combo.setFixedWidth(80)
-        self._lang_combo.setToolTip("Language for grammar checking")
-        _lc_idx = 0
-        for i, (code, label) in enumerate(_LANGUAGE_OPTIONS):
-            self._lang_combo.addItem(label, code)
-            if code == self._language_override:
-                _lc_idx = i
-        self._lang_combo.setCurrentIndex(_lc_idx)
-        self._lang_combo.currentIndexChanged.connect(self._on_language_changed)
-        tb_layout.addWidget(self._lang_combo)
-
-        self._typewriter_btn = QPushButton("Typewriter")
-        self._typewriter_btn.setFlat(True)
-        self._typewriter_btn.setToolTip("Keep cursor line centered")
-        self._typewriter_btn.setStyleSheet(
-            f"color: {theme.TEXT_MUTED}; font-size: 11px;"
-            " background: transparent; padding: 2px 8px;"
-        )
-        self._typewriter_btn.clicked.connect(self.toggle_typewriter_mode)
-        tb_layout.addWidget(self._typewriter_btn)
-
         self._review_btn = QPushButton("Review")
         self._review_btn.setFlat(True)
         self._review_btn.setToolTip("Show review metrics overlay")
@@ -842,9 +869,8 @@ class WritingCoreView(QWidget):
         tb_layout.addWidget(self._focus_btn)
 
         self._topbar_opacity = QGraphicsOpacityEffect(self._top_bar)
-        self._topbar_opacity.setOpacity(0.4)
+        self._topbar_opacity.setOpacity(1.0)
         self._top_bar.setGraphicsEffect(self._topbar_opacity)
-        self._top_bar.installEventFilter(self)
         outer.addWidget(self._top_bar)
 
         # -- Focus bar (shown only in focus mode) ----------------------------
@@ -960,27 +986,7 @@ class WritingCoreView(QWidget):
                 )
                 self._element_shortcuts.append(sc)
 
-    # -- Top bar auto-fade ----------------------------------------------------
-
-    def eventFilter(self, obj, event) -> bool:
-        if obj is self._top_bar:
-            if event.type() == QEvent.Type.Enter:
-                self._animate_topbar(1.0)
-            elif event.type() == QEvent.Type.Leave:
-                self._animate_topbar(0.4)
-        return super().eventFilter(obj, event)
-
-    def _animate_topbar(self, target: float) -> None:
-        if self._topbar_anim is None:
-            self._topbar_anim = QPropertyAnimation(
-                self._topbar_opacity, b"opacity",
-            )
-            self._topbar_anim.setDuration(200)
-            self._topbar_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
-        self._topbar_anim.stop()
-        self._topbar_anim.setStartValue(self._topbar_opacity.opacity())
-        self._topbar_anim.setEndValue(target)
-        self._topbar_anim.start()
+    # -- Top bar (always visible, no fade) ------------------------------------
 
     # -- Data loading ---------------------------------------------------------
 
@@ -1829,6 +1835,150 @@ class WritingCoreView(QWidget):
             self._persist_font_settings()
             self._apply_typography()
 
+    # -- Text color -----------------------------------------------------------
+
+    def _update_color_button_style(self) -> None:
+        active = self._current_text_color or theme.TEXT_PRIMARY
+        self._color_btn.setStyleSheet(
+            f"color: {active}; font-size: 14px; font-weight: bold;"
+            " background: transparent; padding: 2px 4px;"
+            " border-bottom: 2px solid " + active + ";"
+        )
+
+    def _show_color_menu(self) -> None:
+        menu = QMenu(self._color_btn)
+        for label, hex_color in _TEXT_COLOR_PALETTE:
+            action = QAction(label, menu)
+            if hex_color:
+                pix = QColor(hex_color).name()
+                action.setText(f"●  {label}")
+                action.setData(hex_color)
+            else:
+                action.setText(label)
+                action.setData("")
+            action.triggered.connect(
+                lambda _checked=False, c=hex_color: self._apply_text_color(c)
+            )
+            menu.addAction(action)
+        pos = self._color_btn.mapToGlobal(self._color_btn.rect().bottomLeft())
+        menu.exec(pos)
+
+    def _apply_text_color(self, hex_color: str) -> None:
+        self._current_text_color = hex_color
+        self._update_color_button_style()
+        editor = self._active_editor
+        if editor is None:
+            for ed in self._editors.values():
+                if ed.hasFocus():
+                    editor = ed
+                    break
+        if editor is None and self._editors:
+            editor = next(iter(self._editors.values()))
+        if editor is None:
+            return
+        cursor = editor.textCursor()
+        fmt = QTextCharFormat()
+        if hex_color:
+            fmt.setForeground(QColor(hex_color))
+        else:
+            fmt.setForeground(QColor(theme.TEXT_PRIMARY))
+        cursor.mergeCharFormat(fmt)
+        editor.mergeCurrentCharFormat(fmt)
+
+    # -- Paragraph menu (alignment, indent, lists) ----------------------------
+
+    def _show_paragraph_menu(self) -> None:
+        menu = QMenu(self._paragraph_btn)
+
+        for label, alignment in (
+            ("Align Left", Qt.AlignmentFlag.AlignLeft),
+            ("Align Center", Qt.AlignmentFlag.AlignHCenter),
+            ("Align Right", Qt.AlignmentFlag.AlignRight),
+            ("Justify", Qt.AlignmentFlag.AlignJustify),
+        ):
+            act = QAction(label, menu)
+            act.triggered.connect(
+                lambda _checked=False, a=alignment: self._apply_alignment(a)
+            )
+            menu.addAction(act)
+
+        menu.addSeparator()
+
+        inc = QAction("Increase Indent", menu)
+        inc.triggered.connect(lambda: self._change_block_indent(1))
+        menu.addAction(inc)
+        dec = QAction("Decrease Indent", menu)
+        dec.triggered.connect(lambda: self._change_block_indent(-1))
+        menu.addAction(dec)
+
+        menu.addSeparator()
+
+        bullet = QAction("Bullet List", menu)
+        bullet.triggered.connect(
+            lambda: self._toggle_list(QTextListFormat.Style.ListDisc)
+        )
+        menu.addAction(bullet)
+        numbered = QAction("Numbered List", menu)
+        numbered.triggered.connect(
+            lambda: self._toggle_list(QTextListFormat.Style.ListDecimal)
+        )
+        menu.addAction(numbered)
+
+        pos = self._paragraph_btn.mapToGlobal(
+            self._paragraph_btn.rect().bottomLeft()
+        )
+        menu.exec(pos)
+
+    def _target_editor(self) -> QTextEdit | None:
+        editor = self._active_editor
+        if editor is None:
+            for ed in self._editors.values():
+                if ed.hasFocus():
+                    editor = ed
+                    break
+        if editor is None and self._editors:
+            editor = next(iter(self._editors.values()))
+        return editor
+
+    def _apply_alignment(self, alignment: Qt.AlignmentFlag) -> None:
+        editor = self._target_editor()
+        if editor is None:
+            return
+        cursor = editor.textCursor()
+        bfmt = QTextBlockFormat()
+        bfmt.setAlignment(alignment)
+        cursor.mergeBlockFormat(bfmt)
+        editor.setTextCursor(cursor)
+
+    def _change_block_indent(self, delta: int) -> None:
+        editor = self._target_editor()
+        if editor is None:
+            return
+        cursor = editor.textCursor()
+        bfmt = cursor.blockFormat()
+        new_indent = max(0, bfmt.indent() + delta)
+        bfmt.setIndent(new_indent)
+        cursor.mergeBlockFormat(bfmt)
+        editor.setTextCursor(cursor)
+
+    def _toggle_list(self, style: QTextListFormat.Style) -> None:
+        editor = self._target_editor()
+        if editor is None:
+            return
+        cursor = editor.textCursor()
+        current_list = cursor.currentList()
+        if current_list is not None and current_list.format().style() == style:
+            block = cursor.block()
+            current_list.remove(block)
+            bfmt = QTextBlockFormat()
+            bfmt.setIndent(0)
+            cursor.setBlockFormat(bfmt)
+        else:
+            list_fmt = QTextListFormat()
+            list_fmt.setStyle(style)
+            cursor.createList(list_fmt)
+        editor.setTextCursor(cursor)
+
     def _toggle_indent(self) -> None:
         self._first_line_indent = not self._first_line_indent
         self._indent_btn.setStyleSheet(
@@ -1949,8 +2099,7 @@ class WritingCoreView(QWidget):
     def language_override(self) -> str:
         return self._language_override
 
-    def _on_language_changed(self, index: int) -> None:
-        code = self._lang_combo.itemData(index)
+    def _on_language_changed(self, code: str) -> None:
         if code == self._language_override:
             return
         self._language_override = code
@@ -1991,10 +2140,6 @@ class WritingCoreView(QWidget):
 
     def _toggle_grammar(self) -> None:
         self._grammar_checking = not self._grammar_checking
-        self._grammar_btn.setStyleSheet(
-            f"color: {theme.TEXT_PRIMARY if self._grammar_checking else theme.TEXT_MUTED};"
-            " font-size: 11px; background: transparent; padding: 2px 8px;"
-        )
         for editor in self._editors.values():
             editor._grammar_enabled = self._grammar_checking
             if not self._grammar_checking:
@@ -2063,16 +2208,6 @@ class WritingCoreView(QWidget):
 
     def toggle_typewriter_mode(self) -> None:
         self._typewriter_mode = not self._typewriter_mode
-        if self._typewriter_mode:
-            self._typewriter_btn.setStyleSheet(
-                f"color: {theme.TEXT_PRIMARY}; font-size: 11px;"
-                " background: transparent; padding: 2px 8px;"
-            )
-        else:
-            self._typewriter_btn.setStyleSheet(
-                f"color: {theme.TEXT_MUTED}; font-size: 11px;"
-                " background: transparent; padding: 2px 8px;"
-            )
         self._session_save_timer.start()
 
     def is_typewriter_mode(self) -> bool:
