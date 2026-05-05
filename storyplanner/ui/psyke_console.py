@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -42,7 +43,7 @@ _MAX_VISIBLE = 8
 _CONSOLE_WIDTH_RATIO = 0.50
 _CONSOLE_MIN_WIDTH = 320
 _CONSOLE_MAX_WIDTH = 720
-_CONSOLE_BOTTOM_MARGIN = 10
+_CONSOLE_BOTTOM_MARGIN = 6
 
 
 def _widget_deleted(widget: QWidget) -> bool:
@@ -305,7 +306,7 @@ class PsykeConsole(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setFixedHeight(36)
+        self.setFixedHeight(32)
         self.setObjectName("psykeConsole")
 
         self._db = db
@@ -326,6 +327,7 @@ class PsykeConsole(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 0, 4, 0)
         layout.setSpacing(0)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self._input = QLineEdit()
         self._input.setPlaceholderText("Search PSYKE…")
@@ -635,7 +637,7 @@ class PsykeConsole(QWidget):
             f"  border: none;"
             f"  color: {theme.TEXT_MUTED};"
             f"  font-size: 13px;"
-            f"  padding: 4px 8px;"
+            f"  padding: 2px 8px;"
             f"}}"
             f"#psykeConsoleInput:focus {{"
             f"  color: {theme.TEXT_PRIMARY};"

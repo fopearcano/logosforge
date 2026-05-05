@@ -391,9 +391,9 @@ class MainWindow(QMainWindow):
 
         # -- PSYKE Console (global bottom bar) --------------------------------
         console_row = QWidget()
-        console_row.setFixedHeight(46)
+        console_row.setFixedHeight(38)
         console_layout = QHBoxLayout(console_row)
-        console_layout.setContentsMargins(0, 4, 0, 6)
+        console_layout.setContentsMargins(0, 2, 0, 4)
         console_layout.setSpacing(0)
 
         self._psyke_console = PsykeConsole(self._db, self._project_id)
