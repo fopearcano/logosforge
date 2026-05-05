@@ -65,7 +65,6 @@ from storyplanner.ui.scenes_view import ScenesView
 from storyplanner.ui.multi_plot_view import MultiPlotView
 from storyplanner.ui.narrative_dashboard_view import NarrativeDashboardView
 from storyplanner.ui.story_grid_view import StoryGridView
-from storyplanner.ui.search_view import SearchView
 from storyplanner.ui.structure_view import StructureView
 from storyplanner.ui.tag_analysis_view import TagAnalysisView
 from storyplanner.ui.timeline_view import TimelineView
@@ -225,7 +224,6 @@ class MainWindow(QMainWindow):
             "Tags": "\U0001F3F7",
             "Graph": "\U0001F578",
             "Arcs": "\U0001F4C8",
-            "Search": "\U0001F50D",
             "PSYKE": "\U0001F4D6",
             "Grid": "\U0001F5A5",
             "Plot": "\U0001F4CA",
@@ -248,7 +246,7 @@ class MainWindow(QMainWindow):
             ("group", "Structure", ["Structure", "Acts", "Beats", "Arcs"]),
             "Tags", "Graph",
             ("group", "Analytics", ["Health", "Balance", "Pacing", "Narrative"]),
-            "Adapt", "Search", "PSYKE", "Plugins", "Assistant",
+            "Adapt", "PSYKE", "Plugins", "Assistant",
         ]
         self.sidebar_buttons: dict[str, _SidebarButton] = {}
         self._sidebar_groups: list[_SidebarGroupHeader] = []
@@ -318,7 +316,7 @@ class MainWindow(QMainWindow):
             "Projects", "Dashboard", "Notes",
             "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline",
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
-            "Health", "Balance", "Pacing", "Adapt", "Narrative", "Search", "PSYKE", "Plugins",
+            "Health", "Balance", "Pacing", "Adapt", "Narrative", "PSYKE", "Plugins",
         ]
         _nav_handlers = {
             "Projects": self._show_projects,
@@ -341,7 +339,6 @@ class MainWindow(QMainWindow):
             "Pacing": self._show_pacing,
             "Adapt": self._show_adapt,
             "Narrative": self._show_narrative,
-            "Search": self._show_search,
             "PSYKE": self._show_psyke,
             "Plugins": self._show_plugins,
         }
@@ -391,9 +388,9 @@ class MainWindow(QMainWindow):
 
         # -- PSYKE Console (global bottom bar) --------------------------------
         console_row = QWidget()
-        console_row.setFixedHeight(38)
+        console_row.setFixedHeight(28)
         console_layout = QHBoxLayout(console_row)
-        console_layout.setContentsMargins(0, 2, 0, 4)
+        console_layout.setContentsMargins(0, 2, 0, 2)
         console_layout.setSpacing(0)
 
         self._psyke_console = PsykeConsole(self._db, self._project_id)
@@ -849,18 +846,6 @@ class MainWindow(QMainWindow):
                 on_scene_selected=self._open_scene_in_editor,
             )
         )
-
-    def _show_search(self) -> None:
-        self._set_content(
-            SearchView(
-                self._db,
-                self._project_id,
-                on_result_selected=self._on_search_result_selected,
-            )
-        )
-
-    def _on_search_result_selected(self, entity_type: str, entity_id: int) -> None:
-        self._on_link_navigated(entity_type, entity_id)
 
     def _on_link_navigated(self, entity_type: str, entity_id: int) -> None:
         if entity_type in ("Character", "Place", "PsykeEntry"):

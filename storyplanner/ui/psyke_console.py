@@ -306,7 +306,7 @@ class PsykeConsole(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setFixedHeight(32)
+        self.setFixedHeight(24)
         self.setObjectName("psykeConsole")
 
         self._db = db
@@ -328,6 +328,7 @@ class PsykeConsole(QWidget):
         layout.setContentsMargins(4, 0, 4, 0)
         layout.setSpacing(0)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setMaximumHeight(24)
 
         self._input = QLineEdit()
         self._input.setPlaceholderText("Search PSYKE…")
@@ -636,8 +637,8 @@ class PsykeConsole(QWidget):
             f"  background-color: transparent;"
             f"  border: none;"
             f"  color: {theme.TEXT_MUTED};"
-            f"  font-size: 13px;"
-            f"  padding: 2px 8px;"
+            f"  font-size: 12px;"
+            f"  padding: 0px 8px;"
             f"}}"
             f"#psykeConsoleInput:focus {{"
             f"  color: {theme.TEXT_PRIMARY};"
