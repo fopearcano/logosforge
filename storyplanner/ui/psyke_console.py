@@ -44,6 +44,14 @@ _CONSOLE_MIN_WIDTH = 320
 _CONSOLE_MAX_WIDTH = 720
 _CONSOLE_BOTTOM_MARGIN = 10
 
+
+def _widget_deleted(widget: QWidget) -> bool:
+    try:
+        widget.objectName()
+        return False
+    except RuntimeError:
+        return True
+
 class _SuggestionItem(QWidget):
     """Single row in the results dropdown."""
 
@@ -345,10 +353,13 @@ class PsykeConsole(QWidget):
         self._get_scene_entry_ids = getter
 
     def _ensure_dropdown(self) -> _ResultsDropdown:
+        win = self.window() or self
         if self._dropdown is None:
-            win = self.window() or self
             self._dropdown = _ResultsDropdown(win)
             self._dropdown.item_activated.connect(self._on_suggestion_activated)
+            self._dropdown_parent = win
+        elif self._dropdown_parent is not win:
+            self._dropdown.setParent(win)
             self._dropdown_parent = win
         return self._dropdown
 
@@ -367,12 +378,19 @@ class PsykeConsole(QWidget):
         self._input.clear()
         if self._dropdown is not None:
             self._dropdown.hide_results()
-        if self._previous_focus is not None:
-            self._previous_focus.setFocus(Qt.FocusReason.OtherFocusReason)
-            self._previous_focus = None
-        else:
+        target = self._previous_focus
+        self._previous_focus = None
+        try:
+            if target is not None and not _widget_deleted(target):
+                target.setFocus(Qt.FocusReason.OtherFocusReason)
+            else:
+                self.clearFocus()
+        except RuntimeError:
             self.clearFocus()
         self._selecting = False
+
+    def clear_previous_focus(self) -> None:
+        self._previous_focus = None
 
     def set_project(self, project_id: int) -> None:
         self._project_id = project_id
@@ -446,10 +464,7 @@ class PsykeConsole(QWidget):
         dropdown = self._ensure_dropdown()
         if not dropdown.isVisible():
             return
-        win = self.window()
-        if hasattr(self, "_dropdown_parent") and self._dropdown_parent is not win:
-            dropdown.setParent(win)
-            self._dropdown_parent = win
+        win = self.window() or self
         dropdown.adjustSize()
         console_geo = self.geometry()
         mapped = self.mapTo(win, self.rect().topLeft())

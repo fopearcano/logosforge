@@ -427,6 +427,7 @@ class MainWindow(QMainWindow):
 
     def _set_content(self, widget: QWidget) -> None:
         """Replace the content area with a new widget."""
+        self._psyke_console.clear_previous_focus()
         self._root_layout.replaceWidget(self.content_area, widget)
         old = self.content_area
         if old is self._cached_scenes_view:

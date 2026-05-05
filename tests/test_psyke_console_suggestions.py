@@ -145,6 +145,83 @@ class TestDebounceDoesNotBlock:
         assert not console._debounce.isActive()
 
 
+class TestFocusAndLifecycle:
+    """Verify focus handling and console lifecycle across repeated uses."""
+
+    def test_deactivate_with_deleted_previous_focus(self, console):
+        """Deactivate survives if _previous_focus was deleted."""
+        dummy = QWidget()
+        console._previous_focus = dummy
+        dummy.deleteLater()
+        # Force deletion
+        import shiboken6
+        shiboken6.delete(dummy)
+
+        # Should not raise
+        console.deactivate()
+        assert console._previous_focus is None
+
+    def test_deactivate_clears_previous_focus(self, console):
+        """After deactivate, _previous_focus is None."""
+        dummy = QWidget()
+        console._previous_focus = dummy
+        console.deactivate()
+        assert console._previous_focus is None
+
+    def test_clear_previous_focus(self, console):
+        """clear_previous_focus explicitly resets the reference."""
+        dummy = QWidget()
+        console._previous_focus = dummy
+        console.clear_previous_focus()
+        assert console._previous_focus is None
+
+    def test_repeated_activate_deactivate(self, console):
+        """Console works correctly after multiple activate/deactivate cycles."""
+        for _ in range(5):
+            console.activate()
+            console._input.setText("jo")
+            console._run_search()
+            dropdown = console._ensure_dropdown()
+            assert dropdown.has_items()
+            console.deactivate()
+            assert console._input.text() == ""
+
+    def test_dropdown_parent_matches_window(self, app, db, project):
+        """Dropdown is parented to the console's window, not self."""
+        from storyplanner.ui.psyke_console import PsykeConsole
+
+        parent = QWidget()
+        parent.resize(800, 600)
+        c = PsykeConsole(db, project.id, parent=parent)
+        db.create_psyke_entry(project.id, "John", "character")
+        c.mark_index_dirty()
+        c._input.setText("jo")
+        c._run_search()
+        dropdown = c._ensure_dropdown()
+        assert dropdown.parent() is parent
+
+    def test_dropdown_reparented_on_window_change(self, app, db, project):
+        """If window changes, dropdown gets reparented on next use."""
+        from storyplanner.ui.psyke_console import PsykeConsole
+
+        parent1 = QWidget()
+        c = PsykeConsole(db, project.id, parent=parent1)
+        db.create_psyke_entry(project.id, "John", "character")
+        c.mark_index_dirty()
+
+        c._input.setText("jo")
+        c._run_search()
+        dropdown = c._ensure_dropdown()
+        assert dropdown.parent() is parent1
+
+        # Reparent console to new window
+        parent2 = QWidget()
+        c.setParent(parent2)
+        c._input.setText("jo")
+        c._run_search()
+        assert dropdown.parent() is parent2
+
+
 class TestDropdownRefreshed:
     """Verify dropdown is rebuilt each time, not stale."""
 
