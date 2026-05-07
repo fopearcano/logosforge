@@ -2220,3 +2220,156 @@ def test_font_courier_persists():
     assert view._font_family_key == "courier_new"
     settings = db.get_project_settings(proj.id)
     assert settings["font_family"] == "courier_new"
+
+
+# -- Top menu grouped buttons ------------------------------------------------
+
+def test_ap_button_exists():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert hasattr(view, "_ap_btn")
+    assert view._ap_btn.text() == "A-P"
+
+
+def test_review_button_exists():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert hasattr(view, "_review_btn")
+    assert view._review_btn.text() == "Review"
+
+
+def test_focus_button_exists():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert hasattr(view, "_focus_btn")
+    assert view._focus_btn.text() == "Focus"
+
+
+def test_textbg_button_exists():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert hasattr(view, "_textbg_btn")
+    assert view._textbg_btn.text() == "Text/Bg"
+
+
+# -- Bold / Italic / Underline / Strikethrough --------------------------------
+
+def test_toggle_bold():
+    from PySide6.QtGui import QFont
+    db = Database()
+    proj, s1, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._active_editor = editor
+    cursor = editor.textCursor()
+    cursor.select(QTextCursor.SelectionType.Document)
+    editor.setTextCursor(cursor)
+    view._toggle_bold()
+    fmt = editor.textCursor().charFormat()
+    assert fmt.fontWeight() >= QFont.Weight.Bold
+
+
+def test_toggle_italic():
+    db = Database()
+    proj, s1, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._active_editor = editor
+    cursor = editor.textCursor()
+    cursor.select(QTextCursor.SelectionType.Document)
+    editor.setTextCursor(cursor)
+    view._toggle_italic()
+    assert editor.textCursor().charFormat().fontItalic() is True
+
+
+def test_toggle_underline():
+    db = Database()
+    proj, s1, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._active_editor = editor
+    cursor = editor.textCursor()
+    cursor.select(QTextCursor.SelectionType.Document)
+    editor.setTextCursor(cursor)
+    view._toggle_underline()
+    assert editor.textCursor().charFormat().fontUnderline() is True
+
+
+def test_toggle_strikethrough():
+    db = Database()
+    proj, s1, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[s1.id]
+    view._active_editor = editor
+    cursor = editor.textCursor()
+    cursor.select(QTextCursor.SelectionType.Document)
+    editor.setTextCursor(cursor)
+    view._toggle_strikethrough()
+    assert editor.textCursor().charFormat().fontStrikeOut() is True
+
+
+# -- Background color ---------------------------------------------------------
+
+def test_apply_bg_color():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._apply_bg_color("#1C1914")
+    assert view._current_bg_color == "#1C1914"
+
+
+def test_apply_bg_color_default():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._apply_bg_color("#1C1914")
+    view._apply_bg_color("")
+    assert view._current_bg_color == ""
+
+
+# -- Text/Bg menu font helpers -----------------------------------------------
+
+def test_set_font_family_via_menu():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._set_font_family("courier_new")
+    assert view._font_family_key == "courier_new"
+    assert view._font_combo.currentData() == "courier_new"
+
+
+def test_set_font_size_via_menu():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view._set_font_size(22)
+    assert view._font_size == 22
+    assert view._size_combo.currentData() == 22
+
+
+# -- Grammar in review menu ---------------------------------------------------
+
+def test_grammar_toggle_from_view():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    assert view._grammar_checking is False
+    view._toggle_grammar()
+    assert view._grammar_checking is True
+    view._toggle_grammar()
+    assert view._grammar_checking is False
+
+
+# -- Focus mode does not fade top bar ----------------------------------------
+
+def test_focus_mode_restores_opacity():
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    view.toggle_focus_mode()
+    view.toggle_focus_mode()
+    assert view._topbar_opacity.opacity() == 1.0

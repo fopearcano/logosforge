@@ -112,6 +112,14 @@ _TEXT_COLOR_PALETTE: list[tuple[str, str]] = [
     ("Blue", "#3B8BEB"),
     ("Purple", "#9B59B6"),
 ]
+_BG_COLOR_PALETTE: list[tuple[str, str]] = [
+    ("Default dark", ""),
+    ("Warm dark", "#1C1914"),
+    ("Paper light", "#F5F1E8"),
+    ("Soft green", "#1A2420"),
+    ("Soft amber", "#221E14"),
+    ("Black", "#000000"),
+]
 _FONT_SIZE_OPTIONS = [14, 15, 16, 17, 18, 19, 20, 22, 24]
 _LANGUAGE_OPTIONS = [
     ("auto", "Auto"),
@@ -763,6 +771,12 @@ class WritingCoreView(QWidget):
         tb_layout.setContentsMargins(16, 6, 16, 6)
         tb_layout.setSpacing(8)
 
+        _tb_btn_style = (
+            f"color: {theme.TEXT_MUTED}; font-size: 11px;"
+            " background: transparent; padding: 2px 8px;"
+        )
+
+        # 1. Wordcount
         self._word_count_label = QLabel("")
         self._word_count_label.setStyleSheet(
             f"color: {theme.TEXT_MUTED}; font-size: 11px;"
@@ -770,6 +784,7 @@ class WritingCoreView(QWidget):
         )
         tb_layout.addWidget(self._word_count_label)
 
+        # 2. WritingMode
         self._format_combo = QComboBox()
         self._format_combo.setObjectName("writingFormatCombo")
         self._format_combo.setFixedWidth(130)
@@ -781,6 +796,7 @@ class WritingCoreView(QWidget):
         self._format_combo.currentIndexChanged.connect(self._on_format_changed)
         tb_layout.addWidget(self._format_combo)
 
+        # 3. ModeFormat
         self._element_combo = QComboBox()
         self._element_combo.setObjectName("writingElementCombo")
         self._element_combo.setFixedWidth(140)
@@ -788,85 +804,69 @@ class WritingCoreView(QWidget):
         self._element_combo.currentIndexChanged.connect(self._on_element_changed)
         tb_layout.addWidget(self._element_combo)
 
+        # 4. A-P (Text + Paragraph)
+        self._ap_btn = QPushButton("A-P")
+        self._ap_btn.setFlat(True)
+        self._ap_btn.setToolTip("Text & Paragraph formatting")
+        self._ap_btn.setStyleSheet(_tb_btn_style)
+        self._ap_btn.clicked.connect(self._show_ap_menu)
+        tb_layout.addWidget(self._ap_btn)
+
+        # 5. Review
+        self._review_btn = QPushButton("Review")
+        self._review_btn.setFlat(True)
+        self._review_btn.setToolTip("Review tools")
+        self._review_btn.setStyleSheet(_tb_btn_style)
+        self._review_btn.clicked.connect(self._show_review_menu)
+        tb_layout.addWidget(self._review_btn)
+
+        # 6. Focus
+        self._focus_btn = QPushButton("Focus")
+        self._focus_btn.setFlat(True)
+        self._focus_btn.setStyleSheet(_tb_btn_style)
+        self._focus_btn.clicked.connect(self.toggle_focus_mode)
+        tb_layout.addWidget(self._focus_btn)
+
+        # 7. Text/Bg
+        self._textbg_btn = QPushButton("Text/Bg")
+        self._textbg_btn.setFlat(True)
+        self._textbg_btn.setToolTip("Font, color, and background options")
+        self._textbg_btn.setStyleSheet(_tb_btn_style)
+        self._textbg_btn.clicked.connect(self._show_text_bg_menu)
+        tb_layout.addWidget(self._textbg_btn)
+
         tb_layout.addStretch()
 
+        # Hidden combos kept for settings persistence and test compatibility
         self._font_combo = QComboBox()
         self._font_combo.setObjectName("writingFontCombo")
-        self._font_combo.setFixedWidth(140)
+        self._font_combo.setVisible(False)
         for key in _FONT_PRESET_ORDER:
             self._font_combo.addItem(_FONT_PRESET_LABELS[key], key)
         _fc_idx = _FONT_PRESET_ORDER.index(self._font_family_key)
         self._font_combo.setCurrentIndex(_fc_idx)
         self._font_combo.currentIndexChanged.connect(self._on_font_family_changed)
-        tb_layout.addWidget(self._font_combo)
 
         self._size_combo = QComboBox()
         self._size_combo.setObjectName("writingSizeCombo")
-        self._size_combo.setFixedWidth(58)
+        self._size_combo.setVisible(False)
         for sz in _FONT_SIZE_OPTIONS:
             self._size_combo.addItem(f"{sz}", sz)
         _sz_idx = _FONT_SIZE_OPTIONS.index(self._font_size)
         self._size_combo.setCurrentIndex(_sz_idx)
         self._size_combo.currentIndexChanged.connect(self._on_font_size_changed)
-        tb_layout.addWidget(self._size_combo)
 
+        self._current_bg_color: str = ""
+
+        # Hidden widgets for backward compat (tests, internal signal chains)
         self._color_btn = QPushButton("A")
-        self._color_btn.setFlat(True)
-        self._color_btn.setToolTip("Text color")
-        self._color_btn.setFixedWidth(28)
-        self._color_btn.clicked.connect(self._show_color_menu)
-        self._update_color_button_style()
-        tb_layout.addWidget(self._color_btn)
-
+        self._color_btn.setVisible(False)
         self._paragraph_btn = QPushButton("¶")
-        self._paragraph_btn.setFlat(True)
-        self._paragraph_btn.setToolTip("Paragraph: alignment, indent, lists")
-        self._paragraph_btn.setFixedWidth(28)
-        self._paragraph_btn.setStyleSheet(
-            f"color: {theme.TEXT_PRIMARY}; font-size: 14px;"
-            " background: transparent; padding: 2px 4px;"
-        )
-        self._paragraph_btn.clicked.connect(self._show_paragraph_menu)
-        tb_layout.addWidget(self._paragraph_btn)
-
+        self._paragraph_btn.setVisible(False)
         self._indent_btn = QPushButton("Indent")
-        self._indent_btn.setFlat(True)
-        self._indent_btn.setToolTip("First-line paragraph indent")
-        self._indent_btn.setStyleSheet(
-            f"color: {theme.TEXT_PRIMARY if self._first_line_indent else theme.TEXT_MUTED};"
-            " font-size: 11px; background: transparent; padding: 2px 8px;"
-        )
-        self._indent_btn.clicked.connect(self._toggle_indent)
-        tb_layout.addWidget(self._indent_btn)
-
+        self._indent_btn.setVisible(False)
         self._smart_quotes_btn = QPushButton("“”")
-        self._smart_quotes_btn.setFlat(True)
-        self._smart_quotes_btn.setToolTip("Smart quotes")
-        self._smart_quotes_btn.setStyleSheet(
-            f"color: {theme.TEXT_PRIMARY if self._smart_quotes else theme.TEXT_MUTED};"
-            " font-size: 11px; background: transparent; padding: 2px 8px;"
-        )
-        self._smart_quotes_btn.clicked.connect(self._toggle_smart_quotes)
-        tb_layout.addWidget(self._smart_quotes_btn)
-
-        self._review_btn = QPushButton("Review")
-        self._review_btn.setFlat(True)
-        self._review_btn.setToolTip("Show review metrics overlay")
-        self._review_btn.setStyleSheet(
-            f"color: {theme.TEXT_MUTED}; font-size: 11px;"
-            " background: transparent; padding: 2px 8px;"
-        )
-        self._review_btn.clicked.connect(self.toggle_review_mode)
-        tb_layout.addWidget(self._review_btn)
-
-        self._focus_btn = QPushButton("Focus")
-        self._focus_btn.setFlat(True)
-        self._focus_btn.setStyleSheet(
-            f"color: {theme.TEXT_MUTED}; font-size: 11px;"
-            " background: transparent; padding: 2px 8px;"
-        )
-        self._focus_btn.clicked.connect(self.toggle_focus_mode)
-        tb_layout.addWidget(self._focus_btn)
+        self._smart_quotes_btn.setVisible(False)
 
         self._topbar_opacity = QGraphicsOpacityEffect(self._top_bar)
         self._topbar_opacity.setOpacity(1.0)
@@ -1835,60 +1835,25 @@ class WritingCoreView(QWidget):
             self._persist_font_settings()
             self._apply_typography()
 
-    # -- Text color -----------------------------------------------------------
+    # -- A-P menu (text + paragraph) -------------------------------------------
 
-    def _update_color_button_style(self) -> None:
-        active = self._current_text_color or theme.TEXT_PRIMARY
-        self._color_btn.setStyleSheet(
-            f"color: {active}; font-size: 14px; font-weight: bold;"
-            " background: transparent; padding: 2px 4px;"
-            " border-bottom: 2px solid " + active + ";"
-        )
+    def _show_ap_menu(self) -> None:
+        menu = QMenu(self._ap_btn)
 
-    def _show_color_menu(self) -> None:
-        menu = QMenu(self._color_btn)
-        for label, hex_color in _TEXT_COLOR_PALETTE:
-            action = QAction(label, menu)
-            if hex_color:
-                pix = QColor(hex_color).name()
-                action.setText(f"●  {label}")
-                action.setData(hex_color)
-            else:
-                action.setText(label)
-                action.setData("")
-            action.triggered.connect(
-                lambda _checked=False, c=hex_color: self._apply_text_color(c)
-            )
-            menu.addAction(action)
-        pos = self._color_btn.mapToGlobal(self._color_btn.rect().bottomLeft())
-        menu.exec(pos)
+        bold = QAction("Bold", menu)
+        bold.triggered.connect(self._toggle_bold)
+        menu.addAction(bold)
+        italic = QAction("Italic", menu)
+        italic.triggered.connect(self._toggle_italic)
+        menu.addAction(italic)
+        underline = QAction("Underline", menu)
+        underline.triggered.connect(self._toggle_underline)
+        menu.addAction(underline)
+        strike = QAction("Strikethrough", menu)
+        strike.triggered.connect(self._toggle_strikethrough)
+        menu.addAction(strike)
 
-    def _apply_text_color(self, hex_color: str) -> None:
-        self._current_text_color = hex_color
-        self._update_color_button_style()
-        editor = self._active_editor
-        if editor is None:
-            for ed in self._editors.values():
-                if ed.hasFocus():
-                    editor = ed
-                    break
-        if editor is None and self._editors:
-            editor = next(iter(self._editors.values()))
-        if editor is None:
-            return
-        cursor = editor.textCursor()
-        fmt = QTextCharFormat()
-        if hex_color:
-            fmt.setForeground(QColor(hex_color))
-        else:
-            fmt.setForeground(QColor(theme.TEXT_PRIMARY))
-        cursor.mergeCharFormat(fmt)
-        editor.mergeCurrentCharFormat(fmt)
-
-    # -- Paragraph menu (alignment, indent, lists) ----------------------------
-
-    def _show_paragraph_menu(self) -> None:
-        menu = QMenu(self._paragraph_btn)
+        menu.addSeparator()
 
         for label, alignment in (
             ("Align Left", Qt.AlignmentFlag.AlignLeft),
@@ -1924,10 +1889,175 @@ class WritingCoreView(QWidget):
         )
         menu.addAction(numbered)
 
-        pos = self._paragraph_btn.mapToGlobal(
-            self._paragraph_btn.rect().bottomLeft()
-        )
+        pos = self._ap_btn.mapToGlobal(self._ap_btn.rect().bottomLeft())
         menu.exec(pos)
+
+    def _toggle_bold(self) -> None:
+        editor = self._target_editor()
+        if editor is None:
+            return
+        cursor = editor.textCursor()
+        fmt = cursor.charFormat()
+        new_fmt = QTextCharFormat()
+        weight = QFont.Weight.Normal if fmt.fontWeight() >= QFont.Weight.Bold else QFont.Weight.Bold
+        new_fmt.setFontWeight(weight)
+        cursor.mergeCharFormat(new_fmt)
+        editor.setTextCursor(cursor)
+
+    def _toggle_italic(self) -> None:
+        editor = self._target_editor()
+        if editor is None:
+            return
+        cursor = editor.textCursor()
+        new_fmt = QTextCharFormat()
+        new_fmt.setFontItalic(not cursor.charFormat().fontItalic())
+        cursor.mergeCharFormat(new_fmt)
+        editor.setTextCursor(cursor)
+
+    def _toggle_underline(self) -> None:
+        editor = self._target_editor()
+        if editor is None:
+            return
+        cursor = editor.textCursor()
+        new_fmt = QTextCharFormat()
+        new_fmt.setFontUnderline(not cursor.charFormat().fontUnderline())
+        cursor.mergeCharFormat(new_fmt)
+        editor.setTextCursor(cursor)
+
+    def _toggle_strikethrough(self) -> None:
+        editor = self._target_editor()
+        if editor is None:
+            return
+        cursor = editor.textCursor()
+        new_fmt = QTextCharFormat()
+        new_fmt.setFontStrikeOut(not cursor.charFormat().fontStrikeOut())
+        cursor.mergeCharFormat(new_fmt)
+        editor.setTextCursor(cursor)
+
+    # -- Review menu -----------------------------------------------------------
+
+    def _show_review_menu(self) -> None:
+        menu = QMenu(self._review_btn)
+
+        review_act = QAction(
+            "Close Review" if self._review_mode else "Review Metrics", menu,
+        )
+        review_act.triggered.connect(self.toggle_review_mode)
+        menu.addAction(review_act)
+
+        grammar_act = QAction("Grammar Check", menu)
+        grammar_act.setCheckable(True)
+        grammar_act.setChecked(self._grammar_checking)
+        grammar_act.triggered.connect(lambda checked: self._toggle_grammar())
+        menu.addAction(grammar_act)
+
+        pos = self._review_btn.mapToGlobal(self._review_btn.rect().bottomLeft())
+        menu.exec(pos)
+
+    # -- Text/Bg menu ----------------------------------------------------------
+
+    def _show_text_bg_menu(self) -> None:
+        menu = QMenu(self._textbg_btn)
+
+        font_sub = menu.addMenu("Font Family")
+        for key in _FONT_PRESET_ORDER:
+            act = QAction(_FONT_PRESET_LABELS[key], font_sub)
+            act.setCheckable(True)
+            act.setChecked(key == self._font_family_key)
+            act.triggered.connect(
+                lambda _c=False, k=key: self._set_font_family(k)
+            )
+            font_sub.addAction(act)
+
+        size_sub = menu.addMenu("Font Size")
+        for sz in _FONT_SIZE_OPTIONS:
+            act = QAction(str(sz), size_sub)
+            act.setCheckable(True)
+            act.setChecked(sz == self._font_size)
+            act.triggered.connect(
+                lambda _c=False, s=sz: self._set_font_size(s)
+            )
+            size_sub.addAction(act)
+
+        menu.addSeparator()
+
+        color_sub = menu.addMenu("Text Color")
+        for label, hex_color in _TEXT_COLOR_PALETTE:
+            act = QAction(f"●  {label}" if hex_color else label, color_sub)
+            act.triggered.connect(
+                lambda _c=False, c=hex_color: self._apply_text_color(c)
+            )
+            color_sub.addAction(act)
+
+        bg_sub = menu.addMenu("Background Color")
+        for label, hex_color in _BG_COLOR_PALETTE:
+            act = QAction(f"●  {label}" if hex_color else label, bg_sub)
+            act.setCheckable(True)
+            act.setChecked(hex_color == self._current_bg_color)
+            act.triggered.connect(
+                lambda _c=False, c=hex_color: self._apply_bg_color(c)
+            )
+            bg_sub.addAction(act)
+
+        menu.addSeparator()
+
+        indent_act = QAction("First-line Indent", menu)
+        indent_act.setCheckable(True)
+        indent_act.setChecked(self._first_line_indent)
+        indent_act.triggered.connect(lambda: self._toggle_indent())
+        menu.addAction(indent_act)
+
+        sq_act = QAction("Smart Quotes", menu)
+        sq_act.setCheckable(True)
+        sq_act.setChecked(self._smart_quotes)
+        sq_act.triggered.connect(lambda: self._toggle_smart_quotes())
+        menu.addAction(sq_act)
+
+        pos = self._textbg_btn.mapToGlobal(self._textbg_btn.rect().bottomLeft())
+        menu.exec(pos)
+
+    def _set_font_family(self, key: str) -> None:
+        if key not in _FONT_PRESETS:
+            return
+        idx = _FONT_PRESET_ORDER.index(key)
+        self._font_combo.setCurrentIndex(idx)
+
+    def _set_font_size(self, size: int) -> None:
+        if size not in _FONT_SIZE_OPTIONS:
+            return
+        idx = _FONT_SIZE_OPTIONS.index(size)
+        self._size_combo.setCurrentIndex(idx)
+
+    def _apply_text_color(self, hex_color: str) -> None:
+        self._current_text_color = hex_color
+        editor = self._active_editor
+        if editor is None:
+            for ed in self._editors.values():
+                if ed.hasFocus():
+                    editor = ed
+                    break
+        if editor is None and self._editors:
+            editor = next(iter(self._editors.values()))
+        if editor is None:
+            return
+        cursor = editor.textCursor()
+        fmt = QTextCharFormat()
+        if hex_color:
+            fmt.setForeground(QColor(hex_color))
+        else:
+            fmt.setForeground(QColor(theme.TEXT_PRIMARY))
+        cursor.mergeCharFormat(fmt)
+        editor.mergeCurrentCharFormat(fmt)
+
+    def _apply_bg_color(self, hex_color: str) -> None:
+        self._current_bg_color = hex_color
+        bg = hex_color or theme.BG_DARK
+        self._canvas.setStyleSheet(
+            f"#writingCanvas {{ background-color: {bg}; }}"
+        )
+        for editor in self._editors.values():
+            editor._fade_bg = bg
+            editor.viewport().update()
 
     def _target_editor(self) -> QTextEdit | None:
         editor = self._active_editor
@@ -1981,19 +2111,11 @@ class WritingCoreView(QWidget):
 
     def _toggle_indent(self) -> None:
         self._first_line_indent = not self._first_line_indent
-        self._indent_btn.setStyleSheet(
-            f"color: {theme.TEXT_PRIMARY if self._first_line_indent else theme.TEXT_MUTED};"
-            " font-size: 11px; background: transparent; padding: 2px 8px;"
-        )
         self._persist_font_settings()
         self._apply_format_to_all_blocks()
 
     def _toggle_smart_quotes(self) -> None:
         self._smart_quotes = not self._smart_quotes
-        self._smart_quotes_btn.setStyleSheet(
-            f"color: {theme.TEXT_PRIMARY if self._smart_quotes else theme.TEXT_MUTED};"
-            " font-size: 11px; background: transparent; padding: 2px 8px;"
-        )
         for editor in self._editors.values():
             editor._smart_quotes = self._smart_quotes
         self._persist_font_settings()
@@ -2049,7 +2171,7 @@ class WritingCoreView(QWidget):
         self._top_bar.setVisible(not self._focus_mode)
         self._focus_bar.setVisible(self._focus_mode)
         if not self._focus_mode:
-            self._topbar_opacity.setOpacity(0.4)
+            self._topbar_opacity.setOpacity(1.0)
 
         para_alpha = 90 if self._focus_mode else _FADE_ALPHA_PARA
         scene_alpha = 130 if self._focus_mode else _FADE_ALPHA_SCENE
