@@ -243,7 +243,7 @@ class _SummaryEditor(QPlainTextEdit):
         self.setStyleSheet(
             f"QPlainTextEdit {{ background: {theme.BG_INPUT}; "
             f"color: {theme.TEXT_PRIMARY}; border: 1px solid {theme.BORDER}; "
-            "border-radius: 4px; padding: 4px 6px; font-size: 11px; }}"
+            f"border-radius: 4px; padding: 4px 6px; font-size: 11px; }}"
         )
         self._on_commit = on_commit
         self._initial = text
