@@ -57,6 +57,7 @@ from storyplanner.ui.mode_suggestions_view import ModeSuggestionsView
 from storyplanner.ui.graph_view import GraphView
 from storyplanner.ui.notes_view import NotesView
 from storyplanner.ui.outline_view import OutlineView
+from storyplanner.ui.plan_view import PlanView
 from storyplanner.ui.plugins_view import PluginsView
 from storyplanner.ui.psyke_console import PsykeConsole
 from storyplanner.ui.psyke_view import PsykeView
@@ -232,6 +233,7 @@ class MainWindow(QMainWindow):
             "Pacing": "\U0001F3B5",
             "Adapt": "\U0001F9E0",
             "Narrative": "\U0001F4CA",
+            "Plan": "\U0001F5C2",
             "Plugins": "\U0001F9E9",
             "Assistant": "\U0001F916",
         }
@@ -241,8 +243,10 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self._toggle_btn)
 
         _SIDEBAR_LAYOUT: list = [
-            "Projects", "Dashboard", "Notes",
-            "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline",
+            "Projects", "Dashboard", "Notes", "Manuscript",
+            ("group", "Plan", [
+                "Plan", "Scenes", "Timeline", "Grid", "Plot", "Outline",
+            ]),
             ("group", "Structure", ["Structure", "Acts", "Beats", "Arcs"]),
             "Tags", "Graph",
             ("group", "Analytics", ["Health", "Balance", "Pacing", "Narrative"]),
@@ -314,7 +318,7 @@ class MainWindow(QMainWindow):
         # -- Connect navigation buttons (checkable + active tracking) ----------
         self._nav_labels = [
             "Projects", "Dashboard", "Notes",
-            "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline",
+            "Plan", "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline",
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
             "Health", "Balance", "Pacing", "Adapt", "Narrative", "PSYKE", "Plugins",
         ]
@@ -322,6 +326,7 @@ class MainWindow(QMainWindow):
             "Projects": self._show_projects,
             "Dashboard": self._show_dashboard,
             "Notes": self._show_notes,
+            "Plan": self._show_plan,
             "Scenes": self._show_scenes,
             "Manuscript": self._show_manuscript,
             "Timeline": self._show_timeline,
@@ -498,6 +503,16 @@ class MainWindow(QMainWindow):
         if self.content_area is not self._cached_scenes_view:
             self._set_content(self._cached_scenes_view)
         self._cached_scenes_view.refresh()
+
+    def _show_plan(self) -> None:
+        self._set_content(
+            PlanView(
+                self._db,
+                self._project_id,
+                on_data_changed=self._on_data_changed,
+                on_open_scene=self._open_scene_in_editor,
+            )
+        )
 
     def _show_manuscript(self) -> None:
         self._set_content(
