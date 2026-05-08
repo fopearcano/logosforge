@@ -1,9 +1,10 @@
-"""Visual Story Grid — spatial plotting system.
+"""Visual Story Grid — 3-column block grid grouped by Acts.
 
-Displays scenes in a grid where columns are Acts (or Chapters) and rows are
-scenes within each group. Supports drag-and-drop reordering, zoom levels,
-color coding by plotline/tag/beat, and Story Flow indicators (tension bars,
-character dots, scene type badges, pacing warnings).
+Displays scenes (or chapters in Novel mode) as square-ish movable cards in a
+3-column grid, grouped under Act sections.  Supports drag-and-drop reordering
+within and between Acts, zoom levels, color coding by plotline/tag/beat, and
+Story Flow indicators (tension bars, character dots, scene type badges, pacing
+warnings).
 """
 
 from __future__ import annotations
@@ -12,13 +13,16 @@ from collections.abc import Callable
 
 import shiboken6 as shiboken
 from PySide6.QtCore import QMimeData, QPoint, Qt, QTimer
-from PySide6.QtGui import QDrag, QMouseEvent
+from PySide6.QtGui import QAction, QDrag, QMouseEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
+    QMenu,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -38,10 +42,8 @@ from storyplanner.story_flow import (
 from storyplanner.ui import theme
 
 
-_CARD_MIN_WIDTH = 180
-_CARD_MAX_WIDTH = 260
-_COLUMN_MIN_WIDTH = 200
-_COLUMN_MAX_WIDTH = 280
+_BLOCK_SIZE = 160
+_GRID_COLUMNS = 3
 _DRAG_THRESHOLD = 10
 
 _COLOR_PALETTE = [
@@ -50,13 +52,18 @@ _COLOR_PALETTE = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Scene / Chapter block card
+# ---------------------------------------------------------------------------
+
 class _SceneCard(QFrame):
-    """Compact scene card displayed in the grid."""
+    """Compact square-ish block card displayed in the grid."""
 
     def __init__(
         self,
         scene,
         zoom: int,
+        block_label: str = "",
         color_accent: str = "",
         flow_visible: bool = False,
         tension: SceneTension | None = None,
@@ -69,21 +76,21 @@ class _SceneCard(QFrame):
         self.scene_id = scene.id
         self._scene = scene
         self.setObjectName("gridSceneCard")
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        self.setFixedSize(_BLOCK_SIZE, _BLOCK_SIZE)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(3)
 
-        # -- Title row with optional type icon --------------------------------
-        title_row = QHBoxLayout()
-        title_row.setContentsMargins(0, 0, 0, 0)
-        title_row.setSpacing(4)
+        # -- Number / type row ---------------------------------------------------
+        top_row = QHBoxLayout()
+        top_row.setContentsMargins(0, 0, 0, 0)
+        top_row.setSpacing(4)
 
-        self._title_label = QLabel(scene.title or "Untitled")
-        self._title_label.setObjectName("gridCardTitle")
-        self._title_label.setWordWrap(True)
-        title_row.addWidget(self._title_label, stretch=1)
+        self._number_label = QLabel(block_label)
+        self._number_label.setObjectName("gridCardMeta")
+        top_row.addWidget(self._number_label)
+        top_row.addStretch()
 
         self._type_label = QLabel()
         self._type_label.setObjectName("gridCardType")
@@ -91,10 +98,16 @@ class _SceneCard(QFrame):
             icon = scene_type_icon(scene_type.primary)
             self._type_label.setText(icon)
             self._type_label.setToolTip(scene_type.primary.capitalize())
-        title_row.addWidget(self._type_label)
-        layout.addLayout(title_row)
+        top_row.addWidget(self._type_label)
+        layout.addLayout(top_row)
 
-        # -- Summary ----------------------------------------------------------
+        # -- Title ---------------------------------------------------------------
+        self._title_label = QLabel(scene.title or "Untitled")
+        self._title_label.setObjectName("gridCardTitle")
+        self._title_label.setWordWrap(True)
+        layout.addWidget(self._title_label)
+
+        # -- Summary -------------------------------------------------------------
         self._summary_label = QLabel()
         self._summary_label.setObjectName("gridCardSummary")
         self._summary_label.setWordWrap(True)
@@ -104,14 +117,17 @@ class _SceneCard(QFrame):
         self._summary_label.setText(summary_text)
         layout.addWidget(self._summary_label)
 
-        # -- Meta line --------------------------------------------------------
+        # -- Meta line -----------------------------------------------------------
         self._meta_label = QLabel()
         self._meta_label.setObjectName("gridCardMeta")
         meta_parts: list[str] = []
         if scene.beat:
             meta_parts.append(scene.beat)
         if scene.tags:
-            tags_clean = [t.strip() for t in scene.tags.split(",") if not t.strip().lower().startswith("tension:")]
+            tags_clean = [
+                t.strip() for t in scene.tags.split(",")
+                if not t.strip().lower().startswith("tension:")
+            ]
             if tags_clean:
                 meta_parts.append(tags_clean[0])
         if scene.plotline:
@@ -119,7 +135,7 @@ class _SceneCard(QFrame):
         self._meta_label.setText(" · ".join(meta_parts) if meta_parts else "")
         layout.addWidget(self._meta_label)
 
-        # -- Character presence dots ------------------------------------------
+        # -- Character dots ------------------------------------------------------
         self._char_row = QWidget()
         self._char_row.setObjectName("gridCharRow")
         char_layout = QHBoxLayout(self._char_row)
@@ -137,7 +153,7 @@ class _SceneCard(QFrame):
         char_layout.addStretch()
         layout.addWidget(self._char_row)
 
-        # -- Tension bar ------------------------------------------------------
+        # -- Tension bar ---------------------------------------------------------
         self._tension_bar = QWidget()
         self._tension_bar.setObjectName("gridTensionBar")
         self._tension_bar.setFixedHeight(3)
@@ -152,6 +168,8 @@ class _SceneCard(QFrame):
         else:
             self._tension_bar.hide()
         layout.addWidget(self._tension_bar)
+
+        layout.addStretch()
 
         self._apply_zoom(zoom, flow_visible)
         self._apply_accent(color_accent)
@@ -179,12 +197,15 @@ class _SceneCard(QFrame):
     def _apply_accent(self, color: str) -> None:
         if color:
             self.setStyleSheet(
-                self.styleSheet() + f"\n#gridSceneCard {{ border-left: 4px solid {color}; }}"
+                self.styleSheet()
+                + f"\n#gridSceneCard {{ border-left: 4px solid {color}; }}"
             )
 
     def _apply_pacing_warning(self, warning: bool, flow_visible: bool) -> None:
         if warning and flow_visible:
             self.setObjectName("gridSceneCardWarning")
+
+    # -- Drag support -----------------------------------------------------------
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -200,13 +221,8 @@ class _SceneCard(QFrame):
         mime = QMimeData()
         mime.setText(str(self.scene_id))
         drag.setMimeData(mime)
-
         drag.setPixmap(self.grab())
         drag.setHotSpot(event.pos())
-
-        # drag.exec() is blocking and the drop handler may delete this widget
-        # (refresh() rebuilds the grid). Don't touch self after exec returns
-        # without checking that the C++ object still exists.
         drag.exec(Qt.DropAction.MoveAction)
         if not shiboken.isValid(self):
             return
@@ -225,45 +241,48 @@ class _SceneCard(QFrame):
         super().leaveEvent(event)
 
 
-class _GridColumn(QFrame):
-    """A single column in the story grid, representing an Act or Chapter."""
+# ---------------------------------------------------------------------------
+# Act section — groups blocks in a 3-column grid
+# ---------------------------------------------------------------------------
+
+class _ActSection(QFrame):
+    """A single Act section containing scene blocks in a 3-column grid."""
 
     scene_dropped = None
 
     def __init__(
         self,
-        group_name: str,
+        act_name: str,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.group_name = group_name
-        self.setObjectName("gridColumn")
+        self.act_name = act_name
+        self.group_name = act_name
+        self.setObjectName("gridActSection")
         self.setAcceptDrops(True)
-        self.setMinimumWidth(_COLUMN_MIN_WIDTH)
-        self.setMaximumWidth(_COLUMN_MAX_WIDTH)
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
-        self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(8, 8, 8, 8)
-        self._layout.setSpacing(6)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 8)
+        outer.setSpacing(4)
 
-        self._header = QLabel(group_name or "Unassigned")
+        self._header = QLabel(act_name or "Unassigned")
         self._header.setObjectName("gridColumnHeader")
-        self._header.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._layout.addWidget(self._header)
+        outer.addWidget(self._header)
 
-        self._cards_layout = QVBoxLayout()
-        self._cards_layout.setContentsMargins(0, 0, 0, 0)
-        self._cards_layout.setSpacing(6)
-        self._layout.addLayout(self._cards_layout)
-        self._layout.addStretch()
+        self._grid = QGridLayout()
+        self._grid.setContentsMargins(0, 0, 0, 0)
+        self._grid.setSpacing(8)
+        outer.addLayout(self._grid)
 
         self._cards: list[_SceneCard] = []
         self._drop_indicator: QWidget | None = None
 
     def add_card(self, card: _SceneCard) -> None:
+        idx = len(self._cards)
+        row, col = divmod(idx, _GRID_COLUMNS)
         self._cards.append(card)
-        self._cards_layout.addWidget(card)
+        self._grid.addWidget(card, row, col)
 
     def card_count(self) -> int:
         return len(self._cards)
@@ -273,12 +292,16 @@ class _GridColumn(QFrame):
         lbl.setObjectName("gridEmptyColumn")
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setWordWrap(True)
-        self._cards_layout.addWidget(lbl)
+        self._grid.addWidget(lbl, 0, 0, 1, _GRID_COLUMNS)
+
+    # -- Drop target ------------------------------------------------------------
 
     def _drop_index(self, pos: QPoint) -> int:
         for i, card in enumerate(self._cards):
-            card_center = card.pos().y() + card.height() // 2
-            if pos.y() < card_center:
+            card_rect = card.geometry()
+            if pos.y() < card_rect.center().y():
+                return i
+            if pos.y() < card_rect.bottom() and pos.x() < card_rect.center().x():
                 return i
         return len(self._cards)
 
@@ -302,7 +325,7 @@ class _GridColumn(QFrame):
         drop_idx = self._drop_index(event.position().toPoint())
         event.acceptProposedAction()
         if self.scene_dropped:
-            self.scene_dropped(scene_id, self.group_name, drop_idx)
+            self.scene_dropped(scene_id, self.act_name, drop_idx)
 
     def _show_drop_indicator(self) -> None:
         if self._drop_indicator is None:
@@ -313,7 +336,7 @@ class _GridColumn(QFrame):
                 f"background-color: {theme.ACCENT}; border-radius: 1px;"
             )
         self._drop_indicator.setFixedWidth(self.width() - 16)
-        self._drop_indicator.move(8, self.height() - 20)
+        self._drop_indicator.move(8, self.height() - 10)
         self._drop_indicator.show()
 
     def _hide_drop_indicator(self) -> None:
@@ -321,8 +344,22 @@ class _GridColumn(QFrame):
             self._drop_indicator.hide()
 
 
+# ---------------------------------------------------------------------------
+# Backwards-compatible alias (tests import this name)
+# ---------------------------------------------------------------------------
+_GridColumn = _ActSection
+
+
+# ---------------------------------------------------------------------------
+# Main grid view
+# ---------------------------------------------------------------------------
+
+_COLUMN_MIN_WIDTH = 200
+_COLUMN_MAX_WIDTH = 280
+
+
 class StoryGridView(QWidget):
-    """Visual Story Grid — spatial plotting system."""
+    """Visual Story Grid — 3-column block grid grouped by Acts."""
 
     def __init__(
         self,
@@ -337,15 +374,29 @@ class StoryGridView(QWidget):
         self._on_data_changed = on_data_changed
         self._on_open_scene = on_open_scene
 
-        self._group_by = "act"  # "act" or "chapter"
-        self._zoom = 1  # 0=titles, 1=title+summary, 2=full
-        self._color_mode = "none"  # "none", "plotline", "tag", "beat"
+        self._group_by = "act"
+        self._zoom = 1
+        self._color_mode = "none"
         self._flow_visible = False
         self._flow_analysis: FlowAnalysis | None = None
-        self._columns: list[_GridColumn] = []
+        self._columns: list[_ActSection] = []
+
+        project = self._db.get_project_by_id(self._project_id)
+        self._format_mode = (project.format_mode if project else "novel") or "novel"
 
         self._build_ui()
         self.refresh()
+
+    @property
+    def _block_unit(self) -> str:
+        if self._format_mode == "screenplay":
+            return "scene"
+        return "chapter"
+
+    def _block_number_label(self, index: int) -> str:
+        if self._block_unit == "scene":
+            return f"Scene {index}"
+        return f"Ch {index}"
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
@@ -401,14 +452,17 @@ class StoryGridView(QWidget):
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)
         self._scroll.setObjectName("gridScrollArea")
+        self._scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
         outer.addWidget(self._scroll)
 
         self._grid_container = QWidget()
         self._grid_container.setObjectName("gridContainer")
-        self._grid_layout = QHBoxLayout(self._grid_container)
+        self._grid_layout = QVBoxLayout(self._grid_container)
         self._grid_layout.setContentsMargins(12, 12, 12, 12)
-        self._grid_layout.setSpacing(12)
-        self._grid_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self._grid_layout.setSpacing(16)
+        self._grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self._scroll.setWidget(self._grid_container)
 
         self._update_zoom_label()
@@ -421,7 +475,11 @@ class StoryGridView(QWidget):
 
         groups: dict[str, list] = {}
         for scene in scenes:
-            key = (scene.act or "").strip() if self._group_by == "act" else (scene.chapter or "").strip()
+            key = (
+                (scene.act or "").strip()
+                if self._group_by == "act"
+                else (scene.chapter or "").strip()
+            )
             if not key:
                 key = ""
             groups.setdefault(key, []).append(scene)
@@ -445,17 +503,31 @@ class StoryGridView(QWidget):
             return
 
         sorted_keys = sorted(groups.keys(), key=lambda k: (k == "", k))
+        global_idx = 1
 
         for key in sorted_keys:
-            col = _GridColumn(key if key else "Unassigned")
-            col.scene_dropped = self._on_scene_dropped
+            section = _ActSection(key if key else "Unassigned")
+            section.scene_dropped = self._on_scene_dropped
+            section.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            section.customContextMenuRequested.connect(
+                lambda pos, s=section: self._on_section_context(s, pos)
+            )
+
             for scene in groups[key]:
                 accent = color_map.get(scene.id, "")
-                tension = self._flow_analysis.tensions.get(scene.id) if self._flow_analysis else None
-                scene_type = self._flow_analysis.scene_types.get(scene.id) if self._flow_analysis else None
+                tension = (
+                    self._flow_analysis.tensions.get(scene.id)
+                    if self._flow_analysis else None
+                )
+                scene_type = (
+                    self._flow_analysis.scene_types.get(scene.id)
+                    if self._flow_analysis else None
+                )
                 char_colors = char_color_map.get(scene.id, [])
                 card = _SceneCard(
-                    scene, self._zoom,
+                    scene,
+                    self._zoom,
+                    block_label=self._block_number_label(global_idx),
                     color_accent=accent,
                     flow_visible=self._flow_visible,
                     tension=tension,
@@ -463,9 +535,15 @@ class StoryGridView(QWidget):
                     char_colors=char_colors,
                     pacing_warning=scene.id in warned_ids,
                 )
-                col.add_card(card)
-            self._columns.append(col)
-            self._grid_layout.addWidget(col)
+                card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                card.customContextMenuRequested.connect(
+                    lambda pos, c=card: self._on_card_context(c, pos)
+                )
+                section.add_card(card)
+                global_idx += 1
+
+            self._columns.append(section)
+            self._grid_layout.addWidget(section)
 
         self._grid_layout.addStretch()
 
@@ -546,36 +624,141 @@ class StoryGridView(QWidget):
             if scene.chapter != target_group:
                 self._db.update_scene(scene_id, scene.title, chapter=target_group)
 
-        scenes_in_target = self._db.get_all_scenes(self._project_id)
-        target_scenes = [
-            s for s in scenes_in_target
-            if ((s.act or "").strip() if self._group_by == "act" else (s.chapter or "").strip()) == target_group
-            or (target_group == "" and not ((s.act or "").strip() if self._group_by == "act" else (s.chapter or "").strip()))
-        ]
-
-        scene_ids_in_target = [s.id for s in target_scenes if s.id != scene_id]
-        if drop_index > len(scene_ids_in_target):
-            drop_index = len(scene_ids_in_target)
-        scene_ids_in_target.insert(drop_index, scene_id)
-
-        all_scenes = self._db.get_all_scenes(self._project_id)
-        all_ids = [s.id for s in all_scenes]
-        other_ids = [sid for sid in all_ids if sid not in scene_ids_in_target]
-
-        final_order = other_ids[:0]
-        target_inserted = False
-        for sid in all_ids:
-            if sid in scene_ids_in_target:
-                if not target_inserted:
-                    final_order.extend(scene_ids_in_target)
-                    target_inserted = True
-            else:
-                final_order.append(sid)
-        if not target_inserted:
-            final_order.extend(scene_ids_in_target)
-
         self._db.reorder_scene(scene_id, drop_index)
 
+        if self._on_data_changed:
+            self._on_data_changed()
+        self.refresh()
+
+    # -- Context menus -------------------------------------------------------
+
+    def _on_card_context(self, card: _SceneCard, pos: QPoint) -> None:
+        scene = self._db.get_scene_by_id(card.scene_id)
+        if scene is None:
+            return
+        menu = QMenu(card)
+
+        if self._on_open_scene is not None:
+            open_act = QAction("Open in Manuscript", menu)
+            open_act.triggered.connect(lambda: self._on_open_scene(card.scene_id))
+            menu.addAction(open_act)
+
+        edit_title = QAction("Edit Title", menu)
+        edit_title.triggered.connect(lambda: self._edit_title(card.scene_id))
+        menu.addAction(edit_title)
+
+        edit_summary = QAction("Edit Summary", menu)
+        edit_summary.triggered.connect(lambda: self._edit_summary(card.scene_id))
+        menu.addAction(edit_summary)
+
+        # "Move to Act" submenu
+        all_scenes = self._db.get_all_scenes(self._project_id)
+        acts = sorted({(s.act or "").strip() for s in all_scenes} - {""})
+        if acts:
+            move_menu = QMenu("Move to Act", menu)
+            for act in acts:
+                if act != (scene.act or "").strip():
+                    act_action = QAction(act, move_menu)
+                    act_action.triggered.connect(
+                        lambda _, a=act, sid=card.scene_id: self._move_to_act(sid, a)
+                    )
+                    move_menu.addAction(act_action)
+            if move_menu.actions():
+                menu.addMenu(move_menu)
+
+        delete_act = QAction("Delete", menu)
+        delete_act.triggered.connect(lambda: self._delete_scene(card.scene_id))
+        menu.addAction(delete_act)
+
+        menu.exec(card.mapToGlobal(pos))
+
+    def _on_section_context(self, section: _ActSection, pos: QPoint) -> None:
+        menu = QMenu(section)
+        add_act = QAction("Add Scene to this Act", menu)
+        add_act.triggered.connect(
+            lambda: self._add_scene_to_act(section.act_name)
+        )
+        menu.addAction(add_act)
+        menu.exec(section.mapToGlobal(pos))
+
+    # -- Edit operations -----------------------------------------------------
+
+    def _edit_title(self, scene_id: int) -> None:
+        scene = self._db.get_scene_by_id(scene_id)
+        if scene is None:
+            return
+        new_title, ok = QInputDialog.getText(
+            self, "Edit Title", "Title:", text=scene.title,
+        )
+        if not ok or not new_title.strip():
+            return
+        self._db.update_scene(
+            scene_id=scene.id, title=new_title.strip(),
+            summary=scene.summary, synopsis=scene.synopsis,
+            goal=scene.goal, conflict=scene.conflict, outcome=scene.outcome,
+            beat=scene.beat, tags=scene.tags, act=scene.act,
+            content=scene.content, chapter=scene.chapter, plotline=scene.plotline,
+        )
+        if self._on_data_changed:
+            self._on_data_changed()
+        self.refresh()
+
+    def _edit_summary(self, scene_id: int) -> None:
+        scene = self._db.get_scene_by_id(scene_id)
+        if scene is None:
+            return
+        new_summary, ok = QInputDialog.getMultiLineText(
+            self, "Edit Summary", "Summary:", scene.summary or "",
+        )
+        if not ok:
+            return
+        self._db.update_scene_summary(scene_id, new_summary.strip())
+        if self._on_data_changed:
+            self._on_data_changed()
+        self.refresh()
+
+    def _move_to_act(self, scene_id: int, target_act: str) -> None:
+        scene = self._db.get_scene_by_id(scene_id)
+        if scene is None:
+            return
+        self._db.update_scene(
+            scene_id=scene.id, title=scene.title,
+            summary=scene.summary, synopsis=scene.synopsis,
+            goal=scene.goal, conflict=scene.conflict, outcome=scene.outcome,
+            beat=scene.beat, tags=scene.tags, act=target_act,
+            content=scene.content, chapter=scene.chapter, plotline=scene.plotline,
+        )
+        if self._on_data_changed:
+            self._on_data_changed()
+        self.refresh()
+
+    def _delete_scene(self, scene_id: int) -> None:
+        scene = self._db.get_scene_by_id(scene_id)
+        if scene is None:
+            return
+        from PySide6.QtWidgets import QMessageBox
+        confirm = QMessageBox.question(
+            self, "Delete Scene",
+            f"Delete scene '{scene.title}'?\nThis cannot be undone.",
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        self._db.delete_scene(scene_id)
+        if self._on_data_changed:
+            self._on_data_changed()
+        self.refresh()
+
+    def _add_scene_to_act(self, act_name: str) -> None:
+        title, ok = QInputDialog.getText(
+            self, "Add Scene", "Scene title:", text="Untitled Scene",
+        )
+        if not ok:
+            return
+        actual_act = "" if act_name == "Unassigned" else act_name
+        self._db.create_scene(
+            self._project_id, title.strip() or "Untitled Scene",
+            act=actual_act,
+        )
         if self._on_data_changed:
             self._on_data_changed()
         self.refresh()
@@ -658,3 +841,6 @@ class StoryGridView(QWidget):
 
     def total_cards(self) -> int:
         return sum(c.card_count() for c in self._columns)
+
+    def get_format_mode(self) -> str:
+        return self._format_mode

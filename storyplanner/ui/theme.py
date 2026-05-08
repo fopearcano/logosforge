@@ -753,6 +753,12 @@ def build_stylesheet() -> str:
         border: 1px solid {BORDER};
         border-radius: 8px;
     }}
+    #gridActSection {{
+        background-color: {BG_PANEL};
+        border: 1px solid {BORDER};
+        border-radius: 8px;
+        padding: 8px;
+    }}
     #gridColumnHeader {{
         color: {TEXT_PRIMARY};
         font-size: 13px;

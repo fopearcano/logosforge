@@ -7,8 +7,6 @@ from storyplanner.ui.story_grid_view import (
     _GridColumn,
     _SceneCard,
     _COLOR_PALETTE,
-    _COLUMN_MIN_WIDTH,
-    _COLUMN_MAX_WIDTH,
 )
 
 
@@ -132,37 +130,31 @@ def test_card_object_name():
     assert card.objectName() == "gridSceneCard"
 
 
-# -- Columns -----------------------------------------------------------------
+# -- Act sections (formerly columns) -----------------------------------------
 
-def test_column_min_max_width():
-    col = _GridColumn("Act 1")
-    assert col.minimumWidth() >= _COLUMN_MIN_WIDTH
-    assert col.maximumWidth() <= _COLUMN_MAX_WIDTH
-
-
-def test_column_header_text():
-    col = _GridColumn("Act 1")
-    assert col._header.text() == "Act 1"
+def test_section_header_text():
+    section = _GridColumn("Act 1")
+    assert section._header.text() == "Act 1"
 
 
-def test_column_unassigned_header():
-    col = _GridColumn("")
-    assert col._header.text() == "Unassigned"
+def test_section_unassigned_header():
+    section = _GridColumn("")
+    assert section._header.text() == "Unassigned"
 
 
-def test_column_card_count():
-    col = _GridColumn("Act 1")
-    assert col.card_count() == 0
+def test_section_card_count():
+    section = _GridColumn("Act 1")
+    assert section.card_count() == 0
 
 
-def test_column_accepts_drops():
-    col = _GridColumn("Act 1")
-    assert col.acceptDrops()
+def test_section_accepts_drops():
+    section = _GridColumn("Act 1")
+    assert section.acceptDrops()
 
 
-def test_column_object_name():
-    col = _GridColumn("Act 1")
-    assert col.objectName() == "gridColumn"
+def test_section_object_name():
+    section = _GridColumn("Act 1")
+    assert section.objectName() == "gridActSection"
 
 
 # -- Zoom levels -------------------------------------------------------------
@@ -385,3 +377,147 @@ def test_scene_card_default_cursor_not_pinned():
     card = _SceneCard(scene, zoom=2)
     # cursor() returns the default Arrow if no override is set
     assert card.cursor().shape() == Qt.CursorShape.ArrowCursor
+
+
+# -- 3x3 block grid layout --------------------------------------------------
+
+def test_grid_uses_act_sections():
+    """Grid displays Act sections, not horizontal columns."""
+    db, proj, *_ = _make_project_with_scenes()
+    view = StoryGridView(db, proj.id)
+    assert view.column_count() == 3
+    for section in view._columns:
+        assert section.objectName() == "gridActSection"
+
+
+def test_grid_cards_are_square():
+    """Cards have fixed square-ish dimensions."""
+    from storyplanner.ui.story_grid_view import _BLOCK_SIZE
+    db, proj, s1, *_ = _make_project_with_scenes()
+    scene = db.get_scene_by_id(s1.id)
+    card = _SceneCard(scene, zoom=1)
+    assert card.width() == _BLOCK_SIZE
+    assert card.height() == _BLOCK_SIZE
+
+
+def test_grid_3_columns_per_section():
+    """Blocks within an Act section are arranged in a 3-column grid."""
+    from storyplanner.ui.story_grid_view import _GRID_COLUMNS, _ActSection
+    section = _ActSection("Act 1")
+    db = Database()
+    proj = db.create_project("Test")
+    for i in range(7):
+        scene = db.create_scene(proj.id, f"Scene {i}", act="Act 1")
+        card = _SceneCard(scene, zoom=1)
+        section.add_card(card)
+    assert section.card_count() == 7
+    # Cards placed in grid: 7 cards -> 3 rows (3, 3, 1)
+    assert section._grid.rowCount() == 3
+    assert section._grid.columnCount() == _GRID_COLUMNS
+
+
+def test_grid_no_horizontal_scroll():
+    """Grid scroll area disables horizontal scrollbar."""
+    from PySide6.QtCore import Qt
+    db, proj, *_ = _make_project_with_scenes()
+    view = StoryGridView(db, proj.id)
+    assert view._scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+
+
+def test_grid_vertical_layout():
+    """Act sections are stacked vertically, not side-by-side."""
+    from PySide6.QtWidgets import QVBoxLayout
+    db, proj, *_ = _make_project_with_scenes()
+    view = StoryGridView(db, proj.id)
+    assert isinstance(view._grid_layout, QVBoxLayout)
+
+
+# -- Writing mode detection --------------------------------------------------
+
+def test_format_mode_novel_default():
+    db, proj = _make_project()
+    view = StoryGridView(db, proj.id)
+    assert view.get_format_mode() == "novel"
+
+
+def test_format_mode_screenplay():
+    db = Database()
+    proj = db.create_project("ScreenTest", format_mode="screenplay")
+    view = StoryGridView(db, proj.id)
+    assert view.get_format_mode() == "screenplay"
+
+
+def test_block_label_novel_shows_chapter():
+    db, proj = _make_project()
+    view = StoryGridView(db, proj.id)
+    assert view._block_unit == "chapter"
+    assert "Ch" in view._block_number_label(1)
+
+
+def test_block_label_screenplay_shows_scene():
+    db = Database()
+    proj = db.create_project("ScreenTest", format_mode="screenplay")
+    view = StoryGridView(db, proj.id)
+    assert view._block_unit == "scene"
+    assert "Scene" in view._block_number_label(1)
+
+
+def test_cards_have_block_number_labels():
+    db, proj, *_ = _make_project_with_scenes()
+    view = StoryGridView(db, proj.id)
+    # First section, first card should have a number label
+    first_card = view._columns[0]._cards[0]
+    assert first_card._number_label.text() != ""
+
+
+# -- Theme includes act section style ----------------------------------------
+
+def test_theme_has_act_section_rule():
+    ss = theme.build_stylesheet()
+    assert "#gridActSection" in ss
+
+
+# -- Edit operations ---------------------------------------------------------
+
+def test_edit_summary_updates_db():
+    db, proj, s1, *_ = _make_project_with_scenes()
+    db.update_scene_summary(s1.id, "New summary text")
+    scene = db.get_scene_by_id(s1.id)
+    assert scene.summary == "New summary text"
+
+
+def test_move_to_act_updates_db():
+    db, proj, s1, *_ = _make_project_with_scenes()
+    view = StoryGridView(db, proj.id)
+    view._move_to_act(s1.id, "Act 3")
+    scene = db.get_scene_by_id(s1.id)
+    assert scene.act == "Act 3"
+
+
+def test_nine_blocks_visible_as_3x3():
+    """9 blocks in one Act should fill a 3x3 grid exactly."""
+    from storyplanner.ui.story_grid_view import _GRID_COLUMNS, _ActSection
+    db = Database()
+    proj = db.create_project("NineTest")
+    section = _ActSection("Act 1")
+    for i in range(9):
+        scene = db.create_scene(proj.id, f"Scene {i}", act="Act 1")
+        card = _SceneCard(scene, zoom=1)
+        section.add_card(card)
+    assert section.card_count() == 9
+    assert section._grid.rowCount() == 3
+    assert section._grid.columnCount() == _GRID_COLUMNS
+
+
+def test_tenth_block_creates_fourth_row():
+    """10th block goes to row 4, enabling vertical scroll."""
+    from storyplanner.ui.story_grid_view import _ActSection
+    db = Database()
+    proj = db.create_project("TenTest")
+    section = _ActSection("Act 1")
+    for i in range(10):
+        scene = db.create_scene(proj.id, f"Scene {i}", act="Act 1")
+        card = _SceneCard(scene, zoom=1)
+        section.add_card(card)
+    assert section.card_count() == 10
+    assert section._grid.rowCount() == 4
