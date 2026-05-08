@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+import shiboken6 as shiboken
 from PySide6.QtCore import QMimeData, QPoint, Qt, QTimer
 from PySide6.QtGui import QDrag, QMouseEvent
 from PySide6.QtWidgets import (
@@ -68,7 +69,6 @@ class _SceneCard(QFrame):
         self.scene_id = scene.id
         self._scene = scene
         self.setObjectName("gridSceneCard")
-        self.setCursor(Qt.CursorShape.OpenHandCursor)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         layout = QVBoxLayout(self)
@@ -204,14 +204,25 @@ class _SceneCard(QFrame):
         drag.setPixmap(self.grab())
         drag.setHotSpot(event.pos())
 
-        self.setCursor(Qt.CursorShape.ClosedHandCursor)
+        # drag.exec() is blocking and the drop handler may delete this widget
+        # (refresh() rebuilds the grid). Don't touch self after exec returns
+        # without checking that the C++ object still exists.
         drag.exec(Qt.DropAction.MoveAction)
-        self.setCursor(Qt.CursorShape.OpenHandCursor)
+        if not shiboken.isValid(self):
+            return
         self._drag_start = None
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         self._drag_start = None
         super().mouseReleaseEvent(event)
+
+    def enterEvent(self, event) -> None:
+        self.setCursor(Qt.CursorShape.OpenHandCursor)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self.unsetCursor()
+        super().leaveEvent(event)
 
 
 class _GridColumn(QFrame):

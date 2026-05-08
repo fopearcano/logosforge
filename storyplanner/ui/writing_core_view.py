@@ -64,7 +64,7 @@ _BODY_FONT_SIZE = 18
 
 _FONT_PRESETS: dict[str, list[str]] = {
     "serif": ["Georgia", "Noto Serif", "serif"],
-    "sans": ["Segoe UI", "Noto Sans", "sans-serif"],
+    "sans": ["Segoe UI", "Helvetica Neue", "Helvetica", "Arial", "Noto Sans", "sans-serif"],
     "georgia": ["Georgia", "serif"],
     "times": ["Times New Roman", "Times", "serif"],
     "garamond": ["Garamond", "EB Garamond", "serif"],

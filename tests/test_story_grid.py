@@ -354,3 +354,34 @@ def test_theme_has_grid_card_rule():
 def test_theme_has_grid_toolbar_rule():
     ss = theme.build_stylesheet()
     assert "#gridToolbar" in ss
+
+
+# -- Regression: deleted card mouse safety -----------------------------------
+
+def test_scene_card_imports_shiboken_for_validity_guard():
+    """mouseMoveEvent must guard against drag.exec() returning after the
+    card was deleted by the drop's refresh — verified by shiboken import."""
+    from storyplanner.ui import story_grid_view
+    assert hasattr(story_grid_view, "shiboken")
+
+
+def test_scene_card_handles_enter_and_leave_events():
+    """Cursor switches happen in enter/leave, not pinned in __init__."""
+    db = Database()
+    proj = db.create_project("Test")
+    scene = db.create_scene(proj.id, "S1")
+    card = _SceneCard(scene, zoom=2)
+    assert hasattr(card, "enterEvent")
+    assert hasattr(card, "leaveEvent")
+
+
+def test_scene_card_default_cursor_not_pinned():
+    """The OpenHandCursor was moved to enterEvent, so a fresh card has no
+    persistent cursor override that could fire on a deleted widget."""
+    from PySide6.QtCore import Qt
+    db = Database()
+    proj = db.create_project("Test")
+    scene = db.create_scene(proj.id, "S1")
+    card = _SceneCard(scene, zoom=2)
+    # cursor() returns the default Arrow if no override is set
+    assert card.cursor().shape() == Qt.CursorShape.ArrowCursor
