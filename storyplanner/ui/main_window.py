@@ -23,8 +23,10 @@ from PySide6.QtWidgets import (
 from storyplanner.ui import theme
 
 from storyplanner import preferences, recent_projects
+from storyplanner.autosave import AutosaveManager
 from storyplanner.db import Database
 from storyplanner.settings import get_manager as get_settings
+from storyplanner.version_manager import VersionManager
 from storyplanner.export import (
     export_csv_scenes,
     export_docx_manuscript,
@@ -162,9 +164,15 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._db = db
         self._project_id = project_id
-        self._current_file: str | None = None
+        self._current_file: str | None = None  # kept for backward compat; use _set_current_file
         self._dirty = False
         self._current_section: str = "Dashboard"
+
+        self._autosave = AutosaveManager(db, project_id, parent=self)
+        self._autosave.status_changed.connect(self._on_autosave_status)
+
+        self._versions = VersionManager(db, project_id, parent=self)
+        self._versions.start()
         self._cached_scenes_view: ScenesView | None = None
         self._cached_scene_entry_scene: int | None = None
         self._cached_scene_entry_ids: set[int] | None = None
@@ -398,6 +406,12 @@ class MainWindow(QMainWindow):
         self._psyke_console.entry_open_requested.connect(self._open_psyke_entry)
         self._psyke_console.command_submitted.connect(self._on_console_command)
 
+        self._save_status_label = QLabel("")
+        self._save_status_label.setObjectName("saveStatusLabel")
+        self._save_status_label.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: 10px; padding: 0 8px;"
+        )
+        console_layout.addWidget(self._save_status_label)
         console_layout.addStretch(1)
         console_layout.addWidget(self._psyke_console, stretch=0)
         console_layout.addStretch(1)
@@ -981,7 +995,7 @@ class MainWindow(QMainWindow):
         new_project_id = import_json(self._db, data)
         self._project_id = new_project_id
         self._psyke_console.set_project(new_project_id)
-        self._current_file = None
+        self._set_current_file(None)
         self._cached_scenes_view = None
         self._mark_clean()
         self._reset_content("Import complete. Select a section from the sidebar.")
@@ -1109,6 +1123,16 @@ class MainWindow(QMainWindow):
         import_action = QAction("Import...", self)
         import_action.triggered.connect(self._on_import)
         file_menu.addAction(import_action)
+
+        file_menu.addSeparator()
+
+        snapshot_action = QAction("Create Snapshot", self)
+        snapshot_action.triggered.connect(self._on_create_snapshot)
+        file_menu.addAction(snapshot_action)
+
+        history_action = QAction("Version History...", self)
+        history_action.triggered.connect(self._on_version_history)
+        file_menu.addAction(history_action)
 
         file_menu.addSeparator()
 
@@ -1306,7 +1330,7 @@ class MainWindow(QMainWindow):
         project = self._db.create_project("Untitled")
         self._project_id = project.id
         self._psyke_console.set_project(project.id)
-        self._current_file = None
+        self._set_current_file(None)
         self._cached_scenes_view = None
         self._mark_clean()
         self._reset_content("New project created. Select a section from the sidebar.")
@@ -1348,6 +1372,42 @@ class MainWindow(QMainWindow):
             and self.content_area is self._cached_scenes_view
         ):
             self._cached_scenes_view.toggle_focus_mode()
+
+    # -- Versioning menu handlers -----------------------------------------------
+
+    def _on_create_snapshot(self) -> None:
+        from PySide6.QtWidgets import QInputDialog
+        label, ok = QInputDialog.getText(
+            self, "Create Snapshot", "Optional label:",
+        )
+        if not ok:
+            return
+        path = self._versions.create_snapshot(
+            reason="manual", label=label.strip(),
+        )
+        if path:
+            QMessageBox.information(
+                self, "Snapshot Created",
+                f"Version snapshot saved.",
+            )
+        else:
+            QMessageBox.warning(
+                self, "Snapshot Failed", "Could not create snapshot.",
+            )
+
+    def _on_version_history(self) -> None:
+        from storyplanner.ui.version_history_dialog import VersionHistoryDialog
+        dlg = VersionHistoryDialog(self._versions, parent=self)
+        result = dlg.exec()
+        if result and dlg.restored_project_id is not None:
+            self._project_id = dlg.restored_project_id
+            self._psyke_console.set_project(dlg.restored_project_id)
+            self._set_current_file(None)
+            self._cached_scenes_view = None
+            self._mark_clean()
+            self._reset_content(
+                "Version restored. Select a section from the sidebar."
+            )
 
     def _menu_ai_preset(self, preset: str) -> None:
         if not self._assistant_panel.isVisible():
@@ -1447,7 +1507,7 @@ class MainWindow(QMainWindow):
         new_project_id = import_json(self._db, data)
         self._project_id = new_project_id
         self._psyke_console.set_project(new_project_id)
-        self._current_file = path
+        self._set_current_file(path)
         self._cached_scenes_view = None
         self._mark_clean()
         recent_projects.add(path)
@@ -1470,7 +1530,7 @@ class MainWindow(QMainWindow):
             return False
         self._project_id = import_json(self._db, data)
         self._psyke_console.set_project(self._project_id)
-        self._current_file = path
+        self._set_current_file(path)
         self._cached_scenes_view = None
         self._mark_clean()
         recent_projects.add(path)
@@ -1494,7 +1554,7 @@ class MainWindow(QMainWindow):
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
 
-        self._current_file = path
+        self._set_current_file(path)
         self._mark_clean()
         recent_projects.add(path)
         self._refresh_recent_menu()
@@ -1511,7 +1571,8 @@ class MainWindow(QMainWindow):
     def _on_data_changed(self) -> None:
         self._dirty = True
         self._update_title()
-        self._auto_save()
+        self._autosave.mark_dirty()
+        self._versions.mark_dirty()
         self._assistant_panel.refresh_scenes()
         self._cached_scene_entry_scene = None
         self._cached_scene_entry_ids = None
@@ -1520,11 +1581,14 @@ class MainWindow(QMainWindow):
     def _auto_save(self) -> None:
         if not self._current_file:
             return
-        content = export_json(self._db, self._project_id)
-        with open(self._current_file, "w", encoding="utf-8") as f:
-            f.write(content)
-        self._dirty = False
-        self._update_title()
+        self._autosave.save_now()
+
+    def _on_autosave_status(self, status: str) -> None:
+        if status == "Saved":
+            self._dirty = False
+            self._update_title()
+        if hasattr(self, "_save_status_label"):
+            self._save_status_label.setText(status)
 
     def _on_focus_mode_changed(self, active: bool) -> None:
         if active:
@@ -1539,13 +1603,19 @@ class MainWindow(QMainWindow):
             central.layout().invalidate()
             central.update()
 
+    def _set_current_file(self, path: str | None) -> None:
+        self._current_file = path
+        self._autosave.file_path = path
+
     def _mark_clean(self) -> None:
         self._dirty = False
+        self._autosave.mark_clean()
         self._update_title()
 
     # -- Close event ---------------------------------------------------------
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        self._versions.stop()
         self._assistant_panel.save_settings()
         if self._dirty and not self._current_file:
             answer = QMessageBox.warning(
