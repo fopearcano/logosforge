@@ -9,17 +9,23 @@ Scene summaries live on Scene.summary.
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction
+from PySide6.QtCore import Qt, QMimeData, Signal
+from PySide6.QtGui import QAction, QDrag
 from PySide6.QtWidgets import (
+    QButtonGroup,
+    QFrame,
+    QGridLayout,
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -247,6 +253,74 @@ class _SummaryEditor(QPlainTextEdit):
             self._on_commit(new_text)
 
 
+_SCENE_MIME_TYPE = "application/x-storyplanner-scene-id"
+
+
+class _SceneCardList(QListWidget):
+    """Drag-and-drop list of scene cards used by the Grid view.
+
+    Drops from another _SceneCardList move the scene to this list's chapter.
+    """
+
+    def __init__(
+        self,
+        scenes: list,
+        chapter_name: str,
+        on_drop,
+        on_card_menu,
+        on_card_open,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._chapter_name = chapter_name
+        self._on_drop = on_drop
+        self._on_card_menu = on_card_menu
+        self._on_card_open = on_card_open
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.setStyleSheet(
+            f"QListWidget {{ background: transparent; border: none; }}"
+            f"QListWidget::item {{ background: {theme.BG_DARK};"
+            f" color: {theme.TEXT_PRIMARY};"
+            f" border: 1px solid {theme.BORDER}; border-radius: 4px;"
+            " padding: 6px 8px; margin: 2px 0; font-size: 11px; }"
+            f"QListWidget::item:hover {{ border-color: {theme.ACCENT}; }}"
+        )
+        for scene in scenes:
+            item = QListWidgetItem(scene.title or "Untitled")
+            item.setData(Qt.ItemDataRole.UserRole, scene.id)
+            self.addItem(item)
+        self.itemDoubleClicked.connect(self._open_card)
+
+    def _open_card(self, item: QListWidgetItem) -> None:
+        if self._on_card_open is not None:
+            self._on_card_open(item.data(Qt.ItemDataRole.UserRole))
+
+    def mimeTypes(self) -> list[str]:
+        return [_SCENE_MIME_TYPE]
+
+    def mimeData(self, items) -> QMimeData:
+        mime = QMimeData()
+        if items:
+            scene_id = items[0].data(Qt.ItemDataRole.UserRole)
+            mime.setData(_SCENE_MIME_TYPE, str(scene_id).encode("utf-8"))
+        return mime
+
+    def dropEvent(self, event) -> None:
+        mime = event.mimeData()
+        if not mime.hasFormat(_SCENE_MIME_TYPE):
+            return
+        try:
+            scene_id = int(bytes(mime.data(_SCENE_MIME_TYPE)).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return
+        event.acceptProposedAction()
+        if self._on_drop is not None:
+            self._on_drop(scene_id, self._chapter_name)
+
+
 class PlanView(QWidget):
     """Hierarchical Acts → Chapters → Scenes plan view."""
 
@@ -262,17 +336,37 @@ class PlanView(QWidget):
         self._project_id = project_id
         self._on_data_changed = on_data_changed
         self._on_open_scene = on_open_scene
+        self._view_mode = "list"
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 12, 16, 12)
         root.setSpacing(8)
 
         header_row = QHBoxLayout()
-        title = QLabel("Plan")
+        title = QLabel("Outline")
         title.setStyleSheet(
             f"font-size: 18px; font-weight: bold; color: {theme.TEXT_PRIMARY};"
         )
         header_row.addWidget(title)
+
+        header_row.addSpacing(16)
+        self._mode_group = QButtonGroup(self)
+        self._mode_group.setExclusive(True)
+        for mode_key, label in (("list", "List"), ("grid", "Grid"), ("matrix", "Matrix")):
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.setChecked(mode_key == self._view_mode)
+            btn.setStyleSheet(
+                f"QPushButton {{ padding: 4px 12px; font-size: 11px;"
+                f" border: 1px solid {theme.BORDER}; background: transparent;"
+                f" color: {theme.TEXT_MUTED}; }}"
+                f"QPushButton:checked {{ background: {theme.ACCENT};"
+                f" color: #ffffff; border-color: {theme.ACCENT}; }}"
+            )
+            btn.clicked.connect(lambda _c=False, k=mode_key: self._set_view_mode(k))
+            self._mode_group.addButton(btn)
+            header_row.addWidget(btn)
+
         header_row.addStretch()
 
         add_act_btn = QPushButton("+ Add Act")
@@ -280,23 +374,66 @@ class PlanView(QWidget):
         header_row.addWidget(add_act_btn)
         root.addLayout(header_row)
 
+        self._stack = QStackedWidget()
+        root.addWidget(self._stack, stretch=1)
+
+        # List view (existing scrollable hierarchy)
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
         )
-        self._scroll.setStyleSheet(f"QScrollArea {{ border: none; }}")
-
+        self._scroll.setStyleSheet("QScrollArea { border: none; }")
         self._content = QWidget()
         self._content_layout = QVBoxLayout(self._content)
         self._content_layout.setContentsMargins(0, 0, 0, 0)
         self._content_layout.setSpacing(12)
         self._scroll.setWidget(self._content)
-        root.addWidget(self._scroll, stretch=1)
+        self._stack.addWidget(self._scroll)
+
+        # Grid view (kanban: columns = chapters, cards = scenes)
+        self._grid_scroll = QScrollArea()
+        self._grid_scroll.setWidgetResizable(True)
+        self._grid_scroll.setStyleSheet("QScrollArea { border: none; }")
+        self._grid_canvas = QWidget()
+        self._grid_layout = QHBoxLayout(self._grid_canvas)
+        self._grid_layout.setContentsMargins(0, 0, 0, 0)
+        self._grid_layout.setSpacing(12)
+        self._grid_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self._grid_scroll.setWidget(self._grid_canvas)
+        self._stack.addWidget(self._grid_scroll)
+
+        # Matrix view (acts × chapters)
+        self._matrix_scroll = QScrollArea()
+        self._matrix_scroll.setWidgetResizable(True)
+        self._matrix_scroll.setStyleSheet("QScrollArea { border: none; }")
+        self._matrix_canvas = QWidget()
+        self._matrix_layout = QGridLayout(self._matrix_canvas)
+        self._matrix_layout.setContentsMargins(0, 0, 0, 0)
+        self._matrix_layout.setHorizontalSpacing(8)
+        self._matrix_layout.setVerticalSpacing(8)
+        self._matrix_scroll.setWidget(self._matrix_canvas)
+        self._stack.addWidget(self._matrix_scroll)
 
         self.refresh()
 
+    def _set_view_mode(self, mode: str) -> None:
+        if mode not in ("list", "grid", "matrix") or mode == self._view_mode:
+            return
+        self._view_mode = mode
+        idx = {"list": 0, "grid": 1, "matrix": 2}[mode]
+        self._stack.setCurrentIndex(idx)
+        self.refresh()
+
     def refresh(self) -> None:
+        if self._view_mode == "list":
+            self._refresh_list()
+        elif self._view_mode == "grid":
+            self._refresh_grid()
+        else:
+            self._refresh_matrix()
+
+    def _refresh_list(self) -> None:
         while self._content_layout.count():
             item = self._content_layout.takeAt(0)
             w = item.widget()
@@ -486,6 +623,228 @@ class PlanView(QWidget):
         layout.addWidget(summary_box)
 
         return row
+
+    # -- Grid view (kanban: chapter columns) ----------------------------------
+
+    def _refresh_grid(self) -> None:
+        while self._grid_layout.count():
+            item = self._grid_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+        tree = build_plan_tree(self._db, self._project_id)
+        if not tree:
+            empty = QLabel("No scenes yet — add an act to begin.")
+            empty.setStyleSheet(f"color: {theme.TEXT_MUTED}; padding: 24px;")
+            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._grid_layout.addWidget(empty)
+            return
+
+        for act_name, chapters in tree:
+            for chapter_name, scenes in chapters:
+                self._grid_layout.addWidget(
+                    self._build_grid_column(act_name, chapter_name, scenes)
+                )
+        self._grid_layout.addStretch()
+
+    def _build_grid_column(
+        self, act_name: str, chapter_name: str, scenes: list,
+    ) -> QWidget:
+        col = QFrame()
+        col.setObjectName("planGridCol")
+        col.setFixedWidth(220)
+        col.setStyleSheet(
+            f"QFrame#planGridCol {{ background: {theme.BG_PANEL};"
+            f" border: 1px solid {theme.BORDER}; border-radius: 6px; }}"
+        )
+        lay = QVBoxLayout(col)
+        lay.setContentsMargins(8, 8, 8, 8)
+        lay.setSpacing(6)
+
+        head_row = QHBoxLayout()
+        head_row.setSpacing(4)
+        act_lbl = QLabel(act_name)
+        act_lbl.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: 10px; "
+            "text-transform: uppercase; letter-spacing: 1px;"
+        )
+        chap_lbl = QLabel(chapter_name)
+        chap_lbl.setStyleSheet(
+            f"color: {theme.TEXT_PRIMARY}; font-size: 12px; font-weight: bold;"
+        )
+        col_head = QVBoxLayout()
+        col_head.setSpacing(0)
+        col_head.addWidget(act_lbl)
+        col_head.addWidget(chap_lbl)
+        head_row.addLayout(col_head, stretch=1)
+
+        more = QPushButton("⋯")
+        more.setFixedWidth(24)
+        more.clicked.connect(
+            lambda: self._show_chapter_menu(more, chapter_name)
+        )
+        head_row.addWidget(more)
+        lay.addLayout(head_row)
+
+        scene_list = _SceneCardList(
+            scenes,
+            chapter_name,
+            self._on_scene_dropped,
+            self._show_scene_menu,
+            self._on_open_scene,
+        )
+        lay.addWidget(scene_list, stretch=1)
+
+        add_scene_btn = QPushButton("+ Scene")
+        add_scene_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; color: {theme.TEXT_MUTED};"
+            f" border: 1px dashed {theme.BORDER}; border-radius: 4px;"
+            " padding: 6px; font-size: 11px; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY};"
+            f" border-color: {theme.TEXT_MUTED}; }}"
+        )
+        add_scene_btn.clicked.connect(
+            lambda: self._add_scene(act_name, chapter_name)
+        )
+        lay.addWidget(add_scene_btn)
+        return col
+
+    def _on_scene_dropped(self, scene_id: int, target_chapter: str) -> None:
+        scene = self._db.get_scene_by_id(scene_id)
+        if scene is None:
+            return
+        new_chapter = "" if target_chapter == _UNTITLED_CHAPTER else target_chapter
+        if scene.chapter == new_chapter:
+            return
+        self._db.update_scene(
+            scene_id=scene.id,
+            title=scene.title,
+            summary=scene.summary,
+            synopsis=scene.synopsis,
+            goal=scene.goal,
+            conflict=scene.conflict,
+            outcome=scene.outcome,
+            beat=scene.beat,
+            tags=scene.tags,
+            act=scene.act,
+            content=scene.content,
+            chapter=new_chapter,
+            plotline=scene.plotline,
+        )
+        self._notify()
+        self.refresh()
+
+    # -- Matrix view (acts × chapters) ----------------------------------------
+
+    def _refresh_matrix(self) -> None:
+        while self._matrix_layout.count():
+            item = self._matrix_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+        tree = build_plan_tree(self._db, self._project_id)
+        if not tree:
+            empty = QLabel("No scenes yet — add an act to begin.")
+            empty.setStyleSheet(f"color: {theme.TEXT_MUTED}; padding: 24px;")
+            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._matrix_layout.addWidget(empty, 0, 0)
+            return
+
+        all_chapters: list[str] = []
+        seen: set[str] = set()
+        for _act, chapters in tree:
+            for chapter_name, _scenes in chapters:
+                if chapter_name not in seen:
+                    seen.add(chapter_name)
+                    all_chapters.append(chapter_name)
+
+        corner = QLabel("Acts ↓ / Chapters →")
+        corner.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: 10px;"
+            " text-transform: uppercase; letter-spacing: 1px;"
+        )
+        self._matrix_layout.addWidget(corner, 0, 0)
+
+        for col_idx, chapter_name in enumerate(all_chapters, start=1):
+            header = QLabel(chapter_name)
+            header.setStyleSheet(
+                f"color: {theme.TEXT_PRIMARY}; font-size: 11px;"
+                f" font-weight: bold; padding: 4px 8px;"
+                f" background: {theme.BG_PANEL};"
+                f" border: 1px solid {theme.BORDER}; border-radius: 4px;"
+            )
+            header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._matrix_layout.addWidget(header, 0, col_idx)
+
+        for row_idx, (act_name, chapters) in enumerate(tree, start=1):
+            row_label = QLabel(act_name)
+            row_label.setStyleSheet(
+                f"color: {theme.TEXT_PRIMARY}; font-size: 11px;"
+                f" font-weight: bold; padding: 4px 8px;"
+                f" background: {theme.BG_PANEL};"
+                f" border: 1px solid {theme.BORDER}; border-radius: 4px;"
+            )
+            self._matrix_layout.addWidget(row_label, row_idx, 0)
+
+            chapters_for_act = {ch: scenes for ch, scenes in chapters}
+            for col_idx, chapter_name in enumerate(all_chapters, start=1):
+                scenes_in_cell = chapters_for_act.get(chapter_name, [])
+                self._matrix_layout.addWidget(
+                    self._build_matrix_cell(act_name, chapter_name, scenes_in_cell),
+                    row_idx,
+                    col_idx,
+                )
+
+    def _build_matrix_cell(
+        self, act_name: str, chapter_name: str, scenes: list,
+    ) -> QWidget:
+        cell = QFrame()
+        cell.setObjectName("planMatrixCell")
+        cell.setStyleSheet(
+            f"QFrame#planMatrixCell {{ background: {theme.BG_DARK};"
+            f" border: 1px solid {theme.BORDER}; border-radius: 4px; }}"
+        )
+        cell.setMinimumSize(160, 80)
+        lay = QVBoxLayout(cell)
+        lay.setContentsMargins(6, 6, 6, 6)
+        lay.setSpacing(2)
+
+        if scenes:
+            for scene in scenes:
+                card = QPushButton(scene.title or "Untitled")
+                card.setStyleSheet(
+                    f"QPushButton {{ text-align: left; padding: 3px 6px;"
+                    f" background: {theme.BG_PANEL}; color: {theme.TEXT_PRIMARY};"
+                    f" border: 1px solid {theme.BORDER}; border-radius: 3px;"
+                    " font-size: 10px; }"
+                    f"QPushButton:hover {{ border-color: {theme.ACCENT}; }}"
+                )
+                card.clicked.connect(
+                    lambda _c=False, sid=scene.id: self._open_scene_card(sid)
+                )
+                lay.addWidget(card)
+        else:
+            lay.addStretch()
+
+        add_btn = QPushButton("+")
+        add_btn.setFixedHeight(20)
+        add_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; color: {theme.TEXT_MUTED};"
+            f" border: 1px dashed {theme.BORDER}; border-radius: 3px;"
+            " font-size: 10px; }"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
+        )
+        add_btn.clicked.connect(
+            lambda: self._add_scene(act_name, chapter_name)
+        )
+        lay.addWidget(add_btn)
+        return cell
+
+    def _open_scene_card(self, scene_id: int) -> None:
+        if self._on_open_scene is not None:
+            self._on_open_scene(scene_id)
 
     # -- Add operations -------------------------------------------------------
 

@@ -56,7 +56,6 @@ from storyplanner.ui.pacing_insights_view import PacingInsightsView
 from storyplanner.ui.mode_suggestions_view import ModeSuggestionsView
 from storyplanner.ui.graph_view import GraphView
 from storyplanner.ui.notes_view import NotesView
-from storyplanner.ui.outline_view import OutlineView
 from storyplanner.ui.plan_view import PlanView
 from storyplanner.ui.plugins_view import PluginsView
 from storyplanner.ui.psyke_console import PsykeConsole
@@ -233,7 +232,6 @@ class MainWindow(QMainWindow):
             "Pacing": "\U0001F3B5",
             "Adapt": "\U0001F9E0",
             "Narrative": "\U0001F4CA",
-            "Plan": "\U0001F5C2",
             "Plugins": "\U0001F9E9",
             "Assistant": "\U0001F916",
         }
@@ -245,7 +243,7 @@ class MainWindow(QMainWindow):
         _SIDEBAR_LAYOUT: list = [
             "Projects", "Dashboard", "Notes", "Manuscript",
             ("group", "Plan", [
-                "Plan", "Scenes", "Timeline", "Grid", "Plot", "Outline",
+                "Outline", "Scenes", "Timeline", "Grid", "Plot",
             ]),
             ("group", "Structure", ["Structure", "Acts", "Beats", "Arcs"]),
             "Tags", "Graph",
@@ -318,7 +316,7 @@ class MainWindow(QMainWindow):
         # -- Connect navigation buttons (checkable + active tracking) ----------
         self._nav_labels = [
             "Projects", "Dashboard", "Notes",
-            "Plan", "Scenes", "Manuscript", "Timeline", "Grid", "Plot", "Outline",
+            "Outline", "Scenes", "Manuscript", "Timeline", "Grid", "Plot",
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
             "Health", "Balance", "Pacing", "Adapt", "Narrative", "PSYKE", "Plugins",
         ]
@@ -326,13 +324,12 @@ class MainWindow(QMainWindow):
             "Projects": self._show_projects,
             "Dashboard": self._show_dashboard,
             "Notes": self._show_notes,
-            "Plan": self._show_plan,
+            "Outline": self._show_plan,
             "Scenes": self._show_scenes,
             "Manuscript": self._show_manuscript,
             "Timeline": self._show_timeline,
             "Grid": self._show_grid,
             "Plot": self._show_plot,
-            "Outline": self._show_outline,
             "Structure": self._show_structure,
             "Acts": self._show_acts,
             "Beats": self._show_beats,
@@ -553,14 +550,6 @@ class MainWindow(QMainWindow):
                 self._project_id,
                 on_data_changed=self._on_data_changed,
                 on_open_scene=self._open_scene_in_editor,
-            )
-        )
-
-    def _show_outline(self) -> None:
-        self._set_content(
-            OutlineView(
-                self._db, self._project_id,
-                on_data_changed=self._on_data_changed,
             )
         )
 
