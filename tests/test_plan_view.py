@@ -235,7 +235,7 @@ def test_plan_view_switch_to_matrix():
     assert view._stack.currentIndex() == 2
 
 
-def test_grid_view_has_one_column_per_chapter():
+def test_grid_view_shows_one_card_per_scene():
     QApplication.instance() or QApplication([])
     db, proj = _make_project()
     db.create_scene(proj.id, "S1", act="One", chapter="A")
@@ -243,12 +243,58 @@ def test_grid_view_has_one_column_per_chapter():
     db.create_scene(proj.id, "S3", act="Two", chapter="C")
     view = PlanView(db, proj.id)
     view._set_view_mode("grid")
-    column_count = sum(
-        1
-        for i in range(view._grid_layout.count())
-        if view._grid_layout.itemAt(i).widget() is not None
-    )
-    assert column_count == 3
+    assert view._grid_widget is not None
+    assert view._grid_widget.count() == 3
+
+
+def test_grid_view_uses_flat_4_column_icon_mode():
+    from PySide6.QtWidgets import QListView, QAbstractItemView
+    QApplication.instance() or QApplication([])
+    db, proj = _make_project()
+    db.create_scene(proj.id, "S1")
+    view = PlanView(db, proj.id)
+    view._set_view_mode("grid")
+    grid = view._grid_widget
+    assert grid.viewMode() == QListView.ViewMode.IconMode
+    assert grid.isWrapping()
+    assert grid.flow() == QListView.Flow.LeftToRight
+    assert grid.dragDropMode() == QAbstractItemView.DragDropMode.InternalMove
+
+
+def test_grid_view_cards_carry_scene_ids():
+    from PySide6.QtCore import Qt
+    QApplication.instance() or QApplication([])
+    db, proj = _make_project()
+    s1 = db.create_scene(proj.id, "First")
+    s2 = db.create_scene(proj.id, "Second")
+    view = PlanView(db, proj.id)
+    view._set_view_mode("grid")
+    ids = [
+        view._grid_widget.item(i).data(Qt.ItemDataRole.UserRole)
+        for i in range(view._grid_widget.count())
+    ]
+    assert ids == [s1.id, s2.id]
+
+
+def test_grid_view_shows_same_scenes_as_db():
+    """Grid blocks must mirror db.get_all_scenes — the Outline is the source of truth."""
+    QApplication.instance() or QApplication([])
+    db, proj = _make_project()
+    db.create_scene(proj.id, "From Plan", act="One", chapter="A")
+    db.create_scene(proj.id, "Direct DB", act="Two", chapter="B")
+    view = PlanView(db, proj.id)
+    view._set_view_mode("grid")
+    db_count = len(db.get_all_scenes(proj.id))
+    assert view._grid_widget.count() == db_count
+
+
+def test_grid_view_empty_state_shows_message():
+    QApplication.instance() or QApplication([])
+    db, proj = _make_project()
+    view = PlanView(db, proj.id)
+    view._set_view_mode("grid")
+    assert view._grid_widget is None
+    assert view._grid_layout.count() == 1
 
 
 def test_matrix_view_has_act_rows_and_chapter_columns():
@@ -262,14 +308,32 @@ def test_matrix_view_has_act_rows_and_chapter_columns():
     assert view._matrix_layout.count() == 9
 
 
-def test_grid_drop_moves_scene_to_target_chapter():
+def test_grid_reorder_persists_new_order():
     QApplication.instance() or QApplication([])
     db, proj = _make_project()
-    s1 = db.create_scene(proj.id, "S1", act="One", chapter="A")
-    db.create_scene(proj.id, "S2", act="One", chapter="B")
+    s1 = db.create_scene(proj.id, "First")
+    s2 = db.create_scene(proj.id, "Second")
+    s3 = db.create_scene(proj.id, "Third")
     view = PlanView(db, proj.id)
-    view._on_scene_dropped(s1.id, "B")
-    assert db.get_scene_by_id(s1.id).chapter == "B"
+    view._on_grid_reordered([s3.id, s1.id, s2.id])
+    ordered = db.get_all_scenes(proj.id)
+    assert [s.id for s in ordered] == [s3.id, s1.id, s2.id]
+
+
+def test_grid_reorder_does_not_drop_or_dup_scenes():
+    """After a reorder, every original scene must still exist exactly once."""
+    QApplication.instance() or QApplication([])
+    db, proj = _make_project()
+    ids = [
+        db.create_scene(proj.id, f"Scene {i}").id
+        for i in range(5)
+    ]
+    view = PlanView(db, proj.id)
+    new_order = list(reversed(ids))
+    view._on_grid_reordered(new_order)
+    after = [s.id for s in db.get_all_scenes(proj.id)]
+    assert sorted(after) == sorted(ids)
+    assert after == new_order
 
 
 # -- Cross-section linking ---------------------------------------------------
@@ -320,3 +384,26 @@ def test_scene_summary_change_visible_through_db():
     view = PlanView(db, proj.id)
     view._save_scene_summary(s.id, "Plan-edited summary")
     assert db.get_scene_by_id(s.id).summary == "Plan-edited summary"
+
+
+# -- Quantum influence -------------------------------------------------------
+
+def test_outline_mode_badge_default_classical():
+    QApplication.instance() or QApplication([])
+    db, proj = _make_project()
+    view = PlanView(db, proj.id)
+    assert view._mode_badge.text() == "Classical"
+
+
+def test_outline_mode_badge_reflects_lambda():
+    from storyplanner.quantum_outliner.state import (
+        OutlineMode, get_state, reset_state,
+    )
+    QApplication.instance() or QApplication([])
+    db, proj = _make_project()
+    reset_state(proj.id)
+    state = get_state(proj.id)
+    state.outline_mode = OutlineMode.LAMBDA
+    view = PlanView(db, proj.id)
+    assert "Lambda" in view._mode_badge.text()
+    reset_state(proj.id)
