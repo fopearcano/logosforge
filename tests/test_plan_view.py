@@ -191,7 +191,7 @@ def test_main_window_plan_group_contains_planning_views():
     QApplication.instance() or QApplication([])
     db, proj = _make_project()
     win = MainWindow(db, proj.id)
-    for label in ("Outline", "Scenes", "Timeline", "Grid", "Plot"):
+    for label in ("Outline", "Scenes", "Timeline", "Plot"):
         assert label in win.sidebar_buttons, f"{label} missing from sidebar"
 
 
@@ -204,136 +204,13 @@ def test_old_plan_label_removed():
     assert "Plan" not in win.sidebar_buttons
 
 
-# -- View modes --------------------------------------------------------------
-
-def test_plan_view_default_mode_is_list():
+def test_grid_removed_from_plan_group():
+    """Grid is only available under Plot, not as a standalone sidebar entry."""
+    from storyplanner.ui.main_window import MainWindow
     QApplication.instance() or QApplication([])
     db, proj = _make_project()
-    view = PlanView(db, proj.id)
-    assert view._view_mode == "list"
-    assert view._stack.currentIndex() == 0
-
-
-def test_plan_view_switch_to_grid():
-    QApplication.instance() or QApplication([])
-    db, proj = _make_project()
-    db.create_scene(proj.id, "S1", act="One", chapter="A")
-    db.create_scene(proj.id, "S2", act="One", chapter="B")
-    view = PlanView(db, proj.id)
-    view._set_view_mode("grid")
-    assert view._view_mode == "grid"
-    assert view._stack.currentIndex() == 1
-
-
-def test_plan_view_switch_to_matrix():
-    QApplication.instance() or QApplication([])
-    db, proj = _make_project()
-    db.create_scene(proj.id, "S1", act="One", chapter="A")
-    view = PlanView(db, proj.id)
-    view._set_view_mode("matrix")
-    assert view._view_mode == "matrix"
-    assert view._stack.currentIndex() == 2
-
-
-def test_grid_view_shows_one_card_per_scene():
-    QApplication.instance() or QApplication([])
-    db, proj = _make_project()
-    db.create_scene(proj.id, "S1", act="One", chapter="A")
-    db.create_scene(proj.id, "S2", act="One", chapter="B")
-    db.create_scene(proj.id, "S3", act="Two", chapter="C")
-    view = PlanView(db, proj.id)
-    view._set_view_mode("grid")
-    assert view._grid_widget is not None
-    assert view._grid_widget.count() == 3
-
-
-def test_grid_view_uses_flat_4_column_icon_mode():
-    from PySide6.QtWidgets import QListView, QAbstractItemView
-    QApplication.instance() or QApplication([])
-    db, proj = _make_project()
-    db.create_scene(proj.id, "S1")
-    view = PlanView(db, proj.id)
-    view._set_view_mode("grid")
-    grid = view._grid_widget
-    assert grid.viewMode() == QListView.ViewMode.IconMode
-    assert grid.isWrapping()
-    assert grid.flow() == QListView.Flow.LeftToRight
-    assert grid.dragDropMode() == QAbstractItemView.DragDropMode.InternalMove
-
-
-def test_grid_view_cards_carry_scene_ids():
-    from PySide6.QtCore import Qt
-    QApplication.instance() or QApplication([])
-    db, proj = _make_project()
-    s1 = db.create_scene(proj.id, "First")
-    s2 = db.create_scene(proj.id, "Second")
-    view = PlanView(db, proj.id)
-    view._set_view_mode("grid")
-    ids = [
-        view._grid_widget.item(i).data(Qt.ItemDataRole.UserRole)
-        for i in range(view._grid_widget.count())
-    ]
-    assert ids == [s1.id, s2.id]
-
-
-def test_grid_view_shows_same_scenes_as_db():
-    """Grid blocks must mirror db.get_all_scenes — the Outline is the source of truth."""
-    QApplication.instance() or QApplication([])
-    db, proj = _make_project()
-    db.create_scene(proj.id, "From Plan", act="One", chapter="A")
-    db.create_scene(proj.id, "Direct DB", act="Two", chapter="B")
-    view = PlanView(db, proj.id)
-    view._set_view_mode("grid")
-    db_count = len(db.get_all_scenes(proj.id))
-    assert view._grid_widget.count() == db_count
-
-
-def test_grid_view_empty_state_shows_message():
-    QApplication.instance() or QApplication([])
-    db, proj = _make_project()
-    view = PlanView(db, proj.id)
-    view._set_view_mode("grid")
-    assert view._grid_widget is None
-    assert view._grid_layout.count() == 1
-
-
-def test_matrix_view_has_act_rows_and_chapter_columns():
-    QApplication.instance() or QApplication([])
-    db, proj = _make_project()
-    db.create_scene(proj.id, "S1", act="Act One", chapter="Ch 1")
-    db.create_scene(proj.id, "S2", act="Act Two", chapter="Ch 2")
-    view = PlanView(db, proj.id)
-    view._set_view_mode("matrix")
-    # 1 corner + 2 chapter headers + 2 act rows × (1 row label + 2 cells) = 9
-    assert view._matrix_layout.count() == 9
-
-
-def test_grid_reorder_persists_new_order():
-    QApplication.instance() or QApplication([])
-    db, proj = _make_project()
-    s1 = db.create_scene(proj.id, "First")
-    s2 = db.create_scene(proj.id, "Second")
-    s3 = db.create_scene(proj.id, "Third")
-    view = PlanView(db, proj.id)
-    view._on_grid_reordered([s3.id, s1.id, s2.id])
-    ordered = db.get_all_scenes(proj.id)
-    assert [s.id for s in ordered] == [s3.id, s1.id, s2.id]
-
-
-def test_grid_reorder_does_not_drop_or_dup_scenes():
-    """After a reorder, every original scene must still exist exactly once."""
-    QApplication.instance() or QApplication([])
-    db, proj = _make_project()
-    ids = [
-        db.create_scene(proj.id, f"Scene {i}").id
-        for i in range(5)
-    ]
-    view = PlanView(db, proj.id)
-    new_order = list(reversed(ids))
-    view._on_grid_reordered(new_order)
-    after = [s.id for s in db.get_all_scenes(proj.id)]
-    assert sorted(after) == sorted(ids)
-    assert after == new_order
+    win = MainWindow(db, proj.id)
+    assert "Grid" not in win.sidebar_buttons
 
 
 # -- Cross-section linking ---------------------------------------------------

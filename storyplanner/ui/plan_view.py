@@ -9,25 +9,17 @@ Scene summaries live on Scene.summary.
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt, QMimeData, QSize
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QAbstractItemView,
-    QButtonGroup,
-    QFrame,
-    QGridLayout,
     QHBoxLayout,
     QInputDialog,
     QLabel,
-    QListView,
-    QListWidget,
-    QListWidgetItem,
     QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
-    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -256,100 +248,6 @@ class _SummaryEditor(QPlainTextEdit):
             self._on_commit(new_text)
 
 
-class _SceneGrid(QListWidget):
-    """Flat 4-column grid of scene cards with drag-to-reorder.
-
-    Scenes are displayed as squared blocks in IconMode with wrapping enabled,
-    flowing left-to-right and wrapping after 4 cards per row. Internal drag
-    reorders the items; the new order is persisted via on_reorder.
-    """
-
-    def __init__(
-        self,
-        scenes: list,
-        on_reorder,
-        on_open_scene,
-        on_scene_menu,
-        parent: QWidget | None = None,
-    ) -> None:
-        super().__init__(parent)
-        self._on_reorder = on_reorder
-        self._on_open_scene = on_open_scene
-        self._on_scene_menu = on_scene_menu
-        self._suppress_reorder = True
-
-        self.setViewMode(QListView.ViewMode.IconMode)
-        self.setFlow(QListView.Flow.LeftToRight)
-        self.setWrapping(True)
-        self.setResizeMode(QListView.ResizeMode.Adjust)
-        self.setMovement(QListView.Movement.Snap)
-        self.setSpacing(8)
-        self.setUniformItemSizes(True)
-        self.setGridSize(QSize(160, 160))
-        self.setIconSize(QSize(140, 140))
-        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.setWordWrap(True)
-        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.setStyleSheet(
-            f"QListWidget {{ background: transparent; border: none;"
-            f" color: {theme.TEXT_PRIMARY}; }}"
-            f"QListWidget::item {{ background: {theme.BG_PANEL};"
-            f" color: {theme.TEXT_PRIMARY};"
-            f" border: 1px solid {theme.BORDER}; border-radius: 6px;"
-            " padding: 8px; font-size: 11px;"
-            " text-align: center; }"
-            f"QListWidget::item:selected {{ border-color: {theme.ACCENT};"
-            f" background: {theme.BG_HOVER}; }}"
-            f"QListWidget::item:hover {{ border-color: {theme.ACCENT}; }}"
-        )
-
-        for scene in scenes:
-            item = QListWidgetItem(self._format_label(scene))
-            item.setData(Qt.ItemDataRole.UserRole, scene.id)
-            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            tooltip = scene.summary or scene.title or "Untitled"
-            item.setToolTip(tooltip)
-            self.addItem(item)
-
-        self.itemDoubleClicked.connect(self._open_card)
-        self.customContextMenuRequested.connect(self._on_context_menu)
-        self.model().rowsMoved.connect(self._on_rows_moved)
-        self._suppress_reorder = False
-
-    @staticmethod
-    def _format_label(scene) -> str:
-        title = scene.title or "Untitled"
-        location: list[str] = []
-        if scene.act:
-            location.append(scene.act)
-        if scene.chapter:
-            location.append(scene.chapter)
-        if location:
-            return f"{title}\n\n{' · '.join(location)}"
-        return title
-
-    def _open_card(self, item: QListWidgetItem) -> None:
-        if self._on_open_scene is not None:
-            self._on_open_scene(item.data(Qt.ItemDataRole.UserRole))
-
-    def _on_context_menu(self, pos) -> None:
-        item = self.itemAt(pos)
-        if item is None or self._on_scene_menu is None:
-            return
-        scene_id = item.data(Qt.ItemDataRole.UserRole)
-        self._on_scene_menu(self, scene_id, self.mapToGlobal(pos))
-
-    def _on_rows_moved(self, *_args) -> None:
-        if self._suppress_reorder or self._on_reorder is None:
-            return
-        ordered_ids = [
-            self.item(i).data(Qt.ItemDataRole.UserRole)
-            for i in range(self.count())
-        ]
-        self._on_reorder(ordered_ids)
-
-
 class PlanView(QWidget):
     """Hierarchical Acts → Chapters → Scenes plan view."""
 
@@ -365,7 +263,6 @@ class PlanView(QWidget):
         self._project_id = project_id
         self._on_data_changed = on_data_changed
         self._on_open_scene = on_open_scene
-        self._view_mode = "list"
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 12, 16, 12)
@@ -383,24 +280,6 @@ class PlanView(QWidget):
         header_row.addWidget(self._mode_badge)
         self._refresh_mode_badge()
 
-        header_row.addSpacing(16)
-        self._mode_group = QButtonGroup(self)
-        self._mode_group.setExclusive(True)
-        for mode_key, label in (("list", "List"), ("grid", "Grid"), ("matrix", "Matrix")):
-            btn = QPushButton(label)
-            btn.setCheckable(True)
-            btn.setChecked(mode_key == self._view_mode)
-            btn.setStyleSheet(
-                f"QPushButton {{ padding: 4px 12px; font-size: 11px;"
-                f" border: 1px solid {theme.BORDER}; background: transparent;"
-                f" color: {theme.TEXT_MUTED}; }}"
-                f"QPushButton:checked {{ background: {theme.ACCENT};"
-                f" color: #ffffff; border-color: {theme.ACCENT}; }}"
-            )
-            btn.clicked.connect(lambda _c=False, k=mode_key: self._set_view_mode(k))
-            self._mode_group.addButton(btn)
-            header_row.addWidget(btn)
-
         header_row.addStretch()
 
         add_act_btn = QPushButton("+ Add Act")
@@ -408,10 +287,6 @@ class PlanView(QWidget):
         header_row.addWidget(add_act_btn)
         root.addLayout(header_row)
 
-        self._stack = QStackedWidget()
-        root.addWidget(self._stack, stretch=1)
-
-        # List view (existing scrollable hierarchy)
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setHorizontalScrollBarPolicy(
@@ -423,46 +298,13 @@ class PlanView(QWidget):
         self._content_layout.setContentsMargins(0, 0, 0, 0)
         self._content_layout.setSpacing(12)
         self._scroll.setWidget(self._content)
-        self._stack.addWidget(self._scroll)
+        root.addWidget(self._scroll, stretch=1)
 
-        # Grid view (flat 4-column scene grid with drag reorder)
-        self._grid_canvas = QWidget()
-        self._grid_layout = QVBoxLayout(self._grid_canvas)
-        self._grid_layout.setContentsMargins(0, 0, 0, 0)
-        self._grid_layout.setSpacing(0)
-        self._grid_widget: _SceneGrid | None = None
-        self._stack.addWidget(self._grid_canvas)
-
-        # Matrix view (acts × chapters)
-        self._matrix_scroll = QScrollArea()
-        self._matrix_scroll.setWidgetResizable(True)
-        self._matrix_scroll.setStyleSheet("QScrollArea { border: none; }")
-        self._matrix_canvas = QWidget()
-        self._matrix_layout = QGridLayout(self._matrix_canvas)
-        self._matrix_layout.setContentsMargins(0, 0, 0, 0)
-        self._matrix_layout.setHorizontalSpacing(8)
-        self._matrix_layout.setVerticalSpacing(8)
-        self._matrix_scroll.setWidget(self._matrix_canvas)
-        self._stack.addWidget(self._matrix_scroll)
-
-        self.refresh()
-
-    def _set_view_mode(self, mode: str) -> None:
-        if mode not in ("list", "grid", "matrix") or mode == self._view_mode:
-            return
-        self._view_mode = mode
-        idx = {"list": 0, "grid": 1, "matrix": 2}[mode]
-        self._stack.setCurrentIndex(idx)
         self.refresh()
 
     def refresh(self) -> None:
         self._refresh_mode_badge()
-        if self._view_mode == "list":
-            self._refresh_list()
-        elif self._view_mode == "grid":
-            self._refresh_grid()
-        else:
-            self._refresh_matrix()
+        self._refresh_list()
 
     def _refresh_mode_badge(self) -> None:
         mode = get_outline_mode(self._project_id)
@@ -673,163 +515,6 @@ class PlanView(QWidget):
         layout.addWidget(summary_box)
 
         return row
-
-    # -- Grid view (flat 4-column movable scene blocks) -----------------------
-
-    def _refresh_grid(self) -> None:
-        while self._grid_layout.count():
-            item = self._grid_layout.takeAt(0)
-            w = item.widget()
-            if w:
-                w.deleteLater()
-
-        scenes = self._db.get_all_scenes(self._project_id)
-        if not scenes:
-            empty = QLabel("No scenes yet — add an act to begin.")
-            empty.setStyleSheet(f"color: {theme.TEXT_MUTED}; padding: 24px;")
-            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._grid_layout.addWidget(empty)
-            return
-
-        self._grid_widget = _SceneGrid(
-            scenes,
-            on_reorder=self._on_grid_reordered,
-            on_open_scene=self._on_open_scene,
-            on_scene_menu=self._on_grid_card_menu,
-        )
-        self._grid_layout.addWidget(self._grid_widget)
-
-    def _on_grid_reordered(self, ordered_scene_ids: list[int]) -> None:
-        for new_index, scene_id in enumerate(ordered_scene_ids):
-            self._db.reorder_scene(scene_id, new_index)
-        self._notify()
-
-    def _on_grid_card_menu(self, anchor: QWidget, scene_id: int, global_pos) -> None:
-        menu = QMenu(anchor)
-        if self._on_open_scene is not None:
-            open_act = QAction("Open in Manuscript", menu)
-            open_act.triggered.connect(
-                lambda: self._on_open_scene(scene_id)
-            )
-            menu.addAction(open_act)
-        rename = QAction("Rename Scene", menu)
-        rename.triggered.connect(lambda: self._rename_scene_dialog(scene_id))
-        menu.addAction(rename)
-        delete = QAction("Delete Scene", menu)
-        delete.triggered.connect(lambda: self._delete_scene_dialog(scene_id))
-        menu.addAction(delete)
-        menu.exec(global_pos)
-
-    # -- Matrix view (acts × chapters) ----------------------------------------
-
-    def _refresh_matrix(self) -> None:
-        while self._matrix_layout.count():
-            item = self._matrix_layout.takeAt(0)
-            w = item.widget()
-            if w:
-                w.deleteLater()
-
-        tree = build_plan_tree(self._db, self._project_id)
-        if not tree:
-            empty = QLabel("No scenes yet — add an act to begin.")
-            empty.setStyleSheet(f"color: {theme.TEXT_MUTED}; padding: 24px;")
-            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._matrix_layout.addWidget(empty, 0, 0)
-            return
-
-        all_chapters: list[str] = []
-        seen: set[str] = set()
-        for _act, chapters in tree:
-            for chapter_name, _scenes in chapters:
-                if chapter_name not in seen:
-                    seen.add(chapter_name)
-                    all_chapters.append(chapter_name)
-
-        corner = QLabel("Acts ↓ / Chapters →")
-        corner.setStyleSheet(
-            f"color: {theme.TEXT_MUTED}; font-size: 10px;"
-            " text-transform: uppercase; letter-spacing: 1px;"
-        )
-        self._matrix_layout.addWidget(corner, 0, 0)
-
-        for col_idx, chapter_name in enumerate(all_chapters, start=1):
-            header = QLabel(chapter_name)
-            header.setStyleSheet(
-                f"color: {theme.TEXT_PRIMARY}; font-size: 11px;"
-                f" font-weight: bold; padding: 4px 8px;"
-                f" background: {theme.BG_PANEL};"
-                f" border: 1px solid {theme.BORDER}; border-radius: 4px;"
-            )
-            header.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._matrix_layout.addWidget(header, 0, col_idx)
-
-        for row_idx, (act_name, chapters) in enumerate(tree, start=1):
-            row_label = QLabel(act_name)
-            row_label.setStyleSheet(
-                f"color: {theme.TEXT_PRIMARY}; font-size: 11px;"
-                f" font-weight: bold; padding: 4px 8px;"
-                f" background: {theme.BG_PANEL};"
-                f" border: 1px solid {theme.BORDER}; border-radius: 4px;"
-            )
-            self._matrix_layout.addWidget(row_label, row_idx, 0)
-
-            chapters_for_act = {ch: scenes for ch, scenes in chapters}
-            for col_idx, chapter_name in enumerate(all_chapters, start=1):
-                scenes_in_cell = chapters_for_act.get(chapter_name, [])
-                self._matrix_layout.addWidget(
-                    self._build_matrix_cell(act_name, chapter_name, scenes_in_cell),
-                    row_idx,
-                    col_idx,
-                )
-
-    def _build_matrix_cell(
-        self, act_name: str, chapter_name: str, scenes: list,
-    ) -> QWidget:
-        cell = QFrame()
-        cell.setObjectName("planMatrixCell")
-        cell.setStyleSheet(
-            f"QFrame#planMatrixCell {{ background: {theme.BG_DARK};"
-            f" border: 1px solid {theme.BORDER}; border-radius: 4px; }}"
-        )
-        cell.setMinimumSize(160, 80)
-        lay = QVBoxLayout(cell)
-        lay.setContentsMargins(6, 6, 6, 6)
-        lay.setSpacing(2)
-
-        if scenes:
-            for scene in scenes:
-                card = QPushButton(scene.title or "Untitled")
-                card.setStyleSheet(
-                    f"QPushButton {{ text-align: left; padding: 3px 6px;"
-                    f" background: {theme.BG_PANEL}; color: {theme.TEXT_PRIMARY};"
-                    f" border: 1px solid {theme.BORDER}; border-radius: 3px;"
-                    " font-size: 10px; }"
-                    f"QPushButton:hover {{ border-color: {theme.ACCENT}; }}"
-                )
-                card.clicked.connect(
-                    lambda _c=False, sid=scene.id: self._open_scene_card(sid)
-                )
-                lay.addWidget(card)
-        else:
-            lay.addStretch()
-
-        add_btn = QPushButton("+")
-        add_btn.setFixedHeight(20)
-        add_btn.setStyleSheet(
-            f"QPushButton {{ background: transparent; color: {theme.TEXT_MUTED};"
-            f" border: 1px dashed {theme.BORDER}; border-radius: 3px;"
-            " font-size: 10px; }"
-            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
-        )
-        add_btn.clicked.connect(
-            lambda: self._add_scene(act_name, chapter_name)
-        )
-        lay.addWidget(add_btn)
-        return cell
-
-    def _open_scene_card(self, scene_id: int) -> None:
-        if self._on_open_scene is not None:
-            self._on_open_scene(scene_id)
 
     # -- Add operations -------------------------------------------------------
 

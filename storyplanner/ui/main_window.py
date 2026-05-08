@@ -64,7 +64,6 @@ from storyplanner.ui.projects_view import ProjectsView
 from storyplanner.ui.scenes_view import ScenesView
 from storyplanner.ui.multi_plot_view import MultiPlotView
 from storyplanner.ui.narrative_dashboard_view import NarrativeDashboardView
-from storyplanner.ui.story_grid_view import StoryGridView
 from storyplanner.ui.structure_view import StructureView
 from storyplanner.ui.tag_analysis_view import TagAnalysisView
 from storyplanner.ui.timeline_view import TimelineView
@@ -243,7 +242,7 @@ class MainWindow(QMainWindow):
         _SIDEBAR_LAYOUT: list = [
             "Projects", "Dashboard", "Notes", "Manuscript",
             ("group", "Plan", [
-                "Outline", "Scenes", "Timeline", "Grid", "Plot",
+                "Outline", "Scenes", "Timeline", "Plot",
             ]),
             ("group", "Structure", ["Structure", "Acts", "Beats", "Arcs"]),
             "Tags", "Graph",
@@ -316,7 +315,7 @@ class MainWindow(QMainWindow):
         # -- Connect navigation buttons (checkable + active tracking) ----------
         self._nav_labels = [
             "Projects", "Dashboard", "Notes",
-            "Outline", "Scenes", "Manuscript", "Timeline", "Grid", "Plot",
+            "Outline", "Scenes", "Manuscript", "Timeline", "Plot",
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
             "Health", "Balance", "Pacing", "Adapt", "Narrative", "PSYKE", "Plugins",
         ]
@@ -328,7 +327,6 @@ class MainWindow(QMainWindow):
             "Scenes": self._show_scenes,
             "Manuscript": self._show_manuscript,
             "Timeline": self._show_timeline,
-            "Grid": self._show_grid,
             "Plot": self._show_plot,
             "Structure": self._show_structure,
             "Acts": self._show_acts,
@@ -530,16 +528,6 @@ class MainWindow(QMainWindow):
                 self._project_id,
                 on_scene_selected=self._open_scene_in_editor,
                 on_data_changed=self._on_data_changed,
-            )
-        )
-
-    def _show_grid(self) -> None:
-        self._set_content(
-            StoryGridView(
-                self._db,
-                self._project_id,
-                on_data_changed=self._on_data_changed,
-                on_open_scene=self._open_scene_in_editor,
             )
         )
 
