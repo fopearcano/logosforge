@@ -1053,32 +1053,7 @@ class _SceneEditor(QTextEdit):
             sel.format = fmt
             selections.append(sel)
 
-        style_spans: list[tuple[int, int]] = []
-        if self._style_hints_enabled:
-            hint_color = QColor(theme.get("STYLE_HINT"))
-            for hint in self._style_hints:
-                if hint.start < 0 or hint.end > doc_len:
-                    continue
-                if any(
-                    gs <= hint.start < ge or gs < hint.end <= ge
-                    or (hint.start <= gs and hint.end >= ge)
-                    for gs, ge in grammar_spans
-                ):
-                    continue
-                style_spans.append((hint.start, hint.end))
-                sel = QTextEdit.ExtraSelection()
-                fmt = QTextCharFormat()
-                fmt.setUnderlineStyle(QTextCharFormat.UnderlineStyle.DotLine)
-                fmt.setUnderlineColor(hint_color)
-                fmt.setToolTip(hint.message)
-                cursor = QTextCursor(doc)
-                cursor.setPosition(hint.start)
-                cursor.setPosition(hint.end, QTextCursor.MoveMode.KeepAnchor)
-                sel.cursor = cursor
-                sel.format = fmt
-                selections.append(sel)
-
-        occupied = grammar_spans + style_spans
+        voice_spans: list[tuple[int, int]] = []
         if self._voice_hints_enabled:
             voice_color = QColor(theme.get("VOICE_HINT"))
             for dev in self._voice_deviations:
@@ -1086,11 +1061,12 @@ class _SceneEditor(QTextEdit):
                 if vs < 0 or ve > doc_len:
                     continue
                 if any(
-                    os <= vs < oe or os < ve <= oe
-                    or (vs <= os and ve >= oe)
-                    for os, oe in occupied
+                    gs <= vs < ge or gs < ve <= ge
+                    or (vs <= gs and ve >= ge)
+                    for gs, ge in grammar_spans
                 ):
                     continue
+                voice_spans.append((vs, ve))
                 sel = QTextEdit.ExtraSelection()
                 fmt = QTextCharFormat()
                 fmt.setUnderlineStyle(QTextCharFormat.UnderlineStyle.DashUnderline)
@@ -1100,6 +1076,30 @@ class _SceneEditor(QTextEdit):
                 cursor = QTextCursor(doc)
                 cursor.setPosition(vs)
                 cursor.setPosition(ve, QTextCursor.MoveMode.KeepAnchor)
+                sel.cursor = cursor
+                sel.format = fmt
+                selections.append(sel)
+
+        occupied = grammar_spans + voice_spans
+        if self._style_hints_enabled:
+            hint_color = QColor(theme.get("STYLE_HINT"))
+            for hint in self._style_hints:
+                if hint.start < 0 or hint.end > doc_len:
+                    continue
+                if any(
+                    os <= hint.start < oe or os < hint.end <= oe
+                    or (hint.start <= os and hint.end >= oe)
+                    for os, oe in occupied
+                ):
+                    continue
+                sel = QTextEdit.ExtraSelection()
+                fmt = QTextCharFormat()
+                fmt.setUnderlineStyle(QTextCharFormat.UnderlineStyle.DotLine)
+                fmt.setUnderlineColor(hint_color)
+                fmt.setToolTip(hint.message)
+                cursor = QTextCursor(doc)
+                cursor.setPosition(hint.start)
+                cursor.setPosition(hint.end, QTextCursor.MoveMode.KeepAnchor)
                 sel.cursor = cursor
                 sel.format = fmt
                 selections.append(sel)

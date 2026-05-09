@@ -154,7 +154,7 @@ def test_grammar_suppresses_overlapping_voice_hint():
     assert "Unknown word" in sels[0].format.toolTip()
 
 
-def test_style_suppresses_overlapping_voice_hint():
+def test_voice_suppresses_overlapping_style_hint():
     db, proj, s1 = _setup()
     view = WritingCoreView(db, proj.id)
     editor = list(view._editors.values())[0]
@@ -169,8 +169,8 @@ def test_style_suppresses_overlapping_voice_hint():
     editor.apply_grammar_underlines()
     sels = editor.extraSelections()
     tips = [s.format.toolTip() for s in sels]
-    assert any("Style hint" in t for t in tips)
-    assert not any("too formal" in t for t in tips)
+    assert any("too formal" in t for t in tips)
+    assert not any("Style hint" in t for t in tips)
 
 
 def test_voice_hint_shown_when_no_overlap():
@@ -240,7 +240,7 @@ def test_voice_hint_partial_overlap_with_grammar():
     assert "g1" in sels[0].format.toolTip()
 
 
-def test_voice_hint_enclosing_style_is_suppressed():
+def test_voice_hint_enclosing_style_suppresses_style():
     db, proj, s1 = _setup()
     view = WritingCoreView(db, proj.id)
     editor = list(view._editors.values())[0]
@@ -255,8 +255,8 @@ def test_voice_hint_enclosing_style_is_suppressed():
     editor.apply_grammar_underlines()
     sels = editor.extraSelections()
     tips = [s.format.toolTip() for s in sels]
-    assert "s1" in tips
-    assert not any("too formal" in t for t in tips)
+    assert any("too formal" in t for t in tips)
+    assert "s1" not in tips
 
 
 # -- Toggle persistence ------------------------------------------------------
