@@ -2373,3 +2373,190 @@ def test_focus_mode_restores_opacity():
     view.toggle_focus_mode()
     view.toggle_focus_mode()
     assert view._topbar_opacity.opacity() == 1.0
+
+
+# -- Unified grammar + style feedback -----------------------------------------
+
+def test_grammar_priority_over_style_same_span():
+    """Grammar error on same span suppresses the style hint."""
+    from storyplanner.grammar_checker import Issue
+    from storyplanner.style_analysis import StyleHint
+
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("quikc brown fox jumps quickly")
+
+    editor._grammar_issues = [
+        Issue(start=0, end=5, issue_type="spelling",
+              message="Unknown word", suggestions=["quick"]),
+    ]
+    editor._style_hints = [
+        StyleHint(start=0, end=5, hint_type="clarity", message="Unclear"),
+    ]
+    editor._style_hints_enabled = True
+    editor.apply_grammar_underlines()
+    sels = editor.extraSelections()
+    assert len(sels) == 1
+    assert sels[0].format.toolTip().startswith("Unknown word")
+
+
+def test_style_hint_shown_when_no_grammar_overlap():
+    """Style hint on different span is shown alongside grammar error."""
+    from storyplanner.grammar_checker import Issue
+    from storyplanner.style_analysis import StyleHint
+
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("quikc brown fox jumps quickly")
+
+    editor._grammar_issues = [
+        Issue(start=0, end=5, issue_type="spelling",
+              message="Unknown word", suggestions=["quick"]),
+    ]
+    editor._style_hints = [
+        StyleHint(start=20, end=27, hint_type="clarity",
+                  message="Style issue here"),
+    ]
+    editor._style_hints_enabled = True
+    editor.apply_grammar_underlines()
+    sels = editor.extraSelections()
+    assert len(sels) == 2
+    tips = [s.format.toolTip() for s in sels]
+    assert any("Unknown word" in t for t in tips)
+    assert any("Style issue here" in t for t in tips)
+
+
+def test_grammar_suppresses_overlapping_style_partial():
+    """Style hint partially overlapping grammar span is suppressed."""
+    from storyplanner.grammar_checker import Issue
+    from storyplanner.style_analysis import StyleHint
+
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("quikc brown fox jumps quickly")
+
+    editor._grammar_issues = [
+        Issue(start=5, end=15, issue_type="grammar",
+              message="Grammar issue"),
+    ]
+    editor._style_hints = [
+        StyleHint(start=10, end=20, hint_type="rhythm",
+                  message="Rhythm issue"),
+    ]
+    editor._style_hints_enabled = True
+    editor.apply_grammar_underlines()
+    sels = editor.extraSelections()
+    assert len(sels) == 1
+    assert "Grammar issue" in sels[0].format.toolTip()
+
+
+def test_grammar_suppresses_style_that_encloses_it():
+    """Style hint that fully encloses a grammar span is suppressed."""
+    from storyplanner.grammar_checker import Issue
+    from storyplanner.style_analysis import StyleHint
+
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("quikc brown fox jumps quickly")
+
+    editor._grammar_issues = [
+        Issue(start=6, end=11, issue_type="spelling",
+              message="Spelling error"),
+    ]
+    editor._style_hints = [
+        StyleHint(start=0, end=20, hint_type="clarity",
+                  message="Long sentence"),
+    ]
+    editor._style_hints_enabled = True
+    editor.apply_grammar_underlines()
+    sels = editor.extraSelections()
+    assert len(sels) == 1
+    assert "Spelling error" in sels[0].format.toolTip()
+
+
+def test_multiple_grammar_multiple_style_no_duplicate():
+    """Multiple grammar errors suppress overlapping style hints."""
+    from storyplanner.grammar_checker import Issue
+    from storyplanner.style_analysis import StyleHint
+
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("aa bb cc dd ee ff gg hh ii jj")
+
+    editor._grammar_issues = [
+        Issue(start=0, end=2, issue_type="spelling", message="g1"),
+        Issue(start=6, end=8, issue_type="grammar", message="g2"),
+    ]
+    editor._style_hints = [
+        StyleHint(start=0, end=2, hint_type="clarity", message="s1"),
+        StyleHint(start=3, end=5, hint_type="clarity", message="s2"),
+        StyleHint(start=6, end=8, hint_type="rhythm", message="s3"),
+    ]
+    editor._style_hints_enabled = True
+    editor.apply_grammar_underlines()
+    sels = editor.extraSelections()
+    tips = [s.format.toolTip() for s in sels]
+    assert "g1" in tips
+    assert "g2" in tips
+    assert "s2" in tips
+    assert "s1" not in tips
+    assert "s3" not in tips
+
+
+def test_style_disabled_no_style_selections():
+    """When style hints are disabled, only grammar selections appear."""
+    from storyplanner.grammar_checker import Issue
+    from storyplanner.style_analysis import StyleHint
+
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("quikc brown fox")
+
+    editor._grammar_issues = [
+        Issue(start=0, end=5, issue_type="spelling", message="spell"),
+    ]
+    editor._style_hints = [
+        StyleHint(start=6, end=11, hint_type="clarity", message="style"),
+    ]
+    editor._style_hints_enabled = False
+    editor.apply_grammar_underlines()
+    sels = editor.extraSelections()
+    assert len(sels) == 1
+    assert "spell" in sels[0].format.toolTip()
+
+
+def test_ignored_grammar_allows_style_hint():
+    """Ignored grammar issue no longer suppresses the style hint."""
+    from storyplanner.grammar_checker import Issue
+    from storyplanner.style_analysis import StyleHint
+
+    db = Database()
+    proj, *_ = _setup_project(db)
+    view = WritingCoreView(db, proj.id)
+    editor = list(view._editors.values())[0]
+    editor.setPlainText("quikc brown fox")
+
+    issue = Issue(start=0, end=5, issue_type="spelling",
+                  message="Unknown word")
+    editor._grammar_issues = [issue]
+    editor._style_hints = [
+        StyleHint(start=0, end=5, hint_type="clarity", message="Unclear"),
+    ]
+    editor._style_hints_enabled = True
+    editor._ignored_issues.add((issue.issue_type, issue.message))
+    editor.apply_grammar_underlines()
+    sels = editor.extraSelections()
+    assert len(sels) == 1
+    assert "Unclear" in sels[0].format.toolTip()

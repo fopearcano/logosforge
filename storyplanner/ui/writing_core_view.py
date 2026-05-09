@@ -834,12 +834,15 @@ class _SceneEditor(QTextEdit):
         selections: list[QTextEdit.ExtraSelection] = []
         doc = self.document()
         doc_len = doc.characterCount()
+
+        grammar_spans: list[tuple[int, int]] = []
         for issue in self._grammar_issues:
             if issue.start < 0 or issue.end > doc_len:
                 continue
             key = (issue.issue_type, issue.message)
             if key in self._ignored_issues:
                 continue
+            grammar_spans.append((issue.start, issue.end))
             color, style = _STYLES.get(issue.issue_type, _DEFAULT)
             sel = QTextEdit.ExtraSelection()
             fmt = QTextCharFormat()
@@ -860,6 +863,12 @@ class _SceneEditor(QTextEdit):
             hint_color = QColor(theme.get("STYLE_HINT"))
             for hint in self._style_hints:
                 if hint.start < 0 or hint.end > doc_len:
+                    continue
+                if any(
+                    gs <= hint.start < ge or gs < hint.end <= ge
+                    or (hint.start <= gs and hint.end >= ge)
+                    for gs, ge in grammar_spans
+                ):
                     continue
                 sel = QTextEdit.ExtraSelection()
                 fmt = QTextCharFormat()
