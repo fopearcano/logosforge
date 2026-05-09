@@ -62,6 +62,8 @@ from storyplanner.paragraph_energy import (
     detect_flow_hints,
 )
 from storyplanner.creative_layer import compute_review_metrics
+from storyplanner.dialogue_attribution import DialogueSegment, attribute_dialogue
+from storyplanner.voice_consistency import VoiceDeviation, check_consistency
 from storyplanner.db import Database
 from storyplanner.structural_intelligence import StructuralCache
 from storyplanner.settings import get_manager as get_settings
@@ -335,6 +337,43 @@ class _StyleHintWorker(QThread):
             self.finished.emit(self._generation, results)
 
 
+class _VoiceConsistencyWorker(QThread):
+    """Runs voice consistency checks off the main thread."""
+
+    finished = Signal(int, object)
+
+    def __init__(
+        self,
+        generation: int,
+        scenes: dict[int, str],
+        characters: list,
+        profiles: dict[int, dict],
+    ) -> None:
+        super().__init__()
+        self._generation = generation
+        self._scenes = scenes
+        self._characters = characters
+        self._profiles = profiles
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
+
+    def run(self) -> None:
+        results: dict[int, list[VoiceDeviation]] = {}
+        for scene_id, text in self._scenes.items():
+            if self._cancelled:
+                return
+            if not text.strip():
+                results[scene_id] = []
+                continue
+            segments = attribute_dialogue(text, self._characters)
+            deviations = check_consistency(segments, self._profiles)
+            results[scene_id] = deviations
+        if not self._cancelled:
+            self.finished.emit(self._generation, results)
+
+
 class _GrammarPopup(QWidget):
     """Floating popup for grammar/spelling issue fixes."""
 
@@ -576,6 +615,8 @@ class _SceneEditor(QTextEdit):
         self._style_hints: list[StyleHint] = []
         self._style_hints_enabled = False
         self._style_context: StyleContext | None = None
+        self._voice_deviations: list[VoiceDeviation] = []
+        self._voice_hints_enabled = False
         self._grammar_popup = _GrammarPopup()
         self._grammar_popup.suggestion_chosen.connect(self._on_popup_suggestion)
         self._grammar_popup.issue_ignored.connect(self._on_popup_ignore)
@@ -859,6 +900,7 @@ class _SceneEditor(QTextEdit):
             sel.format = fmt
             selections.append(sel)
 
+        style_spans: list[tuple[int, int]] = []
         if self._style_hints_enabled:
             hint_color = QColor(theme.get("STYLE_HINT"))
             for hint in self._style_hints:
@@ -870,6 +912,7 @@ class _SceneEditor(QTextEdit):
                     for gs, ge in grammar_spans
                 ):
                     continue
+                style_spans.append((hint.start, hint.end))
                 sel = QTextEdit.ExtraSelection()
                 fmt = QTextCharFormat()
                 fmt.setUnderlineStyle(QTextCharFormat.UnderlineStyle.DotLine)
@@ -878,6 +921,32 @@ class _SceneEditor(QTextEdit):
                 cursor = QTextCursor(doc)
                 cursor.setPosition(hint.start)
                 cursor.setPosition(hint.end, QTextCursor.MoveMode.KeepAnchor)
+                sel.cursor = cursor
+                sel.format = fmt
+                selections.append(sel)
+
+        occupied = grammar_spans + style_spans
+        if self._voice_hints_enabled:
+            voice_color = QColor(theme.get("VOICE_HINT"))
+            for dev in self._voice_deviations:
+                vs, ve = dev.segment.start_pos, dev.segment.end_pos
+                if vs < 0 or ve > doc_len:
+                    continue
+                if any(
+                    os <= vs < oe or os < ve <= oe
+                    or (vs <= os and ve >= oe)
+                    for os, oe in occupied
+                ):
+                    continue
+                sel = QTextEdit.ExtraSelection()
+                fmt = QTextCharFormat()
+                fmt.setUnderlineStyle(QTextCharFormat.UnderlineStyle.DashUnderline)
+                fmt.setUnderlineColor(voice_color)
+                reason_text = "; ".join(dev.reasons) if dev.reasons else "Voice deviation"
+                fmt.setToolTip(reason_text)
+                cursor = QTextCursor(doc)
+                cursor.setPosition(vs)
+                cursor.setPosition(ve, QTextCursor.MoveMode.KeepAnchor)
                 sel.cursor = cursor
                 sel.format = fmt
                 selections.append(sel)
@@ -1161,6 +1230,14 @@ class WritingCoreView(QWidget):
         self._style_hint_timer.timeout.connect(self._run_style_hints)
         self._style_hint_worker: _StyleHintWorker | None = None
         self._style_hint_generation: int = 0
+
+        self._voice_hints_checking: bool = bool(_settings.get("voice_hints", False))
+        self._voice_hint_timer = QTimer(self)
+        self._voice_hint_timer.setSingleShot(True)
+        self._voice_hint_timer.setInterval(1100)
+        self._voice_hint_timer.timeout.connect(self._run_voice_hints)
+        self._voice_hint_worker: _VoiceConsistencyWorker | None = None
+        self._voice_hint_generation: int = 0
 
         self._command_palette: CommandPalette | None = None
         self._palette_source_editor: _SceneEditor | None = None
@@ -1504,6 +1581,7 @@ class WritingCoreView(QWidget):
         editor._smart_quotes = self._smart_quotes
         editor._grammar_enabled = self._grammar_checking
         editor._style_hints_enabled = self._style_hints_checking
+        editor._voice_hints_enabled = self._voice_hints_checking
         editor.textChanged.connect(
             lambda sid=scene.id: self._schedule_save(sid)
         )
@@ -1945,6 +2023,8 @@ class WritingCoreView(QWidget):
             self._grammar_timer.start()
         if self._style_hints_checking:
             self._style_hint_timer.start()
+        if self._voice_hints_checking:
+            self._voice_hint_timer.start()
         self._update_word_count()
 
     def _save_scene(self, scene_id: int) -> None:
@@ -2408,6 +2488,12 @@ class WritingCoreView(QWidget):
             )
             style_sens_sub.addAction(act)
 
+        voice_act = QAction("Voice Consistency", menu)
+        voice_act.setCheckable(True)
+        voice_act.setChecked(self._voice_hints_checking)
+        voice_act.triggered.connect(lambda checked: self._toggle_voice_hints())
+        menu.addAction(voice_act)
+
         menu.addSeparator()
 
         energy_act = QAction("Energy View", menu)
@@ -2606,6 +2692,7 @@ class WritingCoreView(QWidget):
         settings["style_sensitivity"] = self._style_sensitivity
         settings["energy_enabled"] = self._energy_enabled
         settings["energy_sensitivity"] = self._energy_sensitivity
+        settings["voice_hints"] = self._voice_hints_checking
         settings["language_override"] = self._language_override
         self._db.save_project_settings(self._project_id, settings)
 
@@ -2891,6 +2978,71 @@ class WritingCoreView(QWidget):
             editor._style_hints = hints
             editor.apply_grammar_underlines()
         self._style_hint_worker = None
+
+    # -- Voice consistency hints -----------------------------------------------
+
+    def _toggle_voice_hints(self) -> None:
+        self._voice_hints_checking = not self._voice_hints_checking
+        for editor in self._editors.values():
+            editor._voice_hints_enabled = self._voice_hints_checking
+            if not self._voice_hints_checking:
+                editor._voice_deviations = []
+                editor.apply_grammar_underlines()
+        if self._voice_hints_checking:
+            self._start_voice_hint_worker()
+        else:
+            self._voice_hint_timer.stop()
+            self._cancel_voice_hint_worker()
+        self._persist_font_settings()
+
+    def _run_voice_hints(self) -> None:
+        if not self._voice_hints_checking:
+            return
+        self._start_voice_hint_worker()
+
+    def _cancel_voice_hint_worker(self) -> None:
+        if self._voice_hint_worker is not None:
+            self._voice_hint_worker.cancel()
+            if self._voice_hint_worker.isRunning():
+                self._voice_hint_worker.wait()
+            self._voice_hint_worker = None
+
+    def _start_voice_hint_worker(self) -> None:
+        self._voice_hint_generation += 1
+        if self._voice_hint_worker is not None:
+            self._voice_hint_worker.cancel()
+            if self._voice_hint_worker.isRunning():
+                self._voice_hint_worker.wait()
+        scenes: dict[int, str] = {}
+        for sid, editor in self._editors.items():
+            scenes[sid] = editor.toPlainText()
+        characters = self._db.get_all_characters(self._project_id)
+        profiles: dict[int, dict] = {}
+        for ch in characters:
+            data = self._db.get_voice_profile_data(ch.id)
+            if data is not None:
+                profiles[ch.id] = data
+        worker = _VoiceConsistencyWorker(
+            self._voice_hint_generation, scenes, characters, profiles,
+        )
+        worker.finished.connect(self._on_voice_hint_results)
+        self._voice_hint_worker = worker
+        worker.start()
+
+    def _on_voice_hint_results(
+        self, generation: int, results: dict[int, list[VoiceDeviation]],
+    ) -> None:
+        if generation != self._voice_hint_generation:
+            return
+        if not self._voice_hints_checking:
+            return
+        for sid, deviations in results.items():
+            editor = self._editors.get(sid)
+            if editor is None:
+                continue
+            editor._voice_deviations = deviations
+            editor.apply_grammar_underlines()
+        self._voice_hint_worker = None
 
     # -- Typewriter mode ------------------------------------------------------
 

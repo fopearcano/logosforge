@@ -78,6 +78,7 @@ _PALETTES: dict[str, dict[str, str]] = {
         "GRAMMAR_GRAMMAR":  "#60a5fa",
         "GRAMMAR_STYLE":    "#78716c",
         "STYLE_HINT":       "#8b8589",
+        "VOICE_HINT":       "#c084fc",
     },
 
     "Light (Green)": {
@@ -151,6 +152,7 @@ _PALETTES: dict[str, dict[str, str]] = {
         "GRAMMAR_GRAMMAR":  "#2563eb",
         "GRAMMAR_STYLE":    "#a8a29e",
         "STYLE_HINT":       "#9ca3af",
+        "VOICE_HINT":       "#9333ea",
     },
 
     "Light (Warm)": {
@@ -224,6 +226,7 @@ _PALETTES: dict[str, dict[str, str]] = {
         "GRAMMAR_GRAMMAR":  "#60a5fa",
         "GRAMMAR_STYLE":    "#78716c",
         "STYLE_HINT":       "#8b8589",
+        "VOICE_HINT":       "#c084fc",
     },
 }
 
