@@ -113,7 +113,7 @@ def test_markers_render_multiple_paragraphs():
     gutter = view._energy_gutters[scene.id]
     pairs = list(gutter._block_energy_pairs())
     assert len(pairs) == 3
-    for _, energy in pairs:
+    for _, energy, _idx in pairs:
         assert "tension" in energy.metrics
 
 
@@ -185,3 +185,61 @@ def test_editor_row_has_gutter_and_editor():
     widgets = [layout.itemAt(i).widget() for i in range(layout.count())]
     assert gutter in widgets
     assert editor in widgets
+
+
+# -- Flow hint integration -----------------------------------------------------
+
+def test_gutter_stores_hints():
+    calm = "The table was wooden.\n\n" * 5
+    view, scene = _make_view(calm.strip())
+    gutter = view._energy_gutters[scene.id]
+    assert isinstance(gutter._hints, list)
+
+
+def test_gutter_flat_content_generates_hints():
+    lines = "\n\n".join([
+        "The table stood still.",
+        "The chair was wooden.",
+        "The floor was clean.",
+        "The window was open.",
+        "The curtain was white.",
+    ])
+    view, scene = _make_view(lines)
+    gutter = view._energy_gutters[scene.id]
+    flat = [h for h in gutter._hints if h.kind == "flat"]
+    assert len(flat) >= 1
+
+
+def test_gutter_varied_content_no_flat_hint():
+    lines = "\n\n".join([
+        "She feared the lurking darkness.",
+        "They fought and attacked fiercely.",
+        "He laughed then sobbed with grief.",
+        "She ran and jumped and fled!",
+    ])
+    view, scene = _make_view(lines)
+    gutter = view._energy_gutters[scene.id]
+    flat = [h for h in gutter._hints if h.kind == "flat"]
+    assert len(flat) == 0
+
+
+def test_gutter_hinted_paragraph_has_message():
+    lines = "\n\n".join([
+        "The table stood still.",
+        "The chair was wooden.",
+        "The floor was clean.",
+        "The window was open.",
+        "The curtain was white.",
+    ])
+    view, scene = _make_view(lines)
+    gutter = view._energy_gutters[scene.id]
+    assert len(gutter._hinted_paragraphs) > 0
+    for msg in gutter._hinted_paragraphs.values():
+        assert len(msg) > 0
+
+
+def test_gutter_no_layout_shift_with_hints():
+    lines = "\n\n".join(["Calm line." for _ in range(6)])
+    view, scene = _make_view(lines)
+    gutter = view._energy_gutters[scene.id]
+    assert gutter.width() == _GUTTER_WIDTH

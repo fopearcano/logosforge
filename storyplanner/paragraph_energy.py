@@ -247,6 +247,96 @@ def analyze_paragraph(text: str) -> ParagraphEnergy:
     return result
 
 
+@dataclass
+class FlowHint:
+    """A light flow issue detected across a span of paragraphs."""
+
+    start: int
+    end: int
+    kind: str
+    message: str
+
+
+_FLAT_WINDOW = 4
+_FLAT_TENSION_CEIL = 0.15
+_FLAT_CONFLICT_CEIL = 0.1
+
+_PACING_WINDOW = 3
+_PACING_SPIKE_DELTA = 0.4
+
+_EMOTION_WINDOW = 5
+_EMOTION_SHIFT_CEIL = 0.05
+
+
+def detect_flow_hints(energies: list[ParagraphEnergy]) -> list[FlowHint]:
+    """Detect flow issues from a sequence of paragraph energies.
+
+    Returns at most one hint per detected region.  Keeps thresholds
+    strict so hints only fire on unambiguous patterns.
+    """
+    hints: list[FlowHint] = []
+    n = len(energies)
+
+    # -- flat sequence: low tension + low conflict for FLAT_WINDOW+ paragraphs
+    if n >= _FLAT_WINDOW:
+        run_start: int | None = None
+        for i, e in enumerate(energies):
+            flat = e.tension <= _FLAT_TENSION_CEIL and e.conflict <= _FLAT_CONFLICT_CEIL
+            if flat:
+                if run_start is None:
+                    run_start = i
+            else:
+                if run_start is not None and i - run_start >= _FLAT_WINDOW:
+                    hints.append(FlowHint(
+                        start=run_start, end=i - 1,
+                        kind="flat",
+                        message="This section may feel flat — tension and conflict are low across several paragraphs",
+                    ))
+                run_start = None
+        if run_start is not None and n - run_start >= _FLAT_WINDOW:
+            hints.append(FlowHint(
+                start=run_start, end=n - 1,
+                kind="flat",
+                message="This section may feel flat — tension and conflict are low across several paragraphs",
+            ))
+
+    # -- pacing spike/drop: sudden jump between adjacent paragraphs
+    if n >= _PACING_WINDOW:
+        for i in range(1, n):
+            delta = energies[i].pacing - energies[i - 1].pacing
+            if abs(delta) >= _PACING_SPIKE_DELTA:
+                word = "spike" if delta > 0 else "drop"
+                hints.append(FlowHint(
+                    start=i, end=i,
+                    kind=f"pacing_{word}",
+                    message=f"Pacing {word}s sharply here",
+                ))
+
+    # -- no emotional shift: long stretch with zero emotional_shift
+    if n >= _EMOTION_WINDOW:
+        run_start = None
+        for i, e in enumerate(energies):
+            if e.emotional_shift <= _EMOTION_SHIFT_CEIL:
+                if run_start is None:
+                    run_start = i
+            else:
+                if run_start is not None and i - run_start >= _EMOTION_WINDOW:
+                    hints.append(FlowHint(
+                        start=run_start, end=i - 1,
+                        kind="no_emotion",
+                        message="Emotional tone stays constant through this stretch",
+                    ))
+                run_start = None
+        if run_start is not None and n - run_start >= _EMOTION_WINDOW:
+            hints.append(FlowHint(
+                start=run_start, end=n - 1,
+                kind="no_emotion",
+                message="Emotional tone stays constant through this stretch",
+            ))
+
+    return hints
+
+
 def analyze_scene_energy(scene_id: int, content: str) -> list[ParagraphEnergy]:
     """Compute energy metrics for all paragraphs in scene content."""
     paragraphs = [p.strip() for p in content.split("\n") if p.strip()]

@@ -43,7 +43,12 @@ from PySide6.QtWidgets import (
 from storyplanner.auto_link import AutoLinkSuggester, Suggestion
 from storyplanner.grammar_checker import Issue as GrammarIssue, check_text, detect_language
 from storyplanner.context_assistant import ContextAssistant, ContextHint, HintRateLimiter
-from storyplanner.paragraph_energy import ParagraphEnergy, analyze_scene_energy
+from storyplanner.paragraph_energy import (
+    FlowHint,
+    ParagraphEnergy,
+    analyze_scene_energy,
+    detect_flow_hints,
+)
 from storyplanner.creative_layer import compute_review_metrics
 from storyplanner.db import Database
 from storyplanner.structural_intelligence import StructuralCache
@@ -678,13 +683,20 @@ def _tension_dot_color(tension: float) -> QColor:
     return c
 
 
+_HINT_COLOR = "#facc15"
+_HINT_ALPHA = 0.45
+_HINT_DIAMOND_SIZE = 2.5
+
+
 class _EnergyGutter(QWidget):
-    """Thin left-gutter widget showing per-paragraph energy dots."""
+    """Thin left-gutter widget showing per-paragraph energy dots and flow hints."""
 
     def __init__(self, editor: _SceneEditor, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._editor = editor
         self._energies: list[ParagraphEnergy] = []
+        self._hints: list[FlowHint] = []
+        self._hinted_paragraphs: dict[int, str] = {}
         self.setFixedWidth(_GUTTER_WIDTH)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
@@ -707,6 +719,11 @@ class _EnergyGutter(QWidget):
         text = self._editor.toPlainText()
         scene_id = self._editor._scene_id or 0
         self._energies = analyze_scene_energy(scene_id, text)
+        self._hints = detect_flow_hints(self._energies)
+        self._hinted_paragraphs = {}
+        for h in self._hints:
+            mid = (h.start + h.end) // 2
+            self._hinted_paragraphs[mid] = h.message
         self.update()
 
     def _block_energy_pairs(self):
@@ -719,7 +736,7 @@ class _EnergyGutter(QWidget):
         while block.isValid() and para_idx < len(self._energies):
             if block.text().strip():
                 rect = layout.blockBoundingRect(block)
-                yield rect, self._energies[para_idx]
+                yield rect, self._energies[para_idx], para_idx
                 para_idx += 1
             block = block.next()
 
@@ -729,24 +746,39 @@ class _EnergyGutter(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         cx = self.width() / 2.0
-        for rect, energy in self._block_energy_pairs():
-            color = _tension_dot_color(energy.tension)
+        for rect, energy, idx in self._block_energy_pairs():
             cy = rect.top() + rect.height() / 2.0
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(color)
-            painter.drawEllipse(QPointF(cx, cy), _GUTTER_DOT_RADIUS, _GUTTER_DOT_RADIUS)
+            if idx in self._hinted_paragraphs:
+                hint_color = QColor(_HINT_COLOR)
+                hint_color.setAlphaF(_HINT_ALPHA)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(hint_color)
+                s = _HINT_DIAMOND_SIZE
+                painter.save()
+                painter.translate(cx, cy)
+                painter.rotate(45)
+                painter.drawRect(-s, -s, s * 2, s * 2)
+                painter.restore()
+            else:
+                color = _tension_dot_color(energy.tension)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(color)
+                painter.drawEllipse(QPointF(cx, cy), _GUTTER_DOT_RADIUS, _GUTTER_DOT_RADIUS)
         painter.end()
 
     def event(self, ev) -> bool:
         if ev.type() == QEvent.Type.ToolTip:
             y = ev.pos().y()
-            for rect, energy in self._block_energy_pairs():
+            for rect, energy, idx in self._block_energy_pairs():
                 if rect.top() <= y <= rect.bottom():
                     tip = (
                         f"Tension: {energy.tension:.0%}\n"
                         f"Pacing: {energy.pacing:.0%}\n"
                         f"Conflict: {energy.conflict:.0%}"
                     )
+                    hint_msg = self._hinted_paragraphs.get(idx)
+                    if hint_msg:
+                        tip += f"\n\n{hint_msg}"
                     QToolTip.showText(ev.globalPos(), tip, self)
                     return True
             QToolTip.hideText()

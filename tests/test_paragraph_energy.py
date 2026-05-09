@@ -4,12 +4,17 @@ import time
 from unittest.mock import patch
 
 from storyplanner.paragraph_energy import (
+    FlowHint,
     ParagraphEnergy,
+    _EMOTION_WINDOW,
+    _FLAT_WINDOW,
+    _PACING_SPIKE_DELTA,
     _parse_llm_metrics,
     analyze_paragraph,
     analyze_scene_energy,
     clear_cache,
     compute_paragraph_energy,
+    detect_flow_hints,
 )
 
 
@@ -288,6 +293,141 @@ def test_analyze_scene_each_has_metrics():
         assert "pacing" in e.metrics
         assert "conflict" in e.metrics
         assert "emotional_shift" in e.metrics
+
+
+# -- Flow hint detection -------------------------------------------------------
+
+def _make_energy(tension=0.0, pacing=0.5, conflict=0.0, emotional_shift=0.0, idx=0):
+    return ParagraphEnergy(
+        paragraph_id=idx, scene_id=1,
+        metrics={
+            "tension": tension, "pacing": pacing,
+            "conflict": conflict, "emotional_shift": emotional_shift,
+        },
+    )
+
+
+def test_no_hints_on_empty():
+    assert detect_flow_hints([]) == []
+
+
+def test_no_hints_on_short_sequence():
+    energies = [_make_energy(idx=i) for i in range(2)]
+    assert detect_flow_hints(energies) == []
+
+
+def test_flat_detected():
+    energies = [_make_energy(tension=0.05, conflict=0.0, idx=i) for i in range(_FLAT_WINDOW)]
+    hints = detect_flow_hints(energies)
+    flat = [h for h in hints if h.kind == "flat"]
+    assert len(flat) == 1
+    assert flat[0].start == 0
+    assert flat[0].end == _FLAT_WINDOW - 1
+    assert "flat" in flat[0].message.lower()
+
+
+def test_flat_not_triggered_below_window():
+    energies = [_make_energy(tension=0.05, conflict=0.0, idx=i) for i in range(_FLAT_WINDOW - 1)]
+    hints = detect_flow_hints(energies)
+    assert not any(h.kind == "flat" for h in hints)
+
+
+def test_flat_not_triggered_with_tension():
+    energies = [_make_energy(tension=0.3, conflict=0.0, idx=i) for i in range(_FLAT_WINDOW + 2)]
+    hints = detect_flow_hints(energies)
+    assert not any(h.kind == "flat" for h in hints)
+
+
+def test_flat_broken_by_mid_tension():
+    energies = [_make_energy(tension=0.05, idx=i) for i in range(3)]
+    energies.append(_make_energy(tension=0.5, idx=3))
+    energies += [_make_energy(tension=0.05, idx=i) for i in range(4, 7)]
+    hints = detect_flow_hints(energies)
+    assert not any(h.kind == "flat" for h in hints)
+
+
+def test_pacing_spike_detected():
+    energies = [
+        _make_energy(pacing=0.2, idx=0),
+        _make_energy(pacing=0.2, idx=1),
+        _make_energy(pacing=0.8, idx=2),
+    ]
+    hints = detect_flow_hints(energies)
+    spikes = [h for h in hints if h.kind == "pacing_spike"]
+    assert len(spikes) == 1
+    assert spikes[0].start == 2
+    assert "spike" in spikes[0].message.lower()
+
+
+def test_pacing_drop_detected():
+    energies = [
+        _make_energy(pacing=0.8, idx=0),
+        _make_energy(pacing=0.8, idx=1),
+        _make_energy(pacing=0.2, idx=2),
+    ]
+    hints = detect_flow_hints(energies)
+    drops = [h for h in hints if h.kind == "pacing_drop"]
+    assert len(drops) == 1
+    assert "drop" in drops[0].message.lower()
+
+
+def test_pacing_no_spike_on_small_delta():
+    energies = [
+        _make_energy(pacing=0.4, idx=0),
+        _make_energy(pacing=0.4, idx=1),
+        _make_energy(pacing=0.5, idx=2),
+    ]
+    hints = detect_flow_hints(energies)
+    assert not any("pacing" in h.kind for h in hints)
+
+
+def test_no_emotion_detected():
+    energies = [_make_energy(emotional_shift=0.0, idx=i) for i in range(_EMOTION_WINDOW)]
+    hints = detect_flow_hints(energies)
+    emotion = [h for h in hints if h.kind == "no_emotion"]
+    assert len(emotion) == 1
+    assert "constant" in emotion[0].message.lower()
+
+
+def test_no_emotion_not_triggered_below_window():
+    energies = [_make_energy(emotional_shift=0.0, idx=i) for i in range(_EMOTION_WINDOW - 1)]
+    hints = detect_flow_hints(energies)
+    assert not any(h.kind == "no_emotion" for h in hints)
+
+
+def test_no_emotion_broken_by_shift():
+    energies = [_make_energy(emotional_shift=0.0, idx=i) for i in range(3)]
+    energies.append(_make_energy(emotional_shift=0.5, idx=3))
+    energies += [_make_energy(emotional_shift=0.0, idx=i) for i in range(4, 7)]
+    hints = detect_flow_hints(energies)
+    assert not any(h.kind == "no_emotion" for h in hints)
+
+
+def test_mixed_text_no_false_positives():
+    texts = [
+        "She feared the darkness that lurked in every shadow.",
+        "They fought and argued over the plan.",
+        "He laughed, then sobbed with grief.",
+        "The sun rose quietly over the hills.",
+        "She ran and jumped over the fence!",
+    ]
+    energies = [compute_paragraph_energy(i, 1, t) for i, t in enumerate(texts)]
+    hints = detect_flow_hints(energies)
+    assert not any(h.kind == "flat" for h in hints)
+
+
+def test_all_calm_text_triggers_flat():
+    texts = [
+        "The table was wooden.",
+        "The chair was also wooden.",
+        "The floor was clean.",
+        "The window was open.",
+        "The curtain was white.",
+    ]
+    energies = [compute_paragraph_energy(i, 1, t) for i, t in enumerate(texts)]
+    hints = detect_flow_hints(energies)
+    flat = [h for h in hints if h.kind == "flat"]
+    assert len(flat) >= 1
 
 
 # -- LLM metric parsing -------------------------------------------------------
