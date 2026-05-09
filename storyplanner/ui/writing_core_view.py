@@ -46,6 +46,7 @@ from storyplanner.context_assistant import ContextAssistant, ContextHint, HintRa
 from storyplanner.paragraph_energy import (
     FlowHint,
     ParagraphEnergy,
+    SENSITIVITY_LEVELS,
     analyze_scene_energy,
     detect_flow_hints,
 )
@@ -694,6 +695,8 @@ class _EnergyGutter(QWidget):
     def __init__(self, editor: _SceneEditor, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._editor = editor
+        self._enabled = True
+        self._sensitivity = "medium"
         self._energies: list[ParagraphEnergy] = []
         self._hints: list[FlowHint] = []
         self._hinted_paragraphs: dict[int, str] = {}
@@ -709,17 +712,37 @@ class _EnergyGutter(QWidget):
 
         editor.textChanged.connect(self._schedule)
 
+    def set_enabled(self, on: bool) -> None:
+        self._enabled = on
+        if on:
+            self._recompute()
+        else:
+            self._energies.clear()
+            self._hints.clear()
+            self._hinted_paragraphs.clear()
+            self._timer.stop()
+            self.update()
+
+    def set_sensitivity(self, level: str) -> None:
+        if level not in SENSITIVITY_LEVELS:
+            return
+        self._sensitivity = level
+        if self._enabled:
+            self._recompute()
+
     def initial_compute(self) -> None:
-        self._recompute()
+        if self._enabled:
+            self._recompute()
 
     def _schedule(self) -> None:
-        self._timer.start()
+        if self._enabled:
+            self._timer.start()
 
     def _recompute(self) -> None:
         text = self._editor.toPlainText()
         scene_id = self._editor._scene_id or 0
         self._energies = analyze_scene_energy(scene_id, text)
-        self._hints = detect_flow_hints(self._energies)
+        self._hints = detect_flow_hints(self._energies, self._sensitivity)
         self._hinted_paragraphs = {}
         for h in self._hints:
             mid = (h.start + h.end) // 2
@@ -832,6 +855,10 @@ class WritingCoreView(QWidget):
         if self._language_override != "auto":
             self._current_language = self._language_override
         self._grammar_checking: bool = bool(_settings.get("grammar_checking", False))
+        self._energy_enabled: bool = bool(_settings.get("energy_enabled", False))
+        self._energy_sensitivity: str = str(_settings.get("energy_sensitivity", "medium"))
+        if self._energy_sensitivity not in SENSITIVITY_LEVELS:
+            self._energy_sensitivity = "medium"
         self._current_text_color: str = ""
         self._editors: dict[int, _SceneEditor] = {}
         self._save_timers: dict[int, QTimer] = {}
@@ -1242,7 +1269,8 @@ class WritingCoreView(QWidget):
         self._inner_layout.addWidget(row)
         self._scene_widgets.append(row)
         self._energy_gutters[scene.id] = gutter
-        gutter.initial_compute()
+        gutter.set_sensitivity(self._energy_sensitivity)
+        gutter.set_enabled(self._energy_enabled)
 
         highlighter = PsykeHighlighter(editor.document())
         self._highlighters[scene.id] = highlighter
@@ -2098,6 +2126,24 @@ class WritingCoreView(QWidget):
         grammar_act.triggered.connect(lambda checked: self._toggle_grammar())
         menu.addAction(grammar_act)
 
+        menu.addSeparator()
+
+        energy_act = QAction("Energy View", menu)
+        energy_act.setCheckable(True)
+        energy_act.setChecked(self._energy_enabled)
+        energy_act.triggered.connect(lambda checked: self._toggle_energy())
+        menu.addAction(energy_act)
+
+        sens_sub = menu.addMenu("Energy Sensitivity")
+        for level in SENSITIVITY_LEVELS:
+            act = QAction(level.capitalize(), sens_sub)
+            act.setCheckable(True)
+            act.setChecked(level == self._energy_sensitivity)
+            act.triggered.connect(
+                lambda _c=False, lv=level: self._set_energy_sensitivity(lv),
+            )
+            sens_sub.addAction(act)
+
         pos = self._review_btn.mapToGlobal(self._review_btn.rect().bottomLeft())
         menu.exec(pos)
 
@@ -2274,6 +2320,8 @@ class WritingCoreView(QWidget):
         settings["first_line_indent"] = self._first_line_indent
         settings["smart_quotes"] = self._smart_quotes
         settings["grammar_checking"] = self._grammar_checking
+        settings["energy_enabled"] = self._energy_enabled
+        settings["energy_sensitivity"] = self._energy_sensitivity
         settings["language_override"] = self._language_override
         self._db.save_project_settings(self._project_id, settings)
 
@@ -2419,6 +2467,18 @@ class WritingCoreView(QWidget):
         else:
             self._grammar_timer.stop()
             self._cancel_grammar_worker()
+        self._persist_font_settings()
+
+    def _toggle_energy(self) -> None:
+        self._energy_enabled = not self._energy_enabled
+        for gutter in self._energy_gutters.values():
+            gutter.set_enabled(self._energy_enabled)
+        self._persist_font_settings()
+
+    def _set_energy_sensitivity(self, level: str) -> None:
+        self._energy_sensitivity = level
+        for gutter in self._energy_gutters.values():
+            gutter.set_sensitivity(level)
         self._persist_font_settings()
 
     def _run_grammar_check(self) -> None:

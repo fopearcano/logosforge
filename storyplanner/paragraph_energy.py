@@ -267,44 +267,82 @@ _PACING_SPIKE_DELTA = 0.4
 _EMOTION_WINDOW = 5
 _EMOTION_SHIFT_CEIL = 0.05
 
+SENSITIVITY_PRESETS: dict[str, dict[str, float | int]] = {
+    "low": {
+        "flat_window": 6,
+        "flat_tension_ceil": 0.10,
+        "flat_conflict_ceil": 0.05,
+        "pacing_spike_delta": 0.55,
+        "emotion_window": 7,
+        "emotion_shift_ceil": 0.03,
+    },
+    "medium": {
+        "flat_window": _FLAT_WINDOW,
+        "flat_tension_ceil": _FLAT_TENSION_CEIL,
+        "flat_conflict_ceil": _FLAT_CONFLICT_CEIL,
+        "pacing_spike_delta": _PACING_SPIKE_DELTA,
+        "emotion_window": _EMOTION_WINDOW,
+        "emotion_shift_ceil": _EMOTION_SHIFT_CEIL,
+    },
+    "high": {
+        "flat_window": 3,
+        "flat_tension_ceil": 0.25,
+        "flat_conflict_ceil": 0.15,
+        "pacing_spike_delta": 0.25,
+        "emotion_window": 3,
+        "emotion_shift_ceil": 0.08,
+    },
+}
 
-def detect_flow_hints(energies: list[ParagraphEnergy]) -> list[FlowHint]:
+SENSITIVITY_LEVELS = ("low", "medium", "high")
+
+
+def detect_flow_hints(
+    energies: list[ParagraphEnergy],
+    sensitivity: str = "medium",
+) -> list[FlowHint]:
     """Detect flow issues from a sequence of paragraph energies.
 
-    Returns at most one hint per detected region.  Keeps thresholds
-    strict so hints only fire on unambiguous patterns.
+    ``sensitivity`` adjusts thresholds: "low" fires rarely,
+    "high" fires on subtler patterns.
     """
+    p = SENSITIVITY_PRESETS.get(sensitivity, SENSITIVITY_PRESETS["medium"])
+    flat_window = int(p["flat_window"])
+    flat_tension = float(p["flat_tension_ceil"])
+    flat_conflict = float(p["flat_conflict_ceil"])
+    pacing_delta = float(p["pacing_spike_delta"])
+    emo_window = int(p["emotion_window"])
+    emo_ceil = float(p["emotion_shift_ceil"])
+
     hints: list[FlowHint] = []
     n = len(energies)
 
-    # -- flat sequence: low tension + low conflict for FLAT_WINDOW+ paragraphs
-    if n >= _FLAT_WINDOW:
+    if n >= flat_window:
         run_start: int | None = None
         for i, e in enumerate(energies):
-            flat = e.tension <= _FLAT_TENSION_CEIL and e.conflict <= _FLAT_CONFLICT_CEIL
+            flat = e.tension <= flat_tension and e.conflict <= flat_conflict
             if flat:
                 if run_start is None:
                     run_start = i
             else:
-                if run_start is not None and i - run_start >= _FLAT_WINDOW:
+                if run_start is not None and i - run_start >= flat_window:
                     hints.append(FlowHint(
                         start=run_start, end=i - 1,
                         kind="flat",
                         message="This section may feel flat — tension and conflict are low across several paragraphs",
                     ))
                 run_start = None
-        if run_start is not None and n - run_start >= _FLAT_WINDOW:
+        if run_start is not None and n - run_start >= flat_window:
             hints.append(FlowHint(
                 start=run_start, end=n - 1,
                 kind="flat",
                 message="This section may feel flat — tension and conflict are low across several paragraphs",
             ))
 
-    # -- pacing spike/drop: sudden jump between adjacent paragraphs
     if n >= _PACING_WINDOW:
         for i in range(1, n):
             delta = energies[i].pacing - energies[i - 1].pacing
-            if abs(delta) >= _PACING_SPIKE_DELTA:
+            if abs(delta) >= pacing_delta:
                 word = "spike" if delta > 0 else "drop"
                 hints.append(FlowHint(
                     start=i, end=i,
@@ -312,22 +350,21 @@ def detect_flow_hints(energies: list[ParagraphEnergy]) -> list[FlowHint]:
                     message=f"Pacing {word}s sharply here",
                 ))
 
-    # -- no emotional shift: long stretch with zero emotional_shift
-    if n >= _EMOTION_WINDOW:
+    if n >= emo_window:
         run_start = None
         for i, e in enumerate(energies):
-            if e.emotional_shift <= _EMOTION_SHIFT_CEIL:
+            if e.emotional_shift <= emo_ceil:
                 if run_start is None:
                     run_start = i
             else:
-                if run_start is not None and i - run_start >= _EMOTION_WINDOW:
+                if run_start is not None and i - run_start >= emo_window:
                     hints.append(FlowHint(
                         start=run_start, end=i - 1,
                         kind="no_emotion",
                         message="Emotional tone stays constant through this stretch",
                     ))
                 run_start = None
-        if run_start is not None and n - run_start >= _EMOTION_WINDOW:
+        if run_start is not None and n - run_start >= emo_window:
             hints.append(FlowHint(
                 start=run_start, end=n - 1,
                 kind="no_emotion",

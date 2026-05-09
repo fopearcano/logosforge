@@ -16,10 +16,14 @@ def _app():
     return QApplication.instance() or QApplication([])
 
 
-def _make_view(content="First paragraph.\n\nSecond paragraph.\n\nThird paragraph."):
+def _make_view(content="First paragraph.\n\nSecond paragraph.\n\nThird paragraph.", energy=True):
     _app()
     db = Database()
     proj = db.create_project("EnergyTest")
+    if energy:
+        settings = db.get_project_settings(proj.id)
+        settings["energy_enabled"] = True
+        db.save_project_settings(proj.id, settings)
     scene = db.create_scene(proj.id, "Scene 1", content=content)
     view = WritingCoreView(db, proj.id)
     return view, scene
@@ -243,3 +247,122 @@ def test_gutter_no_layout_shift_with_hints():
     view, scene = _make_view(lines)
     gutter = view._energy_gutters[scene.id]
     assert gutter.width() == _GUTTER_WIDTH
+
+
+# -- Toggle on/off -------------------------------------------------------------
+
+def test_toggle_off_clears_energies():
+    view, scene = _make_view("Some text.\n\nMore text.")
+    gutter = view._energy_gutters[scene.id]
+    assert len(gutter._energies) == 2
+    view._toggle_energy()
+    assert len(gutter._energies) == 0
+    assert not gutter._enabled
+
+
+def test_toggle_on_computes_energies():
+    view, scene = _make_view("Line one.\n\nLine two.", energy=False)
+    gutter = view._energy_gutters[scene.id]
+    assert len(gutter._energies) == 0
+    view._toggle_energy()
+    assert gutter._enabled
+    assert len(gutter._energies) == 2
+
+
+def test_toggle_off_stops_timer():
+    view, scene = _make_view("Text.")
+    gutter = view._energy_gutters[scene.id]
+    gutter._schedule()
+    assert gutter._timer.isActive()
+    view._toggle_energy()
+    assert not gutter._timer.isActive()
+
+
+def test_toggle_persists_to_settings():
+    _app()
+    db = Database()
+    proj = db.create_project("Persist")
+    db.create_scene(proj.id, "S", content="Hello.")
+    view = WritingCoreView(db, proj.id)
+    assert not view._energy_enabled
+    view._toggle_energy()
+    saved = db.get_project_settings(proj.id)
+    assert saved["energy_enabled"] is True
+
+
+def test_toggle_restores_from_settings():
+    _app()
+    db = Database()
+    proj = db.create_project("Restore")
+    settings = db.get_project_settings(proj.id)
+    settings["energy_enabled"] = True
+    db.save_project_settings(proj.id, settings)
+    scene = db.create_scene(proj.id, "S", content="Content.")
+    view = WritingCoreView(db, proj.id)
+    assert view._energy_enabled
+    gutter = view._energy_gutters[scene.id]
+    assert gutter._enabled
+    assert len(gutter._energies) > 0
+
+
+def test_default_off():
+    view, scene = _make_view("Text.", energy=False)
+    gutter = view._energy_gutters[scene.id]
+    assert not gutter._enabled
+    assert len(gutter._energies) == 0
+
+
+# -- Sensitivity ---------------------------------------------------------------
+
+def test_sensitivity_default_medium():
+    view, scene = _make_view()
+    gutter = view._energy_gutters[scene.id]
+    assert gutter._sensitivity == "medium"
+
+
+def test_set_sensitivity_updates_gutters():
+    view, scene = _make_view()
+    view._set_energy_sensitivity("high")
+    gutter = view._energy_gutters[scene.id]
+    assert gutter._sensitivity == "high"
+
+
+def test_set_sensitivity_persists():
+    _app()
+    db = Database()
+    proj = db.create_project("SensPersist")
+    settings = db.get_project_settings(proj.id)
+    settings["energy_enabled"] = True
+    db.save_project_settings(proj.id, settings)
+    db.create_scene(proj.id, "S", content="Text.")
+    view = WritingCoreView(db, proj.id)
+    view._set_energy_sensitivity("low")
+    saved = db.get_project_settings(proj.id)
+    assert saved["energy_sensitivity"] == "low"
+
+
+def test_sensitivity_restores_from_settings():
+    _app()
+    db = Database()
+    proj = db.create_project("SensRestore")
+    settings = db.get_project_settings(proj.id)
+    settings["energy_enabled"] = True
+    settings["energy_sensitivity"] = "high"
+    db.save_project_settings(proj.id, settings)
+    db.create_scene(proj.id, "S", content="Text.")
+    view = WritingCoreView(db, proj.id)
+    assert view._energy_sensitivity == "high"
+    gutter = list(view._energy_gutters.values())[0]
+    assert gutter._sensitivity == "high"
+
+
+def test_sensitivity_invalid_falls_back():
+    _app()
+    db = Database()
+    proj = db.create_project("BadSens")
+    settings = db.get_project_settings(proj.id)
+    settings["energy_sensitivity"] = "ultra"
+    db.save_project_settings(proj.id, settings)
+    db.create_scene(proj.id, "S", content="Text.")
+    view = WritingCoreView(db, proj.id)
+    assert view._energy_sensitivity == "medium"
