@@ -4,12 +4,16 @@ from unittest.mock import patch
 
 from storyplanner.style_analysis import (
     ParagraphStyle,
+    StyleContext,
     StyleHint,
     StyleSuggestion,
+    _STYLE_PSYKE_WEIGHT,
     _parse_style_metrics,
     analyze_paragraph,
     analyze_paragraphs,
     analyze_style,
+    apply_style_context,
+    build_style_context,
     clear_cache,
     detect_style_hints,
     generate_style_suggestions,
@@ -911,3 +915,222 @@ def test_selection_triggers_suggestions():
     assert editor._style_suggestion_popup.isVisible()
     assert len(editor._style_suggestion_popup._suggestion_labels) >= 1
     editor._style_suggestion_popup.hide()
+
+
+# -- StyleContext & PSYKE-aware style -----------------------------------------
+
+def test_style_context_defaults():
+    ctx = StyleContext()
+    assert ctx.stress_level == 0.0
+    assert ctx.formality_level == 0.0
+    assert ctx.emotional_intensity == 0.0
+
+
+def test_apply_style_context_no_change_when_neutral():
+    style = analyze_paragraph(0, "She walked home quickly.")
+    ctx = StyleContext()
+    adjusted = apply_style_context(style, ctx)
+    assert adjusted.metrics == style.metrics
+
+
+def test_apply_style_context_stress_boosts_rhythm():
+    text = "Run. Hide. Go. Now. Fast. Move. Run. Hide."
+    style = analyze_paragraph(0, text)
+    ctx = StyleContext(stress_level=1.0)
+    adjusted = apply_style_context(style, ctx)
+    assert adjusted.metrics["rhythm"] >= style.metrics["rhythm"]
+
+
+def test_apply_style_context_formality_boosts_tone():
+    text = (
+        "The ambassador addressed the assembly with measured eloquence. "
+        "Yo that's wild right?"
+    )
+    style = analyze_paragraph(0, text)
+    ctx = StyleContext(formality_level=1.0)
+    adjusted = apply_style_context(style, ctx)
+    assert adjusted.metrics["tone_consistency"] >= style.metrics["tone_consistency"]
+
+
+def test_apply_style_context_formality_boosts_dialogue():
+    text = (
+        '"I must inform the committee that the resolution has been ratified '
+        'by the governing body and shall henceforth be considered binding '
+        'upon all signatories to the agreement," he declared.'
+    )
+    style = analyze_paragraph(0, text)
+    if "dialogue_naturalness" in style.metrics:
+        ctx = StyleContext(formality_level=1.0)
+        adjusted = apply_style_context(style, ctx)
+        assert adjusted.metrics["dialogue_naturalness"] >= style.metrics["dialogue_naturalness"]
+
+
+def test_apply_style_context_emotion_boosts_tone():
+    text = (
+        "She screamed at the heavens! Then whispered a prayer. "
+        "The fury subsided into quiet tears."
+    )
+    style = analyze_paragraph(0, text)
+    ctx = StyleContext(emotional_intensity=1.0)
+    adjusted = apply_style_context(style, ctx)
+    assert adjusted.metrics["tone_consistency"] >= style.metrics["tone_consistency"]
+
+
+def test_apply_style_context_caps_at_one():
+    style = ParagraphStyle(
+        paragraph_id=0,
+        metrics={"rhythm": 0.99, "tone_consistency": 0.99, "dialogue_naturalness": 0.99},
+    )
+    ctx = StyleContext(stress_level=1.0, formality_level=1.0, emotional_intensity=1.0)
+    adjusted = apply_style_context(style, ctx)
+    assert adjusted.metrics["rhythm"] <= 1.0
+    assert adjusted.metrics["tone_consistency"] <= 1.0
+    assert adjusted.metrics["dialogue_naturalness"] <= 1.0
+
+
+def test_apply_style_context_preserves_id_and_notes():
+    style = ParagraphStyle(
+        paragraph_id=42,
+        metrics={"rhythm": 0.5, "clarity": 0.8},
+        notes=["Test note"],
+    )
+    ctx = StyleContext(stress_level=0.5)
+    adjusted = apply_style_context(style, ctx)
+    assert adjusted.paragraph_id == 42
+    assert adjusted.notes == ["Test note"]
+
+
+def test_build_style_context_empty_db():
+    from storyplanner.db import Database
+    db = Database()
+    proj = db.create_project("StyleCtx")
+    scene = db.create_scene(proj.id, "S", content="Hello.")
+    ctx = build_style_context(db, proj.id, scene.id)
+    assert ctx.stress_level == 0.0
+    assert ctx.formality_level == 0.0
+    assert ctx.emotional_intensity == 0.0
+
+
+def test_build_style_context_from_character_states():
+    from storyplanner.db import Database
+    db = Database()
+    proj = db.create_project("StyleCtxChar")
+    char = db.create_character(proj.id, "Hero")
+    scene = db.create_scene(
+        proj.id, "S", content="Hello.",
+        character_ids=[char.id],
+        character_states=[(char.id, "anxious and terrified, desperate")],
+    )
+    ctx = build_style_context(db, proj.id, scene.id)
+    assert ctx.stress_level > 0.0
+
+
+def test_build_style_context_from_memories():
+    from storyplanner.db import Database
+    db = Database()
+    proj = db.create_project("StyleCtxMem")
+    scene = db.create_scene(proj.id, "S", content="Hello.")
+    db.add_memory(proj.id, scene.id, "state", "character", "formal and dignified")
+    ctx = build_style_context(db, proj.id, scene.id)
+    assert ctx.formality_level > 0.0
+
+
+def test_build_style_context_emotional():
+    from storyplanner.db import Database
+    db = Database()
+    proj = db.create_project("StyleCtxEmo")
+    scene = db.create_scene(proj.id, "S", content="Hello.")
+    db.add_memory(proj.id, scene.id, "state", "character", "grief and despair and anguish")
+    ctx = build_style_context(db, proj.id, scene.id)
+    assert ctx.emotional_intensity > 0.0
+
+
+def test_same_text_different_psyke_different_suggestions():
+    """Core test: same text, different PSYKE → different feedback."""
+    text = (
+        "The dog ran fast. The cat sat down. The man went home. "
+        "The bird flew up. The sun went down."
+    )
+    neutral_suggestions, _ = generate_style_suggestions(text)
+    stressed_suggestions, _ = generate_style_suggestions(
+        text, context=StyleContext(stress_level=1.0),
+    )
+    neutral_cats = [s.category for s in neutral_suggestions]
+    stressed_cats = [s.category for s in stressed_suggestions]
+    assert "rhythm" in neutral_cats
+    assert "rhythm" not in stressed_cats
+
+
+def test_stressed_context_changes_rhythm_suggestion():
+    text = "Run. Stop. Go. Now. Fast. Move. Run. Stop."
+    neutral, _ = generate_style_suggestions(text)
+    stressed, _ = generate_style_suggestions(
+        text, context=StyleContext(stress_level=1.0),
+    )
+    neutral_rhythm = [s for s in neutral if s.category == "rhythm"]
+    stressed_rhythm = [s for s in stressed if s.category == "rhythm"]
+    assert len(neutral_rhythm) > 0
+    assert len(stressed_rhythm) == 0
+
+
+def test_formal_context_changes_dialogue_suggestion():
+    text = (
+        '"The matter; having been discussed; at length; requires further '
+        'deliberation; before any conclusion can be drawn; from the evidence '
+        'presented; to the committee; in its entirety," he said.'
+    )
+    neutral, _ = generate_style_suggestions(text)
+    formal, _ = generate_style_suggestions(
+        text, context=StyleContext(formality_level=1.0),
+    )
+    neutral_dlg = [s for s in neutral if s.category == "dialogue"]
+    formal_dlg = [s for s in formal if s.category == "dialogue"]
+    assert len(neutral_dlg) > 0
+    assert len(formal_dlg) > 0
+    assert neutral_dlg[0].message != formal_dlg[0].message
+
+
+def test_emotional_context_changes_tone_suggestion():
+    text = (
+        "The ambassador deliberated with extraordinary circumspection. "
+        "Yo that was totally wild bro! "
+        "The proceedings concluded satisfactorily. "
+        "Man what a crazy day!"
+    )
+    neutral, _ = generate_style_suggestions(text)
+    emotional, _ = generate_style_suggestions(
+        text, context=StyleContext(emotional_intensity=1.0),
+    )
+    neutral_tone = [s for s in neutral if s.category == "tone"]
+    emotional_tone = [s for s in emotional if s.category == "tone"]
+    assert len(neutral_tone) > 0
+    assert len(emotional_tone) > 0
+    assert neutral_tone[0].message != emotional_tone[0].message
+
+
+def test_psyke_context_can_suppress_rhythm_suggestion():
+    text = (
+        "The dog ran fast. The cat sat down. The man went home. "
+        "The bird flew up. The sun went down."
+    )
+    neutral, _ = generate_style_suggestions(text)
+    stressed, _ = generate_style_suggestions(
+        text, context=StyleContext(stress_level=1.0),
+    )
+    assert any(s.category == "rhythm" for s in neutral)
+    assert not any(s.category == "rhythm" for s in stressed)
+
+
+def test_editor_has_style_context():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from storyplanner.db import Database
+    from storyplanner.ui.writing_core_view import WritingCoreView
+
+    db = Database()
+    proj = db.create_project("StyleCtxUI")
+    scene = db.create_scene(proj.id, "S", content="Hello.")
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[scene.id]
+    assert editor._style_context is not None
+    assert isinstance(editor._style_context, StyleContext)

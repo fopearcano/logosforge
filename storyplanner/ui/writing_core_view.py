@@ -44,8 +44,10 @@ from storyplanner.auto_link import AutoLinkSuggester, Suggestion
 from storyplanner.grammar_checker import Issue as GrammarIssue, check_text, detect_language
 from storyplanner.context_assistant import ContextAssistant, ContextHint, HintRateLimiter
 from storyplanner.style_analysis import (
+    StyleContext,
     StyleHint,
     StyleSuggestion,
+    build_style_context,
     detect_style_hints,
     generate_style_suggestions,
 )
@@ -564,6 +566,7 @@ class _SceneEditor(QTextEdit):
         self._ignored_issues: set[tuple[str, str]] = set()
         self._style_hints: list[StyleHint] = []
         self._style_hints_enabled = False
+        self._style_context: StyleContext | None = None
         self._grammar_popup = _GrammarPopup()
         self._grammar_popup.suggestion_chosen.connect(self._on_popup_suggestion)
         self._grammar_popup.issue_ignored.connect(self._on_popup_ignore)
@@ -775,7 +778,9 @@ class _SceneEditor(QTextEdit):
         if not cursor.hasSelection():
             return
         text = cursor.selectedText().replace(" ", "\n")
-        suggestions, rewrite = generate_style_suggestions(text)
+        suggestions, rewrite = generate_style_suggestions(
+            text, context=self._style_context,
+        )
         self._style_suggestion_popup.show_suggestions(
             suggestions, rewrite, global_pos,
         )
@@ -1498,6 +1503,9 @@ class WritingCoreView(QWidget):
         self._energy_gutters[scene.id] = gutter
         ctx = build_story_context(self._db, self._project_id, scene.id)
         gutter.set_story_context(ctx)
+        editor._style_context = build_style_context(
+            self._db, self._project_id, scene.id,
+        )
         gutter.set_sensitivity(self._energy_sensitivity)
         gutter.set_enabled(self._energy_enabled)
 
@@ -2729,6 +2737,11 @@ class WritingCoreView(QWidget):
         for scene_id, gutter in self._energy_gutters.items():
             ctx = build_story_context(self._db, self._project_id, scene_id)
             gutter.set_story_context(ctx)
+            editor = self._editors.get(scene_id)
+            if editor is not None:
+                editor._style_context = build_style_context(
+                    self._db, self._project_id, scene_id,
+                )
 
     def _run_grammar_check(self) -> None:
         if not self._grammar_checking:

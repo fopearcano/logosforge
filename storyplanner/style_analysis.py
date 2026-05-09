@@ -52,6 +52,106 @@ class StyleSuggestion:
     message: str
 
 
+@dataclass
+class StyleContext:
+    """PSYKE-derived context that adjusts style expectations."""
+
+    stress_level: float = 0.0
+    formality_level: float = 0.0
+    emotional_intensity: float = 0.0
+
+
+# ---------------------------------------------------------------------------
+# PSYKE signal words for style context
+# ---------------------------------------------------------------------------
+
+_STRESS_SIGNALS = frozenset({
+    "stressed", "tense", "anxious", "nervous", "panicked", "rushed",
+    "urgent", "frantic", "desperate", "afraid", "scared", "terrified",
+    "hunted", "trapped", "cornered", "fleeing", "fearful", "restless",
+})
+
+_FORMALITY_SIGNALS = frozenset({
+    "formal", "dignified", "regal", "noble", "composed", "proper",
+    "educated", "aristocratic", "diplomatic", "refined", "ceremonial",
+    "professional", "scholarly", "authoritative", "reserved", "stiff",
+})
+
+_EMOTION_INTENSITY_SIGNALS = frozenset({
+    "grief", "rage", "ecstasy", "despair", "anguish", "fury",
+    "passion", "agony", "torment", "devastated", "overwhelmed",
+    "elated", "heartbroken", "euphoric", "shattered", "hysterical",
+})
+
+_STYLE_PSYKE_WEIGHT = 0.15
+_STYLE_SIGNAL_DIVISOR = 3
+
+
+def build_style_context(
+    db: object, project_id: int, scene_id: int,
+) -> StyleContext:
+    """Build style context from PSYKE character states and memories."""
+    texts: list[str] = []
+    for _cid, state in db.get_scene_character_states(scene_id):
+        texts.append(state)
+    for mem in db.get_memories(project_id, scene_id):
+        texts.append(mem.value)
+    if not texts:
+        return StyleContext()
+    combined = " ".join(texts).lower()
+    found = set(re.findall(r"[a-z]+", combined))
+    if not found:
+        return StyleContext()
+    return StyleContext(
+        stress_level=min(1.0, len(found & _STRESS_SIGNALS) / _STYLE_SIGNAL_DIVISOR),
+        formality_level=min(1.0, len(found & _FORMALITY_SIGNALS) / _STYLE_SIGNAL_DIVISOR),
+        emotional_intensity=min(1.0, len(found & _EMOTION_INTENSITY_SIGNALS) / _STYLE_SIGNAL_DIVISOR),
+    )
+
+
+def apply_style_context(
+    style: ParagraphStyle, context: StyleContext,
+) -> ParagraphStyle:
+    """Adjust style metrics based on PSYKE context.
+
+    When writing matches character state, scores are boosted:
+    - stress → short uniform rhythm is appropriate
+    - formality → formal tone and structured dialogue expected
+    - emotional intensity → tone shifts are expressive, not inconsistent
+    """
+    if (
+        not context.stress_level
+        and not context.formality_level
+        and not context.emotional_intensity
+    ):
+        return style
+    m = dict(style.metrics)
+    w = _STYLE_PSYKE_WEIGHT
+    if "rhythm" in m:
+        m["rhythm"] = min(1.0, round(m["rhythm"] + context.stress_level * w, 3))
+    if "tone_consistency" in m:
+        m["tone_consistency"] = min(
+            1.0,
+            round(
+                m["tone_consistency"]
+                + context.formality_level * w
+                + context.emotional_intensity * w,
+                3,
+            ),
+        )
+    if "dialogue_naturalness" in m:
+        m["dialogue_naturalness"] = min(
+            1.0,
+            round(m["dialogue_naturalness"] + context.formality_level * w, 3),
+        )
+    return ParagraphStyle(
+        paragraph_id=style.paragraph_id,
+        metrics=m,
+        notes=list(style.notes),
+        last_updated=style.last_updated,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Heuristic helpers
 # ---------------------------------------------------------------------------
@@ -467,8 +567,14 @@ def _build_rewrite(text: str, words: list[str]) -> str | None:
     return result
 
 
-def generate_style_suggestions(text: str) -> tuple[list[StyleSuggestion], str | None]:
+def generate_style_suggestions(
+    text: str,
+    context: StyleContext | None = None,
+) -> tuple[list[StyleSuggestion], str | None]:
     """Analyze *text* and return 1-3 suggestions plus an optional rewrite.
+
+    When *context* is provided, thresholds shift so writing that matches
+    the character's PSYKE state produces fewer (or different) suggestions.
 
     Returns ``(suggestions, rewrite)`` where *rewrite* is ``None`` when no
     meaningful improvement can be produced heuristically.
@@ -480,10 +586,19 @@ def generate_style_suggestions(text: str) -> tuple[list[StyleSuggestion], str | 
     sents = _sentences(text)
     suggestions: list[StyleSuggestion] = []
 
+    pw = _STYLE_PSYKE_WEIGHT
+    stress = context.stress_level if context else 0.0
+    formality = context.formality_level if context else 0.0
+    emotion = context.emotional_intensity if context else 0.0
+
     clarity_score = _clarity(text, w, sents)
     if clarity_score < 0.7:
         avg_len = len(w) / max(len(sents), 1)
-        if avg_len > 25:
+        if avg_len > 25 and stress > 0.3:
+            suggestions.append(StyleSuggestion(
+                "clarity", "Short, punchy sentences suit this character's tension",
+            ))
+        elif avg_len > 25:
             suggestions.append(StyleSuggestion(
                 "clarity", "Break long sentences for readability",
             ))
@@ -514,22 +629,44 @@ def generate_style_suggestions(text: str) -> tuple[list[StyleSuggestion], str | 
             ))
 
     rhythm_score = _rhythm(sents)
-    if len(suggestions) < _MAX_SUGGESTIONS and rhythm_score < 0.65:
-        suggestions.append(StyleSuggestion(
-            "rhythm", "Vary sentence lengths for better flow",
-        ))
+    rhythm_adjusted = rhythm_score + stress * pw
+    if len(suggestions) < _MAX_SUGGESTIONS and rhythm_adjusted < 0.65:
+        if stress > 0.3:
+            suggestions.append(StyleSuggestion(
+                "rhythm", "Staccato rhythm works — but vary slightly for impact",
+            ))
+        else:
+            suggestions.append(StyleSuggestion(
+                "rhythm", "Vary sentence lengths for better flow",
+            ))
 
     tone_score = _tone_consistency(sents)
-    if len(suggestions) < _MAX_SUGGESTIONS and tone_score < 0.7:
-        suggestions.append(StyleSuggestion(
-            "tone", "Tone shifts between formal and informal",
-        ))
+    tone_adjusted = tone_score + formality * pw + emotion * pw
+    if len(suggestions) < _MAX_SUGGESTIONS and tone_adjusted < 0.7:
+        if emotion > 0.3:
+            suggestions.append(StyleSuggestion(
+                "tone", "Tone shifts can work here — lean into the emotion",
+            ))
+        else:
+            suggestions.append(StyleSuggestion(
+                "tone", "Tone shifts between formal and informal",
+            ))
 
     dialogue = _dialogue_naturalness(text)
-    if len(suggestions) < _MAX_SUGGESTIONS and dialogue is not None and dialogue < 0.6:
-        suggestions.append(StyleSuggestion(
-            "dialogue", "Shorten dialogue or add contractions",
-        ))
+    dialogue_adjusted = (dialogue or 0.0) + formality * pw if dialogue is not None else None
+    if (
+        len(suggestions) < _MAX_SUGGESTIONS
+        and dialogue_adjusted is not None
+        and dialogue_adjusted < 0.6
+    ):
+        if formality > 0.3:
+            suggestions.append(StyleSuggestion(
+                "dialogue", "Structured dialogue fits — keep it purposeful",
+            ))
+        else:
+            suggestions.append(StyleSuggestion(
+                "dialogue", "Shorten dialogue or add contractions",
+            ))
 
     suggestions = suggestions[:_MAX_SUGGESTIONS]
 
