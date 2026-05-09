@@ -63,7 +63,12 @@ from storyplanner.paragraph_energy import (
 )
 from storyplanner.creative_layer import compute_review_metrics
 from storyplanner.dialogue_attribution import DialogueSegment, attribute_dialogue
-from storyplanner.voice_consistency import VoiceDeviation, check_consistency
+from storyplanner.voice_consistency import (
+    VOICE_SENSITIVITY_LEVELS,
+    VoiceDeviation,
+    check_consistency,
+    sensitivity_threshold,
+)
 from storyplanner.voice_learner import (
     VoiceRewrite,
     adjust_voice_for_state,
@@ -354,6 +359,7 @@ class _VoiceConsistencyWorker(QThread):
         characters: list,
         profiles: dict[int, dict],
         scene_states: dict[int, list[tuple[int, str]]] | None = None,
+        threshold: float = 0.45,
     ) -> None:
         super().__init__()
         self._generation = generation
@@ -361,6 +367,7 @@ class _VoiceConsistencyWorker(QThread):
         self._characters = characters
         self._profiles = profiles
         self._scene_states = scene_states or {}
+        self._threshold = threshold
         self._cancelled = False
 
     def cancel(self) -> None:
@@ -389,7 +396,9 @@ class _VoiceConsistencyWorker(QThread):
                 continue
             segments = attribute_dialogue(text, self._characters)
             profiles = self._adjusted_profiles(scene_id)
-            deviations = check_consistency(segments, profiles)
+            deviations = check_consistency(
+                segments, profiles, threshold=self._threshold,
+            )
             results[scene_id] = deviations
         if not self._cancelled:
             self.finished.emit(self._generation, results)
@@ -1376,6 +1385,9 @@ class WritingCoreView(QWidget):
         self._style_hint_generation: int = 0
 
         self._voice_hints_checking: bool = bool(_settings.get("voice_hints", False))
+        self._voice_sensitivity: str = str(_settings.get("voice_sensitivity", "medium"))
+        if self._voice_sensitivity not in VOICE_SENSITIVITY_LEVELS:
+            self._voice_sensitivity = "medium"
         self._voice_hint_timer = QTimer(self)
         self._voice_hint_timer.setSingleShot(True)
         self._voice_hint_timer.setInterval(1100)
@@ -2652,6 +2664,16 @@ class WritingCoreView(QWidget):
         voice_act.triggered.connect(lambda checked: self._toggle_voice_hints())
         menu.addAction(voice_act)
 
+        voice_sens_sub = menu.addMenu("Voice Sensitivity")
+        for level in VOICE_SENSITIVITY_LEVELS:
+            act = QAction(level.capitalize(), voice_sens_sub)
+            act.setCheckable(True)
+            act.setChecked(level == self._voice_sensitivity)
+            act.triggered.connect(
+                lambda _c=False, lv=level: self._set_voice_sensitivity(lv),
+            )
+            voice_sens_sub.addAction(act)
+
         menu.addSeparator()
 
         energy_act = QAction("Energy View", menu)
@@ -2851,6 +2873,7 @@ class WritingCoreView(QWidget):
         settings["energy_enabled"] = self._energy_enabled
         settings["energy_sensitivity"] = self._energy_sensitivity
         settings["voice_hints"] = self._voice_hints_checking
+        settings["voice_sensitivity"] = self._voice_sensitivity
         settings["language_override"] = self._language_override
         self._db.save_project_settings(self._project_id, settings)
 
@@ -3153,6 +3176,12 @@ class WritingCoreView(QWidget):
             self._cancel_voice_hint_worker()
         self._persist_font_settings()
 
+    def _set_voice_sensitivity(self, level: str) -> None:
+        self._voice_sensitivity = level
+        self._persist_font_settings()
+        if self._voice_hints_checking:
+            self._start_voice_hint_worker()
+
     def _run_voice_hints(self) -> None:
         if not self._voice_hints_checking:
             return
@@ -3185,6 +3214,7 @@ class WritingCoreView(QWidget):
         worker = _VoiceConsistencyWorker(
             self._voice_hint_generation, scenes, characters, profiles,
             scene_states=scene_states,
+            threshold=sensitivity_threshold(self._voice_sensitivity),
         )
         worker.finished.connect(self._on_voice_hint_results)
         self._voice_hint_worker = worker

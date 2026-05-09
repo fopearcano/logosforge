@@ -35,6 +35,19 @@ class VoiceDeviation:
 
 _DEFAULT_THRESHOLD = 0.45
 
+VOICE_SENSITIVITY_LEVELS = ("low", "medium", "high")
+
+_SENSITIVITY_THRESHOLDS: dict[str, float] = {
+    "low": 0.60,
+    "medium": 0.45,
+    "high": 0.30,
+}
+
+
+def sensitivity_threshold(level: str) -> float:
+    """Return the deviation threshold for a sensitivity level."""
+    return _SENSITIVITY_THRESHOLDS.get(level, _DEFAULT_THRESHOLD)
+
 _TONE_DISTANCE: dict[tuple[str, str], float] = {
     ("formal", "casual"): 1.0,
     ("casual", "formal"): 1.0,
