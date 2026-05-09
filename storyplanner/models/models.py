@@ -213,3 +213,49 @@ CHAT_PERSONALITIES = (
     "minimalist",
     "philosopher",
 )
+
+
+# ---------------------------------------------------------------------------
+# Stages — narrative versioning + branching
+# ---------------------------------------------------------------------------
+
+STAGE_SCOPE_TYPES = ("project", "act", "chapter", "scene", "psyke", "outline")
+STAGE_STATUSES = ("active", "archived", "canonical", "alternate")
+
+
+class Stage(SQLModel, table=True):
+    """A named narrative version or branch."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id")
+    name: str
+    description: str = ""
+    parent_stage_id: Optional[int] = Field(default=None, foreign_key="stage.id")
+    scope_type: str = "project"
+    scope_id: Optional[int] = None
+    status: str = "alternate"
+    metadata_json: str = ""
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
+class StageSnapshot(SQLModel, table=True):
+    """A captured copy of project data attached to a Stage."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    stage_id: int = Field(foreign_key="stage.id")
+    label: str = ""
+    reason: str = ""
+    summary: str = ""
+    data_json: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+class StageBranch(SQLModel, table=True):
+    """An explicit branching edge between two stages."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    source_stage_id: int = Field(foreign_key="stage.id")
+    target_stage_id: int = Field(foreign_key="stage.id")
+    branch_reason: str = ""
+    created_at: datetime = Field(default_factory=_now)

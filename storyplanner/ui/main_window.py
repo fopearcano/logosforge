@@ -47,6 +47,7 @@ from storyplanner.psyke_command_validator import ValidationStatus, validate_comm
 from storyplanner.psyke_system_commands import SystemCommandHandlers
 from storyplanner.ui.assistant_view import AssistantPanel
 from storyplanner.ui.chat_view import ChatView
+from storyplanner.ui.stages_view import StagesView
 from storyplanner.ui.settings_dialog import SettingsDialog
 from storyplanner.ui.act_analysis_view import ActAnalysisView
 from storyplanner.ui.beat_analysis_view import BeatAnalysisView
@@ -243,6 +244,7 @@ class MainWindow(QMainWindow):
             "Plugins": "\U0001F9E9",
             "Assistant": "\U0001F916",
             "Chat": "\U0001F4AC",
+            "Stages": "\U0001F4DC",
         }
 
         self._toggle_btn = QPushButton("\u00ab")
@@ -257,7 +259,7 @@ class MainWindow(QMainWindow):
             ("group", "Structure", ["Structure", "Acts", "Beats", "Arcs"]),
             "Tags", "Graph",
             ("group", "Analytics", ["Health", "Balance", "Pacing", "Narrative"]),
-            "Adapt", "PSYKE", "Plugins", "Assistant", "Chat",
+            "Adapt", "PSYKE", "Stages", "Plugins", "Assistant", "Chat",
         ]
         self.sidebar_buttons: dict[str, _SidebarButton] = {}
         self._sidebar_groups: list[_SidebarGroupHeader] = []
@@ -328,7 +330,7 @@ class MainWindow(QMainWindow):
             "Outline", "Scenes", "Manuscript", "Timeline", "Plot",
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
             "Health", "Balance", "Pacing", "Adapt", "Narrative", "PSYKE", "Plugins",
-            "Chat",
+            "Stages", "Chat",
         ]
         _nav_handlers = {
             "Projects": self._show_projects,
@@ -353,6 +355,7 @@ class MainWindow(QMainWindow):
             "PSYKE": self._show_psyke,
             "Plugins": self._show_plugins,
             "Chat": self._show_chat,
+            "Stages": self._show_stages,
         }
         for label in self._nav_labels:
             btn = self.sidebar_buttons[label]
@@ -839,6 +842,16 @@ class MainWindow(QMainWindow):
     def _show_chat(self) -> None:
         self._set_content(
             ChatView(
+                self._db,
+                self._project_id,
+                on_data_changed=self._on_data_changed,
+                get_active_scene_id=self._detect_active_scene_id,
+            )
+        )
+
+    def _show_stages(self) -> None:
+        self._set_content(
+            StagesView(
                 self._db,
                 self._project_id,
                 on_data_changed=self._on_data_changed,

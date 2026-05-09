@@ -29,6 +29,9 @@ from storyplanner.models import (
     SceneCharacterLink,
     SceneCharacterState,
     ScenePlaceLink,
+    Stage,
+    StageBranch,
+    StageSnapshot,
     StoryMemoryEntry,
     VoiceProfile,
 )
@@ -1550,6 +1553,205 @@ class Database:
                 return
             msg.metadata_json = json.dumps(metadata) if metadata else ""
             session.commit()
+
+    # -- Stages ---------------------------------------------------------------
+
+    def create_stage(
+        self,
+        project_id: int,
+        name: str,
+        *,
+        description: str = "",
+        parent_stage_id: int | None = None,
+        scope_type: str = "project",
+        scope_id: int | None = None,
+        status: str = "alternate",
+        metadata: dict | None = None,
+    ) -> Stage:
+        import json
+        with Session(self._engine) as session:
+            stage = Stage(
+                project_id=project_id,
+                name=name,
+                description=description,
+                parent_stage_id=parent_stage_id,
+                scope_type=scope_type,
+                scope_id=scope_id,
+                status=status,
+                metadata_json=json.dumps(metadata) if metadata else "",
+            )
+            session.add(stage)
+            session.commit()
+            session.refresh(stage)
+            return stage
+
+    def get_stage(self, stage_id: int) -> Stage | None:
+        with Session(self._engine) as session:
+            return session.get(Stage, stage_id)
+
+    def get_all_stages(self, project_id: int) -> list[Stage]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(Stage)
+                .where(Stage.project_id == project_id)
+                .order_by(Stage.created_at)
+            )
+            return list(session.exec(stmt).all())
+
+    def get_child_stages(self, stage_id: int) -> list[Stage]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(Stage)
+                .where(Stage.parent_stage_id == stage_id)
+                .order_by(Stage.created_at)
+            )
+            return list(session.exec(stmt).all())
+
+    def update_stage(
+        self,
+        stage_id: int,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        status: str | None = None,
+        metadata: dict | None = None,
+    ) -> Stage | None:
+        import json
+        from datetime import datetime, timezone
+        with Session(self._engine) as session:
+            stage = session.get(Stage, stage_id)
+            if stage is None:
+                return None
+            if name is not None:
+                stage.name = name
+            if description is not None:
+                stage.description = description
+            if status is not None:
+                stage.status = status
+            if metadata is not None:
+                stage.metadata_json = json.dumps(metadata)
+            stage.updated_at = datetime.now(timezone.utc)
+            session.commit()
+            session.refresh(stage)
+            return stage
+
+    def set_stage_status(
+        self, stage_id: int, status: str,
+    ) -> Stage | None:
+        if status not in ("active", "archived", "canonical", "alternate"):
+            return None
+        stage = self.get_stage(stage_id)
+        if stage is None:
+            return None
+        if status == "canonical" and stage.scope_type == "project":
+            for other in self.get_all_stages(stage.project_id):
+                if (
+                    other.id != stage_id
+                    and other.scope_type == "project"
+                    and other.status == "canonical"
+                ):
+                    self.update_stage(other.id, status="alternate")
+        if status == "canonical" and stage.scope_type == "scene" and stage.scope_id is not None:
+            for other in self.get_all_stages(stage.project_id):
+                if (
+                    other.id != stage_id
+                    and other.scope_type == "scene"
+                    and other.scope_id == stage.scope_id
+                    and other.status == "canonical"
+                ):
+                    self.update_stage(other.id, status="alternate")
+        return self.update_stage(stage_id, status=status)
+
+    def delete_stage(self, stage_id: int) -> None:
+        with Session(self._engine) as session:
+            for snap in session.exec(
+                select(StageSnapshot).where(StageSnapshot.stage_id == stage_id)
+            ).all():
+                session.delete(snap)
+            for br in session.exec(
+                select(StageBranch).where(
+                    (StageBranch.source_stage_id == stage_id)
+                    | (StageBranch.target_stage_id == stage_id)
+                )
+            ).all():
+                session.delete(br)
+            stage = session.get(Stage, stage_id)
+            if stage is not None:
+                session.delete(stage)
+            session.commit()
+
+    def get_stage_metadata(self, stage_id: int) -> dict:
+        import json
+        stage = self.get_stage(stage_id)
+        if stage is None or not stage.metadata_json:
+            return {}
+        try:
+            return json.loads(stage.metadata_json)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    # -- Stage snapshots ------------------------------------------------------
+
+    def create_stage_snapshot(
+        self,
+        stage_id: int,
+        data_json: str,
+        *,
+        label: str = "",
+        reason: str = "",
+        summary: str = "",
+    ) -> StageSnapshot:
+        with Session(self._engine) as session:
+            snap = StageSnapshot(
+                stage_id=stage_id,
+                label=label,
+                reason=reason,
+                summary=summary,
+                data_json=data_json,
+            )
+            session.add(snap)
+            session.commit()
+            session.refresh(snap)
+            return snap
+
+    def get_stage_snapshots(self, stage_id: int) -> list[StageSnapshot]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(StageSnapshot)
+                .where(StageSnapshot.stage_id == stage_id)
+                .order_by(StageSnapshot.created_at)
+            )
+            return list(session.exec(stmt).all())
+
+    def get_snapshot(self, snapshot_id: int) -> StageSnapshot | None:
+        with Session(self._engine) as session:
+            return session.get(StageSnapshot, snapshot_id)
+
+    # -- Stage branches -------------------------------------------------------
+
+    def create_stage_branch(
+        self,
+        source_stage_id: int,
+        target_stage_id: int,
+        branch_reason: str = "",
+    ) -> StageBranch:
+        with Session(self._engine) as session:
+            br = StageBranch(
+                source_stage_id=source_stage_id,
+                target_stage_id=target_stage_id,
+                branch_reason=branch_reason,
+            )
+            session.add(br)
+            session.commit()
+            session.refresh(br)
+            return br
+
+    def get_branches_from(self, stage_id: int) -> list[StageBranch]:
+        with Session(self._engine) as session:
+            stmt = select(StageBranch).where(
+                StageBranch.source_stage_id == stage_id,
+            )
+            return list(session.exec(stmt).all())
 
     @staticmethod
     def _matches(query_lower: str, *fields: str) -> bool:
