@@ -44,6 +44,14 @@ class StyleHint:
     message: str
 
 
+@dataclass(frozen=True)
+class StyleSuggestion:
+    """A single actionable style suggestion."""
+
+    category: str
+    message: str
+
+
 # ---------------------------------------------------------------------------
 # Heuristic helpers
 # ---------------------------------------------------------------------------
@@ -434,6 +442,100 @@ def detect_style_hints(text: str) -> list[StyleHint]:
                 ))
 
     return hints
+
+
+# ---------------------------------------------------------------------------
+# On-demand style suggestions
+# ---------------------------------------------------------------------------
+
+_MAX_SUGGESTIONS = 3
+
+
+def _build_rewrite(text: str, words: list[str]) -> str | None:
+    """Attempt a lightweight heuristic rewrite by removing filler words."""
+    result = text
+    for filler in _FILLER_WORDS:
+        result = re.sub(
+            rf"\b{re.escape(filler)}\b\s*",
+            "",
+            result,
+            flags=re.IGNORECASE,
+        )
+    result = re.sub(r"  +", " ", result).strip()
+    if result == text.strip() or len(result) < 10:
+        return None
+    return result
+
+
+def generate_style_suggestions(text: str) -> tuple[list[StyleSuggestion], str | None]:
+    """Analyze *text* and return 1-3 suggestions plus an optional rewrite.
+
+    Returns ``(suggestions, rewrite)`` where *rewrite* is ``None`` when no
+    meaningful improvement can be produced heuristically.
+    """
+    if not text.strip():
+        return [], None
+
+    w = _words(text)
+    sents = _sentences(text)
+    suggestions: list[StyleSuggestion] = []
+
+    clarity_score = _clarity(text, w, sents)
+    if clarity_score < 0.7:
+        avg_len = len(w) / max(len(sents), 1)
+        if avg_len > 25:
+            suggestions.append(StyleSuggestion(
+                "clarity", "Break long sentences for readability",
+            ))
+        elif _repeated_word_ratio(w) > 0.12:
+            suggestions.append(StyleSuggestion(
+                "clarity", "Vary word choice to avoid repetition",
+            ))
+        else:
+            suggestions.append(StyleSuggestion(
+                "clarity", "Simplify sentence structure",
+            ))
+
+    concision_score = _concision(text, w, sents)
+    if len(suggestions) < _MAX_SUGGESTIONS and concision_score < 0.7:
+        filler_count = sum(1 for word in w if word in _FILLER_WORDS)
+        adverb_r = _adverb_ratio(w)
+        if filler_count > 0:
+            suggestions.append(StyleSuggestion(
+                "concision", "Remove filler words (very, really, just…)",
+            ))
+        elif adverb_r > 0.05:
+            suggestions.append(StyleSuggestion(
+                "concision", "Use stronger verbs instead of adverbs",
+            ))
+        else:
+            suggestions.append(StyleSuggestion(
+                "concision", "Tighten the prose — fewer words, same meaning",
+            ))
+
+    rhythm_score = _rhythm(sents)
+    if len(suggestions) < _MAX_SUGGESTIONS and rhythm_score < 0.65:
+        suggestions.append(StyleSuggestion(
+            "rhythm", "Vary sentence lengths for better flow",
+        ))
+
+    tone_score = _tone_consistency(sents)
+    if len(suggestions) < _MAX_SUGGESTIONS and tone_score < 0.7:
+        suggestions.append(StyleSuggestion(
+            "tone", "Tone shifts between formal and informal",
+        ))
+
+    dialogue = _dialogue_naturalness(text)
+    if len(suggestions) < _MAX_SUGGESTIONS and dialogue is not None and dialogue < 0.6:
+        suggestions.append(StyleSuggestion(
+            "dialogue", "Shorten dialogue or add contractions",
+        ))
+
+    suggestions = suggestions[:_MAX_SUGGESTIONS]
+
+    rewrite = _build_rewrite(text, w) if suggestions else None
+
+    return suggestions, rewrite
 
 
 # ---------------------------------------------------------------------------

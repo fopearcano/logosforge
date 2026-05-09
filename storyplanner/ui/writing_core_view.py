@@ -43,7 +43,12 @@ from PySide6.QtWidgets import (
 from storyplanner.auto_link import AutoLinkSuggester, Suggestion
 from storyplanner.grammar_checker import Issue as GrammarIssue, check_text, detect_language
 from storyplanner.context_assistant import ContextAssistant, ContextHint, HintRateLimiter
-from storyplanner.style_analysis import StyleHint, detect_style_hints
+from storyplanner.style_analysis import (
+    StyleHint,
+    StyleSuggestion,
+    detect_style_hints,
+    generate_style_suggestions,
+)
 from storyplanner.paragraph_energy import (
     FlowHint,
     ParagraphEnergy,
@@ -422,6 +427,105 @@ class _GrammarPopup(QWidget):
         self.hide()
 
 
+class _StyleSuggestionPopup(QWidget):
+    """Floating popup that shows 1-3 style suggestions + optional rewrite."""
+
+    rewrite_accepted = Signal(str)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowFlags(
+            Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint,
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
+        self.setObjectName("styleSuggestionPopup")
+        self.setMaximumWidth(360)
+
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(10, 8, 10, 8)
+        self._layout.setSpacing(4)
+
+        self._header = QLabel()
+        self._header.setObjectName("styleSuggestionHeader")
+        self._layout.addWidget(self._header)
+
+        self._suggestion_labels: list[QLabel] = []
+        self._rewrite_btn: QPushButton | None = None
+        self._rewrite_text: str | None = None
+
+        self.setStyleSheet(f"""
+            #styleSuggestionPopup {{
+                background: {theme.BG_PANEL};
+                border: 1px solid {theme.BG_HOVER};
+                border-radius: 6px;
+            }}
+            #styleSuggestionHeader {{
+                color: {theme.TEXT_SECONDARY};
+                font-size: 11px;
+                font-weight: bold;
+            }}
+            .QLabel {{
+                color: {theme.TEXT_PRIMARY};
+                font-size: 12px;
+                background: transparent;
+            }}
+            QPushButton {{
+                color: {theme.TEXT_PRIMARY};
+                background: {theme.BG_INPUT};
+                border: 1px solid {theme.BG_HOVER};
+                border-radius: 4px;
+                font-size: 12px;
+                padding: 3px 10px;
+            }}
+            QPushButton:hover {{
+                background: {theme.BG_HOVER};
+            }}
+        """)
+
+    def show_suggestions(
+        self,
+        suggestions: list[StyleSuggestion],
+        rewrite: str | None,
+        global_pos,
+    ) -> None:
+        for lbl in self._suggestion_labels:
+            self._layout.removeWidget(lbl)
+            lbl.deleteLater()
+        self._suggestion_labels.clear()
+        if self._rewrite_btn is not None:
+            self._layout.removeWidget(self._rewrite_btn)
+            self._rewrite_btn.deleteLater()
+            self._rewrite_btn = None
+        self._rewrite_text = None
+
+        if not suggestions:
+            self._header.setText("No suggestions — looks good!")
+        else:
+            self._header.setText("Style suggestions:")
+
+        for s in suggestions:
+            lbl = QLabel(f"  • {s.message}")
+            lbl.setWordWrap(True)
+            self._layout.addWidget(lbl)
+            self._suggestion_labels.append(lbl)
+
+        if rewrite is not None:
+            self._rewrite_text = rewrite
+            btn = QPushButton("Apply rewrite")
+            btn.clicked.connect(self._on_rewrite)
+            self._layout.addWidget(btn)
+            self._rewrite_btn = btn
+
+        self.adjustSize()
+        self.move(global_pos)
+        self.show()
+
+    def _on_rewrite(self) -> None:
+        if self._rewrite_text is not None:
+            self.rewrite_accepted.emit(self._rewrite_text)
+        self.hide()
+
+
 class _SceneEditor(QTextEdit):
     """Borderless editor with focus-fade overlay and cross-scene navigation.
 
@@ -463,6 +567,10 @@ class _SceneEditor(QTextEdit):
         self._grammar_popup = _GrammarPopup()
         self._grammar_popup.suggestion_chosen.connect(self._on_popup_suggestion)
         self._grammar_popup.issue_ignored.connect(self._on_popup_ignore)
+        self._style_suggestion_popup = _StyleSuggestionPopup()
+        self._style_suggestion_popup.rewrite_accepted.connect(
+            self._on_style_rewrite,
+        )
         self._focus_fade_enabled = False
         self._fade_block = -1
         self._fade_bg = "#0f1219"
@@ -636,6 +744,12 @@ class _SceneEditor(QTextEdit):
             open_act.triggered.connect(
                 lambda _, eid=entry_id: self._fire_psyke_action("open", eid),
             )
+        if self.textCursor().hasSelection():
+            menu.addSeparator()
+            style_act = menu.addAction("Style Improve")
+            style_act.triggered.connect(
+                lambda: self._show_style_suggestions(event.globalPos()),
+            )
         menu.exec(event.globalPos())
         menu.deleteLater()
 
@@ -655,6 +769,21 @@ class _SceneEditor(QTextEdit):
         key = (issue.issue_type, issue.message)
         self._ignored_issues.add(key)
         self.apply_grammar_underlines()
+
+    def _show_style_suggestions(self, global_pos) -> None:
+        cursor = self.textCursor()
+        if not cursor.hasSelection():
+            return
+        text = cursor.selectedText().replace(" ", "\n")
+        suggestions, rewrite = generate_style_suggestions(text)
+        self._style_suggestion_popup.show_suggestions(
+            suggestions, rewrite, global_pos,
+        )
+
+    def _on_style_rewrite(self, rewrite: str) -> None:
+        cursor = self.textCursor()
+        if cursor.hasSelection():
+            cursor.insertText(rewrite)
 
     def _resolve_psyke_at(self, pos) -> int | None:
         if self._on_psyke_context_action is None:
@@ -1822,6 +1951,11 @@ class WritingCoreView(QWidget):
             self._create_chapter_from_command(editor)
         elif key == "focus":
             self.toggle_focus_mode()
+        elif key == "style_improve":
+            if editor is not None:
+                cursor_rect = editor.cursorRect()
+                gpos = editor.mapToGlobal(cursor_rect.bottomLeft())
+                editor._show_style_suggestions(gpos)
         elif key == "psyke":
             pass
         elif key.startswith("ai_"):

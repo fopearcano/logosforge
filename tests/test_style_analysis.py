@@ -5,12 +5,14 @@ from unittest.mock import patch
 from storyplanner.style_analysis import (
     ParagraphStyle,
     StyleHint,
+    StyleSuggestion,
     _parse_style_metrics,
     analyze_paragraph,
     analyze_paragraphs,
     analyze_style,
     clear_cache,
     detect_style_hints,
+    generate_style_suggestions,
 )
 
 
@@ -750,3 +752,162 @@ def test_style_hints_toggle_clears_hints():
     view._toggle_style_hints()
     view._toggle_style_hints()
     assert editor._style_hints == []
+
+
+# -- generate_style_suggestions -----------------------------------------------
+
+def test_suggestions_empty_text():
+    suggestions, rewrite = generate_style_suggestions("")
+    assert suggestions == []
+    assert rewrite is None
+
+
+def test_suggestions_clean_prose():
+    text = "She walked home. The rain fell softly. He opened the door."
+    suggestions, rewrite = generate_style_suggestions(text)
+    assert len(suggestions) <= 3
+    assert rewrite is None or isinstance(rewrite, str)
+
+
+def test_suggestions_returns_style_suggestion_instances():
+    text = (
+        "The man who was standing by the really very ancient and weathered door "
+        "which had been basically built many decades ago really just opened it."
+    )
+    suggestions, _ = generate_style_suggestions(text)
+    for s in suggestions:
+        assert isinstance(s, StyleSuggestion)
+        assert isinstance(s.category, str)
+        assert isinstance(s.message, str)
+
+
+def test_suggestions_filler_words_trigger_concision():
+    text = (
+        "He was really very just basically totally completely honestly "
+        "simply absolutely definitely standing there."
+    )
+    suggestions, _ = generate_style_suggestions(text)
+    categories = [s.category for s in suggestions]
+    assert "concision" in categories
+
+
+def test_suggestions_long_sentences_trigger_clarity():
+    text = (
+        "The man who was standing by the ancient and weathered door which "
+        "had been built many decades ago opened it with a slow and careful "
+        "motion of his hand while glancing nervously over his shoulder at "
+        "the crowd that had gathered behind him in the narrow hallway."
+    )
+    suggestions, _ = generate_style_suggestions(text)
+    categories = [s.category for s in suggestions]
+    assert "clarity" in categories
+
+
+def test_suggestions_monotonous_rhythm():
+    text = (
+        "The dog ran fast. The cat sat down. The man went home. "
+        "The bird flew up. The sun went down."
+    )
+    suggestions, _ = generate_style_suggestions(text)
+    categories = [s.category for s in suggestions]
+    assert "rhythm" in categories
+
+
+def test_suggestions_max_three():
+    text = (
+        "He was really very basically standing by the quite totally honestly "
+        "extremely absolutely completely ancient door which had been simply "
+        "definitely certainly built. He was really very basically standing. "
+        "He was really very basically standing. He was really very basically "
+        "standing. He was really very basically standing."
+    )
+    suggestions, _ = generate_style_suggestions(text)
+    assert len(suggestions) <= 3
+
+
+def test_suggestions_rewrite_removes_fillers():
+    text = "He very really just basically walked to the store."
+    suggestions, rewrite = generate_style_suggestions(text)
+    if rewrite is not None:
+        assert "very" not in rewrite.lower().split()
+        assert "really" not in rewrite.lower().split()
+        assert "basically" not in rewrite.lower().split()
+
+
+def test_suggestions_rewrite_none_when_clean():
+    text = "She walked home. The rain fell softly."
+    _, rewrite = generate_style_suggestions(text)
+    assert rewrite is None
+
+
+# -- Style suggestions UI integration -----------------------------------------
+
+def test_style_suggestion_popup_shows():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from storyplanner.ui.writing_core_view import _StyleSuggestionPopup
+
+    popup = _StyleSuggestionPopup()
+    suggestions = [
+        StyleSuggestion("clarity", "Break long sentences"),
+        StyleSuggestion("concision", "Remove filler words"),
+    ]
+    popup.show_suggestions(suggestions, "Rewritten text.", popup.pos())
+    assert len(popup._suggestion_labels) == 2
+    assert popup._rewrite_btn is not None
+    assert popup._rewrite_text == "Rewritten text."
+    popup.hide()
+
+
+def test_style_suggestion_popup_no_rewrite():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from storyplanner.ui.writing_core_view import _StyleSuggestionPopup
+
+    popup = _StyleSuggestionPopup()
+    suggestions = [StyleSuggestion("rhythm", "Vary sentence lengths")]
+    popup.show_suggestions(suggestions, None, popup.pos())
+    assert len(popup._suggestion_labels) == 1
+    assert popup._rewrite_btn is None
+    popup.hide()
+
+
+def test_style_suggestion_popup_empty():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from storyplanner.ui.writing_core_view import _StyleSuggestionPopup
+
+    popup = _StyleSuggestionPopup()
+    popup.show_suggestions([], None, popup.pos())
+    assert len(popup._suggestion_labels) == 0
+    assert popup._rewrite_btn is None
+    popup.hide()
+
+
+def test_selection_triggers_suggestions():
+    from PySide6.QtGui import QTextCursor
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from storyplanner.db import Database
+    from storyplanner.ui.writing_core_view import WritingCoreView
+
+    db = Database()
+    proj = db.create_project("StyleSuggest")
+    content = (
+        "He was really very just basically totally completely honestly "
+        "simply absolutely definitely standing there by the door."
+    )
+    scene = db.create_scene(proj.id, "S", content=content)
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[scene.id]
+
+    cursor = editor.textCursor()
+    cursor.select(QTextCursor.SelectionType.Document)
+    editor.setTextCursor(cursor)
+
+    gpos = editor.mapToGlobal(editor.cursorRect().bottomLeft())
+    editor._show_style_suggestions(gpos)
+
+    assert editor._style_suggestion_popup.isVisible()
+    assert len(editor._style_suggestion_popup._suggestion_labels) >= 1
+    editor._style_suggestion_popup.hide()

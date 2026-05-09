@@ -25,6 +25,7 @@ COMMANDS = [
     ("Expand", "ai_expand", "AI: expand selected text"),
     ("Dialogue", "ai_dialogue", "AI: improve dialogue"),
     ("Suggest Beats", "ai_suggest", "AI: suggest narrative directions"),
+    ("Style Improve", "style_improve", "Analyze selection and suggest improvements"),
     ("Focus Mode", "focus", "Toggle distraction-free writing"),
 ]
 
