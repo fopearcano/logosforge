@@ -342,8 +342,8 @@ def build_stylesheet() -> str:
         border: none;
         border-radius: 6px;
         text-align: left;
-        padding: 8px 8px;
-        margin: 1px 4px;
+        padding: 6px 8px;
+        margin: 0px 4px;
         background-color: transparent;
         color: {TEXT_SECONDARY};
         font-size: 13px;

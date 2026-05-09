@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QPropertyAnimation, QEasingCurve, Qt
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QVariantAnimation
 from PySide6.QtGui import QAction, QCloseEvent, QColor, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -95,6 +95,59 @@ class _SidebarButton(QPushButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setObjectName("sidebarBtn")
         self._update_text()
+
+        self._hover_blend = 0.0
+        self._hover_anim = QVariantAnimation(self)
+        self._hover_anim.setDuration(120)
+        self._hover_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._hover_anim.valueChanged.connect(self._on_hover_tick)
+        self.toggled.connect(self._on_toggled)
+
+    def enterEvent(self, event) -> None:
+        if not self.isChecked():
+            bg = QColor(theme.get('BG_HOVER'))
+            self.setStyleSheet(
+                f"background-color: rgba({bg.red()},{bg.green()},{bg.blue()},0);"
+                f" color: {theme.get('TEXT_SECONDARY')};"
+            )
+        self._animate_hover(1.0)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._animate_hover(0.0)
+        super().leaveEvent(event)
+
+    def _animate_hover(self, target: float) -> None:
+        self._hover_anim.stop()
+        self._hover_anim.setStartValue(self._hover_blend)
+        self._hover_anim.setEndValue(target)
+        self._hover_anim.start()
+
+    def _on_hover_tick(self, value: float) -> None:
+        self._hover_blend = value
+        if self.isChecked():
+            return
+        if value < 0.01:
+            if self.styleSheet():
+                self.setStyleSheet("")
+            return
+        bg = QColor(theme.get('BG_HOVER'))
+        ts = QColor(theme.get('TEXT_SECONDARY'))
+        tp = QColor(theme.get('TEXT_PRIMARY'))
+        r = int(ts.red() + (tp.red() - ts.red()) * value)
+        g = int(ts.green() + (tp.green() - ts.green()) * value)
+        b = int(ts.blue() + (tp.blue() - ts.blue()) * value)
+        self.setStyleSheet(
+            f"background-color: rgba({bg.red()},{bg.green()},{bg.blue()},{int(value * 255)});"
+            f" color: rgb({r},{g},{b});"
+        )
+
+    def _on_toggled(self, checked: bool) -> None:
+        if checked:
+            self._hover_anim.stop()
+            self._hover_blend = 0.0
+            if self.styleSheet():
+                self.setStyleSheet("")
 
     def set_collapsed(self, collapsed: bool) -> None:
         self._collapsed = collapsed
@@ -248,6 +301,7 @@ class MainWindow(QMainWindow):
         }
 
         self._toggle_btn = QPushButton("\u00ab")
+        self._toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._toggle_btn.clicked.connect(self._toggle_sidebar)
         sidebar_layout.addWidget(self._toggle_btn)
 
@@ -305,6 +359,7 @@ class MainWindow(QMainWindow):
         ):
             btn = QPushButton(short)
             btn.setCheckable(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setChecked(name == theme.current_palette())
             btn.clicked.connect(lambda _, n=name: self._switch_theme(n))
             ab_layout.addWidget(btn)
