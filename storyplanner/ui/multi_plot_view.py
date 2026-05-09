@@ -10,11 +10,15 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
+    QMenu,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -37,16 +41,115 @@ class PlotFilters:
 
 
 # =============================================================================
+# Shared context-menu behaviour for scene cards
+# =============================================================================
+
+class _SceneCardContextMixin:
+    """Mixin providing context-menu actions for scene cards.
+
+    Requires the host class to have ``_db``, ``_on_data_changed``, and
+    ``_on_open_scene`` attributes.
+    """
+
+    def _setup_card_context(self, card: QFrame, scene_id: int) -> None:
+        card.setProperty("scene_id", scene_id)
+        card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        card.customContextMenuRequested.connect(
+            lambda pos, c=card: self._on_card_context(c, pos),
+        )
+        card.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def _on_card_context(self, card: QFrame, pos) -> None:
+        scene_id = card.property("scene_id")
+        scene = self._db.get_scene_by_id(scene_id)
+        if scene is None:
+            return
+        menu = QMenu(card)
+
+        if self._on_open_scene is not None:
+            open_act = QAction("Open in Manuscript", menu)
+            open_act.triggered.connect(lambda: self._on_open_scene(scene_id))
+            menu.addAction(open_act)
+
+        edit_title = QAction("Edit Title", menu)
+        edit_title.triggered.connect(lambda: self._edit_title(scene_id))
+        menu.addAction(edit_title)
+
+        edit_summary = QAction("Edit Summary", menu)
+        edit_summary.triggered.connect(lambda: self._edit_summary(scene_id))
+        menu.addAction(edit_summary)
+
+        delete_act = QAction("Delete", menu)
+        delete_act.triggered.connect(lambda: self._delete_scene(scene_id))
+        menu.addAction(delete_act)
+
+        menu.exec(card.mapToGlobal(pos))
+
+    def _edit_title(self, scene_id: int) -> None:
+        scene = self._db.get_scene_by_id(scene_id)
+        if scene is None:
+            return
+        new_title, ok = QInputDialog.getText(self, "Edit Title", "Title:", text=scene.title)
+        if not ok or not new_title.strip():
+            return
+        self._db.update_scene(
+            scene_id=scene.id, title=new_title.strip(),
+            summary=scene.summary, synopsis=scene.synopsis,
+            goal=scene.goal, conflict=scene.conflict, outcome=scene.outcome,
+            beat=scene.beat, tags=scene.tags, act=scene.act,
+            content=scene.content, chapter=scene.chapter, plotline=scene.plotline,
+        )
+        if self._on_data_changed:
+            self._on_data_changed()
+
+    def _edit_summary(self, scene_id: int) -> None:
+        scene = self._db.get_scene_by_id(scene_id)
+        if scene is None:
+            return
+        new_summary, ok = QInputDialog.getMultiLineText(
+            self, "Edit Summary", "Summary:", scene.summary or "",
+        )
+        if not ok:
+            return
+        self._db.update_scene_summary(scene_id, new_summary.strip())
+        if self._on_data_changed:
+            self._on_data_changed()
+
+    def _delete_scene(self, scene_id: int) -> None:
+        scene = self._db.get_scene_by_id(scene_id)
+        if scene is None:
+            return
+        confirm = QMessageBox.question(
+            self, "Delete Scene",
+            f"Delete scene '{scene.title}'?\nThis cannot be undone.",
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        self._db.delete_scene(scene_id)
+        if self._on_data_changed:
+            self._on_data_changed()
+
+
+# =============================================================================
 # Timeline Strip — horizontal left-to-right scene flow
 # =============================================================================
 
-class _TimelineStrip(QWidget):
+class _TimelineStrip(_SceneCardContextMixin, QWidget):
     """Horizontal timeline: scenes as cards flowing left to right."""
 
-    def __init__(self, db: Database, project_id: int) -> None:
+    def __init__(
+        self,
+        db: Database,
+        project_id: int,
+        on_data_changed: Callable[[], None] | None = None,
+        on_open_scene: Callable[[int], None] | None = None,
+    ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
+        self._on_data_changed = on_data_changed
+        self._on_open_scene = on_open_scene
+        self._filters: PlotFilters | None = None
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -70,6 +173,7 @@ class _TimelineStrip(QWidget):
         self._cards: list[QFrame] = []
 
     def refresh(self, filters: PlotFilters | None = None) -> None:
+        self._filters = filters
         self._clear()
         scenes = self._filtered_scenes(filters)
 
@@ -113,6 +217,7 @@ class _TimelineStrip(QWidget):
         card.setObjectName("timelineCard")
         card.setFixedWidth(160)
         card.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
+        self._setup_card_context(card, scene.id)
 
         layout = QVBoxLayout(card)
         layout.setContentsMargins(8, 6, 8, 6)
@@ -150,13 +255,22 @@ class _TimelineStrip(QWidget):
 # Arc Lanes — one row per plotline
 # =============================================================================
 
-class _ArcLanes(QWidget):
+class _ArcLanes(_SceneCardContextMixin, QWidget):
     """Arc view: one horizontal lane per plotline."""
 
-    def __init__(self, db: Database, project_id: int) -> None:
+    def __init__(
+        self,
+        db: Database,
+        project_id: int,
+        on_data_changed: Callable[[], None] | None = None,
+        on_open_scene: Callable[[int], None] | None = None,
+    ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
+        self._on_data_changed = on_data_changed
+        self._on_open_scene = on_open_scene
+        self._filters: PlotFilters | None = None
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -178,6 +292,7 @@ class _ArcLanes(QWidget):
         self._lane_count = 0
 
     def refresh(self, filters: PlotFilters | None = None) -> None:
+        self._filters = filters
         self._clear()
         scenes = self._filtered_scenes(filters)
 
@@ -235,6 +350,7 @@ class _ArcLanes(QWidget):
         card = QFrame()
         card.setObjectName("arcCard")
         card.setFixedWidth(140)
+        self._setup_card_context(card, scene.id)
 
         layout = QVBoxLayout(card)
         layout.setContentsMargins(6, 4, 6, 4)
@@ -266,13 +382,22 @@ class _ArcLanes(QWidget):
 # Character Lanes — one row per character
 # =============================================================================
 
-class _CharLanes(QWidget):
+class _CharLanes(_SceneCardContextMixin, QWidget):
     """Character view: one horizontal lane per character."""
 
-    def __init__(self, db: Database, project_id: int) -> None:
+    def __init__(
+        self,
+        db: Database,
+        project_id: int,
+        on_data_changed: Callable[[], None] | None = None,
+        on_open_scene: Callable[[int], None] | None = None,
+    ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
+        self._on_data_changed = on_data_changed
+        self._on_open_scene = on_open_scene
+        self._filters: PlotFilters | None = None
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -294,6 +419,7 @@ class _CharLanes(QWidget):
         self._lane_count = 0
 
     def refresh(self, filters: PlotFilters | None = None) -> None:
+        self._filters = filters
         self._clear()
         scenes = self._filtered_scenes(filters)
         characters = self._db.get_all_characters(self._project_id)
@@ -369,6 +495,7 @@ class _CharLanes(QWidget):
         card = QFrame()
         card.setObjectName("charCard")
         card.setFixedWidth(130)
+        self._setup_card_context(card, scene.id)
 
         layout = QVBoxLayout(card)
         layout.setContentsMargins(6, 4, 6, 4)
@@ -522,9 +649,21 @@ class MultiPlotView(QWidget):
             on_data_changed=self._on_data_changed,
             on_open_scene=self._on_open_scene,
         )
-        self._timeline_view = _TimelineStrip(self._db, self._project_id)
-        self._arc_view = _ArcLanes(self._db, self._project_id)
-        self._char_view = _CharLanes(self._db, self._project_id)
+        self._timeline_view = _TimelineStrip(
+            self._db, self._project_id,
+            on_data_changed=self._on_data_changed,
+            on_open_scene=self._on_open_scene,
+        )
+        self._arc_view = _ArcLanes(
+            self._db, self._project_id,
+            on_data_changed=self._on_data_changed,
+            on_open_scene=self._on_open_scene,
+        )
+        self._char_view = _CharLanes(
+            self._db, self._project_id,
+            on_data_changed=self._on_data_changed,
+            on_open_scene=self._on_open_scene,
+        )
 
         self._views: dict[str, QWidget] = {
             "Grid": self._grid_view,
@@ -584,6 +723,10 @@ class MultiPlotView(QWidget):
 
     def get_active_mode(self) -> str:
         return self._active_mode
+
+    def refresh(self) -> None:
+        """Refresh the currently active view."""
+        self._refresh_active()
 
     def get_view(self, mode: str) -> QWidget | None:
         return self._views.get(mode)

@@ -1414,6 +1414,9 @@ class MainWindow(QMainWindow):
         self._psyke_console.set_project(project.id)
         self._set_current_file(None)
         self._cached_scenes_view = None
+        self._cached_scene_entry_scene = None
+        self._cached_scene_entry_ids = None
+        self._assistant_panel.refresh_scenes()
         self._mark_clean()
         self._reset_content("New project created. Select a section from the sidebar.")
 
@@ -1591,12 +1594,15 @@ class MainWindow(QMainWindow):
         self._psyke_console.set_project(new_project_id)
         self._set_current_file(path)
         self._cached_scenes_view = None
+        self._cached_scene_entry_scene = None
+        self._cached_scene_entry_ids = None
         self._mark_clean()
         recent_projects.add(path)
         self._refresh_recent_menu()
         get_settings().set("last_project_path", str(Path(path).resolve()))
 
-        self._reset_content("Project loaded. Select a section from the sidebar.")
+        self._set_active_section("Dashboard")
+        self._show_dashboard()
 
     def load_file_quiet(self, path: str) -> bool:
         """Load a project file without showing dialogs on failure."""
@@ -1614,6 +1620,8 @@ class MainWindow(QMainWindow):
         self._psyke_console.set_project(self._project_id)
         self._set_current_file(path)
         self._cached_scenes_view = None
+        self._cached_scene_entry_scene = None
+        self._cached_scene_entry_ids = None
         self._mark_clean()
         recent_projects.add(path)
         self._refresh_recent_menu()
@@ -1650,6 +1658,12 @@ class MainWindow(QMainWindow):
 
     # -- Dirty state and autosave --------------------------------------------
 
+    def _refresh_active_view(self) -> None:
+        """Refresh the current content view if it supports refresh."""
+        view = self.content_area
+        if view is not None and hasattr(view, 'refresh'):
+            view.refresh()
+
     def _on_data_changed(self) -> None:
         self._dirty = True
         self._update_title()
@@ -1659,6 +1673,7 @@ class MainWindow(QMainWindow):
         self._cached_scene_entry_scene = None
         self._cached_scene_entry_ids = None
         self._psyke_console.mark_index_dirty()
+        self._refresh_active_view()
 
     def _auto_save(self) -> None:
         if not self._current_file:

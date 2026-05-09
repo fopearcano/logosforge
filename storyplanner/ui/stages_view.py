@@ -230,6 +230,9 @@ class StagesView(QWidget):
 
     # -- Data loading --------------------------------------------------------
 
+    def refresh(self) -> None:
+        self._reload_tree()
+
     def _reload_tree(self) -> None:
         self._tree.clear()
         stages = self._db.get_all_stages(self._project_id)

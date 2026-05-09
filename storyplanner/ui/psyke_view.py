@@ -218,6 +218,9 @@ class PsykeView(QWidget):
 
     # -- List management -----------------------------------------------------
 
+    def refresh(self) -> None:
+        self._refresh_list()
+
     def _refresh_list(self) -> None:
         self._all_entries = self._db.get_all_psyke_entries(self._project_id)
         self._apply_filter()
