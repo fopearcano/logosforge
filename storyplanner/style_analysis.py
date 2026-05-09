@@ -34,6 +34,16 @@ class ParagraphStyle:
             self.last_updated = time.time()
 
 
+@dataclass(frozen=True)
+class StyleHint:
+    """A single inline style issue with character-level position."""
+
+    start: int
+    end: int
+    hint_type: str
+    message: str
+
+
 # ---------------------------------------------------------------------------
 # Heuristic helpers
 # ---------------------------------------------------------------------------
@@ -325,6 +335,105 @@ def analyze_style(text: str) -> ParagraphStyle:
     result = analyze_paragraph(0, text)
     _cache_put(text, result)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Inline style hints — character-level spans for underlines
+# ---------------------------------------------------------------------------
+
+_SENTENCE_SPLIT_RE = re.compile(r'(?<=[.!?])\s+')
+_LONG_SENTENCE_THRESHOLD = 30
+_MAX_HINTS_PER_PARAGRAPH = 3
+_REPEAT_SKIP = frozenset({
+    "the", "a", "an", "and", "or", "but", "in", "on", "of", "to",
+    "is", "was", "it", "he", "she", "i", "we", "they", "his", "her",
+    "that", "this", "for", "with", "not", "had", "has", "have",
+})
+
+
+def detect_style_hints(text: str) -> list[StyleHint]:
+    """Detect inline style issues with character-level positions.
+
+    Returns at most ``_MAX_HINTS_PER_PARAGRAPH`` hints to avoid clutter.
+    """
+    hints: list[StyleHint] = []
+    if not text.strip():
+        return hints
+
+    sentences = _SENTENCE_SPLIT_RE.split(text)
+    sent_starts: list[int] = []
+    pos = 0
+    for s in sentences:
+        idx = text.find(s, pos)
+        sent_starts.append(idx)
+        pos = idx + len(s)
+
+    for i, sent in enumerate(sentences):
+        if len(hints) >= _MAX_HINTS_PER_PARAGRAPH:
+            break
+        word_count = len(sent.split())
+        if word_count > _LONG_SENTENCE_THRESHOLD:
+            start = sent_starts[i]
+            hints.append(StyleHint(
+                start=start,
+                end=start + len(sent),
+                hint_type="clarity",
+                message="Sentence may be too long",
+            ))
+
+    if len(hints) < _MAX_HINTS_PER_PARAGRAPH:
+        lower = text.lower()
+        words_with_pos: list[tuple[str, int, int]] = [
+            (m.group().lower(), m.start(), m.end())
+            for m in re.finditer(r"[a-zA-Z']+", text)
+        ]
+        content_words: dict[str, list[tuple[int, int]]] = {}
+        for w, s, e in words_with_pos:
+            if w not in _REPEAT_SKIP and len(w) > 2:
+                content_words.setdefault(w, []).append((s, e))
+        flagged: set[str] = set()
+        for word, positions in content_words.items():
+            if len(hints) >= _MAX_HINTS_PER_PARAGRAPH:
+                break
+            if len(positions) >= 3 and word not in flagged:
+                flagged.add(word)
+                s, e = positions[1]
+                hints.append(StyleHint(
+                    start=s, end=e,
+                    hint_type="repetition",
+                    message="Repetition detected",
+                ))
+
+    if len(hints) < _MAX_HINTS_PER_PARAGRAPH and len(sentences) >= 4:
+        lengths = [len(s.split()) for s in sentences]
+        avg = sum(lengths) / len(lengths) if lengths else 0
+        if avg > 0:
+            variance = sum((l - avg) ** 2 for l in lengths) / len(lengths)
+            cv = (variance ** 0.5) / avg
+            if cv < 0.15:
+                start = sent_starts[0]
+                end = sent_starts[0] + len(sentences[0])
+                hints.append(StyleHint(
+                    start=start, end=end,
+                    hint_type="rhythm",
+                    message="Rhythm feels monotonous",
+                ))
+
+    dialogue_matches = list(_DIALOGUE_RE.finditer(text))
+    if len(hints) < _MAX_HINTS_PER_PARAGRAPH and dialogue_matches:
+        for m in dialogue_matches:
+            if len(hints) >= _MAX_HINTS_PER_PARAGRAPH:
+                break
+            inner = m.group()[1:-1]
+            inner_words = inner.split()
+            if len(inner_words) > 50:
+                hints.append(StyleHint(
+                    start=m.start(), end=m.end(),
+                    hint_type="dialogue",
+                    message="Dialogue feels stiff",
+                ))
+
+    return hints
 
 
 # ---------------------------------------------------------------------------

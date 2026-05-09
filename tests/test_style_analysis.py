@@ -4,11 +4,13 @@ from unittest.mock import patch
 
 from storyplanner.style_analysis import (
     ParagraphStyle,
+    StyleHint,
     _parse_style_metrics,
     analyze_paragraph,
     analyze_paragraphs,
     analyze_style,
     clear_cache,
+    detect_style_hints,
 )
 
 
@@ -550,3 +552,201 @@ def test_refine_worker_emits_failed_on_exception():
 
     assert len(errors) == 1
     assert "no server" in errors[0]
+
+
+# -- detect_style_hints -------------------------------------------------------
+
+def test_hints_empty_text():
+    assert detect_style_hints("") == []
+
+
+def test_hints_clean_prose_no_hints():
+    text = "She walked home. The rain fell softly. He opened the door."
+    hints = detect_style_hints(text)
+    assert len(hints) == 0
+
+
+def test_hints_long_sentence_detected():
+    text = (
+        "The man who was standing by the ancient and weathered door which "
+        "had been built many decades ago opened it with a slow and careful "
+        "motion of his hand while glancing nervously over his shoulder at "
+        "the crowd that had gathered behind him in the narrow hallway "
+        "leading to the old abandoned wing of the enormous building."
+    )
+    hints = detect_style_hints(text)
+    clarity = [h for h in hints if h.hint_type == "clarity"]
+    assert len(clarity) >= 1
+    assert clarity[0].message == "Sentence may be too long"
+
+
+def test_hints_long_sentence_positions():
+    text = "Short. " + "word " * 35 + "end."
+    hints = detect_style_hints(text)
+    clarity = [h for h in hints if h.hint_type == "clarity"]
+    assert len(clarity) >= 1
+    assert clarity[0].start >= 0
+    assert clarity[0].end <= len(text)
+
+
+def test_hints_repetition_detected():
+    text = (
+        "The castle stood on the castle hill near the castle walls "
+        "surrounding the castle grounds."
+    )
+    hints = detect_style_hints(text)
+    reps = [h for h in hints if h.hint_type == "repetition"]
+    assert len(reps) >= 1
+    assert reps[0].message == "Repetition detected"
+
+
+def test_hints_no_repetition_for_normal_text():
+    text = "The cat sat on the mat. The dog ran in the park."
+    hints = detect_style_hints(text)
+    reps = [h for h in hints if h.hint_type == "repetition"]
+    assert len(reps) == 0
+
+
+def test_hints_rhythm_detected():
+    text = (
+        "The dog ran fast. The cat sat down. The man went home. "
+        "The bird flew up. The sun went down."
+    )
+    hints = detect_style_hints(text)
+    rhythm = [h for h in hints if h.hint_type == "rhythm"]
+    assert len(rhythm) >= 1
+    assert rhythm[0].message == "Rhythm feels monotonous"
+
+
+def test_hints_no_rhythm_for_varied_text():
+    text = (
+        "She stopped. The long winding road stretched out before her, "
+        "disappearing into the mist that clung to the distant hills. "
+        "She breathed deeply. Then she walked on, determined and resolute."
+    )
+    hints = detect_style_hints(text)
+    rhythm = [h for h in hints if h.hint_type == "rhythm"]
+    assert len(rhythm) == 0
+
+
+def test_hints_dialogue_stiff():
+    long_quote = "word " * 55
+    text = f'"{long_quote.strip()}," he said.'
+    hints = detect_style_hints(text)
+    dlg = [h for h in hints if h.hint_type == "dialogue"]
+    assert len(dlg) >= 1
+    assert dlg[0].message == "Dialogue feels stiff"
+
+
+def test_hints_dialogue_ok():
+    text = '"Hey, how are you?" she asked. "Fine," he said.'
+    hints = detect_style_hints(text)
+    dlg = [h for h in hints if h.hint_type == "dialogue"]
+    assert len(dlg) == 0
+
+
+def test_hints_max_capped():
+    long_sent = "word " * 35 + "end. "
+    text = long_sent * 6
+    hints = detect_style_hints(text)
+    assert len(hints) <= 3
+
+
+def test_hints_are_style_hint_instances():
+    text = "word " * 35 + "end."
+    hints = detect_style_hints(text)
+    for h in hints:
+        assert isinstance(h, StyleHint)
+        assert isinstance(h.start, int)
+        assert isinstance(h.end, int)
+        assert isinstance(h.message, str)
+
+
+def test_hints_positions_within_text():
+    text = "Short sentence. " + "word " * 35 + "end."
+    hints = detect_style_hints(text)
+    for h in hints:
+        assert 0 <= h.start < len(text)
+        assert h.start < h.end <= len(text)
+
+
+# -- Style hints UI integration -----------------------------------------------
+
+def test_style_hints_toggle():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from storyplanner.db import Database
+    from storyplanner.ui.writing_core_view import WritingCoreView
+
+    db = Database()
+    proj = db.create_project("StyleToggle")
+    db.create_scene(proj.id, "S", content="Hello.")
+    view = WritingCoreView(db, proj.id)
+    assert not view._style_hints_checking
+    view._toggle_style_hints()
+    assert view._style_hints_checking
+    view._toggle_style_hints()
+    assert not view._style_hints_checking
+
+
+def test_style_hints_persist():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from storyplanner.db import Database
+    from storyplanner.ui.writing_core_view import WritingCoreView
+
+    db = Database()
+    proj = db.create_project("StylePersist")
+    db.create_scene(proj.id, "S", content="Hello.")
+    view = WritingCoreView(db, proj.id)
+    view._toggle_style_hints()
+    saved = db.get_project_settings(proj.id)
+    assert saved["style_hints"] is True
+
+
+def test_style_hints_restore():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from storyplanner.db import Database
+    from storyplanner.ui.writing_core_view import WritingCoreView
+
+    db = Database()
+    proj = db.create_project("StyleRestore")
+    settings = db.get_project_settings(proj.id)
+    settings["style_hints"] = True
+    db.save_project_settings(proj.id, settings)
+    db.create_scene(proj.id, "S", content="Hello.")
+    view = WritingCoreView(db, proj.id)
+    assert view._style_hints_checking
+
+
+def test_style_hints_default_off():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from storyplanner.db import Database
+    from storyplanner.ui.writing_core_view import WritingCoreView
+
+    db = Database()
+    proj = db.create_project("StyleDefault")
+    db.create_scene(proj.id, "S", content="Hello.")
+    view = WritingCoreView(db, proj.id)
+    assert not view._style_hints_checking
+    editor = list(view._editors.values())[0]
+    assert not editor._style_hints_enabled
+
+
+def test_style_hints_toggle_clears_hints():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from storyplanner.db import Database
+    from storyplanner.ui.writing_core_view import WritingCoreView
+
+    db = Database()
+    proj = db.create_project("StyleClear")
+    scene = db.create_scene(proj.id, "S", content="Hello.")
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[scene.id]
+    editor._style_hints = [StyleHint(0, 5, "clarity", "Test")]
+    view._toggle_style_hints()
+    view._toggle_style_hints()
+    assert editor._style_hints == []

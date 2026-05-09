@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
 from storyplanner.auto_link import AutoLinkSuggester, Suggestion
 from storyplanner.grammar_checker import Issue as GrammarIssue, check_text, detect_language
 from storyplanner.context_assistant import ContextAssistant, ContextHint, HintRateLimiter
+from storyplanner.style_analysis import StyleHint, detect_style_hints
 from storyplanner.paragraph_energy import (
     FlowHint,
     ParagraphEnergy,
@@ -196,6 +197,9 @@ class _BlockData(QTextBlockUserData):
 
 
 _GRAMMAR_CACHE: dict[int, list[GrammarIssue]] = {}
+
+_STYLE_HINT_CACHE: dict[int, list[StyleHint]] = {}
+_STYLE_HINT_CACHE_MAX = 512
 _GRAMMAR_CACHE_MAX = 512
 
 
@@ -254,6 +258,63 @@ class _GrammarWorker(QThread):
                             ))
                 offset += len(para) + 1
             results[scene_id] = scene_issues
+        if not self._cancelled:
+            self.finished.emit(self._generation, results)
+
+
+class _StyleHintWorker(QThread):
+    """Runs style hint detection off the main thread."""
+
+    finished = Signal(int, object)
+
+    def __init__(self, generation: int, scenes: dict[int, str]) -> None:
+        super().__init__()
+        self._generation = generation
+        self._scenes = scenes
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
+
+    def run(self) -> None:
+        results: dict[int, list[StyleHint]] = {}
+        for scene_id, text in self._scenes.items():
+            if self._cancelled:
+                return
+            if not text.strip():
+                results[scene_id] = []
+                continue
+            paragraphs = text.split("\n")
+            scene_hints: list[StyleHint] = []
+            offset = 0
+            for para in paragraphs:
+                if self._cancelled:
+                    return
+                para_hash = hash(para)
+                cached = _STYLE_HINT_CACHE.get(para_hash)
+                if cached is not None:
+                    for h in cached:
+                        scene_hints.append(StyleHint(
+                            start=h.start + offset,
+                            end=h.end + offset,
+                            hint_type=h.hint_type,
+                            message=h.message,
+                        ))
+                else:
+                    if para.strip():
+                        para_hints = detect_style_hints(para)
+                        if len(_STYLE_HINT_CACHE) >= _STYLE_HINT_CACHE_MAX:
+                            _STYLE_HINT_CACHE.clear()
+                        _STYLE_HINT_CACHE[para_hash] = para_hints
+                        for h in para_hints:
+                            scene_hints.append(StyleHint(
+                                start=h.start + offset,
+                                end=h.end + offset,
+                                hint_type=h.hint_type,
+                                message=h.message,
+                            ))
+                offset += len(para) + 1
+            results[scene_id] = scene_hints
         if not self._cancelled:
             self.finished.emit(self._generation, results)
 
@@ -397,6 +458,8 @@ class _SceneEditor(QTextEdit):
         self._grammar_issues: list[GrammarIssue] = []
         self._grammar_enabled = False
         self._ignored_issues: set[tuple[str, str]] = set()
+        self._style_hints: list[StyleHint] = []
+        self._style_hints_enabled = False
         self._grammar_popup = _GrammarPopup()
         self._grammar_popup.suggestion_chosen.connect(self._on_popup_suggestion)
         self._grammar_popup.issue_ignored.connect(self._on_popup_ignore)
@@ -649,6 +712,24 @@ class _SceneEditor(QTextEdit):
             sel.cursor = cursor
             sel.format = fmt
             selections.append(sel)
+
+        if self._style_hints_enabled:
+            hint_color = QColor(theme.get("STYLE_HINT"))
+            for hint in self._style_hints:
+                if hint.start < 0 or hint.end > doc_len:
+                    continue
+                sel = QTextEdit.ExtraSelection()
+                fmt = QTextCharFormat()
+                fmt.setUnderlineStyle(QTextCharFormat.UnderlineStyle.DotLine)
+                fmt.setUnderlineColor(hint_color)
+                fmt.setToolTip(hint.message)
+                cursor = QTextCursor(doc)
+                cursor.setPosition(hint.start)
+                cursor.setPosition(hint.end, QTextCursor.MoveMode.KeepAnchor)
+                sel.cursor = cursor
+                sel.format = fmt
+                selections.append(sel)
+
         self.setExtraSelections(selections)
 
     def _issue_at_cursor(self, pos) -> GrammarIssue | None:
@@ -863,6 +944,7 @@ class WritingCoreView(QWidget):
         if self._language_override != "auto":
             self._current_language = self._language_override
         self._grammar_checking: bool = bool(_settings.get("grammar_checking", False))
+        self._style_hints_checking: bool = bool(_settings.get("style_hints", False))
         self._energy_enabled: bool = bool(_settings.get("energy_enabled", False))
         self._energy_sensitivity: str = str(_settings.get("energy_sensitivity", "medium"))
         if self._energy_sensitivity not in SENSITIVITY_LEVELS:
@@ -917,6 +999,13 @@ class WritingCoreView(QWidget):
         self._grammar_timer.timeout.connect(self._run_grammar_check)
         self._grammar_worker: _GrammarWorker | None = None
         self._grammar_generation: int = 0
+
+        self._style_hint_timer = QTimer(self)
+        self._style_hint_timer.setSingleShot(True)
+        self._style_hint_timer.setInterval(900)
+        self._style_hint_timer.timeout.connect(self._run_style_hints)
+        self._style_hint_worker: _StyleHintWorker | None = None
+        self._style_hint_generation: int = 0
 
         self._command_palette: CommandPalette | None = None
         self._palette_source_editor: _SceneEditor | None = None
@@ -1259,6 +1348,7 @@ class WritingCoreView(QWidget):
         editor._on_psyke_context_action = self._handle_psyke_context
         editor._smart_quotes = self._smart_quotes
         editor._grammar_enabled = self._grammar_checking
+        editor._style_hints_enabled = self._style_hints_checking
         editor.textChanged.connect(
             lambda sid=scene.id: self._schedule_save(sid)
         )
@@ -1695,6 +1785,8 @@ class WritingCoreView(QWidget):
         self._lang_detect_timer.start()
         if self._grammar_checking:
             self._grammar_timer.start()
+        if self._style_hints_checking:
+            self._style_hint_timer.start()
         self._update_word_count()
 
     def _save_scene(self, scene_id: int) -> None:
@@ -2137,6 +2229,12 @@ class WritingCoreView(QWidget):
         grammar_act.triggered.connect(lambda checked: self._toggle_grammar())
         menu.addAction(grammar_act)
 
+        style_act = QAction("Style Hints", menu)
+        style_act.setCheckable(True)
+        style_act.setChecked(self._style_hints_checking)
+        style_act.triggered.connect(lambda checked: self._toggle_style_hints())
+        menu.addAction(style_act)
+
         menu.addSeparator()
 
         energy_act = QAction("Energy View", menu)
@@ -2331,6 +2429,7 @@ class WritingCoreView(QWidget):
         settings["first_line_indent"] = self._first_line_indent
         settings["smart_quotes"] = self._smart_quotes
         settings["grammar_checking"] = self._grammar_checking
+        settings["style_hints"] = self._style_hints_checking
         settings["energy_enabled"] = self._energy_enabled
         settings["energy_sensitivity"] = self._energy_sensitivity
         settings["language_override"] = self._language_override
@@ -2548,6 +2647,63 @@ class WritingCoreView(QWidget):
             for sid, editor in self._editors.items()
             if editor._grammar_issues
         }
+
+    # -- Style hints -----------------------------------------------------------
+
+    def _toggle_style_hints(self) -> None:
+        self._style_hints_checking = not self._style_hints_checking
+        for editor in self._editors.values():
+            editor._style_hints_enabled = self._style_hints_checking
+            if not self._style_hints_checking:
+                editor._style_hints = []
+                editor.apply_grammar_underlines()
+        if self._style_hints_checking:
+            self._start_style_hint_worker()
+        else:
+            self._style_hint_timer.stop()
+            self._cancel_style_hint_worker()
+        self._persist_font_settings()
+
+    def _run_style_hints(self) -> None:
+        if not self._style_hints_checking:
+            return
+        self._start_style_hint_worker()
+
+    def _cancel_style_hint_worker(self) -> None:
+        if self._style_hint_worker is not None:
+            self._style_hint_worker.cancel()
+            if self._style_hint_worker.isRunning():
+                self._style_hint_worker.wait()
+            self._style_hint_worker = None
+
+    def _start_style_hint_worker(self) -> None:
+        self._style_hint_generation += 1
+        if self._style_hint_worker is not None:
+            self._style_hint_worker.cancel()
+            if self._style_hint_worker.isRunning():
+                self._style_hint_worker.wait()
+        scenes: dict[int, str] = {}
+        for sid, editor in self._editors.items():
+            scenes[sid] = editor.toPlainText()
+        worker = _StyleHintWorker(self._style_hint_generation, scenes)
+        worker.finished.connect(self._on_style_hint_results)
+        self._style_hint_worker = worker
+        worker.start()
+
+    def _on_style_hint_results(
+        self, generation: int, results: dict[int, list[StyleHint]],
+    ) -> None:
+        if generation != self._style_hint_generation:
+            return
+        if not self._style_hints_checking:
+            return
+        for sid, hints in results.items():
+            editor = self._editors.get(sid)
+            if editor is None:
+                continue
+            editor._style_hints = hints
+            editor.apply_grammar_underlines()
+        self._style_hint_worker = None
 
     # -- Typewriter mode ------------------------------------------------------
 
