@@ -1,0 +1,187 @@
+"""Tests for inline energy gutter — visual indicators in manuscript editor."""
+
+from PySide6.QtWidgets import QApplication
+
+from storyplanner.db import Database
+from storyplanner.ui.writing_core_view import (
+    WritingCoreView,
+    _EnergyGutter,
+    _GUTTER_WIDTH,
+    _SceneEditor,
+    _tension_dot_color,
+)
+
+
+def _app():
+    return QApplication.instance() or QApplication([])
+
+
+def _make_view(content="First paragraph.\n\nSecond paragraph.\n\nThird paragraph."):
+    _app()
+    db = Database()
+    proj = db.create_project("EnergyTest")
+    scene = db.create_scene(proj.id, "Scene 1", content=content)
+    view = WritingCoreView(db, proj.id)
+    return view, scene
+
+
+# -- Gutter creation ----------------------------------------------------------
+
+def test_gutter_created_for_each_scene():
+    view, scene = _make_view()
+    assert scene.id in view._energy_gutters
+    gutter = view._energy_gutters[scene.id]
+    assert isinstance(gutter, _EnergyGutter)
+
+
+def test_gutter_created_for_multiple_scenes():
+    _app()
+    db = Database()
+    proj = db.create_project("Multi")
+    s1 = db.create_scene(proj.id, "S1", content="Line one.")
+    s2 = db.create_scene(proj.id, "S2", content="Line two.")
+    s3 = db.create_scene(proj.id, "S3", content="Line three.")
+    view = WritingCoreView(db, proj.id)
+    assert s1.id in view._energy_gutters
+    assert s2.id in view._energy_gutters
+    assert s3.id in view._energy_gutters
+
+
+# -- Fixed width (no layout shift) --------------------------------------------
+
+def test_gutter_fixed_width():
+    view, scene = _make_view()
+    gutter = view._energy_gutters[scene.id]
+    assert gutter.width() == _GUTTER_WIDTH
+    assert gutter.minimumWidth() == _GUTTER_WIDTH
+    assert gutter.maximumWidth() == _GUTTER_WIDTH
+
+
+def test_gutter_width_constant():
+    assert _GUTTER_WIDTH == 8
+
+
+def test_gutter_width_unchanged_after_recompute():
+    view, scene = _make_view("Short.\n\nAnother short.")
+    gutter = view._energy_gutters[scene.id]
+    w_before = gutter.width()
+    gutter._recompute()
+    assert gutter.width() == w_before
+
+
+# -- Energy computation -------------------------------------------------------
+
+def test_gutter_computes_energies():
+    view, scene = _make_view()
+    gutter = view._energy_gutters[scene.id]
+    assert len(gutter._energies) == 3
+
+
+def test_gutter_energies_match_paragraphs():
+    view, scene = _make_view("A.\n\nB.\n\nC.\n\nD.")
+    gutter = view._energy_gutters[scene.id]
+    assert len(gutter._energies) == 4
+
+
+def test_gutter_energies_have_metrics():
+    view, scene = _make_view()
+    gutter = view._energy_gutters[scene.id]
+    for e in gutter._energies:
+        assert "tension" in e.metrics
+        assert "pacing" in e.metrics
+        assert "conflict" in e.metrics
+
+
+def test_gutter_recompute_updates_energies():
+    view, scene = _make_view("One paragraph.")
+    gutter = view._energy_gutters[scene.id]
+    assert len(gutter._energies) == 1
+    editor = view._editors[scene.id]
+    editor.setPlainText("First.\n\nSecond.")
+    gutter._recompute()
+    assert len(gutter._energies) == 2
+
+
+# -- Markers render for multiple paragraphs -----------------------------------
+
+def test_markers_render_multiple_paragraphs():
+    view, scene = _make_view(
+        "She feared the darkness.\n\n"
+        "They fought fiercely.\n\n"
+        "The sun rose peacefully."
+    )
+    gutter = view._energy_gutters[scene.id]
+    pairs = list(gutter._block_energy_pairs())
+    assert len(pairs) == 3
+    for _, energy in pairs:
+        assert "tension" in energy.metrics
+
+
+def test_markers_skip_blank_blocks():
+    view, scene = _make_view("Line A.\n\n\n\nLine B.")
+    gutter = view._energy_gutters[scene.id]
+    pairs = list(gutter._block_energy_pairs())
+    assert len(pairs) == 2
+
+
+# -- Color mapping -------------------------------------------------------------
+
+def test_tension_color_low():
+    c = _tension_dot_color(0.1)
+    assert c.alphaF() < 0.5
+
+
+def test_tension_color_high():
+    c = _tension_dot_color(0.9)
+    assert c.alphaF() >= 0.5
+
+
+def test_tension_color_range():
+    for t in [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]:
+        c = _tension_dot_color(t)
+        assert 0.0 < c.alphaF() <= 1.0
+
+
+# -- Cleanup on refresh -------------------------------------------------------
+
+def test_gutters_cleared_on_refresh():
+    _app()
+    db = Database()
+    proj = db.create_project("Refresh")
+    s = db.create_scene(proj.id, "S", content="Text.")
+    view = WritingCoreView(db, proj.id)
+    assert s.id in view._energy_gutters
+    view.refresh()
+    assert s.id in view._energy_gutters
+
+
+def test_gutters_match_editors():
+    _app()
+    db = Database()
+    proj = db.create_project("Match")
+    db.create_scene(proj.id, "A", content="Hello.")
+    db.create_scene(proj.id, "B", content="World.")
+    view = WritingCoreView(db, proj.id)
+    assert set(view._energy_gutters.keys()) == set(view._editors.keys())
+
+
+# -- No layout shift -----------------------------------------------------------
+
+def test_no_layout_shift_on_empty_content():
+    view, scene = _make_view("")
+    gutter = view._energy_gutters[scene.id]
+    assert gutter.width() == _GUTTER_WIDTH
+    assert len(gutter._energies) == 0
+
+
+def test_editor_row_has_gutter_and_editor():
+    view, scene = _make_view("Content.")
+    gutter = view._energy_gutters[scene.id]
+    editor = view._editors[scene.id]
+    row = gutter.parent()
+    assert row is not None
+    assert row.objectName() == "writingEditorRow"
+    layout = row.layout()
+    widgets = [layout.itemAt(i).widget() for i in range(layout.count())]
+    assert gutter in widgets
+    assert editor in widgets

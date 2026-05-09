@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QEasingCurve, QEvent, QPointF, QPropertyAnimation, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMenu,
     QTextEdit,
+    QToolTip,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -42,6 +43,7 @@ from PySide6.QtWidgets import (
 from storyplanner.auto_link import AutoLinkSuggester, Suggestion
 from storyplanner.grammar_checker import Issue as GrammarIssue, check_text, detect_language
 from storyplanner.context_assistant import ContextAssistant, ContextHint, HintRateLimiter
+from storyplanner.paragraph_energy import ParagraphEnergy, analyze_scene_energy
 from storyplanner.creative_layer import compute_review_metrics
 from storyplanner.db import Database
 from storyplanner.structural_intelligence import StructuralCache
@@ -652,6 +654,106 @@ class _SceneEditor(QTextEdit):
         return None
 
 
+_GUTTER_WIDTH = 8
+_GUTTER_DOT_RADIUS = 2.0
+_ENERGY_DEBOUNCE_MS = 600
+
+
+def _tension_dot_color(tension: float) -> QColor:
+    if tension <= 0.2:
+        c = QColor("#4ade80")
+        c.setAlphaF(0.35)
+    elif tension <= 0.4:
+        c = QColor("#a3e635")
+        c.setAlphaF(0.4)
+    elif tension <= 0.6:
+        c = QColor("#facc15")
+        c.setAlphaF(0.5)
+    elif tension <= 0.8:
+        c = QColor("#fb923c")
+        c.setAlphaF(0.55)
+    else:
+        c = QColor("#f87171")
+        c.setAlphaF(0.6)
+    return c
+
+
+class _EnergyGutter(QWidget):
+    """Thin left-gutter widget showing per-paragraph energy dots."""
+
+    def __init__(self, editor: _SceneEditor, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._editor = editor
+        self._energies: list[ParagraphEnergy] = []
+        self.setFixedWidth(_GUTTER_WIDTH)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        self.setMouseTracking(True)
+
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.setInterval(_ENERGY_DEBOUNCE_MS)
+        self._timer.timeout.connect(self._recompute)
+
+        editor.textChanged.connect(self._schedule)
+
+    def initial_compute(self) -> None:
+        self._recompute()
+
+    def _schedule(self) -> None:
+        self._timer.start()
+
+    def _recompute(self) -> None:
+        text = self._editor.toPlainText()
+        scene_id = self._editor._scene_id or 0
+        self._energies = analyze_scene_energy(scene_id, text)
+        self.update()
+
+    def _block_energy_pairs(self):
+        if not self._energies:
+            return
+        doc = self._editor.document()
+        layout = doc.documentLayout()
+        block = doc.begin()
+        para_idx = 0
+        while block.isValid() and para_idx < len(self._energies):
+            if block.text().strip():
+                rect = layout.blockBoundingRect(block)
+                yield rect, self._energies[para_idx]
+                para_idx += 1
+            block = block.next()
+
+    def paintEvent(self, event) -> None:
+        if not self._energies:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        cx = self.width() / 2.0
+        for rect, energy in self._block_energy_pairs():
+            color = _tension_dot_color(energy.tension)
+            cy = rect.top() + rect.height() / 2.0
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            painter.drawEllipse(QPointF(cx, cy), _GUTTER_DOT_RADIUS, _GUTTER_DOT_RADIUS)
+        painter.end()
+
+    def event(self, ev) -> bool:
+        if ev.type() == QEvent.Type.ToolTip:
+            y = ev.pos().y()
+            for rect, energy in self._block_energy_pairs():
+                if rect.top() <= y <= rect.bottom():
+                    tip = (
+                        f"Tension: {energy.tension:.0%}\n"
+                        f"Pacing: {energy.pacing:.0%}\n"
+                        f"Conflict: {energy.conflict:.0%}"
+                    )
+                    QToolTip.showText(ev.globalPos(), tip, self)
+                    return True
+            QToolTip.hideText()
+            return True
+        return super().event(ev)
+
+
 class WritingCoreView(QWidget):
     """Immersive continuous manuscript writing view."""
 
@@ -707,6 +809,7 @@ class WritingCoreView(QWidget):
         self._hover_handlers: dict[int, EntityHoverHandler] = {}
         self._suggestion_banners: dict[int, SuggestionBanner] = {}
         self._context_hint_banners: dict[int, ContextHintBanner] = {}
+        self._energy_gutters: dict[int, _EnergyGutter] = {}
         self._typewriter_mode = False
         self._review_mode = False
         self._review_overlay: QWidget | None = None
@@ -1038,6 +1141,7 @@ class WritingCoreView(QWidget):
         self._hover_handlers.clear()
         self._suggestion_banners.clear()
         self._context_hint_banners.clear()
+        self._energy_gutters.clear()
         while self._inner_layout.count():
             item = self._inner_layout.takeAt(0)
             w = item.widget()
@@ -1094,8 +1198,19 @@ class WritingCoreView(QWidget):
         editor.cursorPositionChanged.connect(
             lambda e=editor: self._on_editor_cursor_moved(e),
         )
-        self._inner_layout.addWidget(editor)
-        self._scene_widgets.append(editor)
+
+        gutter = _EnergyGutter(editor)
+        row = QWidget()
+        row.setObjectName("writingEditorRow")
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(0)
+        row_layout.addWidget(gutter)
+        row_layout.addWidget(editor)
+        self._inner_layout.addWidget(row)
+        self._scene_widgets.append(row)
+        self._energy_gutters[scene.id] = gutter
+        gutter.initial_compute()
 
         highlighter = PsykeHighlighter(editor.document())
         self._highlighters[scene.id] = highlighter
