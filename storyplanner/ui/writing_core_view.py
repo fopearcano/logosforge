@@ -47,7 +47,9 @@ from storyplanner.paragraph_energy import (
     FlowHint,
     ParagraphEnergy,
     SENSITIVITY_LEVELS,
+    StoryContext,
     analyze_scene_energy,
+    build_story_context,
     detect_flow_hints,
 )
 from storyplanner.creative_layer import compute_review_metrics
@@ -697,6 +699,7 @@ class _EnergyGutter(QWidget):
         self._editor = editor
         self._enabled = True
         self._sensitivity = "medium"
+        self._story_context: StoryContext | None = None
         self._energies: list[ParagraphEnergy] = []
         self._hints: list[FlowHint] = []
         self._hinted_paragraphs: dict[int, str] = {}
@@ -723,6 +726,11 @@ class _EnergyGutter(QWidget):
             self._timer.stop()
             self.update()
 
+    def set_story_context(self, context: StoryContext | None) -> None:
+        self._story_context = context
+        if self._enabled:
+            self._recompute()
+
     def set_sensitivity(self, level: str) -> None:
         if level not in SENSITIVITY_LEVELS:
             return
@@ -741,7 +749,7 @@ class _EnergyGutter(QWidget):
     def _recompute(self) -> None:
         text = self._editor.toPlainText()
         scene_id = self._editor._scene_id or 0
-        self._energies = analyze_scene_energy(scene_id, text)
+        self._energies = analyze_scene_energy(scene_id, text, context=self._story_context)
         self._hints = detect_flow_hints(self._energies, self._sensitivity)
         self._hinted_paragraphs = {}
         for h in self._hints:
@@ -1269,6 +1277,8 @@ class WritingCoreView(QWidget):
         self._inner_layout.addWidget(row)
         self._scene_widgets.append(row)
         self._energy_gutters[scene.id] = gutter
+        ctx = build_story_context(self._db, self._project_id, scene.id)
+        gutter.set_story_context(ctx)
         gutter.set_sensitivity(self._energy_sensitivity)
         gutter.set_enabled(self._energy_enabled)
 
@@ -1368,6 +1378,7 @@ class WritingCoreView(QWidget):
             handler.set_term_map(self._psyke_term_map)
         for handler in self._hover_handlers.values():
             handler.set_term_map(self._psyke_term_map)
+        self._rebuild_energy_contexts()
 
     # -- Format / element system -----------------------------------------------
 
@@ -2480,6 +2491,11 @@ class WritingCoreView(QWidget):
         for gutter in self._energy_gutters.values():
             gutter.set_sensitivity(level)
         self._persist_font_settings()
+
+    def _rebuild_energy_contexts(self) -> None:
+        for scene_id, gutter in self._energy_gutters.items():
+            ctx = build_story_context(self._db, self._project_id, scene_id)
+            gutter.set_story_context(ctx)
 
     def _run_grammar_check(self) -> None:
         if not self._grammar_checking:

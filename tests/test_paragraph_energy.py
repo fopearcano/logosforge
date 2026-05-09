@@ -6,12 +6,16 @@ from unittest.mock import patch
 from storyplanner.paragraph_energy import (
     FlowHint,
     ParagraphEnergy,
+    StoryContext,
     _EMOTION_WINDOW,
     _FLAT_WINDOW,
     _PACING_SPIKE_DELTA,
+    _PSYKE_WEIGHT,
     _parse_llm_metrics,
     analyze_paragraph,
     analyze_scene_energy,
+    apply_story_context,
+    build_story_context,
     clear_cache,
     compute_paragraph_energy,
     detect_flow_hints,
@@ -556,3 +560,156 @@ def test_refine_worker_emits_failed_on_exception():
 
     assert len(errors) == 1
     assert "no server" in errors[0]
+
+
+# -- StoryContext & PSYKE integration ------------------------------------------
+
+def test_story_context_defaults():
+    ctx = StoryContext()
+    assert ctx.tension_boost == 0.0
+    assert ctx.conflict_boost == 0.0
+    assert ctx.emotional_boost == 0.0
+
+
+def test_apply_story_context_no_boost_returns_same():
+    e = ParagraphEnergy(paragraph_id=0, scene_id=1, metrics={"tension": 0.3, "conflict": 0.1, "emotional_shift": 0.0, "pacing": 0.5})
+    ctx = StoryContext()
+    result = apply_story_context(e, ctx)
+    assert result is e
+
+
+def test_apply_story_context_adjusts_tension():
+    e = ParagraphEnergy(paragraph_id=0, scene_id=1, metrics={"tension": 0.3, "conflict": 0.1, "emotional_shift": 0.0, "pacing": 0.5})
+    ctx = StoryContext(tension_boost=1.0)
+    result = apply_story_context(e, ctx)
+    assert result.tension == round(0.3 + 1.0 * _PSYKE_WEIGHT, 3)
+    assert result.pacing == 0.5
+
+
+def test_apply_story_context_adjusts_conflict():
+    e = ParagraphEnergy(paragraph_id=0, scene_id=1, metrics={"tension": 0.0, "conflict": 0.2, "emotional_shift": 0.0, "pacing": 0.5})
+    ctx = StoryContext(conflict_boost=0.5)
+    result = apply_story_context(e, ctx)
+    assert result.conflict == round(0.2 + 0.5 * _PSYKE_WEIGHT, 3)
+
+
+def test_apply_story_context_adjusts_emotional():
+    e = ParagraphEnergy(paragraph_id=0, scene_id=1, metrics={"tension": 0.0, "conflict": 0.0, "emotional_shift": 0.1, "pacing": 0.5})
+    ctx = StoryContext(emotional_boost=1.0)
+    result = apply_story_context(e, ctx)
+    assert result.emotional_shift == round(0.1 + 1.0 * _PSYKE_WEIGHT, 3)
+
+
+def test_apply_story_context_caps_at_one():
+    e = ParagraphEnergy(paragraph_id=0, scene_id=1, metrics={"tension": 0.95, "conflict": 0.0, "emotional_shift": 0.0, "pacing": 0.5})
+    ctx = StoryContext(tension_boost=1.0)
+    result = apply_story_context(e, ctx)
+    assert result.tension <= 1.0
+
+
+def test_apply_story_context_preserves_ids():
+    e = ParagraphEnergy(paragraph_id=5, scene_id=7, metrics={"tension": 0.0, "conflict": 0.0, "emotional_shift": 0.0, "pacing": 0.5})
+    ctx = StoryContext(tension_boost=0.5)
+    result = apply_story_context(e, ctx)
+    assert result.paragraph_id == 5
+    assert result.scene_id == 7
+
+
+def test_analyze_scene_with_context():
+    clear_cache()
+    ctx = StoryContext(tension_boost=1.0, conflict_boost=1.0)
+    without = analyze_scene_energy(1, "The table was wooden.")
+    with_ctx = analyze_scene_energy(1, "The table was wooden.", context=ctx)
+    assert with_ctx[0].tension > without[0].tension
+    assert with_ctx[0].conflict > without[0].conflict
+
+
+def test_analyze_scene_no_context_unchanged():
+    clear_cache()
+    a = analyze_scene_energy(1, "Hello world.")
+    b = analyze_scene_energy(1, "Hello world.", context=None)
+    assert a[0].tension == b[0].tension
+
+
+def test_build_story_context_empty():
+    from storyplanner.db import Database
+    db = Database()
+    proj = db.create_project("CtxEmpty")
+    scene = db.create_scene(proj.id, "S1", content="Text.")
+    ctx = build_story_context(db, proj.id, scene.id)
+    assert ctx.tension_boost == 0.0
+    assert ctx.conflict_boost == 0.0
+    assert ctx.emotional_boost == 0.0
+
+
+def test_build_story_context_character_state_tension():
+    from storyplanner.db import Database
+    db = Database()
+    proj = db.create_project("CtxTension")
+    char = db.create_character(proj.id, "Alice")
+    scene = db.create_scene(
+        proj.id, "S1", content="Text.",
+        character_ids=[char.id],
+        character_states=[(char.id, "Alice is terrified and trapped in the dungeon")],
+    )
+    ctx = build_story_context(db, proj.id, scene.id)
+    assert ctx.tension_boost > 0.0
+
+
+def test_build_story_context_memory_conflict():
+    from storyplanner.db import Database
+    db = Database()
+    proj = db.create_project("CtxConflict")
+    scene = db.create_scene(proj.id, "S1", content="Text.")
+    db.add_memory(proj.id, scene.id, "relationship", "Bob", "Bob is a rival and enemy of Alice")
+    ctx = build_story_context(db, proj.id, scene.id)
+    assert ctx.conflict_boost > 0.0
+
+
+def test_build_story_context_memory_emotional():
+    from storyplanner.db import Database
+    db = Database()
+    proj = db.create_project("CtxEmotion")
+    scene = db.create_scene(proj.id, "S1", content="Text.")
+    db.add_memory(proj.id, scene.id, "character_state", "Alice", "Alice feels deep grief and sorrow")
+    ctx = build_story_context(db, proj.id, scene.id)
+    assert ctx.emotional_boost > 0.0
+
+
+def test_build_story_context_combined_signals():
+    from storyplanner.db import Database
+    db = Database()
+    proj = db.create_project("CtxCombined")
+    char = db.create_character(proj.id, "Bob")
+    scene = db.create_scene(
+        proj.id, "S1", content="Text.",
+        character_ids=[char.id],
+        character_states=[(char.id, "Bob is scared and hostile, filled with grief")],
+    )
+    ctx = build_story_context(db, proj.id, scene.id)
+    assert ctx.tension_boost > 0.0
+    assert ctx.conflict_boost > 0.0
+    assert ctx.emotional_boost > 0.0
+
+
+def test_changing_psyke_changes_energy():
+    from storyplanner.db import Database
+    clear_cache()
+    db = Database()
+    proj = db.create_project("CtxChange")
+    char = db.create_character(proj.id, "Eve")
+    scene = db.create_scene(proj.id, "S1", content="The room was quiet.")
+
+    ctx_neutral = build_story_context(db, proj.id, scene.id)
+    e_neutral = analyze_scene_energy(scene.id, "The room was quiet.", context=ctx_neutral)
+
+    db.update_scene(
+        scene.id, "S1", content="The room was quiet.",
+        character_ids=[char.id],
+        character_states=[(char.id, "Eve is trapped and fears betrayal from her enemy")],
+    )
+    ctx_conflict = build_story_context(db, proj.id, scene.id)
+    e_conflict = analyze_scene_energy(scene.id, "The room was quiet.", context=ctx_conflict)
+
+    assert e_conflict[0].tension > e_neutral[0].tension
+    assert e_conflict[0].conflict > e_neutral[0].conflict

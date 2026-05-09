@@ -92,6 +92,87 @@ _CONTRAST_WORDS = frozenset({
     "still", "nonetheless", "conversely", "ironically",
 })
 
+# ---------------------------------------------------------------------------
+# PSYKE context signals — keywords scanned in character states & memories
+# ---------------------------------------------------------------------------
+
+_TENSION_SIGNALS = frozenset({
+    "fear", "danger", "threat", "trapped", "desperate", "hunted",
+    "anxious", "nervous", "terrified", "scared", "dread", "peril",
+    "distrust", "suspicion", "betrayal", "enemy", "menace",
+})
+
+_CONFLICT_SIGNALS = frozenset({
+    "angry", "opposed", "fighting", "hostile", "defiant", "rival",
+    "enemy", "conflict", "oppose", "antagonist", "battle", "war",
+    "clash", "grudge", "revenge", "betrayed", "refused",
+})
+
+_EMOTIONAL_SIGNALS = frozenset({
+    "grief", "love", "loss", "joy", "sorrow", "rage", "despair",
+    "hope", "longing", "guilt", "shame", "pride", "jealousy",
+    "heartbreak", "reunion", "forgiveness", "regret",
+})
+
+_PSYKE_WEIGHT = 0.2
+_PSYKE_SIGNAL_DIVISOR = 3
+
+
+@dataclass
+class StoryContext:
+    """PSYKE-derived context signals that adjust energy scoring."""
+
+    tension_boost: float = 0.0
+    conflict_boost: float = 0.0
+    emotional_boost: float = 0.0
+
+
+def build_story_context(db: object, project_id: int, scene_id: int) -> StoryContext:
+    """Extract PSYKE signals from character states and memories for a scene."""
+    texts: list[str] = []
+
+    for _cid, state in db.get_scene_character_states(scene_id):  # type: ignore[union-attr]
+        texts.append(state)
+
+    for mem in db.get_memories(project_id, scene_id):  # type: ignore[union-attr]
+        texts.append(mem.value)
+
+    if not texts:
+        return StoryContext()
+
+    combined = " ".join(texts).lower()
+    words_found = set(re.findall(r"[a-z]+", combined))
+    if not words_found:
+        return StoryContext()
+
+    tension_hits = len(words_found & _TENSION_SIGNALS)
+    conflict_hits = len(words_found & _CONFLICT_SIGNALS)
+    emotional_hits = len(words_found & _EMOTIONAL_SIGNALS)
+
+    return StoryContext(
+        tension_boost=min(1.0, tension_hits / _PSYKE_SIGNAL_DIVISOR),
+        conflict_boost=min(1.0, conflict_hits / _PSYKE_SIGNAL_DIVISOR),
+        emotional_boost=min(1.0, emotional_hits / _PSYKE_SIGNAL_DIVISOR),
+    )
+
+
+def apply_story_context(
+    energy: ParagraphEnergy, context: StoryContext,
+) -> ParagraphEnergy:
+    """Return a new ParagraphEnergy with PSYKE-adjusted metrics."""
+    if not context.tension_boost and not context.conflict_boost and not context.emotional_boost:
+        return energy
+    m = dict(energy.metrics)
+    m["tension"] = min(1.0, round(m.get("tension", 0.0) + context.tension_boost * _PSYKE_WEIGHT, 3))
+    m["conflict"] = min(1.0, round(m.get("conflict", 0.0) + context.conflict_boost * _PSYKE_WEIGHT, 3))
+    m["emotional_shift"] = min(1.0, round(m.get("emotional_shift", 0.0) + context.emotional_boost * _PSYKE_WEIGHT, 3))
+    return ParagraphEnergy(
+        paragraph_id=energy.paragraph_id,
+        scene_id=energy.scene_id,
+        metrics=m,
+        last_updated=energy.last_updated,
+    )
+
 _DIALOGUE_RE = re.compile(
     r'["“][^”"]*["”]'
     r"|"
@@ -374,8 +455,16 @@ def detect_flow_hints(
     return hints
 
 
-def analyze_scene_energy(scene_id: int, content: str) -> list[ParagraphEnergy]:
-    """Compute energy metrics for all paragraphs in scene content."""
+def analyze_scene_energy(
+    scene_id: int,
+    content: str,
+    context: StoryContext | None = None,
+) -> list[ParagraphEnergy]:
+    """Compute energy metrics for all paragraphs in scene content.
+
+    If *context* is provided, PSYKE-derived signals are applied on top of the
+    base heuristic scores.
+    """
     paragraphs = [p.strip() for p in content.split("\n") if p.strip()]
     results: list[ParagraphEnergy] = []
     for i, p in enumerate(paragraphs):
@@ -391,6 +480,8 @@ def analyze_scene_energy(scene_id: int, content: str) -> list[ParagraphEnergy]:
             result = compute_paragraph_energy(i, scene_id, p)
             _cache_put(p, result)
         results.append(result)
+    if context is not None:
+        results = [apply_story_context(r, context) for r in results]
     return results
 
 

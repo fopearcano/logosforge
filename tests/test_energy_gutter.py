@@ -3,6 +3,7 @@
 from PySide6.QtWidgets import QApplication
 
 from storyplanner.db import Database
+from storyplanner.paragraph_energy import StoryContext
 from storyplanner.ui.writing_core_view import (
     WritingCoreView,
     _EnergyGutter,
@@ -366,3 +367,81 @@ def test_sensitivity_invalid_falls_back():
     db.create_scene(proj.id, "S", content="Text.")
     view = WritingCoreView(db, proj.id)
     assert view._energy_sensitivity == "medium"
+
+
+# -- PSYKE context integration ------------------------------------------------
+
+def test_gutter_has_story_context():
+    view, scene = _make_view("Some text.")
+    gutter = view._energy_gutters[scene.id]
+    assert hasattr(gutter, "_story_context")
+
+
+def test_gutter_set_story_context():
+    view, scene = _make_view("Text here.")
+    gutter = view._energy_gutters[scene.id]
+    ctx = StoryContext(tension_boost=0.5)
+    gutter.set_story_context(ctx)
+    assert gutter._story_context is ctx
+
+
+def test_gutter_context_affects_energies():
+    view, scene = _make_view("The table was wooden.")
+    gutter = view._energy_gutters[scene.id]
+    base_tension = gutter._energies[0].tension
+
+    ctx = StoryContext(tension_boost=1.0)
+    gutter.set_story_context(ctx)
+    assert gutter._energies[0].tension > base_tension
+
+
+def test_gutter_neutral_context_no_change():
+    view, scene = _make_view("The table was wooden.")
+    gutter = view._energy_gutters[scene.id]
+    base_tension = gutter._energies[0].tension
+
+    ctx = StoryContext()
+    gutter.set_story_context(ctx)
+    assert gutter._energies[0].tension == base_tension
+
+
+def test_psyke_state_changes_gutter_energy():
+    _app()
+    db = Database()
+    proj = db.create_project("PsykeGutter")
+    settings = db.get_project_settings(proj.id)
+    settings["energy_enabled"] = True
+    db.save_project_settings(proj.id, settings)
+    char = db.create_character(proj.id, "Alice")
+    scene = db.create_scene(
+        proj.id, "S1", content="The room was quiet.",
+        character_ids=[char.id],
+    )
+    view = WritingCoreView(db, proj.id)
+    gutter = view._energy_gutters[scene.id]
+    t_before = gutter._energies[0].tension
+
+    db.update_scene(
+        scene.id, "S1", content="The room was quiet.",
+        character_ids=[char.id],
+        character_states=[(char.id, "Alice is terrified and trapped")],
+    )
+    view._rebuild_energy_contexts()
+    t_after = gutter._energies[0].tension
+    assert t_after > t_before
+
+
+def test_rebuild_energy_contexts_updates_all_gutters():
+    _app()
+    db = Database()
+    proj = db.create_project("RebuildCtx")
+    settings = db.get_project_settings(proj.id)
+    settings["energy_enabled"] = True
+    db.save_project_settings(proj.id, settings)
+    s1 = db.create_scene(proj.id, "S1", content="Line one.")
+    s2 = db.create_scene(proj.id, "S2", content="Line two.")
+    view = WritingCoreView(db, proj.id)
+    view._rebuild_energy_contexts()
+    for sid in [s1.id, s2.id]:
+        gutter = view._energy_gutters[sid]
+        assert gutter._story_context is not None
