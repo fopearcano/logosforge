@@ -377,6 +377,47 @@ class Database:
             "last_updated": profile.updated_at.isoformat(),
         }
 
+    def sync_voice_to_psyke(self, character_id: int, project_id: int) -> None:
+        """Write a voice-profile summary into the character's PSYKE entry."""
+        import json
+        from storyplanner.voice_learner import voice_profile_summary
+
+        data = self.get_voice_profile_data(character_id)
+        if data is None:
+            return
+        summary = voice_profile_summary(data)
+        if not summary:
+            return
+        char = self.get_character_by_id(character_id)
+        if char is None:
+            return
+        entry = self._find_character_psyke_entry(project_id, char.name)
+        if entry is None:
+            return
+        details = self.get_psyke_entry_details(entry.id)
+        details["voice"] = summary
+        self.update_psyke_entry(
+            entry.id,
+            name=entry.name,
+            entry_type=entry.entry_type,
+            aliases=entry.aliases,
+            notes=entry.notes,
+            is_global=entry.is_global,
+            details=details,
+        )
+
+    def _find_character_psyke_entry(
+        self, project_id: int, character_name: str,
+    ) -> PsykeEntry | None:
+        with Session(self._engine) as session:
+            stmt = (
+                select(PsykeEntry)
+                .where(PsykeEntry.project_id == project_id)
+                .where(PsykeEntry.entry_type == "character")
+                .where(PsykeEntry.name == character_name)
+            )
+            return session.exec(stmt).first()
+
     # -- Places --------------------------------------------------------------
 
     def get_place_by_id(self, place_id: int) -> Place | None:

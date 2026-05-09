@@ -273,13 +273,16 @@ def learn_voice_profile(
     segments: list[DialogueSegment],
     *,
     user_locked: tuple[str, ...] = (),
+    project_id: int | None = None,
 ) -> VoiceAnalysis:
     """Analyze dialogue and merge inferred traits into the stored profile.
 
     *user_locked* names fields the user has explicitly set — these are
     never overwritten by inference (e.g. ``("tone", "vocabulary_level")``).
 
-    Creates a new profile if one doesn't exist yet.
+    Creates a new profile if one doesn't exist yet.  When *project_id*
+    is provided, the PSYKE character entry's "voice" field is kept in
+    sync automatically.
     """
     analysis = analyze_voice(segments, character_id)
 
@@ -298,37 +301,40 @@ def learn_voice_profile(
             punctuation_style=analysis.punctuation_style,
             dialogue_markers=analysis.dialogue_markers,
         )
-        return analysis
+    else:
+        db.update_voice_profile(
+            character_id,
+            tone=_merge_field(
+                existing["tone"], analysis.tone, "tone" in user_locked,
+            ),
+            sentence_length=_merge_field(
+                existing["sentence_length"],
+                analysis.sentence_length,
+                "sentence_length" in user_locked,
+            ),
+            vocabulary_level=_merge_field(
+                existing["vocabulary_level"],
+                analysis.vocabulary_level,
+                "vocabulary_level" in user_locked,
+            ),
+            quirks=_merge_list(
+                existing["quirks"], analysis.quirks, "quirks" in user_locked,
+            ),
+            punctuation_style=_merge_punctuation(
+                existing["punctuation_style"],
+                analysis.punctuation_style,
+                "punctuation_style" in user_locked,
+            ),
+            dialogue_markers=_merge_list(
+                existing["dialogue_markers"],
+                analysis.dialogue_markers,
+                "dialogue_markers" in user_locked,
+            ),
+        )
 
-    db.update_voice_profile(
-        character_id,
-        tone=_merge_field(
-            existing["tone"], analysis.tone, "tone" in user_locked,
-        ),
-        sentence_length=_merge_field(
-            existing["sentence_length"],
-            analysis.sentence_length,
-            "sentence_length" in user_locked,
-        ),
-        vocabulary_level=_merge_field(
-            existing["vocabulary_level"],
-            analysis.vocabulary_level,
-            "vocabulary_level" in user_locked,
-        ),
-        quirks=_merge_list(
-            existing["quirks"], analysis.quirks, "quirks" in user_locked,
-        ),
-        punctuation_style=_merge_punctuation(
-            existing["punctuation_style"],
-            analysis.punctuation_style,
-            "punctuation_style" in user_locked,
-        ),
-        dialogue_markers=_merge_list(
-            existing["dialogue_markers"],
-            analysis.dialogue_markers,
-            "dialogue_markers" in user_locked,
-        ),
-    )
+    if project_id is not None:
+        db.sync_voice_to_psyke(character_id, project_id)
+
     return analysis
 
 
@@ -458,6 +464,102 @@ class VoiceRewrite:
 
     text: str
     label: str
+
+
+# ---------------------------------------------------------------------------
+# State-based voice adjustment (PSYKE integration)
+# ---------------------------------------------------------------------------
+
+_STRESS_VOICE_SIGNALS = frozenset({
+    "stressed", "tense", "anxious", "nervous", "panicked", "rushed",
+    "urgent", "frantic", "desperate", "afraid", "scared", "terrified",
+    "hunted", "trapped", "cornered", "fleeing",
+})
+
+_CONFIDENCE_VOICE_SIGNALS = frozenset({
+    "confident", "commanding", "authoritative", "assertive", "bold",
+    "decisive", "determined", "powerful", "composed", "resolute",
+})
+
+_EMOTION_VOICE_SIGNALS = frozenset({
+    "grief", "rage", "ecstasy", "despair", "anguish", "fury",
+    "passion", "agony", "devastated", "overwhelmed", "heartbroken",
+    "euphoric", "shattered", "hysterical",
+})
+
+_SL_ORDER = ("short", "medium", "long")
+_TONE_ORDER = ("casual", "neutral", "formal")
+
+
+def adjust_voice_for_state(profile: dict, state_text: str) -> dict:
+    """Return a copy of *profile* shifted by character state.
+
+    Stressed → shorter sentences.
+    Confident → more formal/direct tone.
+    High emotion → casual tone, shorter sentences.
+
+    Only adjusts when the current value sits on the standard scale
+    (short/medium/long, casual/neutral/formal).  Exotic tones like
+    "abrasive" are left untouched.
+    """
+    if not state_text or not profile:
+        return dict(profile)
+
+    words = set(re.findall(r"[a-z]+", state_text.lower()))
+    if not words:
+        return dict(profile)
+
+    stress = len(words & _STRESS_VOICE_SIGNALS)
+    confidence = len(words & _CONFIDENCE_VOICE_SIGNALS)
+    emotion = len(words & _EMOTION_VOICE_SIGNALS)
+
+    if not stress and not confidence and not emotion:
+        return dict(profile)
+
+    adjusted = dict(profile)
+    adjusted["quirks"] = list(profile.get("quirks", []))
+    adjusted["punctuation_style"] = dict(profile.get("punctuation_style", {}))
+    adjusted["dialogue_markers"] = list(profile.get("dialogue_markers", []))
+
+    cur_sl = profile.get("sentence_length", "medium")
+    cur_tone = profile.get("tone", "neutral")
+
+    sl_idx = _SL_ORDER.index(cur_sl) if cur_sl in _SL_ORDER else None
+    tone_idx = _TONE_ORDER.index(cur_tone) if cur_tone in _TONE_ORDER else None
+
+    if sl_idx is not None:
+        if stress >= 1:
+            sl_idx = max(0, sl_idx - 1)
+        if emotion >= 2:
+            sl_idx = max(0, sl_idx - 1)
+        adjusted["sentence_length"] = _SL_ORDER[sl_idx]
+
+    if tone_idx is not None:
+        if confidence >= 1:
+            tone_idx = min(2, tone_idx + 1)
+        if emotion >= 2:
+            tone_idx = max(0, tone_idx - 1)
+        adjusted["tone"] = _TONE_ORDER[tone_idx]
+
+    return adjusted
+
+
+def voice_profile_summary(profile: dict) -> str:
+    """One-line human-readable summary of a voice profile dict."""
+    parts: list[str] = []
+    if profile.get("tone"):
+        parts.append(f"Tone: {profile['tone']}")
+    if profile.get("sentence_length"):
+        parts.append(f"Sentences: {profile['sentence_length']}")
+    if profile.get("vocabulary_level"):
+        parts.append(f"Vocabulary: {profile['vocabulary_level']}")
+    quirks = profile.get("quirks", [])
+    if quirks:
+        parts.append(f"Quirks: {', '.join(quirks)}")
+    markers = profile.get("dialogue_markers", [])
+    if markers:
+        parts.append(f"Markers: {', '.join(markers)}")
+    return ". ".join(parts) + "." if parts else ""
 
 
 def generate_voice_rewrites(

@@ -64,7 +64,11 @@ from storyplanner.paragraph_energy import (
 from storyplanner.creative_layer import compute_review_metrics
 from storyplanner.dialogue_attribution import DialogueSegment, attribute_dialogue
 from storyplanner.voice_consistency import VoiceDeviation, check_consistency
-from storyplanner.voice_learner import VoiceRewrite, generate_voice_rewrites
+from storyplanner.voice_learner import (
+    VoiceRewrite,
+    adjust_voice_for_state,
+    generate_voice_rewrites,
+)
 from storyplanner.db import Database
 from storyplanner.structural_intelligence import StructuralCache
 from storyplanner.settings import get_manager as get_settings
@@ -349,16 +353,31 @@ class _VoiceConsistencyWorker(QThread):
         scenes: dict[int, str],
         characters: list,
         profiles: dict[int, dict],
+        scene_states: dict[int, list[tuple[int, str]]] | None = None,
     ) -> None:
         super().__init__()
         self._generation = generation
         self._scenes = scenes
         self._characters = characters
         self._profiles = profiles
+        self._scene_states = scene_states or {}
         self._cancelled = False
 
     def cancel(self) -> None:
         self._cancelled = True
+
+    def _adjusted_profiles(self, scene_id: int) -> dict[int, dict]:
+        states = self._scene_states.get(scene_id, [])
+        if not states:
+            return self._profiles
+        adjusted: dict[int, dict] = {}
+        state_by_char: dict[int, str] = {}
+        for cid, st in states:
+            state_by_char[cid] = st
+        for cid, prof in self._profiles.items():
+            st = state_by_char.get(cid, "")
+            adjusted[cid] = adjust_voice_for_state(prof, st) if st else prof
+        return adjusted
 
     def run(self) -> None:
         results: dict[int, list[VoiceDeviation]] = {}
@@ -369,7 +388,8 @@ class _VoiceConsistencyWorker(QThread):
                 results[scene_id] = []
                 continue
             segments = attribute_dialogue(text, self._characters)
-            deviations = check_consistency(segments, self._profiles)
+            profiles = self._adjusted_profiles(scene_id)
+            deviations = check_consistency(segments, profiles)
             results[scene_id] = deviations
         if not self._cancelled:
             self.finished.emit(self._generation, results)
@@ -724,6 +744,7 @@ class _SceneEditor(QTextEdit):
             self._on_voice_rewrite,
         )
         self._voice_profile_data: dict | None = None
+        self._voice_state_text: str = ""
         self._focus_fade_enabled = False
         self._fade_block = -1
         self._fade_bg = "#0f1219"
@@ -952,7 +973,10 @@ class _SceneEditor(QTextEdit):
         if self._voice_profile_data is None:
             return
         text = cursor.selectedText().replace(" ", "\n")
-        rewrites = generate_voice_rewrites(text, self._voice_profile_data)
+        profile = adjust_voice_for_state(
+            self._voice_profile_data, self._voice_state_text,
+        )
+        rewrites = generate_voice_rewrites(text, profile)
         self._voice_rewrite_popup.show_rewrites(rewrites, global_pos)
 
     def _on_voice_rewrite(self, rewrite: str) -> None:
@@ -1726,10 +1750,13 @@ class WritingCoreView(QWidget):
             self._db, self._project_id, scene.id,
         )
         char_ids = self._db.get_scene_character_ids(scene.id)
+        scene_char_states = self._db.get_scene_character_states(scene.id)
+        state_by_char = {cid: st for cid, st in scene_char_states}
         for cid in char_ids:
             vdata = self._db.get_voice_profile_data(cid)
             if vdata is not None:
                 editor._voice_profile_data = vdata
+                editor._voice_state_text = state_by_char.get(cid, "")
                 break
         gutter.set_sensitivity(self._energy_sensitivity)
         gutter.set_enabled(self._energy_enabled)
@@ -3145,8 +3172,10 @@ class WritingCoreView(QWidget):
             if self._voice_hint_worker.isRunning():
                 self._voice_hint_worker.wait()
         scenes: dict[int, str] = {}
+        scene_states: dict[int, list[tuple[int, str]]] = {}
         for sid, editor in self._editors.items():
             scenes[sid] = editor.toPlainText()
+            scene_states[sid] = self._db.get_scene_character_states(sid)
         characters = self._db.get_all_characters(self._project_id)
         profiles: dict[int, dict] = {}
         for ch in characters:
@@ -3155,6 +3184,7 @@ class WritingCoreView(QWidget):
                 profiles[ch.id] = data
         worker = _VoiceConsistencyWorker(
             self._voice_hint_generation, scenes, characters, profiles,
+            scene_states=scene_states,
         )
         worker.finished.connect(self._on_voice_hint_results)
         self._voice_hint_worker = worker
