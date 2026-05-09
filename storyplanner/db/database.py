@@ -14,6 +14,8 @@ from typing import Optional
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from storyplanner.models import (
+    ChatMessage,
+    ChatSummary,
     Character,
     Note,
     OutlineNode,
@@ -1440,6 +1442,113 @@ class Database:
             else:
                 record.state_json = state_json
                 record.updated_at = datetime.now(timezone.utc)
+            session.commit()
+
+    # -- Chat -----------------------------------------------------------------
+
+    def add_chat_message(
+        self,
+        project_id: int,
+        role: str,
+        content: str,
+        metadata: dict | None = None,
+    ) -> ChatMessage:
+        import json
+        with Session(self._engine) as session:
+            msg = ChatMessage(
+                project_id=project_id,
+                role=role,
+                content=content,
+                metadata_json=json.dumps(metadata) if metadata else "",
+            )
+            session.add(msg)
+            session.commit()
+            session.refresh(msg)
+            return msg
+
+    def get_chat_messages(
+        self, project_id: int, limit: int | None = None,
+    ) -> list[ChatMessage]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(ChatMessage)
+                .where(ChatMessage.project_id == project_id)
+                .order_by(ChatMessage.id)
+            )
+            results = list(session.exec(stmt).all())
+            if limit is not None and limit > 0:
+                results = results[-limit:]
+            return results
+
+    def get_chat_messages_after(
+        self, project_id: int, after_id: int,
+    ) -> list[ChatMessage]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(ChatMessage)
+                .where(ChatMessage.project_id == project_id)
+                .where(ChatMessage.id > after_id)
+                .order_by(ChatMessage.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def clear_chat_messages(self, project_id: int) -> None:
+        with Session(self._engine) as session:
+            stmt = select(ChatMessage).where(
+                ChatMessage.project_id == project_id,
+            )
+            for m in session.exec(stmt).all():
+                session.delete(m)
+            summary = session.get(ChatSummary, project_id)
+            if summary is not None:
+                session.delete(summary)
+            session.commit()
+
+    def get_chat_summary(self, project_id: int) -> ChatSummary | None:
+        with Session(self._engine) as session:
+            return session.get(ChatSummary, project_id)
+
+    def update_chat_summary(
+        self, project_id: int, summary_text: str, last_id: int,
+    ) -> ChatSummary:
+        from datetime import datetime, timezone
+        with Session(self._engine) as session:
+            record = session.get(ChatSummary, project_id)
+            if record is None:
+                record = ChatSummary(
+                    project_id=project_id,
+                    summary=summary_text,
+                    last_summarized_message_id=last_id,
+                )
+                session.add(record)
+            else:
+                record.summary = summary_text
+                record.last_summarized_message_id = last_id
+                record.updated_at = datetime.now(timezone.utc)
+            session.commit()
+            session.refresh(record)
+            return record
+
+    def get_chat_message_metadata(self, message_id: int) -> dict:
+        import json
+        with Session(self._engine) as session:
+            msg = session.get(ChatMessage, message_id)
+            if msg is None or not msg.metadata_json:
+                return {}
+            try:
+                return json.loads(msg.metadata_json)
+            except (json.JSONDecodeError, TypeError):
+                return {}
+
+    def update_chat_message_metadata(
+        self, message_id: int, metadata: dict,
+    ) -> None:
+        import json
+        with Session(self._engine) as session:
+            msg = session.get(ChatMessage, message_id)
+            if msg is None:
+                return
+            msg.metadata_json = json.dumps(metadata) if metadata else ""
             session.commit()
 
     @staticmethod

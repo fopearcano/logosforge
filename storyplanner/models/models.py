@@ -181,3 +181,35 @@ class QuantumStateRecord(SQLModel, table=True):
     project_id: int = Field(foreign_key="project.id", primary_key=True)
     state_json: str = ""
     updated_at: datetime = Field(default_factory=_now)
+
+
+class ChatMessage(SQLModel, table=True):
+    """A single message in the project chat."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id")
+    role: str  # "user" | "assistant" | "system"
+    content: str
+    metadata_json: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+class ChatSummary(SQLModel, table=True):
+    """Rolling summary of older chat messages — one row per project."""
+
+    project_id: int = Field(foreign_key="project.id", primary_key=True)
+    summary: str = ""
+    last_summarized_message_id: int = 0
+    updated_at: datetime = Field(default_factory=_now)
+
+
+CHAT_PERSONALITIES = (
+    "default",
+    "mentor",
+    "skeptic",
+    "editor",
+    "brutal",
+    "whimsical",
+    "minimalist",
+    "philosopher",
+)
