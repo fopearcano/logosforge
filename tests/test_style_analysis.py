@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 from storyplanner.style_analysis import (
+    STYLE_SENSITIVITY_LEVELS,
     ParagraphStyle,
     StyleContext,
     StyleHint,
@@ -1134,3 +1135,207 @@ def test_editor_has_style_context():
     editor = view._editors[scene.id]
     assert editor._style_context is not None
     assert isinstance(editor._style_context, StyleContext)
+
+
+# -- Style sensitivity levels --------------------------------------------------
+
+def test_sensitivity_levels_defined():
+    assert STYLE_SENSITIVITY_LEVELS == ("low", "medium", "high")
+
+
+def test_detect_hints_low_sensitivity_fewer_hints():
+    text = (
+        "The dog ran fast and the dog ran far and the dog ran well and "
+        "the dog ran home and the dog ran back. "
+        "She walked through the incredibly ancient and extraordinarily "
+        "weathered door which had been painstakingly and meticulously built "
+        "many many decades ago by the remarkably skilled craftsmen."
+    )
+    low_hints = detect_style_hints(text, sensitivity="low")
+    high_hints = detect_style_hints(text, sensitivity="high")
+    assert len(low_hints) <= len(high_hints)
+
+
+def test_detect_hints_high_sensitivity_catches_more():
+    text = (
+        "He walked to the store. He walked to the park. "
+        "He walked to the school. He walked to the car."
+    )
+    low_hints = detect_style_hints(text, sensitivity="low")
+    high_hints = detect_style_hints(text, sensitivity="high")
+    assert len(high_hints) >= len(low_hints)
+
+
+def test_detect_hints_low_long_sentence_threshold():
+    words = " ".join(f"word{i}" for i in range(35))
+    text = f"{words}."
+    low_hints = [h for h in detect_style_hints(text, sensitivity="low") if h.hint_type == "clarity"]
+    medium_hints = [h for h in detect_style_hints(text, sensitivity="medium") if h.hint_type == "clarity"]
+    assert len(low_hints) == 0
+    assert len(medium_hints) >= 1
+
+
+def test_detect_hints_high_long_sentence_threshold():
+    words = " ".join(f"word{i}" for i in range(25))
+    text = f"{words}."
+    medium_hints = [h for h in detect_style_hints(text, sensitivity="medium") if h.hint_type == "clarity"]
+    high_hints = [h for h in detect_style_hints(text, sensitivity="high") if h.hint_type == "clarity"]
+    assert len(medium_hints) == 0
+    assert len(high_hints) >= 1
+
+
+def test_detect_hints_max_hints_by_sensitivity():
+    long_s1 = " ".join(["alpha"] * 45)
+    long_s2 = " ".join(["beta"] * 45)
+    long_s3 = " ".join(["gamma"] * 45)
+    long_s4 = " ".join(["delta"] * 45)
+    long_s5 = " ".join(["epsilon"] * 45)
+    long_s6 = " ".join(["zeta"] * 45)
+    text = f"{long_s1}. {long_s2}. {long_s3}. {long_s4}. {long_s5}. {long_s6}."
+    low_hints = detect_style_hints(text, sensitivity="low")
+    medium_hints = detect_style_hints(text, sensitivity="medium")
+    high_hints = detect_style_hints(text, sensitivity="high")
+    assert len(low_hints) <= 1
+    assert len(medium_hints) <= 3
+    assert len(high_hints) <= 5
+
+
+def test_detect_hints_default_sensitivity_is_medium():
+    text = " ".join(["word"] * 35) + "."
+    default_hints = detect_style_hints(text)
+    medium_hints = detect_style_hints(text, sensitivity="medium")
+    assert len(default_hints) == len(medium_hints)
+
+
+def test_detect_hints_repetition_threshold_by_sensitivity():
+    text = "cat sat on the mat. cat sat on the mat."
+    low_hints = detect_style_hints(text, sensitivity="low")
+    high_hints = detect_style_hints(text, sensitivity="high")
+    low_reps = [h for h in low_hints if h.hint_type == "repetition"]
+    high_reps = [h for h in high_hints if h.hint_type == "repetition"]
+    assert len(high_reps) >= len(low_reps)
+
+
+# -- Style toggle & sensitivity UI integration --------------------------------
+
+def test_toggle_style_feedback_works_instantly():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from storyplanner.db import Database
+    from storyplanner.ui.writing_core_view import WritingCoreView
+
+    db = Database()
+    proj = db.create_project("ToggleFB")
+    scene = db.create_scene(proj.id, "S", content="Hello world.")
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[scene.id]
+
+    assert not view._style_hints_checking
+    assert not editor._style_hints_enabled
+
+    view._toggle_style_hints()
+    assert view._style_hints_checking
+    assert editor._style_hints_enabled
+
+    view._toggle_style_hints()
+    assert not view._style_hints_checking
+    assert not editor._style_hints_enabled
+
+
+def test_toggle_off_clears_hints():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from storyplanner.db import Database
+    from storyplanner.ui.writing_core_view import WritingCoreView
+
+    db = Database()
+    proj = db.create_project("ToggleClear")
+    scene = db.create_scene(proj.id, "S", content="Hello.")
+    view = WritingCoreView(db, proj.id)
+    editor = view._editors[scene.id]
+    editor._style_hints = [StyleHint(0, 5, "clarity", "Test")]
+    view._toggle_style_hints()
+    view._toggle_style_hints()
+    assert editor._style_hints == []
+
+
+def test_style_sensitivity_persisted():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from storyplanner.db import Database
+    from storyplanner.ui.writing_core_view import WritingCoreView
+
+    db = Database()
+    proj = db.create_project("SensPersist")
+    scene = db.create_scene(proj.id, "S", content="Hello.")
+    view = WritingCoreView(db, proj.id)
+    assert view._style_sensitivity == "medium"
+
+    view._set_style_sensitivity("high")
+    assert view._style_sensitivity == "high"
+
+    settings = db.get_project_settings(proj.id)
+    assert settings["style_sensitivity"] == "high"
+
+
+def test_style_sensitivity_restored():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from storyplanner.db import Database
+    from storyplanner.ui.writing_core_view import WritingCoreView
+
+    db = Database()
+    proj = db.create_project("SensRestore")
+    scene = db.create_scene(proj.id, "S", content="Hello.")
+    settings = db.get_project_settings(proj.id)
+    settings["style_sensitivity"] = "low"
+    db.save_project_settings(proj.id, settings)
+
+    view = WritingCoreView(db, proj.id)
+    assert view._style_sensitivity == "low"
+
+
+def test_style_sensitivity_invalid_falls_back_to_medium():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from storyplanner.db import Database
+    from storyplanner.ui.writing_core_view import WritingCoreView
+
+    db = Database()
+    proj = db.create_project("SensBad")
+    scene = db.create_scene(proj.id, "S", content="Hello.")
+    settings = db.get_project_settings(proj.id)
+    settings["style_sensitivity"] = "extreme"
+    db.save_project_settings(proj.id, settings)
+
+    view = WritingCoreView(db, proj.id)
+    assert view._style_sensitivity == "medium"
+
+
+def test_style_toggle_persisted():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from storyplanner.db import Database
+    from storyplanner.ui.writing_core_view import WritingCoreView
+
+    db = Database()
+    proj = db.create_project("TogglePersist")
+    scene = db.create_scene(proj.id, "S", content="Hello.")
+    view = WritingCoreView(db, proj.id)
+    assert not view._style_hints_checking
+
+    view._toggle_style_hints()
+    settings = db.get_project_settings(proj.id)
+    assert settings["style_hints"] is True
+
+
+def test_sensitivity_affects_hint_frequency():
+    """Core test: same text, different sensitivity → different hint count."""
+    long_s1 = " ".join(["word"] * 45)
+    long_s2 = " ".join(["word"] * 45)
+    long_s3 = " ".join(["word"] * 45)
+    long_s4 = " ".join(["word"] * 45)
+    text = f"{long_s1}. {long_s2}. {long_s3}. {long_s4}."
+    low = detect_style_hints(text, sensitivity="low")
+    high = detect_style_hints(text, sensitivity="high")
+    assert len(low) < len(high)

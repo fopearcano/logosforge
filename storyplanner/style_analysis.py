@@ -153,6 +153,19 @@ def apply_style_context(
 
 
 # ---------------------------------------------------------------------------
+# Style sensitivity
+# ---------------------------------------------------------------------------
+
+STYLE_SENSITIVITY_LEVELS = ("low", "medium", "high")
+
+_SENSITIVITY_CONFIG: dict[str, dict[str, int]] = {
+    "low":    {"max_hints": 1, "long_sent": 40, "repeat_count": 4, "min_sents_rhythm": 6},
+    "medium": {"max_hints": 3, "long_sent": 30, "repeat_count": 3, "min_sents_rhythm": 4},
+    "high":   {"max_hints": 5, "long_sent": 20, "repeat_count": 2, "min_sents_rhythm": 3},
+}
+
+
+# ---------------------------------------------------------------------------
 # Heuristic helpers
 # ---------------------------------------------------------------------------
 
@@ -459,11 +472,21 @@ _REPEAT_SKIP = frozenset({
 })
 
 
-def detect_style_hints(text: str) -> list[StyleHint]:
+def detect_style_hints(
+    text: str,
+    sensitivity: str = "medium",
+) -> list[StyleHint]:
     """Detect inline style issues with character-level positions.
 
-    Returns at most ``_MAX_HINTS_PER_PARAGRAPH`` hints to avoid clutter.
+    *sensitivity* controls how aggressively hints are generated
+    (``"low"`` / ``"medium"`` / ``"high"``).
     """
+    cfg = _SENSITIVITY_CONFIG.get(sensitivity, _SENSITIVITY_CONFIG["medium"])
+    max_hints = cfg["max_hints"]
+    long_sent_threshold = cfg["long_sent"]
+    repeat_count = cfg["repeat_count"]
+    min_sents_rhythm = cfg["min_sents_rhythm"]
+
     hints: list[StyleHint] = []
     if not text.strip():
         return hints
@@ -477,10 +500,10 @@ def detect_style_hints(text: str) -> list[StyleHint]:
         pos = idx + len(s)
 
     for i, sent in enumerate(sentences):
-        if len(hints) >= _MAX_HINTS_PER_PARAGRAPH:
+        if len(hints) >= max_hints:
             break
         word_count = len(sent.split())
-        if word_count > _LONG_SENTENCE_THRESHOLD:
+        if word_count > long_sent_threshold:
             start = sent_starts[i]
             hints.append(StyleHint(
                 start=start,
@@ -489,8 +512,7 @@ def detect_style_hints(text: str) -> list[StyleHint]:
                 message="Sentence may be too long",
             ))
 
-    if len(hints) < _MAX_HINTS_PER_PARAGRAPH:
-        lower = text.lower()
+    if len(hints) < max_hints:
         words_with_pos: list[tuple[str, int, int]] = [
             (m.group().lower(), m.start(), m.end())
             for m in re.finditer(r"[a-zA-Z']+", text)
@@ -501,9 +523,9 @@ def detect_style_hints(text: str) -> list[StyleHint]:
                 content_words.setdefault(w, []).append((s, e))
         flagged: set[str] = set()
         for word, positions in content_words.items():
-            if len(hints) >= _MAX_HINTS_PER_PARAGRAPH:
+            if len(hints) >= max_hints:
                 break
-            if len(positions) >= 3 and word not in flagged:
+            if len(positions) >= repeat_count and word not in flagged:
                 flagged.add(word)
                 s, e = positions[1]
                 hints.append(StyleHint(
@@ -512,7 +534,7 @@ def detect_style_hints(text: str) -> list[StyleHint]:
                     message="Repetition detected",
                 ))
 
-    if len(hints) < _MAX_HINTS_PER_PARAGRAPH and len(sentences) >= 4:
+    if len(hints) < max_hints and len(sentences) >= min_sents_rhythm:
         lengths = [len(s.split()) for s in sentences]
         avg = sum(lengths) / len(lengths) if lengths else 0
         if avg > 0:
@@ -528,9 +550,9 @@ def detect_style_hints(text: str) -> list[StyleHint]:
                 ))
 
     dialogue_matches = list(_DIALOGUE_RE.finditer(text))
-    if len(hints) < _MAX_HINTS_PER_PARAGRAPH and dialogue_matches:
+    if len(hints) < max_hints and dialogue_matches:
         for m in dialogue_matches:
-            if len(hints) >= _MAX_HINTS_PER_PARAGRAPH:
+            if len(hints) >= max_hints:
                 break
             inner = m.group()[1:-1]
             inner_words = inner.split()

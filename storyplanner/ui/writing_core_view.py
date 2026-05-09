@@ -44,6 +44,7 @@ from storyplanner.auto_link import AutoLinkSuggester, Suggestion
 from storyplanner.grammar_checker import Issue as GrammarIssue, check_text, detect_language
 from storyplanner.context_assistant import ContextAssistant, ContextHint, HintRateLimiter
 from storyplanner.style_analysis import (
+    STYLE_SENSITIVITY_LEVELS,
     StyleContext,
     StyleHint,
     StyleSuggestion,
@@ -274,10 +275,16 @@ class _StyleHintWorker(QThread):
 
     finished = Signal(int, object)
 
-    def __init__(self, generation: int, scenes: dict[int, str]) -> None:
+    def __init__(
+        self,
+        generation: int,
+        scenes: dict[int, str],
+        sensitivity: str = "medium",
+    ) -> None:
         super().__init__()
         self._generation = generation
         self._scenes = scenes
+        self._sensitivity = sensitivity
         self._cancelled = False
 
     def cancel(self) -> None:
@@ -297,8 +304,8 @@ class _StyleHintWorker(QThread):
             for para in paragraphs:
                 if self._cancelled:
                     return
-                para_hash = hash(para)
-                cached = _STYLE_HINT_CACHE.get(para_hash)
+                cache_key = (hash(para), self._sensitivity)
+                cached = _STYLE_HINT_CACHE.get(cache_key)
                 if cached is not None:
                     for h in cached:
                         scene_hints.append(StyleHint(
@@ -309,10 +316,12 @@ class _StyleHintWorker(QThread):
                         ))
                 else:
                     if para.strip():
-                        para_hints = detect_style_hints(para)
+                        para_hints = detect_style_hints(
+                            para, sensitivity=self._sensitivity,
+                        )
                         if len(_STYLE_HINT_CACHE) >= _STYLE_HINT_CACHE_MAX:
                             _STYLE_HINT_CACHE.clear()
-                        _STYLE_HINT_CACHE[para_hash] = para_hints
+                        _STYLE_HINT_CACHE[cache_key] = para_hints
                         for h in para_hints:
                             scene_hints.append(StyleHint(
                                 start=h.start + offset,
@@ -1079,6 +1088,9 @@ class WritingCoreView(QWidget):
             self._current_language = self._language_override
         self._grammar_checking: bool = bool(_settings.get("grammar_checking", False))
         self._style_hints_checking: bool = bool(_settings.get("style_hints", False))
+        self._style_sensitivity: str = str(_settings.get("style_sensitivity", "medium"))
+        if self._style_sensitivity not in STYLE_SENSITIVITY_LEVELS:
+            self._style_sensitivity = "medium"
         self._energy_enabled: bool = bool(_settings.get("energy_enabled", False))
         self._energy_sensitivity: str = str(_settings.get("energy_sensitivity", "medium"))
         if self._energy_sensitivity not in SENSITIVITY_LEVELS:
@@ -2371,11 +2383,21 @@ class WritingCoreView(QWidget):
         grammar_act.triggered.connect(lambda checked: self._toggle_grammar())
         menu.addAction(grammar_act)
 
-        style_act = QAction("Style Hints", menu)
+        style_act = QAction("Style Feedback", menu)
         style_act.setCheckable(True)
         style_act.setChecked(self._style_hints_checking)
         style_act.triggered.connect(lambda checked: self._toggle_style_hints())
         menu.addAction(style_act)
+
+        style_sens_sub = menu.addMenu("Style Sensitivity")
+        for level in STYLE_SENSITIVITY_LEVELS:
+            act = QAction(level.capitalize(), style_sens_sub)
+            act.setCheckable(True)
+            act.setChecked(level == self._style_sensitivity)
+            act.triggered.connect(
+                lambda _c=False, lv=level: self._set_style_sensitivity(lv),
+            )
+            style_sens_sub.addAction(act)
 
         menu.addSeparator()
 
@@ -2572,6 +2594,7 @@ class WritingCoreView(QWidget):
         settings["smart_quotes"] = self._smart_quotes
         settings["grammar_checking"] = self._grammar_checking
         settings["style_hints"] = self._style_hints_checking
+        settings["style_sensitivity"] = self._style_sensitivity
         settings["energy_enabled"] = self._energy_enabled
         settings["energy_sensitivity"] = self._energy_sensitivity
         settings["language_override"] = self._language_override
@@ -2733,6 +2756,12 @@ class WritingCoreView(QWidget):
             gutter.set_sensitivity(level)
         self._persist_font_settings()
 
+    def _set_style_sensitivity(self, level: str) -> None:
+        self._style_sensitivity = level
+        self._persist_font_settings()
+        if self._style_hints_checking:
+            self._start_style_hint_worker()
+
     def _rebuild_energy_contexts(self) -> None:
         for scene_id, gutter in self._energy_gutters.items():
             ctx = build_story_context(self._db, self._project_id, scene_id)
@@ -2832,7 +2861,9 @@ class WritingCoreView(QWidget):
         scenes: dict[int, str] = {}
         for sid, editor in self._editors.items():
             scenes[sid] = editor.toPlainText()
-        worker = _StyleHintWorker(self._style_hint_generation, scenes)
+        worker = _StyleHintWorker(
+            self._style_hint_generation, scenes, self._style_sensitivity,
+        )
         worker.finished.connect(self._on_style_hint_results)
         self._style_hint_worker = worker
         worker.start()
