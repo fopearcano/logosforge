@@ -1,10 +1,14 @@
 """Tests for ParagraphEnergy — per-paragraph writing dynamics."""
 
 import time
+from unittest.mock import patch
 
 from storyplanner.paragraph_energy import (
     ParagraphEnergy,
+    _parse_llm_metrics,
+    analyze_paragraph,
     analyze_scene_energy,
+    clear_cache,
     compute_paragraph_energy,
 )
 
@@ -138,6 +142,103 @@ def test_compute_preserves_ids():
     assert e.scene_id == 7
 
 
+# -- Dialogue heuristic -------------------------------------------------------
+
+def test_dialogue_boosts_tension():
+    without = compute_paragraph_energy(0, 1, "She walked to the door and opened it.")
+    with_dlg = compute_paragraph_energy(
+        0, 1, '“Get out!” she screamed. “I feared this,” he whispered.',
+    )
+    assert with_dlg.tension >= without.tension
+
+
+def test_dialogue_boosts_pacing():
+    without = compute_paragraph_energy(0, 1, "The room was empty and still.")
+    with_dlg = compute_paragraph_energy(
+        0, 1, '“Run!” he shouted. “Now!” she yelled back.',
+    )
+    assert with_dlg.pacing >= without.pacing
+
+
+# -- Contrast words heuristic -------------------------------------------------
+
+def test_contrast_words_boost_emotional_shift():
+    without = compute_paragraph_energy(0, 1, "He walked. He sat. He stood.")
+    with_contrast = compute_paragraph_energy(
+        0, 1, "He smiled. But suddenly he wept. However, he laughed again.",
+    )
+    assert with_contrast.emotional_shift > without.emotional_shift
+
+
+def test_contrast_alone_gives_small_shift():
+    e = compute_paragraph_energy(
+        0, 1, "The sky was blue. But suddenly it turned grey.",
+    )
+    assert e.emotional_shift > 0.0
+
+
+# -- Cache (analyze_paragraph API) --------------------------------------------
+
+def test_analyze_paragraph_returns_energy():
+    clear_cache()
+    e = analyze_paragraph("A simple sentence.")
+    assert isinstance(e, ParagraphEnergy)
+    assert set(e.metrics.keys()) == {"tension", "pacing", "conflict", "emotional_shift"}
+
+
+def test_analyze_paragraph_cache_hit():
+    clear_cache()
+    text = "The fox jumped over the lazy dog."
+    first = analyze_paragraph(text)
+    second = analyze_paragraph(text)
+    assert first is second
+
+
+def test_analyze_paragraph_different_texts_not_cached():
+    clear_cache()
+    a = analyze_paragraph("Hello world.")
+    b = analyze_paragraph("Goodbye world.")
+    assert a is not b
+
+
+def test_cache_cleared_by_clear_cache():
+    clear_cache()
+    text = "Cached paragraph."
+    first = analyze_paragraph(text)
+    clear_cache()
+    second = analyze_paragraph(text)
+    assert first is not second
+
+
+def test_cache_eviction_at_max():
+    clear_cache()
+    for i in range(520):
+        analyze_paragraph(f"Paragraph number {i} unique text here.")
+    from storyplanner.paragraph_energy import _energy_cache
+    assert len(_energy_cache) <= 512
+
+
+def test_analyze_scene_uses_cache():
+    clear_cache()
+    content = "Shared line.\nAnother line."
+    analyze_scene_energy(1, content)
+
+    from storyplanner.paragraph_energy import _cache_get
+    assert _cache_get("Shared line.") is not None
+    assert _cache_get("Another line.") is not None
+
+
+def test_analyze_scene_reuses_cache():
+    clear_cache()
+    text = "Reusable paragraph."
+    analyze_paragraph(text)
+
+    from storyplanner.paragraph_energy import _energy_cache
+    cache_size_before = len(_energy_cache)
+    analyze_scene_energy(5, text)
+    assert len(_energy_cache) == cache_size_before
+
+
 # -- Analyze scene energy (attach to paragraphs) ------------------------------
 
 def test_analyze_scene_empty():
@@ -187,3 +288,131 @@ def test_analyze_scene_each_has_metrics():
         assert "pacing" in e.metrics
         assert "conflict" in e.metrics
         assert "emotional_shift" in e.metrics
+
+
+# -- LLM metric parsing -------------------------------------------------------
+
+def test_parse_llm_metrics_valid():
+    raw = '{"tension": 0.7, "pacing": 0.5, "conflict": 0.3, "emotional_shift": 0.2}'
+    result = _parse_llm_metrics(raw)
+    assert result == {"tension": 0.7, "pacing": 0.5, "conflict": 0.3, "emotional_shift": 0.2}
+
+
+def test_parse_llm_metrics_with_surrounding_text():
+    raw = 'Here are the metrics: {"tension": 0.8, "pacing": 0.4, "conflict": 0.1, "emotional_shift": 0.9} done.'
+    result = _parse_llm_metrics(raw)
+    assert result is not None
+    assert result["tension"] == 0.8
+
+
+def test_parse_llm_metrics_clamps_values():
+    raw = '{"tension": 1.5, "pacing": -0.3, "conflict": 0.5, "emotional_shift": 0.0}'
+    result = _parse_llm_metrics(raw)
+    assert result["tension"] == 1.0
+    assert result["pacing"] == 0.0
+
+
+def test_parse_llm_metrics_missing_keys():
+    raw = '{"tension": 0.5, "pacing": 0.3}'
+    result = _parse_llm_metrics(raw)
+    assert result is None
+
+
+def test_parse_llm_metrics_invalid_json():
+    result = _parse_llm_metrics("not json at all")
+    assert result is None
+
+
+def test_parse_llm_metrics_empty():
+    result = _parse_llm_metrics("")
+    assert result is None
+
+
+# -- EnergyRefineWorker --------------------------------------------------------
+
+def test_refine_worker_exists():
+    from storyplanner.paragraph_energy import EnergyRefineWorker
+    assert EnergyRefineWorker is not None
+
+
+def test_refine_worker_blends_on_success():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+
+    from storyplanner.paragraph_energy import EnergyRefineWorker
+
+    heuristic = ParagraphEnergy(
+        paragraph_id=0, scene_id=1,
+        metrics={"tension": 0.2, "pacing": 0.4, "conflict": 0.6, "emotional_shift": 0.0},
+    )
+    llm_response = '{"tension": 0.8, "pacing": 0.6, "conflict": 0.4, "emotional_shift": 1.0}'
+
+    results = []
+
+    def mock_chat_completion(messages, **kwargs):
+        return llm_response, False
+
+    worker = EnergyRefineWorker(heuristic, "some text")
+    worker.completed.connect(results.append)
+
+    with patch("storyplanner.assistant.chat_completion", mock_chat_completion), \
+         patch("storyplanner.paragraph_energy._build_provider"):
+        worker.run()
+
+    assert len(results) == 1
+    blended = results[0]
+    assert blended.metrics["tension"] == round(0.2 * 0.4 + 0.8 * 0.6, 3)
+    assert blended.metrics["pacing"] == round(0.4 * 0.4 + 0.6 * 0.6, 3)
+
+
+def test_refine_worker_emits_failed_on_bad_response():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+
+    from storyplanner.paragraph_energy import EnergyRefineWorker
+
+    heuristic = ParagraphEnergy(
+        paragraph_id=0, scene_id=1,
+        metrics={"tension": 0.5, "pacing": 0.5, "conflict": 0.5, "emotional_shift": 0.5},
+    )
+
+    errors = []
+
+    def mock_chat_completion(messages, **kwargs):
+        return "I can't do that.", False
+
+    worker = EnergyRefineWorker(heuristic, "text")
+    worker.failed.connect(errors.append)
+
+    with patch("storyplanner.assistant.chat_completion", mock_chat_completion), \
+         patch("storyplanner.paragraph_energy._build_provider"):
+        worker.run()
+
+    assert len(errors) == 1
+
+
+def test_refine_worker_emits_failed_on_exception():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+
+    from storyplanner.paragraph_energy import EnergyRefineWorker
+
+    heuristic = ParagraphEnergy(
+        paragraph_id=0, scene_id=1,
+        metrics={"tension": 0.5, "pacing": 0.5, "conflict": 0.5, "emotional_shift": 0.5},
+    )
+
+    errors = []
+
+    def mock_chat_completion(messages, **kwargs):
+        raise ConnectionError("no server")
+
+    worker = EnergyRefineWorker(heuristic, "text")
+    worker.failed.connect(errors.append)
+
+    with patch("storyplanner.assistant.chat_completion", mock_chat_completion), \
+         patch("storyplanner.paragraph_energy._build_provider"):
+        worker.run()
+
+    assert len(errors) == 1
+    assert "no server" in errors[0]
