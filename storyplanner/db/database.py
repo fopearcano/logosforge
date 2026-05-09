@@ -28,6 +28,7 @@ from storyplanner.models import (
     SceneCharacterState,
     ScenePlaceLink,
     StoryMemoryEntry,
+    VoiceProfile,
 )
 
 
@@ -275,6 +276,106 @@ class Database:
             if character:
                 session.delete(character)
             session.commit()
+
+    # -- Voice Profiles --------------------------------------------------------
+
+    def get_voice_profile(self, character_id: int) -> VoiceProfile | None:
+        with Session(self._engine) as session:
+            stmt = select(VoiceProfile).where(
+                VoiceProfile.character_id == character_id,
+            )
+            return session.exec(stmt).first()
+
+    def create_voice_profile(
+        self,
+        character_id: int,
+        *,
+        tone: str = "neutral",
+        sentence_length: str = "medium",
+        vocabulary_level: str = "standard",
+        quirks: list[str] | None = None,
+        punctuation_style: dict | None = None,
+        dialogue_markers: list[str] | None = None,
+    ) -> VoiceProfile:
+        import json
+        with Session(self._engine) as session:
+            profile = VoiceProfile(
+                character_id=character_id,
+                tone=tone,
+                sentence_length=sentence_length,
+                vocabulary_level=vocabulary_level,
+                quirks_json=json.dumps(quirks or []),
+                punctuation_style_json=json.dumps(punctuation_style or {}),
+                dialogue_markers_json=json.dumps(dialogue_markers or []),
+            )
+            session.add(profile)
+            session.commit()
+            session.refresh(profile)
+            return profile
+
+    def update_voice_profile(
+        self,
+        character_id: int,
+        *,
+        tone: str | None = None,
+        sentence_length: str | None = None,
+        vocabulary_level: str | None = None,
+        quirks: list[str] | None = None,
+        punctuation_style: dict | None = None,
+        dialogue_markers: list[str] | None = None,
+    ) -> VoiceProfile | None:
+        import json
+        from datetime import datetime, timezone
+        with Session(self._engine) as session:
+            stmt = select(VoiceProfile).where(
+                VoiceProfile.character_id == character_id,
+            )
+            profile = session.exec(stmt).first()
+            if profile is None:
+                return None
+            if tone is not None:
+                profile.tone = tone
+            if sentence_length is not None:
+                profile.sentence_length = sentence_length
+            if vocabulary_level is not None:
+                profile.vocabulary_level = vocabulary_level
+            if quirks is not None:
+                profile.quirks_json = json.dumps(quirks)
+            if punctuation_style is not None:
+                profile.punctuation_style_json = json.dumps(punctuation_style)
+            if dialogue_markers is not None:
+                profile.dialogue_markers_json = json.dumps(dialogue_markers)
+            profile.updated_at = datetime.now(timezone.utc)
+            session.commit()
+            session.refresh(profile)
+            return profile
+
+    def delete_voice_profile(self, character_id: int) -> None:
+        with Session(self._engine) as session:
+            stmt = select(VoiceProfile).where(
+                VoiceProfile.character_id == character_id,
+            )
+            profile = session.exec(stmt).first()
+            if profile:
+                session.delete(profile)
+                session.commit()
+
+    def get_voice_profile_data(self, character_id: int) -> dict | None:
+        """Return deserialized voice profile as a plain dict, or None."""
+        import json
+        profile = self.get_voice_profile(character_id)
+        if profile is None:
+            return None
+        return {
+            "character_id": profile.character_id,
+            "tone": profile.tone,
+            "sentence_length": profile.sentence_length,
+            "vocabulary_level": profile.vocabulary_level,
+            "quirks": json.loads(profile.quirks_json),
+            "punctuation_style": json.loads(profile.punctuation_style_json),
+            "dialogue_markers": json.loads(profile.dialogue_markers_json),
+            "last_updated": profile.updated_at.isoformat(),
+        }
 
     # -- Places --------------------------------------------------------------
 

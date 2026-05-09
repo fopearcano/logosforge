@@ -156,6 +156,25 @@ class OutlineNode(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
 
 
+class VoiceProfile(SQLModel, table=True):
+    """How a character speaks — tone, rhythm, vocabulary, quirks."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    character_id: int = Field(foreign_key="character.id")
+    tone: str = "neutral"
+    sentence_length: str = "medium"
+    vocabulary_level: str = "standard"
+    quirks_json: str = "[]"
+    punctuation_style_json: str = "{}"
+    dialogue_markers_json: str = "[]"
+    updated_at: datetime = Field(default_factory=_now)
+
+
+VOICE_TONES = ("formal", "neutral", "casual", "abrasive", "polite")
+VOICE_SENTENCE_LENGTHS = ("short", "medium", "long")
+VOICE_VOCABULARY_LEVELS = ("simple", "standard", "elevated")
+
+
 class QuantumStateRecord(SQLModel, table=True):
     """Persisted Quantum Outliner state — one row per project."""
 

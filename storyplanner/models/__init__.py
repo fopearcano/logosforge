@@ -1,4 +1,7 @@
 from storyplanner.models.models import (
+    VOICE_SENTENCE_LENGTHS,
+    VOICE_TONES,
+    VOICE_VOCABULARY_LEVELS,
     Character,
     Note,
     OutlineNode,
@@ -13,6 +16,7 @@ from storyplanner.models.models import (
     SceneCharacterState,
     ScenePlaceLink,
     StoryMemoryEntry,
+    VoiceProfile,
 )
 
 __all__ = [
@@ -30,4 +34,8 @@ __all__ = [
     "StoryMemoryEntry",
     "OutlineNode",
     "QuantumStateRecord",
+    "VoiceProfile",
+    "VOICE_TONES",
+    "VOICE_SENTENCE_LENGTHS",
+    "VOICE_VOCABULARY_LEVELS",
 ]
