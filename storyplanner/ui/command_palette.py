@@ -26,6 +26,7 @@ COMMANDS = [
     ("Dialogue", "ai_dialogue", "AI: improve dialogue"),
     ("Suggest Beats", "ai_suggest", "AI: suggest narrative directions"),
     ("Style Improve", "style_improve", "Analyze selection and suggest improvements"),
+    ("Voice Rewrite", "voice_rewrite", "Rewrite selection in character voice"),
     ("Focus Mode", "focus", "Toggle distraction-free writing"),
 ]
 

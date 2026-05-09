@@ -330,3 +330,204 @@ def learn_voice_profile(
         ),
     )
     return analysis
+
+
+# ---------------------------------------------------------------------------
+# Voice rewrite — heuristic transforms to match a profile
+# ---------------------------------------------------------------------------
+
+_EXPANSION_MAP: dict[str, str] = {
+    "i'm": "I am", "i'll": "I will", "i've": "I have", "i'd": "I would",
+    "you're": "you are", "you'll": "you will", "you've": "you have",
+    "you'd": "you would",
+    "he's": "he is", "she's": "she is", "it's": "it is",
+    "we're": "we are", "they're": "they are",
+    "he'll": "he will", "she'll": "she will",
+    "we'll": "we will", "they'll": "they will",
+    "he'd": "he would", "she'd": "she would",
+    "we'd": "we would", "they'd": "they would",
+    "isn't": "is not", "aren't": "are not",
+    "wasn't": "was not", "weren't": "were not",
+    "don't": "do not", "doesn't": "does not", "didn't": "did not",
+    "won't": "will not", "wouldn't": "would not",
+    "couldn't": "could not", "shouldn't": "should not",
+    "can't": "cannot", "haven't": "have not",
+    "hasn't": "has not", "hadn't": "had not",
+    "let's": "let us", "that's": "that is",
+    "there's": "there is", "who's": "who is", "what's": "what is",
+}
+
+_CONTRACTION_MAP: dict[str, str] = {
+    "I am": "I'm", "I will": "I'll", "I have": "I've", "I would": "I'd",
+    "you are": "you're", "you will": "you'll", "you have": "you've",
+    "you would": "you'd",
+    "he is": "he's", "she is": "she's", "it is": "it's",
+    "we are": "we're", "they are": "they're",
+    "he will": "he'll", "she will": "she'll",
+    "we will": "we'll", "they will": "they'll",
+    "is not": "isn't", "are not": "aren't",
+    "was not": "wasn't", "were not": "weren't",
+    "do not": "don't", "does not": "doesn't", "did not": "didn't",
+    "will not": "won't", "would not": "wouldn't",
+    "could not": "couldn't", "should not": "shouldn't",
+    "can not": "can't", "cannot": "can't",
+    "have not": "haven't", "has not": "hasn't", "had not": "hadn't",
+    "let us": "let's", "that is": "that's",
+    "there is": "there's",
+}
+
+
+def _expand_contractions(text: str) -> str:
+    def _replace(m: re.Match) -> str:
+        word = m.group(0)
+        expanded = _EXPANSION_MAP.get(word.lower())
+        if expanded is None:
+            return word
+        if word[0].isupper():
+            return expanded[0].upper() + expanded[1:]
+        return expanded
+    return _CONTRACTION_RE.sub(_replace, text)
+
+
+def _add_contractions(text: str) -> str:
+    result = text
+    for full, short in sorted(
+        _CONTRACTION_MAP.items(), key=lambda x: -len(x[0]),
+    ):
+        pattern = re.compile(
+            r"\b" + re.escape(full) + r"\b", re.IGNORECASE,
+        )
+        def _repl(m: re.Match, s=short) -> str:
+            if m.group(0)[0].isupper():
+                return s[0].upper() + s[1:]
+            return s
+        result = pattern.sub(_repl, result)
+    return result
+
+
+def _shorten_sentences(text: str) -> str:
+    sentences: list[str] = []
+    for m in _SENTENCE_RE.finditer(text):
+        sent = m.group().strip()
+        words = sent.split()
+        if len(words) > 10:
+            mid = len(words) // 2
+            for i in range(mid - 2, mid + 3):
+                if 0 < i < len(words) and words[i].lower() in (
+                    "and", "but", "so", "then", "because", "while",
+                ):
+                    first = " ".join(words[:i])
+                    rest = " ".join(words[i + 1:])
+                    if not first.endswith((".", "!", "?")):
+                        first += "."
+                    if rest and rest[0].islower():
+                        rest = rest[0].upper() + rest[1:]
+                    sentences.append(first)
+                    sentences.append(rest)
+                    break
+            else:
+                sentences.append(sent)
+        else:
+            sentences.append(sent)
+    return " ".join(sentences)
+
+
+def _lengthen_sentences(text: str) -> str:
+    sentences = [m.group().strip() for m in _SENTENCE_RE.finditer(text)]
+    if len(sentences) < 2:
+        return text
+    merged: list[str] = []
+    i = 0
+    while i < len(sentences):
+        sent = sentences[i]
+        words = sent.split()
+        if len(words) <= 5 and i + 1 < len(sentences):
+            next_sent = sentences[i + 1]
+            joined = sent.rstrip(".!?") + ", and " + next_sent[0].lower() + next_sent[1:]
+            merged.append(joined)
+            i += 2
+        else:
+            merged.append(sent)
+            i += 1
+    return " ".join(merged)
+
+
+@dataclass(slots=True)
+class VoiceRewrite:
+    """A single voice-matched rewrite alternative."""
+
+    text: str
+    label: str
+
+
+def generate_voice_rewrites(
+    text: str,
+    profile: dict,
+) -> list[VoiceRewrite]:
+    """Return 1–2 heuristic rewrites of *text* to match *profile*.
+
+    Does NOT auto-apply. The caller presents the alternatives and the
+    user chooses.
+    """
+    if not text.strip() or not profile:
+        return []
+
+    rewrites: list[VoiceRewrite] = []
+    current_tone = _classify_tone(
+        _contraction_rate([text]),
+        _avg_sentence_length([text]),
+    )
+    target_tone = profile.get("tone", "neutral")
+
+    target_sl = profile.get("sentence_length", "medium")
+    current_sl = _classify_sentence_length(_avg_sentence_length([text]))
+
+    quirks = profile.get("quirks", [])
+
+    candidate = text
+
+    if target_tone == "formal" and current_tone != "formal":
+        candidate = _expand_contractions(candidate)
+        rewrites.append(VoiceRewrite(
+            text=candidate,
+            label="More formal tone",
+        ))
+    elif target_tone == "casual" and current_tone != "casual":
+        candidate = _add_contractions(candidate)
+        rewrites.append(VoiceRewrite(
+            text=candidate,
+            label="More casual tone",
+        ))
+
+    if target_sl == "short" and current_sl in ("medium", "long"):
+        shortened = _shorten_sentences(candidate if rewrites else text)
+        if shortened != (candidate if rewrites else text):
+            rewrites.append(VoiceRewrite(
+                text=shortened,
+                label="Shorter sentences",
+            ))
+    elif target_sl == "long" and current_sl == "short":
+        lengthened = _lengthen_sentences(candidate if rewrites else text)
+        if lengthened != (candidate if rewrites else text):
+            rewrites.append(VoiceRewrite(
+                text=lengthened,
+                label="Longer sentences",
+            ))
+
+    if not rewrites and "avoids contractions" in quirks:
+        expanded = _expand_contractions(text)
+        if expanded != text:
+            rewrites.append(VoiceRewrite(
+                text=expanded,
+                label="Expand contractions (character quirk)",
+            ))
+
+    if not rewrites and "heavy contraction use" in quirks:
+        contracted = _add_contractions(text)
+        if contracted != text:
+            rewrites.append(VoiceRewrite(
+                text=contracted,
+                label="Add contractions (character quirk)",
+            ))
+
+    return rewrites[:2]

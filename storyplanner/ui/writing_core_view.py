@@ -64,6 +64,7 @@ from storyplanner.paragraph_energy import (
 from storyplanner.creative_layer import compute_review_metrics
 from storyplanner.dialogue_attribution import DialogueSegment, attribute_dialogue
 from storyplanner.voice_consistency import VoiceDeviation, check_consistency
+from storyplanner.voice_learner import VoiceRewrite, generate_voice_rewrites
 from storyplanner.db import Database
 from storyplanner.structural_intelligence import StructuralCache
 from storyplanner.settings import get_manager as get_settings
@@ -576,6 +577,100 @@ class _StyleSuggestionPopup(QWidget):
         self.hide()
 
 
+class _VoiceRewritePopup(QWidget):
+    """Floating popup that shows 1–2 voice-matched rewrite alternatives."""
+
+    rewrite_accepted = Signal(str)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowFlags(
+            Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint,
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
+        self.setObjectName("voiceRewritePopup")
+        self.setMaximumWidth(400)
+
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(10, 8, 10, 8)
+        self._layout.setSpacing(4)
+
+        self._header = QLabel()
+        self._header.setObjectName("voiceRewriteHeader")
+        self._layout.addWidget(self._header)
+
+        self._option_widgets: list[QWidget] = []
+
+        self.setStyleSheet(f"""
+            #voiceRewritePopup {{
+                background: {theme.BG_PANEL};
+                border: 1px solid {theme.BG_HOVER};
+                border-radius: 6px;
+            }}
+            #voiceRewriteHeader {{
+                color: {theme.TEXT_SECONDARY};
+                font-size: 11px;
+                font-weight: bold;
+            }}
+            .QLabel {{
+                color: {theme.TEXT_PRIMARY};
+                font-size: 12px;
+                background: transparent;
+            }}
+            QPushButton {{
+                color: {theme.TEXT_PRIMARY};
+                background: {theme.BG_INPUT};
+                border: 1px solid {theme.BG_HOVER};
+                border-radius: 4px;
+                font-size: 12px;
+                padding: 3px 10px;
+            }}
+            QPushButton:hover {{
+                background: {theme.BG_HOVER};
+            }}
+        """)
+
+    def show_rewrites(
+        self,
+        rewrites: list[VoiceRewrite],
+        global_pos,
+    ) -> None:
+        for w in self._option_widgets:
+            self._layout.removeWidget(w)
+            w.deleteLater()
+        self._option_widgets.clear()
+
+        if not rewrites:
+            self._header.setText("No voice rewrites needed — line matches profile.")
+        else:
+            self._header.setText("Rewrite in character voice:")
+
+        for rw in rewrites:
+            lbl = QLabel(f"  {rw.label}")
+            lbl.setWordWrap(True)
+            self._layout.addWidget(lbl)
+            self._option_widgets.append(lbl)
+
+            preview = QLabel(f'    "{rw.text}"')
+            preview.setWordWrap(True)
+            preview.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-style: italic;")
+            self._layout.addWidget(preview)
+            self._option_widgets.append(preview)
+
+            btn = QPushButton("Apply")
+            btn.clicked.connect(lambda _c=False, t=rw.text: self._accept(t))
+            self._layout.addWidget(btn)
+            self._option_widgets.append(btn)
+
+        self.adjustSize()
+        self.move(global_pos)
+        self.show()
+
+    def _accept(self, text: str) -> None:
+        self.rewrite_accepted.emit(text)
+        self.hide()
+
+
 class _SceneEditor(QTextEdit):
     """Borderless editor with focus-fade overlay and cross-scene navigation.
 
@@ -624,6 +719,11 @@ class _SceneEditor(QTextEdit):
         self._style_suggestion_popup.rewrite_accepted.connect(
             self._on_style_rewrite,
         )
+        self._voice_rewrite_popup = _VoiceRewritePopup()
+        self._voice_rewrite_popup.rewrite_accepted.connect(
+            self._on_voice_rewrite,
+        )
+        self._voice_profile_data: dict | None = None
         self._focus_fade_enabled = False
         self._fade_block = -1
         self._fade_bg = "#0f1219"
@@ -803,6 +903,11 @@ class _SceneEditor(QTextEdit):
             style_act.triggered.connect(
                 lambda: self._show_style_suggestions(event.globalPos()),
             )
+            if self._voice_profile_data is not None:
+                voice_act = menu.addAction("Voice Rewrite")
+                voice_act.triggered.connect(
+                    lambda: self._show_voice_rewrites(event.globalPos()),
+                )
         menu.exec(event.globalPos())
         menu.deleteLater()
 
@@ -836,6 +941,21 @@ class _SceneEditor(QTextEdit):
         )
 
     def _on_style_rewrite(self, rewrite: str) -> None:
+        cursor = self.textCursor()
+        if cursor.hasSelection():
+            cursor.insertText(rewrite)
+
+    def _show_voice_rewrites(self, global_pos) -> None:
+        cursor = self.textCursor()
+        if not cursor.hasSelection():
+            return
+        if self._voice_profile_data is None:
+            return
+        text = cursor.selectedText().replace(" ", "\n")
+        rewrites = generate_voice_rewrites(text, self._voice_profile_data)
+        self._voice_rewrite_popup.show_rewrites(rewrites, global_pos)
+
+    def _on_voice_rewrite(self, rewrite: str) -> None:
         cursor = self.textCursor()
         if cursor.hasSelection():
             cursor.insertText(rewrite)
@@ -1605,6 +1725,12 @@ class WritingCoreView(QWidget):
         editor._style_context = build_style_context(
             self._db, self._project_id, scene.id,
         )
+        char_ids = self._db.get_scene_character_ids(scene.id)
+        for cid in char_ids:
+            vdata = self._db.get_voice_profile_data(cid)
+            if vdata is not None:
+                editor._voice_profile_data = vdata
+                break
         gutter.set_sensitivity(self._energy_sensitivity)
         gutter.set_enabled(self._energy_enabled)
 
@@ -2065,6 +2191,11 @@ class WritingCoreView(QWidget):
                 cursor_rect = editor.cursorRect()
                 gpos = editor.mapToGlobal(cursor_rect.bottomLeft())
                 editor._show_style_suggestions(gpos)
+        elif key == "voice_rewrite":
+            if editor is not None:
+                cursor_rect = editor.cursorRect()
+                gpos = editor.mapToGlobal(cursor_rect.bottomLeft())
+                editor._show_voice_rewrites(gpos)
         elif key == "psyke":
             pass
         elif key.startswith("ai_"):
