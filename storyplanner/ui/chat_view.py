@@ -318,7 +318,7 @@ class ChatView(QWidget):
         layout.addWidget(self._status_label)
 
         self.setStyleSheet(
-            f"QWidget {{ background-color: {theme.get('BG_BASE')}; }}"
+            f"QWidget {{ background-color: {theme.get('BG_PANEL')}; }}"
         )
 
     def _build_header(self) -> QHBoxLayout:

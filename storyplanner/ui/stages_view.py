@@ -103,7 +103,7 @@ class StagesView(QWidget):
         layout.addWidget(self._action_bar)
 
         self.setStyleSheet(
-            f"QWidget {{ background-color: {theme.get('BG_BASE')}; }}"
+            f"QWidget {{ background-color: {theme.get('BG_PANEL')}; }}"
         )
 
     def _build_left_panel(self) -> QWidget:
