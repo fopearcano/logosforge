@@ -1,9 +1,14 @@
 """Tests for style_analysis — ParagraphStyle model and metric computation."""
 
+from unittest.mock import patch
+
 from storyplanner.style_analysis import (
     ParagraphStyle,
+    _parse_style_metrics,
     analyze_paragraph,
     analyze_paragraphs,
+    analyze_style,
+    clear_cache,
 )
 
 
@@ -245,3 +250,303 @@ def test_metrics_are_rounded():
         if "." in s:
             decimals = len(s.split(".")[1])
             assert decimals <= 3
+
+
+# -- analyze_style (cached API) ------------------------------------------------
+
+def test_analyze_style_returns_paragraph_style():
+    clear_cache()
+    result = analyze_style("The dog ran across the field.")
+    assert isinstance(result, ParagraphStyle)
+    assert "clarity" in result.metrics
+
+
+def test_analyze_style_cache_hit():
+    clear_cache()
+    text = "The fox jumped over the lazy dog."
+    first = analyze_style(text)
+    second = analyze_style(text)
+    assert first is second
+
+
+def test_analyze_style_different_texts_not_cached():
+    clear_cache()
+    a = analyze_style("Hello world.")
+    b = analyze_style("Goodbye world.")
+    assert a is not b
+
+
+def test_cache_cleared_by_clear_cache():
+    clear_cache()
+    text = "Cached paragraph text."
+    first = analyze_style(text)
+    clear_cache()
+    second = analyze_style(text)
+    assert first is not second
+
+
+def test_cache_eviction_at_max():
+    clear_cache()
+    for i in range(520):
+        analyze_style(f"Paragraph number {i} unique text here.")
+    from storyplanner.style_analysis import _style_cache
+    assert len(_style_cache) <= 512
+
+
+# -- Different texts produce different metrics ---------------------------------
+
+def test_different_texts_different_clarity():
+    clear_cache()
+    clear_text = "She ran. He jumped. They stopped."
+    muddy_text = (
+        "The individual who was previously situated adjacent to the "
+        "antiquated door which had been constructed approximately "
+        "forty-seven years previously although the precise date remained "
+        "somewhat uncertain among the various inhabitants."
+    )
+    a = analyze_style(clear_text)
+    b = analyze_style(muddy_text)
+    assert a.metrics["clarity"] > b.metrics["clarity"]
+
+
+def test_different_texts_different_concision():
+    clear_cache()
+    tight = "He sprinted across the field."
+    wordy = (
+        "He was very really quite basically just honestly totally "
+        "completely absolutely definitely running across the field."
+    )
+    a = analyze_style(tight)
+    b = analyze_style(wordy)
+    assert a.metrics["concision"] > b.metrics["concision"]
+
+
+def test_different_texts_different_rhythm():
+    clear_cache()
+    uniform = (
+        "The dog ran fast. The cat sat down. The man went home. "
+        "The bird flew up. The sun went down."
+    )
+    varied = (
+        "She stopped. The long winding road stretched out before her, "
+        "disappearing into mist. She breathed. Then she walked on."
+    )
+    a = analyze_style(varied)
+    b = analyze_style(uniform)
+    assert a.metrics["rhythm"] > b.metrics["rhythm"]
+
+
+# -- Repeated words → lower clarity -------------------------------------------
+
+def test_repeated_words_lower_clarity():
+    clean = "The cat sat on the mat. She looked out the window."
+    repetitive = (
+        "The castle stood on the castle hill. The castle walls "
+        "surrounded the castle grounds near the castle gate."
+    )
+    a = analyze_paragraph(0, clean)
+    b = analyze_paragraph(0, repetitive)
+    assert a.metrics["clarity"] > b.metrics["clarity"]
+
+
+def test_repeated_word_note():
+    text = (
+        "The castle stood on the castle hill. The castle walls "
+        "surrounded the castle grounds near the castle gate."
+    )
+    result = analyze_paragraph(0, text)
+    assert any("repeat" in n.lower() for n in result.notes)
+
+
+# -- Adverb detection ---------------------------------------------------------
+
+def test_excessive_adverbs_lower_concision():
+    clean = "He walked to the door and opened it."
+    adverby = (
+        "He extremely quickly walked to the incredibly enormous door "
+        "and very slowly, deeply, completely opened it."
+    )
+    a = analyze_paragraph(0, clean)
+    b = analyze_paragraph(0, adverby)
+    assert a.metrics["concision"] > b.metrics["concision"]
+
+
+def test_adverb_note():
+    text = (
+        "She very slowly and extremely carefully and incredibly "
+        "thoroughly and deeply completely examined the room."
+    )
+    result = analyze_paragraph(0, text)
+    assert any("adverb" in n.lower() for n in result.notes)
+
+
+# -- Dialogue punctuation -----------------------------------------------------
+
+def test_dialogue_excessive_exclamation():
+    normal = '"Hey," she said. "What happened?"'
+    loud = '"Hey!!! What!!! Is!!! Going!!!! On!!!!" she screamed.'
+    a = analyze_paragraph(0, normal)
+    b = analyze_paragraph(0, loud)
+    dn_a = a.metrics.get("dialogue_naturalness", 1.0)
+    dn_b = b.metrics.get("dialogue_naturalness", 1.0)
+    assert dn_a >= dn_b
+
+
+def test_dialogue_semicolons_lower_naturalness():
+    natural = '"I think we should go," he said.'
+    stilted = '"I think; however, we should consider; perhaps, going," he said.'
+    a = analyze_paragraph(0, natural)
+    b = analyze_paragraph(0, stilted)
+    dn_a = a.metrics.get("dialogue_naturalness", 1.0)
+    dn_b = b.metrics.get("dialogue_naturalness", 1.0)
+    assert dn_a > dn_b
+
+
+# -- Long sentences → lower concision -----------------------------------------
+
+def test_long_sentences_lower_concision():
+    short = "He sat. She stood. The door opened."
+    long_sent = (
+        "The man who was standing by the ancient and weathered door which "
+        "had been built many decades ago opened it with a slow and careful "
+        "motion of his hand while glancing nervously over his shoulder at "
+        "the crowd that had gathered behind him in the narrow hallway."
+    )
+    a = analyze_paragraph(0, short)
+    b = analyze_paragraph(0, long_sent)
+    assert a.metrics["concision"] > b.metrics["concision"]
+
+
+# -- LLM metric parsing -------------------------------------------------------
+
+def test_parse_style_metrics_valid():
+    raw = '{"clarity": 0.8, "concision": 0.7, "rhythm": 0.9, "tone_consistency": 0.85}'
+    result = _parse_style_metrics(raw)
+    assert result is not None
+    assert result["clarity"] == 0.8
+    assert result["rhythm"] == 0.9
+
+
+def test_parse_style_metrics_with_dialogue():
+    raw = '{"clarity": 0.8, "concision": 0.7, "rhythm": 0.9, "tone_consistency": 0.85, "dialogue_naturalness": 0.6}'
+    result = _parse_style_metrics(raw)
+    assert result is not None
+    assert "dialogue_naturalness" in result
+
+
+def test_parse_style_metrics_clamps():
+    raw = '{"clarity": 1.5, "concision": -0.3, "rhythm": 0.5, "tone_consistency": 0.8}'
+    result = _parse_style_metrics(raw)
+    assert result["clarity"] == 1.0
+    assert result["concision"] == 0.0
+
+
+def test_parse_style_metrics_missing_keys():
+    raw = '{"clarity": 0.8, "concision": 0.7}'
+    result = _parse_style_metrics(raw)
+    assert result is None
+
+
+def test_parse_style_metrics_invalid_json():
+    assert _parse_style_metrics("not json") is None
+
+
+def test_parse_style_metrics_empty():
+    assert _parse_style_metrics("") is None
+
+
+def test_parse_style_metrics_with_surrounding_text():
+    raw = 'Here are the metrics: {"clarity": 0.9, "concision": 0.8, "rhythm": 0.7, "tone_consistency": 0.6} done.'
+    result = _parse_style_metrics(raw)
+    assert result is not None
+    assert result["clarity"] == 0.9
+
+
+# -- StyleRefineWorker ---------------------------------------------------------
+
+def test_refine_worker_exists():
+    from storyplanner.style_analysis import StyleRefineWorker
+    assert StyleRefineWorker is not None
+
+
+def test_refine_worker_blends_on_success():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+
+    from storyplanner.style_analysis import StyleRefineWorker
+
+    heuristic = ParagraphStyle(
+        paragraph_id=0,
+        metrics={"clarity": 0.4, "concision": 0.6, "rhythm": 0.8, "tone_consistency": 0.5},
+    )
+    llm_response = '{"clarity": 0.8, "concision": 0.4, "rhythm": 0.6, "tone_consistency": 0.9}'
+
+    results = []
+
+    def mock_chat(messages, **kwargs):
+        return llm_response, False
+
+    worker = StyleRefineWorker(heuristic, "some text")
+    worker.completed.connect(results.append)
+
+    with patch("storyplanner.assistant.chat_completion", mock_chat), \
+         patch("storyplanner.style_analysis._build_provider"):
+        worker.run()
+
+    assert len(results) == 1
+    blended = results[0]
+    assert blended.metrics["clarity"] == round(0.4 * 0.4 + 0.8 * 0.6, 3)
+    assert blended.metrics["concision"] == round(0.6 * 0.4 + 0.4 * 0.6, 3)
+
+
+def test_refine_worker_emits_failed_on_bad_response():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+
+    from storyplanner.style_analysis import StyleRefineWorker
+
+    heuristic = ParagraphStyle(
+        paragraph_id=0,
+        metrics={"clarity": 0.5, "concision": 0.5, "rhythm": 0.5, "tone_consistency": 0.5},
+    )
+
+    errors = []
+
+    def mock_chat(messages, **kwargs):
+        return "I can't do that.", False
+
+    worker = StyleRefineWorker(heuristic, "text")
+    worker.failed.connect(errors.append)
+
+    with patch("storyplanner.assistant.chat_completion", mock_chat), \
+         patch("storyplanner.style_analysis._build_provider"):
+        worker.run()
+
+    assert len(errors) == 1
+
+
+def test_refine_worker_emits_failed_on_exception():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+
+    from storyplanner.style_analysis import StyleRefineWorker
+
+    heuristic = ParagraphStyle(
+        paragraph_id=0,
+        metrics={"clarity": 0.5, "concision": 0.5, "rhythm": 0.5, "tone_consistency": 0.5},
+    )
+
+    errors = []
+
+    def mock_chat(messages, **kwargs):
+        raise ConnectionError("no server")
+
+    worker = StyleRefineWorker(heuristic, "text")
+    worker.failed.connect(errors.append)
+
+    with patch("storyplanner.assistant.chat_completion", mock_chat), \
+         patch("storyplanner.style_analysis._build_provider"):
+        worker.run()
+
+    assert len(errors) == 1
+    assert "no server" in errors[0]
