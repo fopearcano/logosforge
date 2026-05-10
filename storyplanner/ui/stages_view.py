@@ -350,6 +350,8 @@ class StagesView(QWidget):
         )
         self._reload_tree()
         self._select_stage(stage.id)
+        if self._on_data_changed is not None:
+            self._on_data_changed()
 
     def _on_take_snapshot(self) -> None:
         stage_id = self._selected_stage_id
@@ -369,6 +371,8 @@ class StagesView(QWidget):
         )
         self._render_detail(stage)
         self._restore_status.setText("Snapshot captured.")
+        if self._on_data_changed is not None:
+            self._on_data_changed()
 
     def _on_branch(self) -> None:
         if self._selected_stage_id is None:
@@ -395,6 +399,8 @@ class StagesView(QWidget):
             return
         self._reload_tree()
         self._select_stage(new_stage.id)
+        if self._on_data_changed is not None:
+            self._on_data_changed()
 
     def _on_compare(self) -> None:
         if self._selected_snapshot_id is None or self._selected_stage_id is None:
@@ -447,6 +453,8 @@ class StagesView(QWidget):
         self._db.set_stage_status(self._selected_stage_id, new_status)
         self._reload_tree()
         self._select_stage(self._selected_stage_id)
+        if self._on_data_changed is not None:
+            self._on_data_changed()
 
     # -- Helpers -------------------------------------------------------------
 

@@ -55,6 +55,12 @@ class AutosaveManager(QObject):
     def file_path(self, path: str | None) -> None:
         self._file_path = path
 
+    def set_project(self, project_id: int) -> None:
+        self._debounce.stop()
+        self._project_id = project_id
+        self._dirty = False
+        self._queued = False
+
     def mark_dirty(self) -> None:
         self._dirty = True
         if self._file_path:

@@ -66,6 +66,11 @@ class GraphView(QWidget):
             )
         return "  ".join(parts)
 
+    def refresh(self) -> None:
+        self._scene.clear()
+        self._node_items.clear()
+        self._build_graph()
+
     def _build_graph(self) -> None:
         nodes, edges = self._db.build_link_graph(self._project_id)
 

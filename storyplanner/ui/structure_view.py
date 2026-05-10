@@ -40,6 +40,9 @@ class StructureView(QWidget):
 
         self._render()
 
+    def refresh(self) -> None:
+        self._render()
+
     def _render(self) -> None:
         scenes = self._db.get_all_scenes(self._project_id)
 

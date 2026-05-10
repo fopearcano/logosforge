@@ -820,7 +820,7 @@ class MainWindow(QMainWindow):
 
     def _setup_system_commands(self) -> None:
         self._command_registry = CommandRegistry()
-        handlers = SystemCommandHandlers(
+        self._system_command_handlers = SystemCommandHandlers(
             self._db,
             self._project_id,
             open_scene=self._open_scene_in_editor,
@@ -830,7 +830,7 @@ class MainWindow(QMainWindow):
             run_ai_action=self._assistant_panel.run_action,
             on_data_changed=self._on_data_changed,
         )
-        handlers.register_all(self._command_registry)
+        self._system_command_handlers.register_all(self._command_registry)
         self._psyke_console.set_registry(self._command_registry)
         self._psyke_console.set_scene_context(self._get_scene_entry_ids)
 
@@ -1045,6 +1045,7 @@ class MainWindow(QMainWindow):
                 on_data_changed=self._on_data_changed,
                 on_link_clicked=self._on_link_navigated,
                 on_focus_mode_changed=self._on_focus_mode_changed,
+                on_open_psyke_entry=self._open_psyke_entry,
             )
         if self.content_area is not self._cached_scenes_view:
             self._set_content(self._cached_scenes_view)
@@ -1075,14 +1076,7 @@ class MainWindow(QMainWindow):
             return
 
         new_project_id = import_json(self._db, data)
-        self._project_id = new_project_id
-        self._psyke_console.set_project(new_project_id)
-        self._set_current_file(None)
-        self._cached_scenes_view = None
-        self._cached_scene_entry_scene = None
-        self._cached_scene_entry_ids = None
-        self._mark_clean()
-
+        self._switch_project(new_project_id)
         self._set_active_section("Dashboard")
         self._show_dashboard()
         QMessageBox.information(
@@ -1414,15 +1408,9 @@ class MainWindow(QMainWindow):
 
     def _on_new_project(self) -> None:
         project = self._db.create_project("Untitled")
-        self._project_id = project.id
-        self._psyke_console.set_project(project.id)
-        self._set_current_file(None)
-        self._cached_scenes_view = None
-        self._cached_scene_entry_scene = None
-        self._cached_scene_entry_ids = None
-        self._assistant_panel.refresh_scenes()
-        self._mark_clean()
-        self._reset_content("New project created. Select a section from the sidebar.")
+        self._switch_project(project.id)
+        self._set_active_section("Dashboard")
+        self._show_dashboard()
 
     def _on_save(self) -> None:
         if self._current_file:
@@ -1489,13 +1477,7 @@ class MainWindow(QMainWindow):
         dlg = VersionHistoryDialog(self._versions, parent=self)
         result = dlg.exec()
         if result and dlg.restored_project_id is not None:
-            self._project_id = dlg.restored_project_id
-            self._psyke_console.set_project(dlg.restored_project_id)
-            self._set_current_file(None)
-            self._cached_scenes_view = None
-            self._cached_scene_entry_scene = None
-            self._cached_scene_entry_ids = None
-            self._mark_clean()
+            self._switch_project(dlg.restored_project_id)
             self._set_active_section("Dashboard")
             self._show_dashboard()
 
@@ -1595,17 +1577,10 @@ class MainWindow(QMainWindow):
             return
 
         new_project_id = import_json(self._db, data)
-        self._project_id = new_project_id
-        self._psyke_console.set_project(new_project_id)
-        self._set_current_file(path)
-        self._cached_scenes_view = None
-        self._cached_scene_entry_scene = None
-        self._cached_scene_entry_ids = None
-        self._mark_clean()
+        self._switch_project(new_project_id, file_path=path)
         recent_projects.add(path)
         self._refresh_recent_menu()
         get_settings().set("last_project_path", str(Path(path).resolve()))
-
         self._set_active_section("Dashboard")
         self._show_dashboard()
 
@@ -1621,16 +1596,13 @@ class MainWindow(QMainWindow):
         data, _ = validate_import_data(raw)
         if data is None:
             return False
-        self._project_id = import_json(self._db, data)
-        self._psyke_console.set_project(self._project_id)
-        self._set_current_file(path)
-        self._cached_scenes_view = None
-        self._cached_scene_entry_scene = None
-        self._cached_scene_entry_ids = None
-        self._mark_clean()
+        new_id = import_json(self._db, data)
+        self._switch_project(new_id, file_path=path)
         recent_projects.add(path)
         self._refresh_recent_menu()
         self._update_title()
+        self._set_active_section("Dashboard")
+        self._show_dashboard()
         return True
 
     def _on_save_as(self) -> None:
@@ -1668,6 +1640,21 @@ class MainWindow(QMainWindow):
         view = self.content_area
         if view is not None and hasattr(view, 'refresh'):
             view.refresh()
+
+    def _switch_project(self, new_id: int, file_path: str | None = None) -> None:
+        """Update all subsystems to point at *new_id*."""
+        self._project_id = new_id
+        self._psyke_console.set_project(new_id)
+        self._set_current_file(file_path)
+        self._autosave.set_project(new_id)
+        self._versions.set_project(new_id)
+        self._assistant_panel.set_project(new_id)
+        if hasattr(self, '_system_command_handlers'):
+            self._system_command_handlers.set_project(new_id)
+        self._cached_scenes_view = None
+        self._cached_scene_entry_scene = None
+        self._cached_scene_entry_ids = None
+        self._mark_clean()
 
     def _on_data_changed(self) -> None:
         self._dirty = True

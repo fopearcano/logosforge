@@ -83,6 +83,9 @@ class CharactersView(QWidget):
 
         self._refresh_list()
 
+    def refresh(self) -> None:
+        self._refresh_list()
+
     def _refresh_list(self) -> None:
         self._list.blockSignals(True)
         self._list.clear()

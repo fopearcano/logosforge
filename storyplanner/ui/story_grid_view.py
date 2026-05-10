@@ -619,10 +619,22 @@ class StoryGridView(QWidget):
 
         if self._group_by == "act":
             if scene.act != target_group:
-                self._db.update_scene(scene_id, scene.title, act=target_group)
+                self._db.update_scene(
+                    scene_id=scene.id, title=scene.title,
+                    summary=scene.summary, synopsis=scene.synopsis,
+                    goal=scene.goal, conflict=scene.conflict, outcome=scene.outcome,
+                    beat=scene.beat, tags=scene.tags, act=target_group,
+                    content=scene.content, chapter=scene.chapter, plotline=scene.plotline,
+                )
         else:
             if scene.chapter != target_group:
-                self._db.update_scene(scene_id, scene.title, chapter=target_group)
+                self._db.update_scene(
+                    scene_id=scene.id, title=scene.title,
+                    summary=scene.summary, synopsis=scene.synopsis,
+                    goal=scene.goal, conflict=scene.conflict, outcome=scene.outcome,
+                    beat=scene.beat, tags=scene.tags, act=scene.act,
+                    content=scene.content, chapter=target_group, plotline=scene.plotline,
+                )
 
         self._db.reorder_scene(scene_id, drop_index)
 
@@ -824,7 +836,7 @@ class StoryGridView(QWidget):
     # -- Scene creation ------------------------------------------------------
 
     def _create_first_scene(self) -> None:
-        group = "Act 1" if self._group_by == "act" else "Chapter 1"
+        group = "Act I" if self._group_by == "act" else "Chapter 1"
         self._db.create_scene(
             self._project_id, "New Scene",
             act=group if self._group_by == "act" else "",

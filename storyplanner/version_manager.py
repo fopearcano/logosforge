@@ -97,6 +97,10 @@ class VersionManager(QObject):
     def stop(self) -> None:
         self._interval_timer.stop()
 
+    def set_project(self, project_id: int) -> None:
+        self._project_id = project_id
+        self._dirty_since_snapshot = False
+
     def mark_dirty(self) -> None:
         self._dirty_since_snapshot = True
 

@@ -1896,6 +1896,8 @@ class WritingCoreView(QWidget):
         self._populate_element_combo()
         self._setup_element_shortcuts()
         self._apply_format_to_all_blocks()
+        if self._on_data_changed:
+            self._on_data_changed()
 
     def _on_element_changed(self, index: int) -> None:
         if index < 0:

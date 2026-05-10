@@ -753,8 +753,31 @@ class MultiPlotView(QWidget):
         return self._active_mode
 
     def refresh(self) -> None:
-        """Refresh the currently active view."""
+        """Refresh the currently active view and filter combos."""
+        self._refresh_filters()
         self._refresh_active()
+
+    def _refresh_filters(self) -> None:
+        for combo, loader, default in (
+            (self._char_filter, lambda: [
+                (c.name, c.id) for c in self._db.get_all_characters(self._project_id)
+            ], "All Characters"),
+            (self._tag_filter, lambda: [
+                (t, None) for t in self._db.get_scene_tags(self._project_id)
+            ], "All Tags"),
+            (self._arc_filter, lambda: [
+                (p, None) for p in self._db.get_scene_plotlines(self._project_id)
+            ], "All Arcs"),
+        ):
+            current = combo.currentText()
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItem(default, userData=None)
+            for label, uid in loader():
+                combo.addItem(label, userData=uid)
+            idx = combo.findText(current)
+            combo.setCurrentIndex(idx if idx >= 0 else 0)
+            combo.blockSignals(False)
 
     def get_view(self, mode: str) -> QWidget | None:
         return self._views.get(mode)

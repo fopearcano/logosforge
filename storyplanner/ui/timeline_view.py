@@ -234,6 +234,9 @@ class TimelineView(QWidget):
 
     # -- Reload (single entry point) -----------------------------------------
 
+    def refresh(self) -> None:
+        self._reload()
+
     def _reload(self) -> None:
         self._selected_card = None
         self._load_table()

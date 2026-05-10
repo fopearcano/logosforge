@@ -808,6 +808,12 @@ class AssistantPanel(QWidget):
                 return text
         return ""
 
+    def set_project(self, project_id: int) -> None:
+        self._project_id = project_id
+        quantum_load_state(self._db, project_id)
+        self._quantum_timeline._project_id = project_id
+        self._mode_strip.refresh()
+
     def set_active_scene(self, scene_id: int) -> None:
         pass
 
@@ -1081,6 +1087,8 @@ class AssistantPanel(QWidget):
         state.structure_mode = mode
         self._sync_structure_mode_buttons()
         quantum_save_state(self._db, self._project_id)
+        if self._on_data_changed:
+            self._on_data_changed()
 
     def _sync_structure_mode_buttons(self) -> None:
         state = quantum_get_state(self._project_id)
@@ -1115,6 +1123,8 @@ class AssistantPanel(QWidget):
         self._sync_lambda_toggle()
         quantum_save_state(self._db, self._project_id)
         self._quantum_timeline.refresh()
+        if self._on_data_changed:
+            self._on_data_changed()
 
     def _sync_lambda_toggle(self) -> None:
         state = quantum_get_state(self._project_id)
@@ -1169,8 +1179,8 @@ class AssistantPanel(QWidget):
         self._set_quantum_busy(False)
         if result.kind in ("possibilities", "collapse"):
             quantum_save_state(self._db, self._project_id)
-        if result.kind == "collapse" and self._on_data_changed:
-            self._on_data_changed()
+            if self._on_data_changed:
+                self._on_data_changed()
         self._quantum_worker = None
         self._quantum_timeline.refresh()
 
@@ -1290,6 +1300,8 @@ class AssistantPanel(QWidget):
             quantum_save_state(self._db, self._project_id)
             self._quantum_timeline.refresh()
             self._response_output.setPlainText("Wavefunction archived.")
+            if self._on_data_changed:
+                self._on_data_changed()
 
     def _on_suggest_beats(self) -> None:
         if self._worker is not None:

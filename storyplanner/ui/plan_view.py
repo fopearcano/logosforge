@@ -719,11 +719,13 @@ class PlanView(QWidget):
 
     def _save_act_summary(self, act_name: str, summary: str) -> None:
         _save_act_summary(self._db, self._project_id, _act_key(act_name), summary)
+        self._notify()
 
     def _save_chapter_summary(self, chapter_name: str, summary: str) -> None:
         _save_chapter_summary(
             self._db, self._project_id, _chapter_key(chapter_name), summary,
         )
+        self._notify()
 
     def _save_scene_summary(self, scene_id: int, summary: str) -> None:
         self._db.update_scene_summary(scene_id, summary)

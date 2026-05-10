@@ -186,6 +186,9 @@ class OutlineView(QWidget):
 
     # -- Tree operations -------------------------------------------------------
 
+    def refresh(self) -> None:
+        self._load_outline()
+
     def _load_outline(self) -> None:
         self._tree.clear()
         nodes = self._db.get_outline_nodes(self._project_id)

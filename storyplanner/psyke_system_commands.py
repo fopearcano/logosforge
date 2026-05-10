@@ -43,6 +43,9 @@ class SystemCommandHandlers:
         self._run_ai_action = run_ai_action
         self._on_data_changed = on_data_changed
 
+    def set_project(self, project_id: int) -> None:
+        self._project_id = project_id
+
     def _exec(self, action: str, args: dict | None = None) -> dict:
         return execute_action(
             self._db, self._project_id,
