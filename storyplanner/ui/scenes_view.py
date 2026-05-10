@@ -162,7 +162,8 @@ class ScenesView(QWidget):
 
         pf.addWidget(QLabel("Act"))
         self._act_input = QComboBox()
-        self._act_input.addItems(["", "Act I", "Act II", "Act III"])
+        self._act_input.setEditable(True)
+        self._act_input.lineEdit().setPlaceholderText("e.g. Act I")
         pf.addWidget(self._act_input)
 
         pf.addWidget(QLabel("Beat"))
@@ -391,6 +392,7 @@ class ScenesView(QWidget):
         psyke_create_shortcut.activated.connect(self._quick_create_psyke)
 
         self._refresh_filters()
+        self._refresh_act_options()
         self._refresh_list()
         QTimer.singleShot(0, self._load_characters_and_states)
         QTimer.singleShot(0, self._load_places)
@@ -409,10 +411,27 @@ class ScenesView(QWidget):
             self._load_characters_and_states()
             self._load_places()
             self._refresh_filters()
+            self._refresh_act_options()
             self._refresh_list()
             self._refresh_psyke_terms()
         finally:
             self._refreshing = False
+
+    def _refresh_act_options(self) -> None:
+        current = self._act_input.currentText()
+        self._act_input.blockSignals(True)
+        self._act_input.clear()
+        self._act_input.addItem("")
+        acts = sorted({
+            (s.act or "").strip()
+            for s in self._db.get_all_scenes(self._project_id)
+        } - {""})
+        if not acts:
+            acts = ["Act I", "Act II", "Act III"]
+        for act in acts:
+            self._act_input.addItem(act)
+        self._act_input.setCurrentText(current)
+        self._act_input.blockSignals(False)
 
     def _load_characters_and_states(self) -> None:
         chars = self._db.get_all_characters(self._project_id)
@@ -558,8 +577,7 @@ class ScenesView(QWidget):
         self._title_input.setText(scene.title)
         self._chapter_input.setText(scene.chapter)
         self._plotline_input.setText(scene.plotline)
-        idx = self._act_input.findText(scene.act)
-        self._act_input.setCurrentIndex(idx if idx >= 0 else 0)
+        self._act_input.setCurrentText(scene.act or "")
         self._beat_input.setCurrentText(scene.beat)
         self._tags_input.setText(scene.tags)
         self._summary_input.setPlainText(scene.summary)

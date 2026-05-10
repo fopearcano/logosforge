@@ -1079,8 +1079,12 @@ class MainWindow(QMainWindow):
         self._psyke_console.set_project(new_project_id)
         self._set_current_file(None)
         self._cached_scenes_view = None
+        self._cached_scene_entry_scene = None
+        self._cached_scene_entry_ids = None
         self._mark_clean()
-        self._reset_content("Import complete. Select a section from the sidebar.")
+
+        self._set_active_section("Dashboard")
+        self._show_dashboard()
         QMessageBox.information(
             self, "Import", f"Project imported successfully (ID {new_project_id})."
         )
@@ -1489,10 +1493,11 @@ class MainWindow(QMainWindow):
             self._psyke_console.set_project(dlg.restored_project_id)
             self._set_current_file(None)
             self._cached_scenes_view = None
+            self._cached_scene_entry_scene = None
+            self._cached_scene_entry_ids = None
             self._mark_clean()
-            self._reset_content(
-                "Version restored. Select a section from the sidebar."
-            )
+            self._set_active_section("Dashboard")
+            self._show_dashboard()
 
     def _menu_ai_preset(self, preset: str) -> None:
         if not self._assistant_panel.isVisible():

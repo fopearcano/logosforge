@@ -79,6 +79,20 @@ class _SceneCardContextMixin:
         edit_summary.triggered.connect(lambda: self._edit_summary(scene_id))
         menu.addAction(edit_summary)
 
+        all_scenes = self._db.get_all_scenes(self._project_id)
+        acts = sorted({(s.act or "").strip() for s in all_scenes} - {""})
+        if acts:
+            move_menu = QMenu("Move to Act", menu)
+            for act in acts:
+                if act != (scene.act or "").strip():
+                    act_action = QAction(act, move_menu)
+                    act_action.triggered.connect(
+                        lambda _, a=act, sid=scene_id: self._move_to_act(sid, a),
+                    )
+                    move_menu.addAction(act_action)
+            if move_menu.actions():
+                menu.addMenu(move_menu)
+
         delete_act = QAction("Delete", menu)
         delete_act.triggered.connect(lambda: self._delete_scene(scene_id))
         menu.addAction(delete_act)
@@ -112,6 +126,20 @@ class _SceneCardContextMixin:
         if not ok:
             return
         self._db.update_scene_summary(scene_id, new_summary.strip())
+        if self._on_data_changed:
+            self._on_data_changed()
+
+    def _move_to_act(self, scene_id: int, target_act: str) -> None:
+        scene = self._db.get_scene_by_id(scene_id)
+        if scene is None:
+            return
+        self._db.update_scene(
+            scene_id=scene.id, title=scene.title,
+            summary=scene.summary, synopsis=scene.synopsis,
+            goal=scene.goal, conflict=scene.conflict, outcome=scene.outcome,
+            beat=scene.beat, tags=scene.tags, act=target_act,
+            content=scene.content, chapter=scene.chapter, plotline=scene.plotline,
+        )
         if self._on_data_changed:
             self._on_data_changed()
 
