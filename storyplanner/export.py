@@ -122,7 +122,23 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
             {"name": p.name, "description": p.description} for p in places
         ],
         "notes": [
-            {"title": n.title, "content": n.content} for n in notes
+            {
+                "title": n.title,
+                "content": n.content,
+                "tags": n.tags,
+                "pinned": n.pinned,
+                "psyke_links": [
+                    psyke_name_by_id[eid]
+                    for eid in db.get_note_psyke_links(n.id)
+                    if eid in psyke_name_by_id
+                ],
+                "scene_links": [
+                    scene_title_by_id[sid]
+                    for sid in db.get_note_scene_links(n.id)
+                    if sid in scene_title_by_id
+                ],
+            }
+            for n in notes
         ],
         "scenes": scene_list,
         "psyke_entries": psyke_list,

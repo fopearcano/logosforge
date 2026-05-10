@@ -18,6 +18,8 @@ from storyplanner.models import (
     ChatSummary,
     Character,
     Note,
+    NotePsykeLink,
+    NoteSceneLink,
     OutlineNode,
     Place,
     Project,
@@ -483,11 +485,20 @@ class Database:
             return list(session.exec(stmt).all())
 
     def create_note(
-        self, project_id: int, title: str, content: str = ""
+        self,
+        project_id: int,
+        title: str,
+        content: str = "",
+        tags: str = "",
+        pinned: bool = False,
     ) -> Note:
         with Session(self._engine) as session:
             note = Note(
-                project_id=project_id, title=title, content=content
+                project_id=project_id,
+                title=title,
+                content=content,
+                tags=tags,
+                pinned=pinned,
             )
             session.add(note)
             session.commit()
@@ -495,12 +506,19 @@ class Database:
             return note
 
     def update_note(
-        self, note_id: int, title: str, content: str = ""
+        self,
+        note_id: int,
+        title: str,
+        content: str = "",
+        tags: str = "",
+        pinned: bool = False,
     ) -> Note:
         with Session(self._engine) as session:
             note = session.get(Note, note_id)
             note.title = title
             note.content = content
+            note.tags = tags
+            note.pinned = pinned
             session.commit()
             session.refresh(note)
             return note
@@ -509,8 +527,74 @@ class Database:
         with Session(self._engine) as session:
             note = session.get(Note, note_id)
             if note:
+                stmt = select(NotePsykeLink).where(NotePsykeLink.note_id == note_id)
+                for link in session.exec(stmt).all():
+                    session.delete(link)
+                stmt = select(NoteSceneLink).where(NoteSceneLink.note_id == note_id)
+                for link in session.exec(stmt).all():
+                    session.delete(link)
                 session.delete(note)
             session.commit()
+
+    # -- Note linking ----------------------------------------------------------
+
+    def link_note_to_psyke(self, note_id: int, psyke_entry_id: int) -> None:
+        with Session(self._engine) as session:
+            existing = session.get(NotePsykeLink, (note_id, psyke_entry_id))
+            if existing:
+                return
+            session.add(NotePsykeLink(note_id=note_id, psyke_entry_id=psyke_entry_id))
+            session.commit()
+
+    def unlink_note_from_psyke(self, note_id: int, psyke_entry_id: int) -> None:
+        with Session(self._engine) as session:
+            link = session.get(NotePsykeLink, (note_id, psyke_entry_id))
+            if link:
+                session.delete(link)
+                session.commit()
+
+    def get_note_psyke_links(self, note_id: int) -> list[int]:
+        with Session(self._engine) as session:
+            stmt = select(NotePsykeLink.psyke_entry_id).where(
+                NotePsykeLink.note_id == note_id,
+            )
+            return list(session.exec(stmt).all())
+
+    def get_psyke_note_links(self, psyke_entry_id: int) -> list[int]:
+        with Session(self._engine) as session:
+            stmt = select(NotePsykeLink.note_id).where(
+                NotePsykeLink.psyke_entry_id == psyke_entry_id,
+            )
+            return list(session.exec(stmt).all())
+
+    def link_note_to_scene(self, note_id: int, scene_id: int) -> None:
+        with Session(self._engine) as session:
+            existing = session.get(NoteSceneLink, (note_id, scene_id))
+            if existing:
+                return
+            session.add(NoteSceneLink(note_id=note_id, scene_id=scene_id))
+            session.commit()
+
+    def unlink_note_from_scene(self, note_id: int, scene_id: int) -> None:
+        with Session(self._engine) as session:
+            link = session.get(NoteSceneLink, (note_id, scene_id))
+            if link:
+                session.delete(link)
+                session.commit()
+
+    def get_note_scene_links(self, note_id: int) -> list[int]:
+        with Session(self._engine) as session:
+            stmt = select(NoteSceneLink.scene_id).where(
+                NoteSceneLink.note_id == note_id,
+            )
+            return list(session.exec(stmt).all())
+
+    def get_scene_note_links(self, scene_id: int) -> list[int]:
+        with Session(self._engine) as session:
+            stmt = select(NoteSceneLink.note_id).where(
+                NoteSceneLink.scene_id == scene_id,
+            )
+            return list(session.exec(stmt).all())
 
     # -- Scenes --------------------------------------------------------------
 
@@ -733,6 +817,12 @@ class Database:
                 )
             ).all():
                 session.delete(st)
+            for nsl in session.exec(
+                select(NoteSceneLink).where(
+                    NoteSceneLink.scene_id == scene_id,
+                )
+            ).all():
+                session.delete(nsl)
 
             # Delete the scene
             scene = session.get(Scene, scene_id)
@@ -991,6 +1081,12 @@ class Database:
                 )
             ).all():
                 session.delete(prog)
+            for npl in session.exec(
+                select(NotePsykeLink).where(
+                    NotePsykeLink.psyke_entry_id == entry_id,
+                )
+            ).all():
+                session.delete(npl)
             entry = session.get(PsykeEntry, entry_id)
             if entry:
                 session.delete(entry)

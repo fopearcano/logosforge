@@ -126,6 +126,7 @@ def build_messages(
     outline_context: str = "",
     story_memory_context: str = "",
     psyke_context: str = "",
+    notes_context: str = "",
     graph_context: str = "",
     mode_context: str = "",
     user_note: str = "",
@@ -147,6 +148,9 @@ def build_messages(
         user_parts.append("")
     if psyke_context:
         user_parts.append(psyke_context)
+        user_parts.append("")
+    if notes_context:
+        user_parts.append(notes_context)
         user_parts.append("")
     if graph_context:
         user_parts.append(graph_context)

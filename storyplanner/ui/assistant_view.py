@@ -42,6 +42,7 @@ from storyplanner.adaptive_mode import (
 )
 from storyplanner.context_builder import (
     gather_graph_context,
+    gather_notes_context,
     gather_outline_context,
     gather_psyke_context,
     gather_scene_context,
@@ -864,7 +865,7 @@ class AssistantPanel(QWidget):
 
     def _build_context(
         self, action_key: str = "",
-    ) -> tuple[str, str, str, str, str, str, str, str, str]:
+    ) -> tuple[str, str, str, str, str, str, str, str, str, str]:
         source = self._get_context_source()
         scene_id = self._get_auto_scene_id()
 
@@ -918,6 +919,12 @@ class AssistantPanel(QWidget):
                     query_text=query_text,
                 )
 
+        prompt_query = self._prompt_input.toPlainText().strip()
+        notes_ctx = gather_notes_context(
+            self._db, self._project_id, scene_id,
+            query_text=prompt_query,
+        )
+
         graph_ctx = ""
         if scene_id is not None and source in ("scene", "selection"):
             graph_ctx = gather_graph_context(self._db, self._project_id, scene_id)
@@ -942,13 +949,13 @@ class AssistantPanel(QWidget):
                 description=_MODE_DESCRIPTIONS[effective],
             )
         mode_ctx = mode_context_block(mode_result) if mode_result else ""
-        return scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orchestration_debug, graph_ctx, mode_ctx, structural_ctx, irrational_ctx
+        return scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orchestration_debug, notes_ctx, graph_ctx, mode_ctx, structural_ctx, irrational_ctx
 
     def _send_preset(self, action_key: str) -> None:
         if self._worker is not None:
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, mode_ctx, struct_ctx, irr_ctx = (
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, notes_ctx, graph_ctx, mode_ctx, struct_ctx, irr_ctx = (
             self._build_context(action_key=action_key)
         )
         if not scene_ctx and not outline_ctx and not struct_ctx:
@@ -963,6 +970,7 @@ class AssistantPanel(QWidget):
             outline_context=outline_ctx,
             story_memory_context=story_memory_ctx,
             psyke_context=psyke_ctx,
+            notes_context=notes_ctx,
             graph_context=graph_ctx,
             mode_context=mode_ctx,
             user_note=user_note,
@@ -986,7 +994,7 @@ class AssistantPanel(QWidget):
             self._response_output.setPlainText("Enter a prompt first.")
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, mode_ctx, struct_ctx, irr_ctx = (
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, notes_ctx, graph_ctx, mode_ctx, struct_ctx, irr_ctx = (
             self._build_context()
         )
 
@@ -995,6 +1003,7 @@ class AssistantPanel(QWidget):
             outline_context=outline_ctx,
             story_memory_context=story_memory_ctx,
             psyke_context=psyke_ctx,
+            notes_context=notes_ctx,
             graph_context=graph_ctx,
             mode_context=mode_ctx,
             structural_context=struct_ctx,
@@ -1011,7 +1020,7 @@ class AssistantPanel(QWidget):
         if self._worker is not None:
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, _mode_ctx, _struct_ctx, _irr_ctx = (
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, _notes_ctx, graph_ctx, _mode_ctx, _struct_ctx, _irr_ctx = (
             self._build_context()
         )
         if not scene_ctx and not outline_ctx:
@@ -1044,7 +1053,7 @@ class AssistantPanel(QWidget):
             self._response_output.setPlainText("Enter a prompt first.")
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, graph_ctx, _mode_ctx, _struct_ctx, _irr_ctx = (
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, _notes_ctx, graph_ctx, _mode_ctx, _struct_ctx, _irr_ctx = (
             self._build_context()
         )
 

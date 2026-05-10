@@ -71,16 +71,23 @@ def import_json(db: Database, data: dict) -> int:
             notes=place_data.get("description", ""),
         )
 
-    # Create notes
+    # Create notes and store deferred link info
+    note_link_deferred: list[tuple[int, list[str], list[str]]] = []
     for note_data in data.get("notes", []):
         title = note_data.get("title", "").strip()
         if not title:
             continue
-        db.create_note(
+        note = db.create_note(
             project_id,
             title=title,
             content=note_data.get("content", ""),
+            tags=note_data.get("tags", ""),
+            pinned=note_data.get("pinned", False),
         )
+        psyke_link_names = note_data.get("psyke_links", [])
+        scene_link_titles = note_data.get("scene_links", [])
+        if psyke_link_names or scene_link_titles:
+            note_link_deferred.append((note.id, psyke_link_names, scene_link_titles))
 
     # Create scenes in order, resolving character/place names to IDs
     scenes = data.get("scenes", [])
@@ -207,5 +214,14 @@ def import_json(db: Database, data: dict) -> int:
     if quantum_data and isinstance(quantum_data, dict):
         from storyplanner.quantum_outliner.persistence import import_quantum_state
         import_quantum_state(db, project_id, quantum_data)
+
+    # Restore note → PSYKE and note → scene links
+    for note_id, psyke_names, scene_titles in note_link_deferred:
+        for pname in psyke_names:
+            if pname in psyke_id_by_name:
+                db.link_note_to_psyke(note_id, psyke_id_by_name[pname])
+        for stitle in scene_titles:
+            if stitle in scene_id_by_title:
+                db.link_note_to_scene(note_id, scene_id_by_title[stitle])
 
     return project_id

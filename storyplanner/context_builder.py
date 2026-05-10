@@ -636,6 +636,114 @@ def find_psyke_scene_references(
     return results
 
 
+# -- Notes Context -----------------------------------------------------------
+
+NOTES_MAX_RELEVANT = 12
+NOTES_EXCERPT_MAX = 150
+
+
+def gather_notes_context(
+    db: Database,
+    project_id: int,
+    scene_id: int | None = None,
+    query_text: str = "",
+) -> str:
+    notes = db.get_all_notes(project_id)
+    if not notes:
+        return ""
+
+    entries = db.get_all_psyke_entries(project_id)
+    psyke_names = {e.name.lower(): e.id for e in entries}
+    for e in entries:
+        if e.aliases:
+            for alias in e.aliases.split(","):
+                alias = alias.strip().lower()
+                if alias:
+                    psyke_names[alias] = e.id
+
+    scene_relevant_psyke_ids: set[int] = set()
+    scene_text = ""
+    if scene_id is not None:
+        scene = db.get_scene_by_id(scene_id)
+        if scene is not None:
+            scene_text = _scene_searchable_text(scene)
+            for entry in entries:
+                if _entry_matches_scene(entry, scene_text):
+                    scene_relevant_psyke_ids.add(entry.id)
+
+    scored: list[tuple[float, "Note", str]] = []
+
+    for note in notes:
+        score = 0.0
+        reason = ""
+
+        if note.pinned:
+            score = max(score, 1.0)
+            reason = "pinned"
+
+        scene_links = set(db.get_note_scene_links(note.id))
+        if scene_id is not None and scene_id in scene_links:
+            score = max(score, 0.9)
+            reason = reason or "linked to current scene"
+
+        psyke_links = set(db.get_note_psyke_links(note.id))
+        if psyke_links & scene_relevant_psyke_ids:
+            score = max(score, 0.8)
+            reason = reason or "linked to relevant PSYKE entry"
+
+        if note.tags and scene_id is not None:
+            note_tags = {t.strip().lower() for t in note.tags.split(",") if t.strip()}
+            scene_tags = set()
+            scene_obj = db.get_scene_by_id(scene_id) if scene_id else None
+            if scene_obj and scene_obj.tags:
+                scene_tags = {t.strip().lower() for t in scene_obj.tags.split(",") if t.strip()}
+            if note_tags & scene_tags:
+                matched = (note_tags & scene_tags).pop()
+                score = max(score, 0.7)
+                reason = reason or f"tag match: {matched}"
+            else:
+                search_text = scene_text + "\n" + query_text
+                for tag in note_tags:
+                    if tag and _word_match(tag, search_text):
+                        score = max(score, 0.7)
+                        reason = reason or f"tag match: {tag}"
+                        break
+
+        if scene_text and score < 0.7:
+            combined = note.title + "\n" + note.content
+            for name_lower, eid in psyke_names.items():
+                if _word_match(name_lower, combined) and eid in scene_relevant_psyke_ids:
+                    score = max(score, 0.5)
+                    reason = reason or "mentions relevant entity"
+                    break
+
+        if score > 0:
+            scored.append((score, note, reason))
+
+    if not scored:
+        return ""
+
+    scored.sort(key=lambda t: -t[0])
+
+    pinned = [(s, n, r) for s, n, r in scored if n.pinned]
+    non_pinned = [(s, n, r) for s, n, r in scored if not n.pinned]
+    selected = pinned + non_pinned[:NOTES_MAX_RELEVANT]
+
+    lines = ["[Relevant Notes]"]
+    for _score, note, reason in selected:
+        excerpt = (note.content or "").replace("\n", " ").strip()
+        if len(excerpt) > NOTES_EXCERPT_MAX:
+            excerpt = excerpt[:NOTES_EXCERPT_MAX].rsplit(" ", 1)[0] + "..."
+        line = f"- \"{note.title}\""
+        if excerpt:
+            line += f": {excerpt}"
+        if reason:
+            line += f" ({reason})"
+        lines.append(line)
+
+    return "\n".join(lines)
+
+
 # -- Graph Context -----------------------------------------------------------
 
 GRAPH_DIRECT_MAX = 8

@@ -54,7 +54,23 @@ class Note(SQLModel, table=True):
     project_id: int = Field(foreign_key="project.id")
     title: str
     content: str = ""
+    tags: str = ""
+    pinned: bool = False
     created_at: datetime = Field(default_factory=_now)
+
+
+class NotePsykeLink(SQLModel, table=True):
+    """Links a note to a PSYKE entry (many-to-many)."""
+
+    note_id: int = Field(foreign_key="note.id", primary_key=True)
+    psyke_entry_id: int = Field(foreign_key="psykeentry.id", primary_key=True)
+
+
+class NoteSceneLink(SQLModel, table=True):
+    """Links a note to a scene (many-to-many)."""
+
+    note_id: int = Field(foreign_key="note.id", primary_key=True)
+    scene_id: int = Field(foreign_key="scene.id", primary_key=True)
 
 
 class Scene(SQLModel, table=True):
