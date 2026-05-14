@@ -514,7 +514,9 @@ class StoryGridView(QWidget):
             )
 
             for scene in groups[key]:
-                accent = color_map.get(scene.id, "")
+                from storyplanner.ui.color_labels import color_hex
+                user_color = color_hex(scene.color_label)
+                accent = user_color or color_map.get(scene.id, "")
                 tension = (
                     self._flow_analysis.tensions.get(scene.id)
                     if self._flow_analysis else None
@@ -678,11 +680,22 @@ class StoryGridView(QWidget):
             if move_menu.actions():
                 menu.addMenu(move_menu)
 
+        from storyplanner.ui.color_labels import build_color_menu
+        build_color_menu(
+            menu, scene.color_label,
+            lambda key, sid=card.scene_id: self._set_color(sid, key),
+        )
+
         delete_act = QAction("Delete", menu)
         delete_act.triggered.connect(lambda: self._delete_scene(card.scene_id))
         menu.addAction(delete_act)
 
         menu.exec(card.mapToGlobal(pos))
+
+    def _set_color(self, scene_id: int, color_label: str) -> None:
+        self._db.update_scene_color(scene_id, color_label)
+        if self._on_data_changed:
+            self._on_data_changed()
 
     def _on_section_context(self, section: _ActSection, pos: QPoint) -> None:
         menu = QMenu(section)

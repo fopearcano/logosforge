@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from storyplanner.db import Database
 from storyplanner.ui import theme
+from storyplanner.ui.color_labels import build_color_menu, color_hex
 from storyplanner.ui.story_grid_view import StoryGridView
 
 
@@ -58,6 +59,17 @@ class _SceneCardContextMixin:
             lambda pos, c=card: self._on_card_context(c, pos),
         )
         card.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def _apply_card_color(self, card: QFrame, color_label: str | None) -> None:
+        """Apply a subtle left-border strip + dot to indicate the scene color."""
+        hex_color = color_hex(color_label)
+        if hex_color:
+            card.setStyleSheet(
+                f"QFrame {{ border-left: 4px solid {hex_color}; }}"
+            )
+        else:
+            card.setStyleSheet("")
+        card.setProperty("color_label", color_label or "")
 
     def _on_card_context(self, card: QFrame, pos) -> None:
         scene_id = card.property("scene_id")
@@ -93,11 +105,21 @@ class _SceneCardContextMixin:
             if move_menu.actions():
                 menu.addMenu(move_menu)
 
+        build_color_menu(
+            menu, scene.color_label,
+            lambda key, sid=scene_id: self._set_color(sid, key),
+        )
+
         delete_act = QAction("Delete", menu)
         delete_act.triggered.connect(lambda: self._delete_scene(scene_id))
         menu.addAction(delete_act)
 
         menu.exec(card.mapToGlobal(pos))
+
+    def _set_color(self, scene_id: int, color_label: str) -> None:
+        self._db.update_scene_color(scene_id, color_label)
+        if self._on_data_changed:
+            self._on_data_changed()
 
     def _edit_title(self, scene_id: int) -> None:
         scene = self._db.get_scene_by_id(scene_id)
@@ -246,6 +268,7 @@ class _TimelineStrip(_SceneCardContextMixin, QWidget):
         card.setFixedWidth(160)
         card.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
         self._setup_card_context(card, scene.id)
+        self._apply_card_color(card, scene.color_label)
 
         layout = QVBoxLayout(card)
         layout.setContentsMargins(8, 6, 8, 6)
@@ -379,6 +402,7 @@ class _ArcLanes(_SceneCardContextMixin, QWidget):
         card.setObjectName("arcCard")
         card.setFixedWidth(140)
         self._setup_card_context(card, scene.id)
+        self._apply_card_color(card, scene.color_label)
 
         layout = QVBoxLayout(card)
         layout.setContentsMargins(6, 4, 6, 4)
@@ -524,6 +548,7 @@ class _CharLanes(_SceneCardContextMixin, QWidget):
         card.setObjectName("charCard")
         card.setFixedWidth(130)
         self._setup_card_context(card, scene.id)
+        self._apply_card_color(card, scene.color_label)
 
         layout = QVBoxLayout(card)
         layout.setContentsMargins(6, 4, 6, 4)

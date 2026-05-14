@@ -40,6 +40,7 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
                 "act": scene.act,
                 "chapter": scene.chapter,
                 "plotline": scene.plotline,
+                "color_label": scene.color_label,
                 "characters": [
                     char_name_by_id[cid]
                     for cid in char_ids

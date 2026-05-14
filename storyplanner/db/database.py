@@ -75,6 +75,14 @@ class Database:
                 )
                 conn.commit()
 
+            rows = conn.execute(text("PRAGMA table_info(scene)")).fetchall()
+            columns = {row[1] for row in rows}
+            if rows and "color_label" not in columns:
+                conn.execute(
+                    text("ALTER TABLE scene ADD COLUMN color_label TEXT DEFAULT ''")
+                )
+                conn.commit()
+
     # -- Projects ------------------------------------------------------------
 
     def get_project_by_id(self, project_id: int) -> Project | None:
@@ -676,6 +684,7 @@ class Database:
         content: str = "",
         chapter: str = "",
         plotline: str = "",
+        color_label: str = "",
         character_ids: list[int] | None = None,
         place_ids: list[int] | None = None,
         character_states: list[tuple[int, str]] | None = None,
@@ -705,6 +714,7 @@ class Database:
                 content=content,
                 chapter=chapter,
                 plotline=plotline,
+                color_label=color_label,
                 sort_order=next_order,
             )
             session.add(scene)
@@ -738,6 +748,7 @@ class Database:
         content: str = "",
         chapter: str = "",
         plotline: str = "",
+        color_label: str | None = None,
         character_ids: list[int] | None = None,
         place_ids: list[int] | None = None,
         character_states: list[tuple[int, str]] | None = None,
@@ -756,6 +767,8 @@ class Database:
             scene.content = content
             scene.chapter = chapter
             scene.plotline = plotline
+            if color_label is not None:
+                scene.color_label = color_label
 
             # Replace character links
             old_char_links = session.exec(
@@ -914,6 +927,14 @@ class Database:
             if scene is None:
                 return
             scene.synopsis = synopsis
+            session.commit()
+
+    def update_scene_color(self, scene_id: int, color_label: str) -> None:
+        with Session(self._engine) as session:
+            scene = session.get(Scene, scene_id)
+            if scene is None:
+                return
+            scene.color_label = color_label or ""
             session.commit()
 
     def update_scene_summary(self, scene_id: int, summary: str) -> None:

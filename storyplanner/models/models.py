@@ -90,6 +90,7 @@ class Scene(SQLModel, table=True):
     content: str = ""
     chapter: str = ""
     plotline: str = ""
+    color_label: str = ""
     sort_order: int = 0
     created_at: datetime = Field(default_factory=_now)
 

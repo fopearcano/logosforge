@@ -136,6 +136,7 @@ def import_json(db: Database, data: dict) -> int:
             content=scene_data.get("content", ""),
             chapter=scene_data.get("chapter", ""),
             plotline=scene_data.get("plotline", ""),
+            color_label=scene_data.get("color_label", ""),
             character_ids=character_ids,
             place_ids=place_ids,
             character_states=character_states,

@@ -16,8 +16,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from PySide6.QtWidgets import QMenu
+
 from storyplanner.db import Database
 from storyplanner.ui import theme
+from storyplanner.ui.color_labels import build_color_menu, color_hex
 
 FILTER_ALL = "All"
 UNASSIGNED = "Unassigned"
@@ -136,6 +139,8 @@ class TimelineView(QWidget):
         self._table.cellClicked.connect(self._on_cell_clicked)
         self._table.cellDoubleClicked.connect(self._on_double_click)
         self._table.viewport().installEventFilter(self)
+        self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._table.customContextMenuRequested.connect(self._on_cell_context_menu)
         layout.addWidget(self._table)
 
         # -- Status line -----------------------------------------------------
@@ -350,6 +355,11 @@ class TimelineView(QWidget):
             base_style = _card_beat_style()
         else:
             base_style = _card_style()
+        color = color_hex(getattr(scene, "color_label", "") or "")
+        if color:
+            base_style += (
+                f"\nQFrame {{ border-left: 4px solid {color}; }}"
+            )
         card.setStyleSheet(base_style)
         card.setProperty("base_style", base_style)
 
@@ -512,6 +522,34 @@ class TimelineView(QWidget):
         cell_data = self._cell_data.get((row, col))
         scene_id = cell_data[0] if cell_data else None
         self._apply_selection(scene_id)
+
+    def _on_cell_context_menu(self, pos: QPoint) -> None:
+        index = self._table.indexAt(pos)
+        if not index.isValid():
+            return
+        row, col = index.row(), index.column()
+        cell_data = self._cell_data.get((row, col))
+        if not cell_data:
+            return
+        scene_id = cell_data[0]
+        scene = self._db.get_scene_by_id(scene_id)
+        if scene is None:
+            return
+        self._apply_selection(scene_id)
+
+        menu = QMenu(self._table)
+        build_color_menu(
+            menu, getattr(scene, "color_label", "") or "",
+            lambda key, sid=scene_id: self._set_scene_color(sid, key),
+        )
+        menu.exec(self._table.viewport().mapToGlobal(pos))
+
+    def _set_scene_color(self, scene_id: int, color_label: str) -> None:
+        self._db.update_scene_color(scene_id, color_label)
+        if self._on_data_changed:
+            self._on_data_changed()
+        else:
+            self._reload()
 
     def _apply_selection(self, scene_id: int | None) -> None:
         self._selected_scene_id = scene_id
