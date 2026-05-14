@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QVariantAnimation
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QVariantAnimation, Signal
 from PySide6.QtGui import QAction, QCloseEvent, QColor, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -143,11 +143,12 @@ class _SidebarButton(QPushButton):
         )
 
     def _on_toggled(self, checked: bool) -> None:
-        if checked:
-            self._hover_anim.stop()
-            self._hover_blend = 0.0
-            if self.styleSheet():
-                self.setStyleSheet("")
+        self._hover_anim.stop()
+        self._hover_blend = 0.0
+        if self.styleSheet():
+            self.setStyleSheet("")
+        if not checked and self.underMouse():
+            self._animate_hover(1.0)
 
     def set_collapsed(self, collapsed: bool) -> None:
         self._collapsed = collapsed
@@ -166,14 +167,17 @@ class _SidebarButton(QPushButton):
 class _SidebarGroupHeader(QPushButton):
     """Collapsible group header that toggles visibility of child buttons."""
 
+    expanded_changed = Signal(str, bool)  # group_label, expanded
+
     def __init__(
         self, label: str, children: list[QPushButton],
         parent: QWidget | None = None,
+        expanded: bool = False,
     ) -> None:
         super().__init__(parent)
         self._label_text = label
         self._children = children
-        self._expanded = True
+        self._expanded = expanded
         self._sidebar_collapsed = False
         self.setFlat(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -187,7 +191,34 @@ class _SidebarGroupHeader(QPushButton):
             "QPushButton#sidebarGroupHeader:hover { background-color: rgba(255,255,255,0.05); }"
         )
         self.clicked.connect(self._toggle)
+        for c in self._children:
+            c.setVisible(self._expanded)
         self._update_text()
+
+    @property
+    def label(self) -> str:
+        return self._label_text
+
+    @property
+    def expanded(self) -> bool:
+        return self._expanded
+
+    def set_expanded(self, expanded: bool) -> None:
+        if self._expanded == expanded:
+            return
+        self._expanded = expanded
+        if not self._sidebar_collapsed:
+            for c in self._children:
+                c.setVisible(self._expanded)
+        self._update_text()
+
+    def expand_for_member(self, member_btn: QPushButton) -> bool:
+        """Expand if the given child is one of ours. Returns True if expanded."""
+        if member_btn in self._children and not self._expanded:
+            self.set_expanded(True)
+            self.expanded_changed.emit(self._label_text, True)
+            return True
+        return self._expanded and member_btn in self._children
 
     def set_sidebar_collapsed(self, collapsed: bool) -> None:
         self._sidebar_collapsed = collapsed
@@ -204,10 +235,8 @@ class _SidebarGroupHeader(QPushButton):
     def _toggle(self) -> None:
         if self._sidebar_collapsed:
             return
-        self._expanded = not self._expanded
-        for c in self._children:
-            c.setVisible(self._expanded)
-        self._update_text()
+        self.set_expanded(not self._expanded)
+        self.expanded_changed.emit(self._label_text, self._expanded)
 
     def _update_text(self) -> None:
         arrow = "▾" if self._expanded else "▸"
@@ -317,6 +346,9 @@ class MainWindow(QMainWindow):
         ]
         self.sidebar_buttons: dict[str, _SidebarButton] = {}
         self._sidebar_groups: list[_SidebarGroupHeader] = []
+        persisted_groups = get_settings().get("sidebar_groups_expanded") or {}
+        if not isinstance(persisted_groups, dict):
+            persisted_groups = {}
         for item in _SIDEBAR_LAYOUT:
             if isinstance(item, tuple) and item[0] == "group":
                 _, group_label, member_labels = item
@@ -326,7 +358,11 @@ class MainWindow(QMainWindow):
                     btn = _SidebarButton(icon, member, indent=True)
                     self.sidebar_buttons[member] = btn
                     children.append(btn)
-                header = _SidebarGroupHeader(group_label, children)
+                expanded = bool(persisted_groups.get(group_label, False))
+                header = _SidebarGroupHeader(
+                    group_label, children, expanded=expanded,
+                )
+                header.expanded_changed.connect(self._on_group_expanded_changed)
                 sidebar_layout.addWidget(header)
                 for btn in children:
                     sidebar_layout.addWidget(btn)
@@ -776,7 +812,24 @@ class MainWindow(QMainWindow):
         self._current_section = name
         for label in self._nav_labels:
             self.sidebar_buttons[label].setChecked(label == name)
+        self._ensure_active_visible(name)
         self._assistant_panel.set_active_section_name(name)
+
+    def _ensure_active_visible(self, name: str) -> None:
+        """Expand the parent group if the active section is collapsed inside it."""
+        btn = self.sidebar_buttons.get(name)
+        if btn is None:
+            return
+        for group in self._sidebar_groups:
+            group.expand_for_member(btn)
+
+    def _on_group_expanded_changed(self, label: str, expanded: bool) -> None:
+        state = get_settings().get("sidebar_groups_expanded") or {}
+        if not isinstance(state, dict):
+            state = {}
+        state = dict(state)
+        state[label] = bool(expanded)
+        get_settings().set("sidebar_groups_expanded", state)
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
