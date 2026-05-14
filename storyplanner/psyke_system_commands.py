@@ -62,6 +62,21 @@ class SystemCommandHandlers:
             description="AI writing actions",
             aliases=["ask"],
         )
+        registry.register(
+            "idea", self.handle_idea,
+            description="Controlling Idea — set / explain / check / link / scene",
+        )
+
+    def handle_idea(self, ctx: CommandContext) -> dict:
+        from storyplanner.controlling_idea import handle_command
+        result = handle_command(self._db, self._project_id, ctx.args)
+        if self._on_data_changed is not None:
+            self._on_data_changed()
+        return {
+            "ok": result["status"] == "ok",
+            "message": result["message"],
+            "error": "" if result["status"] == "ok" else result["message"],
+        }
 
     def handle_create(self, ctx: CommandContext) -> dict:
         entry_type = ctx.first_arg.lower() if ctx.first_arg else "other"

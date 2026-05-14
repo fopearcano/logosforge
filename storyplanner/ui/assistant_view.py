@@ -560,6 +560,13 @@ class AssistantPanel(QWidget):
         settings_layout.addWidget(self._story_memory_check)
         settings_layout.addWidget(self._psyke_check)
 
+        self._idea_check = QCheckBox("Idea di Controllo")
+        self._idea_check.setToolTip(
+            "Inject the project's Controlling Idea (McKee) as a guiding "
+            "constraint for the Assistant."
+        )
+        settings_layout.addWidget(self._idea_check)
+
         self._irrational_check = QCheckBox("Go Irrational")
         self._irrational_check.setToolTip(
             "Disrupt PSYKE rules: temporal displacement, entity blending, surreal prompts"
@@ -761,6 +768,10 @@ class AssistantPanel(QWidget):
         self._outline_check.setChecked(bool(mgr.get("assistant_include_outline")))
         self._story_memory_check.setChecked(bool(mgr.get("assistant_include_memory")))
         self._psyke_check.setChecked(bool(mgr.get("assistant_include_bible")))
+        idea_default = bool(mgr.get("assistant_include_controlling_idea"))
+        if mgr.get("assistant_include_controlling_idea") is None:
+            idea_default = self._is_idea_plugin_enabled()
+        self._idea_check.setChecked(idea_default)
         self._irrational_check.setChecked(bool(mgr.get("assistant_irrational")))
 
     def save_settings(self) -> None:
@@ -774,7 +785,22 @@ class AssistantPanel(QWidget):
         mgr.set("assistant_include_outline", self._outline_check.isChecked())
         mgr.set("assistant_include_memory", self._story_memory_check.isChecked())
         mgr.set("assistant_include_bible", self._psyke_check.isChecked())
+        mgr.set(
+            "assistant_include_controlling_idea",
+            self._idea_check.isChecked(),
+        )
         mgr.set("assistant_irrational", self._irrational_check.isChecked())
+
+    def _is_idea_plugin_enabled(self) -> bool:
+        try:
+            from storyplanner.plugin_manager import get_plugin_manager
+            mgr = get_plugin_manager()
+            for p in mgr.plugins:
+                if p.id == "idea_di_controllo" and p.enabled:
+                    return True
+        except Exception:
+            return False
+        return False
 
     def _toggle_settings(self) -> None:
         visible = not self._settings_container.isVisible()
@@ -944,6 +970,13 @@ class AssistantPanel(QWidget):
                 self._db, self._project_id, scene_id, seed=seed,
             )
 
+        controlling_idea_ctx = ""
+        if self._idea_check.isChecked():
+            from storyplanner.controlling_idea import gather_controlling_idea_context
+            controlling_idea_ctx = gather_controlling_idea_context(
+                self._db, self._project_id, scene_id,
+            )
+
         self._mode_strip.refresh()
         mode_result = self._mode_strip.get_mode_result()
         if self._mode_strip.is_overridden():
@@ -955,13 +988,13 @@ class AssistantPanel(QWidget):
                 description=_MODE_DESCRIPTIONS[effective],
             )
         mode_ctx = mode_context_block(mode_result) if mode_result else ""
-        return scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orchestration_debug, notes_ctx, graph_ctx, mode_ctx, structural_ctx, irrational_ctx
+        return scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orchestration_debug, notes_ctx, graph_ctx, mode_ctx, structural_ctx, irrational_ctx, controlling_idea_ctx
 
     def _send_preset(self, action_key: str) -> None:
         if self._worker is not None:
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, notes_ctx, graph_ctx, mode_ctx, struct_ctx, irr_ctx = (
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, notes_ctx, graph_ctx, mode_ctx, struct_ctx, irr_ctx, idea_ctx = (
             self._build_context(action_key=action_key)
         )
         if not scene_ctx and not outline_ctx and not struct_ctx:
@@ -982,6 +1015,7 @@ class AssistantPanel(QWidget):
             user_note=user_note,
             structural_context=struct_ctx,
             irrational_context=irr_ctx,
+            controlling_idea_context=idea_ctx,
             system_prompt=self._get_section_system_prompt(),
         )
         self._update_ctx_viewer(
@@ -1000,7 +1034,7 @@ class AssistantPanel(QWidget):
             self._response_output.setPlainText("Enter a prompt first.")
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, notes_ctx, graph_ctx, mode_ctx, struct_ctx, irr_ctx = (
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, notes_ctx, graph_ctx, mode_ctx, struct_ctx, irr_ctx, idea_ctx = (
             self._build_context()
         )
 
@@ -1014,6 +1048,7 @@ class AssistantPanel(QWidget):
             mode_context=mode_ctx,
             structural_context=struct_ctx,
             irrational_context=irr_ctx,
+            controlling_idea_context=idea_ctx,
             system_prompt=self._get_section_system_prompt(),
         )
         self._update_ctx_viewer(
@@ -1026,7 +1061,7 @@ class AssistantPanel(QWidget):
         if self._worker is not None:
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, _notes_ctx, graph_ctx, _mode_ctx, _struct_ctx, _irr_ctx = (
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, _notes_ctx, graph_ctx, _mode_ctx, _struct_ctx, _irr_ctx, _idea_ctx = (
             self._build_context()
         )
         if not scene_ctx and not outline_ctx:
@@ -1059,7 +1094,7 @@ class AssistantPanel(QWidget):
             self._response_output.setPlainText("Enter a prompt first.")
             return
 
-        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, _notes_ctx, graph_ctx, _mode_ctx, _struct_ctx, _irr_ctx = (
+        scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, _notes_ctx, graph_ctx, _mode_ctx, _struct_ctx, _irr_ctx, _idea_ctx = (
             self._build_context()
         )
 

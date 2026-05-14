@@ -132,6 +132,7 @@ def build_messages(
     user_note: str = "",
     structural_context: str = "",
     irrational_context: str = "",
+    controlling_idea_context: str = "",
     system_prompt: str = "",
 ) -> list[dict]:
     system = system_prompt or DEFAULT_SYSTEM_PROMPT
@@ -145,6 +146,9 @@ def build_messages(
         user_parts.append("")
     if story_memory_context:
         user_parts.append(story_memory_context)
+        user_parts.append("")
+    if controlling_idea_context:
+        user_parts.append(controlling_idea_context)
         user_parts.append("")
     if psyke_context:
         user_parts.append(psyke_context)
