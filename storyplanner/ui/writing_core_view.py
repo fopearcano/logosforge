@@ -1284,6 +1284,7 @@ class WritingCoreView(QWidget):
         on_data_changed: Callable[[], None] | None = None,
         on_focus_mode_changed: Callable[[bool], None] | None = None,
         on_open_psyke_entry: Callable[[int], None] | None = None,
+        on_content_saved: Callable[[], None] | None = None,
     ) -> None:
         super().__init__()
         self.setMinimumWidth(0)
@@ -1292,6 +1293,7 @@ class WritingCoreView(QWidget):
         self._on_data_changed = on_data_changed
         self._on_focus_mode_changed = on_focus_mode_changed
         self._on_open_psyke_entry = on_open_psyke_entry
+        self._on_content_saved = on_content_saved or on_data_changed
         project = db.get_project_by_id(project_id)
         fmt_name = (project.format_mode if project else "novel") or "novel"
         self._format: WritingFormat = ALL_FORMATS.get(fmt_name, ALL_FORMATS["novel"])
@@ -1896,8 +1898,8 @@ class WritingCoreView(QWidget):
         self._populate_element_combo()
         self._setup_element_shortcuts()
         self._apply_format_to_all_blocks()
-        if self._on_data_changed:
-            self._on_data_changed()
+        if self._on_content_saved:
+            self._on_content_saved()
 
     def _on_element_changed(self, index: int) -> None:
         if index < 0:
@@ -2163,8 +2165,8 @@ class WritingCoreView(QWidget):
                     self._db.move_scene_up(new_scene.id)
                     idx_new -= 1
 
-        if self._on_data_changed:
-            self._on_data_changed()
+        if self._on_content_saved:
+            self._on_content_saved()
         self.refresh()
 
         if new_scene.id in self._editors:
@@ -2200,8 +2202,8 @@ class WritingCoreView(QWidget):
             return
         self._db.update_scene_content(scene_id, editor.toMarkdown().rstrip())
         self._structural_cache.mark_dirty()
-        if self._on_data_changed:
-            self._on_data_changed()
+        if self._on_content_saved:
+            self._on_content_saved()
 
     # -- Command palette ------------------------------------------------------
 

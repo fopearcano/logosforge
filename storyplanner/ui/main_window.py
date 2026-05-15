@@ -629,6 +629,7 @@ class MainWindow(QMainWindow):
                 on_data_changed=self._on_data_changed,
                 on_focus_mode_changed=self._on_focus_mode_changed,
                 on_open_psyke_entry=self._open_psyke_entry,
+                on_content_saved=self._on_scene_content_saved,
             )
         )
 
@@ -1719,6 +1720,20 @@ class MainWindow(QMainWindow):
         self._cached_scene_entry_ids = None
         self._psyke_console.mark_index_dirty()
         self._refresh_active_view()
+
+    def _on_scene_content_saved(self) -> None:
+        """Lightweight notification for in-place edits.
+
+        The active view already reflects the change — skipping the view
+        refresh prevents the editor from being destroyed mid-keystroke.
+        """
+        self._dirty = True
+        self._update_title()
+        self._autosave.mark_dirty()
+        self._versions.mark_dirty()
+        self._cached_scene_entry_scene = None
+        self._cached_scene_entry_ids = None
+        self._psyke_console.mark_index_dirty()
 
     def _auto_save(self) -> None:
         if not self._current_file:
