@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import socket
 import ssl
 import time
 import urllib.error
@@ -13,6 +14,37 @@ from collections import OrderedDict
 from storyplanner.providers import ProviderConfig, get_api_format, resolve_api_key
 
 DEFAULT_BASE_URL = "http://localhost:1234/v1"
+
+_LOCAL_PROVIDERS = {"LM Studio", "Ollama"}
+_DEFAULT_TIMEOUT_LOCAL = 300
+_DEFAULT_TIMEOUT_CLOUD = 120
+
+
+def default_timeout_for_provider(provider_name: str) -> int:
+    if provider_name in _LOCAL_PROVIDERS:
+        return _DEFAULT_TIMEOUT_LOCAL
+    return _DEFAULT_TIMEOUT_CLOUD
+
+
+def get_configured_timeout(provider_name: str = "") -> int:
+    from storyplanner.settings import get_manager
+    val = get_manager().get("assistant_api_timeout")
+    if isinstance(val, (int, float)) and val > 0:
+        return int(val)
+    return default_timeout_for_provider(provider_name)
+
+
+def _is_transient(exc: BaseException) -> bool:
+    if isinstance(exc, socket.timeout):
+        return True
+    if isinstance(exc, urllib.error.URLError):
+        reason = getattr(exc, "reason", None)
+        return isinstance(reason, (socket.timeout, OSError))
+    if isinstance(exc, ConnectionError):
+        return True
+    if isinstance(exc, OSError) and not isinstance(exc, urllib.error.HTTPError):
+        return True
+    return False
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -296,7 +328,7 @@ def chat_completion(
     provider: ProviderConfig | None = None,
     base_url: str = "",
     model: str = "",
-    timeout: int = 120,
+    timeout: int = 0,
     use_cache: bool = True,
     response_language: str = "",
 ) -> tuple[str, bool]:
@@ -306,6 +338,9 @@ def chat_completion(
             base_url=base_url or DEFAULT_BASE_URL,
             model=model,
         )
+
+    if timeout <= 0:
+        timeout = get_configured_timeout(provider.name)
 
     lang = response_language or _detect_response_language(messages)
     messages = _inject_language_instruction(messages, lang)
@@ -320,35 +355,62 @@ def chat_completion(
     api_key = resolve_api_key(provider)
     api_format = get_api_format(provider)
 
-    try:
-        if api_format == "anthropic":
-            result = _anthropic_completion(messages, provider, api_key, timeout)
-        else:
-            result = _openai_completion(messages, provider, api_key, timeout)
-
-        if key is not None:
-            _cache_put(key, result)
-        return result, False
-    except urllib.error.HTTPError as e:
-        body = ""
+    last_err: BaseException | None = None
+    for attempt in range(2):
         try:
-            body = e.read().decode("utf-8", errors="replace")[:400]
-        except Exception:
-            pass
-        raise RuntimeError(
-            f"{provider.name} returned HTTP {e.code}: {e.reason}\n{body}"
-        ) from e
-    except urllib.error.URLError as e:
+            if api_format == "anthropic":
+                result = _anthropic_completion(messages, provider, api_key, timeout)
+            else:
+                result = _openai_completion(messages, provider, api_key, timeout)
+
+            if key is not None:
+                _cache_put(key, result)
+            return result, False
+        except urllib.error.HTTPError as e:
+            body = ""
+            try:
+                body = e.read().decode("utf-8", errors="replace")[:400]
+            except Exception:
+                pass
+            raise RuntimeError(
+                f"{provider.name} returned HTTP {e.code}: {e.reason}\n{body}"
+            ) from e
+        except (urllib.error.URLError, ConnectionError, OSError, socket.timeout) as e:
+            last_err = e
+            if attempt == 0 and _is_transient(e):
+                time.sleep(1)
+                continue
+            break
+        except (KeyError, IndexError, json.JSONDecodeError) as e:
+            raise RuntimeError(
+                f"Unexpected response from {provider.name}:\n{e}"
+            ) from e
+
+    if last_err is not None:
+        if isinstance(last_err, (socket.timeout,)) or (
+            isinstance(last_err, urllib.error.URLError)
+            and isinstance(getattr(last_err, "reason", None), socket.timeout)
+        ):
+            raise ConnectionError(
+                f"{provider.name} timed out after {timeout}s.\n\n"
+                f"The model did not respond within the configured timeout. "
+                f"You can increase it in Assistant Settings.\n\n"
+                f"Provider: {provider.name}\n"
+                f"Base URL: {provider.base_url}\n"
+                f"Timeout: {timeout}s"
+            ) from last_err
+        if isinstance(last_err, urllib.error.URLError):
+            raise ConnectionError(
+                f"Cannot reach {provider.name} at {provider.base_url}.\n\n"
+                f"Details: {last_err}\n"
+                f"Timeout: {timeout}s"
+            ) from last_err
         raise ConnectionError(
-            f"Cannot reach {provider.name} at {provider.base_url}.\n\n"
-            f"Details: {e}"
-        ) from e
-    except (KeyError, IndexError, json.JSONDecodeError) as e:
-        raise RuntimeError(
-            f"Unexpected response from {provider.name}:\n{e}"
-        ) from e
-    except OSError as e:
-        raise ConnectionError(f"Connection error: {e}") from e
+            f"Connection to {provider.name} failed.\n\n"
+            f"Details: {last_err}\n"
+            f"Timeout: {timeout}s"
+        ) from last_err
+    raise RuntimeError("Unexpected error in chat_completion")
 
 
 def test_connection(provider: ProviderConfig) -> tuple[bool, str]:

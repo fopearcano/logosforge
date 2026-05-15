@@ -31,6 +31,7 @@ DEFAULTS: dict[str, object] = {
     "connector_allow_writes": False,
     "connector_confirm_writes": True,
     "connector_disabled_actions": [],
+    "assistant_api_timeout": 0,
 }
 
 

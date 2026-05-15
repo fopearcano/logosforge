@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -26,6 +27,7 @@ from storyplanner.assistant import (
     PRESET_ACTIONS,
     build_messages,
     chat_completion,
+    get_configured_timeout,
 )
 from storyplanner.counterpart import (
     DIALOGIC_MODES,
@@ -180,15 +182,18 @@ class _AssistantWorker(QThread):
 
     def __init__(
         self, messages: list[dict], provider: ProviderConfig,
+        timeout: int = 0,
     ) -> None:
         super().__init__()
         self._messages = messages
         self._provider = provider
+        self._timeout = timeout
 
     def run(self) -> None:
         try:
             result, from_cache = chat_completion(
                 self._messages, provider=self._provider,
+                timeout=self._timeout,
             )
             self.completed.emit(result, from_cache)
         except Exception as e:
@@ -602,6 +607,25 @@ class AssistantPanel(QWidget):
         self._provider_widget = ProviderSettingsWidget(compact=True)
         self._restore_provider_settings()
         settings_layout.addWidget(self._provider_widget)
+
+        timeout_row = QHBoxLayout()
+        timeout_row.setSpacing(4)
+        timeout_label = QLabel("API timeout:")
+        timeout_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 11px;")
+        timeout_row.addWidget(timeout_label)
+        self._timeout_spin = QSpinBox()
+        self._timeout_spin.setRange(0, 600)
+        self._timeout_spin.setSuffix("s")
+        self._timeout_spin.setSpecialValueText("Auto")
+        self._timeout_spin.setToolTip(
+            "Seconds before a request times out.\n"
+            "Auto = 120s for cloud providers, 300s for local."
+        )
+        self._timeout_spin.setFixedWidth(80)
+        timeout_row.addWidget(self._timeout_spin)
+        timeout_row.addStretch()
+        settings_layout.addLayout(timeout_row)
+
         self._settings_container.setVisible(False)
         self._layout.addWidget(self._settings_container)
 
@@ -773,6 +797,8 @@ class AssistantPanel(QWidget):
             idea_default = self._is_idea_plugin_enabled()
         self._idea_check.setChecked(idea_default)
         self._irrational_check.setChecked(bool(mgr.get("assistant_irrational")))
+        timeout_val = mgr.get("assistant_api_timeout")
+        self._timeout_spin.setValue(int(timeout_val) if timeout_val else 0)
 
     def save_settings(self) -> None:
         mgr = get_settings()
@@ -790,6 +816,7 @@ class AssistantPanel(QWidget):
             self._idea_check.isChecked(),
         )
         mgr.set("assistant_irrational", self._irrational_check.isChecked())
+        mgr.set("assistant_api_timeout", self._timeout_spin.value())
 
     def _is_idea_plugin_enabled(self) -> bool:
         try:
@@ -1405,7 +1432,8 @@ class AssistantPanel(QWidget):
         self._response_output.setPlainText("Thinking...")
 
         provider = self._provider_widget.get_provider_config()
-        self._worker = _AssistantWorker(messages, provider)
+        timeout = get_configured_timeout(provider.name)
+        self._worker = _AssistantWorker(messages, provider, timeout=timeout)
         self._worker.completed.connect(self._on_response)
         self._worker.failed.connect(self._on_error)
         self._worker.start()
