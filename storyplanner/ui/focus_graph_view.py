@@ -638,13 +638,22 @@ def _make_shape_node(
 
 
 class _ZoomGraphicsView(QGraphicsView):
-    """QGraphicsView that reports zoom changes to the parent on wheel events."""
+    """QGraphicsView with smooth zoom (wheel) + drag pan + antialiasing."""
 
     def __init__(self, scene, on_zoom: Callable[[float], None] | None = None) -> None:
         super().__init__(scene)
+        from PySide6.QtGui import QPainter
         self._on_zoom = on_zoom
         self._zoom = 1.0
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.setRenderHints(
+            QPainter.RenderHint.Antialiasing
+            | QPainter.RenderHint.TextAntialiasing
+            | QPainter.RenderHint.SmoothPixmapTransform,
+        )
+        # Subtle visual cleanup — no border on the viewport.
+        self.setFrameShape(self.Shape.NoFrame)
 
     def wheelEvent(self, event) -> None:
         if event.angleDelta().y() > 0:
@@ -656,6 +665,18 @@ class _ZoomGraphicsView(QGraphicsView):
         new_zoom = max(0.1, min(5.0, new_zoom))
         actual = new_zoom / self._zoom
         self._zoom = new_zoom
+        self.scale(actual, actual)
+        if self._on_zoom:
+            self._on_zoom(self._zoom)
+
+    def current_zoom(self) -> float:
+        return self._zoom
+
+    def reset_zoom(self) -> None:
+        if self._zoom == 1.0:
+            return
+        actual = 1.0 / self._zoom
+        self._zoom = 1.0
         self.scale(actual, actual)
         if self._on_zoom:
             self._on_zoom(self._zoom)
@@ -709,6 +730,16 @@ class FocusGraphView(QWidget):
         self._analysis_visible: bool = False
         self._last_node_analysis: NodeAnalysis | None = None
         self._last_insights: list[GraphInsight] = []
+        # Edge-type visibility — Mention edges are noisy, default off so the
+        # graph reads as semantic structure, not link spaghetti.
+        self._edge_visibility: dict[str, bool] = {
+            EDGE_MENTION: False,
+            EDGE_PARTICIPATION: True,
+            EDGE_CONTAINMENT: True,
+            EDGE_PSYKE_RELATION: True,
+            EDGE_QUANTUM: True,
+            EDGE_LINK: True,
+        }
 
         self._node_items: dict[str, object] = {}
         self._label_items: dict[str, QGraphicsSimpleTextItem] = {}
@@ -717,7 +748,166 @@ class FocusGraphView(QWidget):
         self._build_ui()
         self.refresh()
 
+    # -- Persistence --------------------------------------------------------
+
+    def _capture_state(self) -> dict:
+        """Snapshot the user-visible filters & toggles."""
+        return {
+            "mode": self._mode,
+            "layers": sorted(self._active_layers),
+            "gravity": self._gravity_enabled,
+            "flow_enabled": self._flow_enabled,
+            "flow_type": self._flow_type,
+            "edge_visibility": dict(self._edge_visibility),
+            "skeleton": self._skeleton_btn.isChecked()
+                if hasattr(self, "_skeleton_btn") else False,
+        }
+
+    def _apply_state(self, state: dict) -> None:
+        """Restore a previously captured state (best-effort)."""
+        if not isinstance(state, dict):
+            return
+        mode = state.get("mode")
+        if mode in MODE_PROFILES:
+            self._on_mode_changed(mode)
+        layers = state.get("layers")
+        if isinstance(layers, list):
+            kept = {k for k in layers if k in LAYER_KINDS}
+            if kept:
+                self._active_layers = kept
+                for kind, cb in self._layer_checks.items():
+                    cb.blockSignals(True)
+                    cb.setChecked(kind in kept)
+                    cb.blockSignals(False)
+        if isinstance(state.get("gravity"), bool):
+            self._gravity_enabled = state["gravity"]
+            self._gravity_check.blockSignals(True)
+            self._gravity_check.setChecked(self._gravity_enabled)
+            self._gravity_check.blockSignals(False)
+        if isinstance(state.get("flow_enabled"), bool):
+            self._flow_enabled = state["flow_enabled"]
+            self._flow_check.blockSignals(True)
+            self._flow_check.setChecked(self._flow_enabled)
+            self._flow_check.blockSignals(False)
+        ft = state.get("flow_type")
+        if isinstance(ft, str) and ft in FLOW_TYPES:
+            self._flow_type = ft
+            idx = self._flow_combo.findData(ft)
+            if idx >= 0:
+                self._flow_combo.blockSignals(True)
+                self._flow_combo.setCurrentIndex(idx)
+                self._flow_combo.blockSignals(False)
+        ev = state.get("edge_visibility")
+        if isinstance(ev, dict):
+            for k, v in ev.items():
+                if isinstance(v, bool):
+                    self._edge_visibility[k] = v
+        self._flow_combo.setEnabled(self._flow_enabled)
+        self._rebuild_view()
+
+    def restore_persisted_state(self) -> None:
+        """Restore last-saved filter/mode/flow state from global settings.
+
+        Not called automatically — the host (MainWindow) calls this after
+        construction so that headless tests stay isolated from the user's
+        ~/.storyplanner/settings.json file.
+        """
+        try:
+            from storyplanner.settings import get_manager
+            state = get_manager().get("graph_state")
+        except Exception:
+            return
+        if isinstance(state, dict) and state:
+            self._apply_state(state)
+
+    def _persist_state(self) -> None:
+        try:
+            from storyplanner.settings import get_manager
+            get_manager().set("graph_state", self._capture_state())
+        except Exception:
+            pass
+
+    def get_saved_presets(self) -> dict[str, dict]:
+        try:
+            from storyplanner.settings import get_manager
+            raw = get_manager().get("graph_presets") or {}
+        except Exception:
+            return {}
+        return raw if isinstance(raw, dict) else {}
+
+    def save_preset(self, name: str) -> None:
+        """Persist the current filter / mode state under *name*."""
+        if not name:
+            return
+        try:
+            from storyplanner.settings import get_manager
+            mgr = get_manager()
+            presets = mgr.get("graph_presets") or {}
+            if not isinstance(presets, dict):
+                presets = {}
+            presets[name] = self._capture_state()
+            mgr.set("graph_presets", presets)
+        except Exception:
+            return
+
+    def load_preset(self, name: str) -> bool:
+        presets = self.get_saved_presets()
+        state = presets.get(name)
+        if not isinstance(state, dict):
+            return False
+        self._apply_state(state)
+        return True
+
+    def delete_preset(self, name: str) -> None:
+        try:
+            from storyplanner.settings import get_manager
+            mgr = get_manager()
+            presets = mgr.get("graph_presets") or {}
+            if not isinstance(presets, dict):
+                return
+            presets.pop(name, None)
+            mgr.set("graph_presets", presets)
+        except Exception:
+            return
+
+    def _refresh_preset_combo(self) -> None:
+        if not hasattr(self, "_preset_combo"):
+            return
+        self._preset_combo.blockSignals(True)
+        self._preset_combo.clear()
+        self._preset_combo.addItem("— select —")
+        for name in sorted(self.get_saved_presets().keys()):
+            self._preset_combo.addItem(name)
+        self._preset_combo.blockSignals(False)
+
+    def _on_preset_picked(self, name: str) -> None:
+        if not name or name.startswith("—"):
+            return
+        self.load_preset(name)
+
+    def _on_save_preset_clicked(self) -> None:
+        from PySide6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(
+            self, "Save Graph Preset", "Preset name:",
+        )
+        if not ok:
+            return
+        name = (name or "").strip()
+        if not name:
+            return
+        self.save_preset(name)
+        self._refresh_preset_combo()
+        # Highlight the saved preset in the combo.
+        idx = self._preset_combo.findText(name)
+        if idx >= 0:
+            self._preset_combo.blockSignals(True)
+            self._preset_combo.setCurrentIndex(idx)
+            self._preset_combo.blockSignals(False)
+
     def _build_ui(self) -> None:
+        # Accept keyboard focus so arrow-key navigation works.
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -748,6 +938,19 @@ class FocusGraphView(QWidget):
             self._mode_buttons[mode] = btn
         self._mode_buttons[MODE_ALL].setChecked(True)
         mb.addStretch()
+
+        mb.addWidget(QLabel("Preset:"))
+        self._preset_combo = QComboBox()
+        self._preset_combo.setMinimumWidth(110)
+        self._preset_combo.currentTextChanged.connect(self._on_preset_picked)
+        mb.addWidget(self._preset_combo)
+        self._save_preset_btn = QPushButton("Save…")
+        self._save_preset_btn.setFlat(True)
+        self._save_preset_btn.setToolTip("Save the current filter & layout as a preset")
+        self._save_preset_btn.clicked.connect(self._on_save_preset_clicked)
+        mb.addWidget(self._save_preset_btn)
+        self._refresh_preset_combo()
+
         outer.addWidget(mode_bar)
 
         # -- Toolbar ---------------------------------------------------------
@@ -935,8 +1138,30 @@ class FocusGraphView(QWidget):
             lay.addWidget(cb)
             self._layer_checks[kind] = cb
 
+        # Edges sub-section — minor toggle for the noisy Mentions edges
+        # (off by default; turn back on if you really want them).
+        edge_header = QLabel("Edges")
+        edge_header.setStyleSheet(
+            f"color: {theme.TEXT_SECONDARY}; font-size: 11px; font-weight: bold;"
+            f" padding-top: 8px;"
+        )
+        lay.addWidget(edge_header)
+
+        self._mention_check = QCheckBox("Mentions")
+        self._mention_check.setChecked(self._edge_visibility.get(EDGE_MENTION, False))
+        self._mention_check.setStyleSheet(
+            f"QCheckBox {{ color: {theme.TEXT_PRIMARY}; font-size: 11px; }}"
+        )
+        self._mention_check.toggled.connect(self._on_mentions_toggled)
+        lay.addWidget(self._mention_check)
+
         lay.addStretch()
         return panel
+
+    def _on_mentions_toggled(self, checked: bool) -> None:
+        self._edge_visibility[EDGE_MENTION] = checked
+        self._rebuild_view()
+        self._persist_state()
 
     def _on_layer_toggled(self, kind: str, checked: bool) -> None:
         if checked:
@@ -949,6 +1174,7 @@ class FocusGraphView(QWidget):
             self._skeleton_btn.setChecked(False)
             self._skeleton_btn.blockSignals(False)
         self._rebuild_view()
+        self._persist_state()
 
     def _on_skeleton_toggled(self, checked: bool) -> None:
         target = set(SKELETON_LAYERS) if checked else set(LAYER_KINDS)
@@ -958,6 +1184,7 @@ class FocusGraphView(QWidget):
             cb.setChecked(kind in target)
             cb.blockSignals(False)
         self._rebuild_view()
+        self._persist_state()
 
     # -- Narrative mode ------------------------------------------------------
 
@@ -1003,6 +1230,7 @@ class FocusGraphView(QWidget):
         self._skeleton_btn.setEnabled(mode == MODE_ALL)
 
         self._rebuild_view()
+        self._persist_state()
 
     def _load_quantum_data(self) -> None:
         """Pull live wavefunctions + branches into graph nodes for Quantum mode."""
@@ -1048,6 +1276,38 @@ class FocusGraphView(QWidget):
 
     def get_mode(self) -> str:
         return self._mode
+
+    # -- Keyboard navigation -------------------------------------------------
+
+    def keyPressEvent(self, event) -> None:
+        """Arrow keys cycle visible nodes; Enter focuses; Esc clears."""
+        key = event.key()
+        if key in (Qt.Key.Key_Escape,):
+            if self._focus_node is not None:
+                self.clear_focus()
+                event.accept()
+                return
+        if key in (Qt.Key.Key_Right, Qt.Key.Key_Left,
+                   Qt.Key.Key_Up, Qt.Key.Key_Down,
+                   Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            visible_ids = sorted(self._node_items.keys())
+            if not visible_ids:
+                super().keyPressEvent(event)
+                return
+            if self._focus_node in visible_ids:
+                idx = visible_ids.index(self._focus_node)
+            else:
+                idx = -1
+            if key in (Qt.Key.Key_Right, Qt.Key.Key_Down):
+                target = visible_ids[(idx + 1) % len(visible_ids)]
+            elif key in (Qt.Key.Key_Left, Qt.Key.Key_Up):
+                target = visible_ids[(idx - 1) % len(visible_ids)]
+            else:  # Enter — re-focus the current node (or first if none).
+                target = self._focus_node or visible_ids[0]
+            self.focus_on(target)
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     # -- Zoom + culling ------------------------------------------------------
 
@@ -1150,6 +1410,9 @@ class FocusGraphView(QWidget):
             if edge.source_id not in visible or edge.target_id not in visible:
                 continue
             if edge.edge_type not in visible_edges:
+                continue
+            # Per-edge-type visibility override (user toggle in Layers panel).
+            if not self._edge_visibility.get(edge.edge_type, True):
                 continue
             src_pos = positions.get(edge.source_id)
             tgt_pos = positions.get(edge.target_id)
@@ -1532,6 +1795,16 @@ class FocusGraphView(QWidget):
             pen_width = 3
         item.setPen(QPen(pen_color, pen_width))
         item.setZValue(2 if is_focal else 1)
+        # Hover tooltip — name, kind, and neighbour count.  Picked up by Qt
+        # automatically when the user hovers over the node.
+        neighbour_count = (
+            len(self._active_graph_data().adjacency.get(node.node_id, set()))
+            if self._active_graph_data() else 0
+        )
+        tip = f"{node.name}\nKind: {kind}\nNeighbours: {neighbour_count}"
+        if gravity is not None:
+            tip += f"\nGravity: {gravity.total:.2f}"
+        item.setToolTip(tip)
         self._gscene.addItem(item)
         self._node_items[node.node_id] = item
 
@@ -1541,6 +1814,8 @@ class FocusGraphView(QWidget):
         if is_focal:
             font.setBold(True)
         label.setFont(font)
+        # Stable label — keep constant screen size regardless of zoom level.
+        label.setFlag(label.GraphicsItemFlag.ItemIgnoresTransformations, True)
         text_color = QColor(theme.TEXT_PRIMARY)
         if is_dimmed:
             text_color.setAlphaF(_DIM_OPACITY)
@@ -1724,6 +1999,7 @@ class FocusGraphView(QWidget):
     def _on_gravity_toggled(self, checked: bool) -> None:
         self._gravity_enabled = checked
         self._rebuild_view()
+        self._persist_state()
 
     def is_gravity_enabled(self) -> bool:
         return self._gravity_enabled
@@ -1737,12 +2013,14 @@ class FocusGraphView(QWidget):
         self._flow_enabled = checked
         self._flow_combo.setEnabled(checked)
         self._rebuild_view()
+        self._persist_state()
 
     def _on_flow_type_changed(self, _idx: int) -> None:
         value = self._flow_combo.currentData() or FLOW_TIMELINE
         self._flow_type = value
         if self._flow_enabled:
             self._rebuild_view()
+        self._persist_state()
 
     def is_flow_enabled(self) -> bool:
         return self._flow_enabled

@@ -34,6 +34,8 @@ DEFAULTS: dict[str, object] = {
     "assistant_api_timeout": 0,
     "default_projects_folder": "",
     "open_anyway_on_lock": False,
+    "graph_state": {},
+    "graph_presets": {},
 }
 
 

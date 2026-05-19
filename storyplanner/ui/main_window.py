@@ -690,13 +690,14 @@ class MainWindow(QMainWindow):
         self._set_content(TagAnalysisView(self._db, self._project_id))
 
     def _show_graph(self) -> None:
-        self._set_content(
-            FocusGraphView(
-                self._db, self._project_id,
-                on_node_selected=self._on_link_navigated,
-                on_send_to_assistant=self._send_graph_analysis_to_assistant,
-            )
+        view = FocusGraphView(
+            self._db, self._project_id,
+            on_node_selected=self._on_link_navigated,
+            on_send_to_assistant=self._send_graph_analysis_to_assistant,
         )
+        # Restore last-used filter / mode / flow state from settings.json.
+        view.restore_persisted_state()
+        self._set_content(view)
 
     def _send_graph_analysis_to_assistant(self, text: str) -> None:
         """Drop a graph-analysis block into the Assistant's prompt and reveal the panel."""
