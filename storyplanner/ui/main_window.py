@@ -694,8 +694,24 @@ class MainWindow(QMainWindow):
             FocusGraphView(
                 self._db, self._project_id,
                 on_node_selected=self._on_link_navigated,
+                on_send_to_assistant=self._send_graph_analysis_to_assistant,
             )
         )
+
+    def _send_graph_analysis_to_assistant(self, text: str) -> None:
+        """Drop a graph-analysis block into the Assistant's prompt and reveal the panel."""
+        if not text:
+            return
+        try:
+            existing = self._assistant_panel._prompt_input.toPlainText().strip()
+            combined = f"{existing}\n\n{text}" if existing else text
+            self._assistant_panel._prompt_input.setPlainText(combined)
+        except Exception:
+            return
+        if not self._assistant_panel.isVisible():
+            self._assistant_user_visible = True
+            self._assistant_panel.refresh_scenes()
+            self._assistant_panel.setVisible(True)
 
     def _show_arcs(self) -> None:
         self._set_content(

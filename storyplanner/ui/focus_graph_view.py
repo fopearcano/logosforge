@@ -36,6 +36,16 @@ from PySide6.QtGui import QPolygonF
 from PySide6.QtCore import QPointF
 
 from storyplanner.db import Database
+from storyplanner.graph_analysis import (
+    GraphInsight,
+    NodeAnalysis,
+    analyze_node,
+    compose_assistant_context,
+    explain_structure,
+    find_disconnected_nodes,
+    find_weak_thematic_clusters,
+    suggest_missing_relations,
+)
 from storyplanner.graph_flow import (
     FLOW_ACTS,
     FLOW_ARC,
@@ -659,11 +669,13 @@ class FocusGraphView(QWidget):
         db: Database,
         project_id: int,
         on_node_selected: Callable[[str, int], None] | None = None,
+        on_send_to_assistant: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
         self._on_node_selected = on_node_selected
+        self._on_send_to_assistant = on_send_to_assistant
 
         self._graph_data: GraphData | None = None
         self._focus_node: str | None = None
@@ -693,6 +705,10 @@ class FocusGraphView(QWidget):
         # Temporal narrative flow — story-order overlay.
         self._flow_enabled: bool = False
         self._flow_type: str = FLOW_TIMELINE
+        # Graph analysis panel — per-node digest + global insights.
+        self._analysis_visible: bool = False
+        self._last_node_analysis: NodeAnalysis | None = None
+        self._last_insights: list[GraphInsight] = []
 
         self._node_items: dict[str, object] = {}
         self._label_items: dict[str, QGraphicsSimpleTextItem] = {}
@@ -833,6 +849,14 @@ class FocusGraphView(QWidget):
         self._suggest_check.toggled.connect(self._on_suggestions_toggled)
         tb.addWidget(self._suggest_check)
 
+        self._analysis_check = QCheckBox("Analysis")
+        self._analysis_check.setToolTip(
+            "Show per-node analysis and global graph insights "
+            "(disconnected nodes, missing relations, weak thematic clusters)."
+        )
+        self._analysis_check.toggled.connect(self._on_analysis_toggled)
+        tb.addWidget(self._analysis_check)
+
         tb.addStretch()
         outer.addWidget(toolbar)
 
@@ -860,6 +884,16 @@ class FocusGraphView(QWidget):
         sp_layout.setSpacing(4)
         self._suggest_panel.hide()
         content_layout.addWidget(self._suggest_panel, stretch=1)
+
+        self._analysis_panel = QFrame()
+        self._analysis_panel.setObjectName("analysisPanel")
+        self._analysis_panel.setMaximumWidth(320)
+        self._analysis_panel.setMinimumWidth(220)
+        ap_layout = QVBoxLayout(self._analysis_panel)
+        ap_layout.setContentsMargins(8, 8, 8, 8)
+        ap_layout.setSpacing(4)
+        self._analysis_panel.hide()
+        content_layout.addWidget(self._analysis_panel, stretch=1)
 
         outer.addWidget(content_area)
 
@@ -1638,6 +1672,8 @@ class FocusGraphView(QWidget):
         self._rebuild_view()
         if self._suggestions_visible:
             self._refresh_suggestions()
+        if self._analysis_visible:
+            self._refresh_analysis()
         if self._on_node_selected and self._graph_data:
             node = self._graph_data.nodes.get(node_id)
             if node:
@@ -1648,6 +1684,8 @@ class FocusGraphView(QWidget):
         self._rebuild_view()
         if self._suggestions_visible:
             self._refresh_suggestions()
+        if self._analysis_visible:
+            self._refresh_analysis()
 
     def get_focus_node(self) -> str | None:
         return self._focus_node
@@ -1741,6 +1779,173 @@ class FocusGraphView(QWidget):
             self._suggest_panel.hide()
             self._suggestions = None
             self.clear_trace()
+
+    # -- Analysis panel ------------------------------------------------------
+
+    def _on_analysis_toggled(self, checked: bool) -> None:
+        self._analysis_visible = checked
+        if checked:
+            self._analysis_panel.show()
+            self._refresh_analysis()
+        else:
+            self._analysis_panel.hide()
+
+    def is_analysis_visible(self) -> bool:
+        return self._analysis_visible
+
+    def get_last_node_analysis(self) -> NodeAnalysis | None:
+        return self._last_node_analysis
+
+    def get_last_insights(self) -> list[GraphInsight]:
+        return list(self._last_insights)
+
+    def _refresh_analysis(self) -> None:
+        """Repopulate the Analysis panel based on the current focal node."""
+        layout = self._analysis_panel.layout()
+        while layout.count():
+            child = layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        # Per-node section.
+        active = self._active_graph_data()
+        self._last_node_analysis = None
+        if self._focus_node and active:
+            self._last_node_analysis = analyze_node(
+                self._db, self._project_id, active, self._focus_node,
+            )
+
+        if self._last_node_analysis:
+            self._build_node_analysis_widgets(layout, self._last_node_analysis)
+        else:
+            hint = QLabel("Click a node to see its themes, relations, scenes,"
+                          " arcs, and Controlling Idea alignment.")
+            hint.setObjectName("analysisHint")
+            hint.setWordWrap(True)
+            layout.addWidget(hint)
+
+        # Global insights.
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet(f"color: {theme.BORDER};")
+        layout.addWidget(sep)
+
+        header = QLabel("Insights")
+        header.setStyleSheet(
+            f"color: {theme.TEXT_SECONDARY}; font-size: 11px; font-weight: bold;"
+        )
+        layout.addWidget(header)
+
+        if active is None:
+            self._last_insights = []
+        else:
+            ins: list[GraphInsight] = []
+            ins.extend(find_disconnected_nodes(active))
+            ins.extend(suggest_missing_relations(self._db, self._project_id, active))
+            ins.extend(find_weak_thematic_clusters(self._db, self._project_id, active))
+            self._last_insights = ins
+
+        summary = explain_structure(self._db, self._project_id, active) if active else ""
+        if summary:
+            sumlbl = QLabel(summary)
+            sumlbl.setWordWrap(True)
+            sumlbl.setStyleSheet(
+                f"color: {theme.TEXT_MUTED}; font-size: 10px; padding: 4px 0;"
+            )
+            layout.addWidget(sumlbl)
+
+        if not self._last_insights:
+            empty = QLabel("No structural issues detected.")
+            empty.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 11px;")
+            layout.addWidget(empty)
+        else:
+            for ins in self._last_insights[:8]:
+                tag = "!" if ins.severity == "warning" else "·"
+                row = QLabel(f"{tag} {ins.title}\n  {ins.message}")
+                row.setWordWrap(True)
+                row.setStyleSheet(
+                    f"color: {theme.TEXT_PRIMARY}; font-size: 11px;"
+                    f" padding: 4px 0;"
+                )
+                layout.addWidget(row)
+
+        if self._on_send_to_assistant:
+            send_btn = QPushButton("Send insights to Assistant")
+            send_btn.setObjectName("analysisSendBtn")
+            send_btn.clicked.connect(self._send_insights_to_assistant)
+            layout.addWidget(send_btn)
+
+        layout.addStretch()
+
+    def _build_node_analysis_widgets(self, layout, na: NodeAnalysis) -> None:
+        title = QLabel(f"{na.name}")
+        title.setStyleSheet(
+            f"color: {theme.TEXT_PRIMARY}; font-size: 13px; font-weight: bold;"
+        )
+        layout.addWidget(title)
+        sub = QLabel(f"Kind: {na.kind}")
+        sub.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 10px;")
+        layout.addWidget(sub)
+
+        def _section(label: str, items: list[str]) -> None:
+            if not items:
+                return
+            box = QLabel(f"<b>{label}:</b> " + ", ".join(items[:8]))
+            box.setWordWrap(True)
+            box.setStyleSheet(
+                f"color: {theme.TEXT_PRIMARY}; font-size: 11px; padding: 2px 0;"
+            )
+            layout.addWidget(box)
+
+        _section("Themes", na.themes)
+        _section("Relations", na.relations)
+        _section("Scenes", na.scenes)
+        _section("Arcs", na.arcs)
+        if na.ci_alignment:
+            ci = QLabel(
+                f"<b>Controlling Idea alignment:</b> {na.ci_alignment}"
+            )
+            ci.setWordWrap(True)
+            ci.setStyleSheet(
+                f"color: {theme.TEXT_PRIMARY}; font-size: 11px; padding: 2px 0;"
+            )
+            layout.addWidget(ci)
+        if na.ci_aligned_neighbours:
+            cn = QLabel(
+                "<b>CI-aligned neighbours:</b> "
+                + ", ".join(na.ci_aligned_neighbours[:6])
+            )
+            cn.setWordWrap(True)
+            cn.setStyleSheet(
+                f"color: {theme.TEXT_PRIMARY}; font-size: 11px; padding: 2px 0;"
+            )
+            layout.addWidget(cn)
+
+        if self._on_send_to_assistant:
+            send_btn = QPushButton("Send to Assistant")
+            send_btn.setObjectName("analysisSendBtn")
+            send_btn.clicked.connect(self._send_node_to_assistant)
+            layout.addWidget(send_btn)
+
+    def _send_node_to_assistant(self) -> None:
+        if not self._on_send_to_assistant or self._last_node_analysis is None:
+            return
+        try:
+            self._on_send_to_assistant(
+                compose_assistant_context(self._last_node_analysis),
+            )
+        except Exception:
+            pass
+
+    def _send_insights_to_assistant(self) -> None:
+        if not self._on_send_to_assistant:
+            return
+        try:
+            self._on_send_to_assistant(
+                compose_assistant_context(self._last_insights),
+            )
+        except Exception:
+            pass
 
     def set_temporal_max_order(self, order: int) -> None:
         self._temporal_max_order = order
