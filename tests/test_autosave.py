@@ -130,11 +130,16 @@ def test_save_emits_saved_status():
     Path(path).unlink(missing_ok=True)
 
 
-def test_save_emits_failed_on_bad_path():
+def test_save_emits_failed_on_bad_path(tmp_path):
+    # Atomic save auto-creates missing parents, so we need a genuinely
+    # unwritable path.  Use a path whose parent is a regular file — the
+    # mkdir() inside atomic_write_text will fail with NotADirectoryError.
     _app()
     db, proj = _make_project()
     mgr = AutosaveManager(db, proj.id)
-    mgr.file_path = "/nonexistent/dir/file.json"
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a dir")
+    mgr.file_path = str(blocker / "file.json")
     statuses: list[str] = []
     mgr.status_changed.connect(statuses.append)
     mgr.mark_dirty()

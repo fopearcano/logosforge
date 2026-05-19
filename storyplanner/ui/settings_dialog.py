@@ -4,20 +4,28 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
     QVBoxLayout,
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import QUrl
 
 import storyplanner.connector_actions  # noqa: F401 — registers actions
+from storyplanner.cloud_storage import detect_cloud_folders
 from storyplanner.connector_registry import list_actions
 from storyplanner.settings import get_manager as get_settings
 from storyplanner.ui import theme
@@ -119,11 +127,57 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(self._separator())
 
-        # -- General (placeholder) ---------------------------------------------
-        layout.addWidget(self._section_label("General"))
-        placeholder = QLabel("No additional settings yet.")
-        placeholder.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 11px;")
-        layout.addWidget(placeholder)
+        # -- Project Storage ----------------------------------------------------
+        layout.addWidget(self._section_label("Project Storage"))
+        storage_desc = QLabel(
+            "Pick a default folder for new projects.  Choosing a cloud-synced "
+            "folder (Dropbox, Google Drive, iCloud Drive, OneDrive, NAS) lets "
+            "you open the project from any device once the file sync completes."
+        )
+        storage_desc.setWordWrap(True)
+        storage_desc.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 11px;")
+        layout.addWidget(storage_desc)
+
+        folder_row = QHBoxLayout()
+        folder_row.setSpacing(6)
+        self._default_folder_input = QLineEdit()
+        self._default_folder_input.setText(
+            str(mgr.get("default_projects_folder") or "")
+        )
+        self._default_folder_input.setPlaceholderText(
+            "Default projects folder (optional)"
+        )
+        folder_row.addWidget(self._default_folder_input, stretch=1)
+
+        choose_btn = QPushButton("Choose…")
+        choose_btn.clicked.connect(self._on_choose_default_folder)
+        folder_row.addWidget(choose_btn)
+
+        open_btn = QPushButton("Open")
+        open_btn.clicked.connect(self._on_open_default_folder)
+        folder_row.addWidget(open_btn)
+
+        layout.addLayout(folder_row)
+
+        detected = detect_cloud_folders()
+        if detected:
+            detected_label = QLabel("Detected cloud folders on this machine:")
+            detected_label.setStyleSheet(
+                f"color: {theme.TEXT_SECONDARY}; font-size: 11px; margin-top: 4px;"
+            )
+            layout.addWidget(detected_label)
+            self._cloud_combo = QComboBox()
+            self._cloud_combo.addItem("(pick a detected folder)", "")
+            for folder in detected:
+                self._cloud_combo.addItem(
+                    f"{folder.provider} — {folder.path}", str(folder.path)
+                )
+            self._cloud_combo.currentIndexChanged.connect(
+                self._on_cloud_combo_changed
+            )
+            layout.addWidget(self._cloud_combo)
+        else:
+            self._cloud_combo = None  # type: ignore[assignment]
 
         layout.addStretch()
 
@@ -168,7 +222,35 @@ class SettingsDialog(QDialog):
             if item.checkState() != Qt.CheckState.Checked:
                 disabled.append(str(item.data(Qt.ItemDataRole.UserRole)))
         mgr.set("connector_disabled_actions", disabled)
+
+        mgr.set(
+            "default_projects_folder",
+            self._default_folder_input.text().strip(),
+        )
         super().accept()
+
+    def _on_choose_default_folder(self) -> None:
+        start = self._default_folder_input.text().strip() or str(Path.home())
+        chosen = QFileDialog.getExistingDirectory(
+            self, "Default Projects Folder", start,
+        )
+        if chosen:
+            self._default_folder_input.setText(chosen)
+
+    def _on_open_default_folder(self) -> None:
+        path = self._default_folder_input.text().strip()
+        if not path:
+            return
+        if not Path(path).is_dir():
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+
+    def _on_cloud_combo_changed(self, index: int) -> None:
+        if self._cloud_combo is None:
+            return
+        data = self._cloud_combo.itemData(index)
+        if data:
+            self._default_folder_input.setText(str(data))
 
     def _update_connector_enabled(self, enabled: bool) -> None:
         self._conn_writes.setEnabled(enabled)

@@ -3,8 +3,8 @@
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QVariantAnimation, Signal
-from PySide6.QtGui import QAction, QCloseEvent, QColor, QIcon, QKeySequence, QShortcut
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QUrl, QVariantAnimation, Signal
+from PySide6.QtGui import QAction, QCloseEvent, QColor, QDesktopServices, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -24,6 +24,15 @@ from storyplanner.ui import theme
 
 from storyplanner import preferences, recent_projects
 from storyplanner.autosave import AutosaveManager
+from storyplanner.cloud_storage import (
+    LockInfo,
+    acquire_lock,
+    atomic_write_text,
+    classify_path,
+    current_lock_info,
+    release_lock,
+    write_conflict_copy,
+)
 from storyplanner.db import Database
 from storyplanner.settings import get_manager as get_settings
 from storyplanner.version_manager import VersionManager
@@ -250,10 +259,13 @@ class MainWindow(QMainWindow):
         self._project_id = project_id
         self._current_file: str | None = None  # kept for backward compat; use _set_current_file
         self._dirty = False
+        self._read_only = False
+        self._external_change_warned = False
         self._current_section: str = "Dashboard"
 
         self._autosave = AutosaveManager(db, project_id, parent=self)
         self._autosave.status_changed.connect(self._on_autosave_status)
+        self._autosave.external_change_detected.connect(self._on_external_change)
 
         self._versions = VersionManager(db, project_id, parent=self)
         self._versions.start()
@@ -510,6 +522,17 @@ class MainWindow(QMainWindow):
             f"color: {theme.TEXT_MUTED}; font-size: 10px; padding: 0 8px;"
         )
         console_layout.addWidget(self._save_status_label)
+        self._storage_label = QLabel("")
+        self._storage_label.setObjectName("storageLabel")
+        self._storage_label.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: 10px; padding: 0 8px;"
+        )
+        self._storage_label.setToolTip(
+            "Where this project lives. Cloud-synced folders (Dropbox, "
+            "Google Drive, iCloud, OneDrive) are treated as ordinary "
+            "synced filesystem paths."
+        )
+        console_layout.addWidget(self._storage_label)
         console_layout.addStretch(1)
         console_layout.addWidget(self._psyke_console, stretch=0)
         console_layout.addStretch(1)
@@ -1248,6 +1271,14 @@ class MainWindow(QMainWindow):
         save_as_action.triggered.connect(self._on_save_as)
         file_menu.addAction(save_as_action)
 
+        move_action = QAction("Move Project to Folder...", self)
+        move_action.triggered.connect(self._on_move_project)
+        file_menu.addAction(move_action)
+
+        open_folder_action = QAction("Open Project Folder", self)
+        open_folder_action.triggered.connect(self._on_open_project_folder)
+        file_menu.addAction(open_folder_action)
+
         file_menu.addSeparator()
 
         export_action = QAction("Export...", self)
@@ -1461,6 +1492,7 @@ class MainWindow(QMainWindow):
     # -- Menu action handlers ---------------------------------------------------
 
     def _on_new_project(self) -> None:
+        self._read_only = False
         project = self._db.create_project("Untitled")
         self._switch_project(project.id)
         self._set_active_section("Dashboard")
@@ -1601,11 +1633,12 @@ class MainWindow(QMainWindow):
 
     def _update_title(self) -> None:
         dirty_mark = " *" if self._dirty else ""
+        ro_mark = " [read-only]" if self._read_only else ""
         if self._current_file:
             name = Path(self._current_file).name
-            self.setWindowTitle(f"Logosforge \u2014 {name}{dirty_mark}")
+            self.setWindowTitle(f"Logosforge \u2014 {name}{dirty_mark}{ro_mark}")
         else:
-            self.setWindowTitle(f"Logosforge{dirty_mark}")
+            self.setWindowTitle(f"Logosforge{dirty_mark}{ro_mark}")
 
     def _on_open_project(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -1630,6 +1663,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Open Project", error)
             return
 
+        if not self._handle_existing_lock(path):
+            return
+
         new_project_id = import_json(self._db, data)
         self._switch_project(new_project_id, file_path=path)
         recent_projects.add(path)
@@ -1650,6 +1686,13 @@ class MainWindow(QMainWindow):
         data, _ = validate_import_data(raw)
         if data is None:
             return False
+
+        existing = current_lock_info(path)
+        if existing is not None and not existing.is_stale() and not existing.is_same_machine():
+            self._read_only = True
+        else:
+            self._read_only = False
+
         new_id = import_json(self._db, data)
         self._switch_project(new_id, file_path=path)
         recent_projects.add(path)
@@ -1660,10 +1703,11 @@ class MainWindow(QMainWindow):
         return True
 
     def _on_save_as(self) -> None:
+        start_dir = self._default_save_dir()
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Project As",
-            "",
+            start_dir,
             "JSON (*.json)",
         )
         if not path:
@@ -1672,15 +1716,113 @@ class MainWindow(QMainWindow):
             path += ".json"
 
         content = export_json(self._db, self._project_id)
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(content)
+        try:
+            atomic_write_text(path, content)
+        except OSError as e:
+            QMessageBox.warning(self, "Save As", f"Could not write file:\n{e}")
+            return
+
+        # Release the previous lock (if any) before switching paths.
+        if self._current_file and self._current_file != path:
+            release_lock(self._current_file)
 
         self._set_current_file(path)
         self._mark_clean()
+        try:
+            acquire_lock(path)
+        except OSError:
+            pass
         recent_projects.add(path)
         self._refresh_recent_menu()
         get_settings().set("last_project_path", str(Path(path).resolve()))
+        self._update_storage_indicator()
         QMessageBox.information(self, "Save As", f"Project saved to {path}")
+
+    def _on_move_project(self) -> None:
+        """Copy the current project to a chosen folder and switch to it.
+
+        The old file (and its lock) are left in place until the user removes
+        them — safer than auto-deleting cloud-synced files.  The recent list
+        is updated to point at the new location.
+        """
+        if not self._current_file:
+            QMessageBox.information(
+                self, "Move Project",
+                "Save the project first before moving it.",
+            )
+            return
+
+        start_dir = self._default_save_dir()
+        target_dir = QFileDialog.getExistingDirectory(
+            self, "Move Project to Folder", start_dir,
+        )
+        if not target_dir:
+            return
+
+        source = Path(self._current_file)
+        dest = Path(target_dir) / source.name
+        if dest.resolve() == source.resolve():
+            QMessageBox.information(
+                self, "Move Project",
+                "The selected folder is the project's current location.",
+            )
+            return
+        if dest.exists():
+            answer = QMessageBox.question(
+                self, "Move Project",
+                f"A file named '{dest.name}' already exists in that folder.\n\n"
+                "Overwrite it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+
+        try:
+            content = export_json(self._db, self._project_id)
+            atomic_write_text(dest, content)
+        except OSError as e:
+            QMessageBox.warning(self, "Move Project", f"Could not copy file:\n{e}")
+            return
+
+        release_lock(self._current_file)
+        old_path = self._current_file
+        new_path = str(dest)
+        self._set_current_file(new_path)
+        try:
+            acquire_lock(new_path)
+        except OSError:
+            pass
+        self._mark_clean()
+        recent_projects.rename(old_path, new_path)
+        self._refresh_recent_menu()
+        get_settings().set("last_project_path", str(Path(new_path).resolve()))
+        self._update_storage_indicator()
+        QMessageBox.information(
+            self, "Move Project",
+            f"Project now points to:\n{new_path}\n\n"
+            f"The original file at\n{old_path}\nis still on disk; "
+            "delete it manually when you're sure the move succeeded.",
+        )
+
+    def _on_open_project_folder(self) -> None:
+        if not self._current_file:
+            QMessageBox.information(
+                self, "Open Project Folder",
+                "Save the project first to open its folder.",
+            )
+            return
+        folder = Path(self._current_file).parent
+        url = QUrl.fromLocalFile(str(folder))
+        QDesktopServices.openUrl(url)
+
+    def _default_save_dir(self) -> str:
+        if self._current_file:
+            return str(Path(self._current_file).parent)
+        default = str(get_settings().get("default_projects_folder") or "")
+        if default and Path(default).is_dir():
+            return default
+        return ""
 
     def _reset_content(self, message: str) -> None:
         widget = QWidget()
@@ -1697,6 +1839,9 @@ class MainWindow(QMainWindow):
 
     def _switch_project(self, new_id: int, file_path: str | None = None) -> None:
         """Update all subsystems to point at *new_id*."""
+        # Release the lock on whatever project we were on before switching.
+        if self._current_file and self._current_file != file_path:
+            release_lock(self._current_file)
         self._project_id = new_id
         self._psyke_console.set_project(new_id)
         self._set_current_file(file_path)
@@ -1708,13 +1853,21 @@ class MainWindow(QMainWindow):
         self._cached_scenes_view = None
         self._cached_scene_entry_scene = None
         self._cached_scene_entry_ids = None
+        self._external_change_warned = False
+        if file_path:
+            try:
+                acquire_lock(file_path)
+            except OSError:
+                pass
         self._mark_clean()
+        self._update_storage_indicator()
 
     def _on_data_changed(self) -> None:
         self._dirty = True
         self._update_title()
-        self._autosave.mark_dirty()
-        self._versions.mark_dirty()
+        if not self._read_only:
+            self._autosave.mark_dirty()
+            self._versions.mark_dirty()
         self._assistant_panel.refresh_scenes()
         self._cached_scene_entry_scene = None
         self._cached_scene_entry_ids = None
@@ -1729,8 +1882,9 @@ class MainWindow(QMainWindow):
         """
         self._dirty = True
         self._update_title()
-        self._autosave.mark_dirty()
-        self._versions.mark_dirty()
+        if not self._read_only:
+            self._autosave.mark_dirty()
+            self._versions.mark_dirty()
         self._cached_scene_entry_scene = None
         self._cached_scene_entry_ids = None
         self._psyke_console.mark_index_dirty()
@@ -1769,6 +1923,110 @@ class MainWindow(QMainWindow):
         self._autosave.mark_clean()
         self._update_title()
 
+    # -- Lock & conflict handling --------------------------------------------
+
+    def _handle_existing_lock(self, path: str) -> bool:
+        """Return True if the project may be opened, False to cancel."""
+        info = current_lock_info(path)
+        if info is None or info.is_stale() or info.is_same_machine():
+            return True
+
+        when = ""
+        if info.timestamp > 0:
+            import datetime as _dt
+            when = _dt.datetime.fromtimestamp(info.timestamp).strftime(
+                "%Y-%m-%d %H:%M",
+            )
+
+        details = (
+            f"This project may already be open on another device.\n\n"
+            f"Device: {info.device or 'unknown'}\n"
+            f"User: {info.user or 'unknown'}\n"
+            f"Opened: {when or 'unknown'}\n\n"
+            "Open it anyway only if you're sure the other session has closed.\n"
+            "Otherwise, opening read-only is safer."
+        )
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle("Project May Be Open Elsewhere")
+        box.setText(details)
+        read_only_btn = box.addButton(
+            "Open Read-Only", QMessageBox.ButtonRole.AcceptRole,
+        )
+        anyway_btn = box.addButton(
+            "Open Anyway", QMessageBox.ButtonRole.DestructiveRole,
+        )
+        cancel_btn = box.addButton(
+            "Cancel", QMessageBox.ButtonRole.RejectRole,
+        )
+        box.setDefaultButton(read_only_btn)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is cancel_btn:
+            return False
+        self._read_only = clicked is read_only_btn
+        return True
+
+    def _on_external_change(self, path: str) -> None:
+        if self._external_change_warned:
+            return
+        self._external_change_warned = True
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle("Project Changed on Disk")
+        box.setText(
+            f"The project file changed externally since it was loaded:\n{path}\n\n"
+            "Saving now would overwrite those changes."
+        )
+        reload_btn = box.addButton(
+            "Reload from Disk", QMessageBox.ButtonRole.AcceptRole,
+        )
+        conflict_btn = box.addButton(
+            "Save Conflict Copy", QMessageBox.ButtonRole.ActionRole,
+        )
+        overwrite_btn = box.addButton(
+            "Overwrite", QMessageBox.ButtonRole.DestructiveRole,
+        )
+        cancel_btn = box.addButton(
+            "Cancel", QMessageBox.ButtonRole.RejectRole,
+        )
+        box.setDefaultButton(reload_btn)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is reload_btn:
+            self._external_change_warned = False
+            self.load_file_quiet(path)
+        elif clicked is conflict_btn:
+            dest = self._autosave.write_conflict_copy_now()
+            self._external_change_warned = False
+            if dest:
+                QMessageBox.information(
+                    self, "Conflict Copy",
+                    f"Your changes were saved to:\n{dest}\n\n"
+                    "Reload the project to see the on-disk version.",
+                )
+        elif clicked is overwrite_btn:
+            self._external_change_warned = False
+            self._autosave.force_next_save()
+            self._autosave.save_now()
+        else:
+            # Cancel — leave the warning latched so we don't pester repeatedly.
+            pass
+
+    def _update_storage_indicator(self) -> None:
+        if not hasattr(self, "_save_status_label"):
+            return
+        if not self._current_file:
+            self._storage_label_text = ""
+        else:
+            provider = classify_path(self._current_file)
+            badge = f"{provider}"
+            if self._read_only:
+                badge = f"{badge} (read-only)"
+            self._storage_label_text = badge
+        if hasattr(self, "_storage_label"):
+            self._storage_label.setText(self._storage_label_text)
+
     # -- Close event ---------------------------------------------------------
 
     def closeEvent(self, event: QCloseEvent) -> None:
@@ -1793,8 +2051,10 @@ class MainWindow(QMainWindow):
             elif answer == QMessageBox.StandardButton.Cancel:
                 event.ignore()
                 return
-        elif self._dirty and self._current_file:
+        elif self._dirty and self._current_file and not self._read_only:
             self._auto_save()
+        if self._current_file:
+            release_lock(self._current_file)
         event.accept()
 
     # -- Theme switching -----------------------------------------------------

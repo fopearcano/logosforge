@@ -44,6 +44,32 @@ def clean() -> list[str]:
     return valid
 
 
+def load_with_status() -> list[tuple[str, bool]]:
+    """Return (path, exists) tuples without removing missing entries."""
+    return [(p, Path(p).is_file()) for p in load()]
+
+
+def rename(old_path: str, new_path: str) -> None:
+    """Replace *old_path* with *new_path* in-place, preserving order."""
+    paths = load()
+    replaced = False
+    out: list[str] = []
+    for p in paths:
+        if p == old_path:
+            if not replaced and new_path not in out:
+                out.append(new_path)
+                replaced = True
+        elif p == new_path:
+            if not replaced:
+                out.append(new_path)
+                replaced = True
+        else:
+            out.append(p)
+    if not replaced:
+        out.insert(0, new_path)
+    _save(out[:MAX_RECENT])
+
+
 def _save(paths: list[str]) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     RECENT_FILE.write_text(json.dumps(paths, indent=2), encoding="utf-8")

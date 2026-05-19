@@ -32,6 +32,8 @@ DEFAULTS: dict[str, object] = {
     "connector_confirm_writes": True,
     "connector_disabled_actions": [],
     "assistant_api_timeout": 0,
+    "default_projects_folder": "",
+    "open_anyway_on_lock": False,
 }
 
 
