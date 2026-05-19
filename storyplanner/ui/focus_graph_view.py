@@ -88,6 +88,8 @@ _KIND_COLORS: dict[str, str] = {
     NODE_KIND_ACT: "#94a3b8",
     NODE_KIND_NOTE: "#ab47bc",
     NODE_KIND_OTHER: "#9e9e9e",
+    "wavefunction": "#ec4899",
+    "branch": "#f472b6",
 }
 
 _KIND_SHAPES: dict[str, str] = {
@@ -100,6 +102,8 @@ _KIND_SHAPES: dict[str, str] = {
     NODE_KIND_ACT: "act_band",
     NODE_KIND_NOTE: "small_circle",
     NODE_KIND_OTHER: "circle",
+    "wavefunction": "hexagon",
+    "branch": "small_circle",
 }
 
 # -- Semantic edge kinds ------------------------------------------------------
@@ -109,14 +113,123 @@ EDGE_MENTION = "mention"            # [[text-link]] reference
 EDGE_PSYKE_RELATION = "psyke_relation"   # PSYKE entry ↔ related entry
 EDGE_PARTICIPATION = "participation"     # scene ↔ character / place
 EDGE_CONTAINMENT = "containment"         # Act → Scene
+EDGE_QUANTUM = "quantum_branch"          # wavefunction → branch (in Quantum mode)
 
 EDGE_STYLE: dict[str, dict] = {
     EDGE_PARTICIPATION: {"color": "#4ade80", "width": 1.3, "dash": "solid"},
     EDGE_CONTAINMENT:   {"color": "#60a5fa", "width": 2.4, "dash": "solid"},
     EDGE_PSYKE_RELATION:{"color": "#c084fc", "width": 1.6, "dash": "solid"},
     EDGE_MENTION:       {"color": "#94a3b8", "width": 0.9, "dash": "dash"},
+    EDGE_QUANTUM:       {"color": "#f472b6", "width": 1.5, "dash": "dot"},
     EDGE_LINK:          {"color": "#4a5568", "width": 1.2, "dash": "solid"},
 }
+
+# -- Narrative modes ---------------------------------------------------------
+# A mode is a self-contained "view" of the graph: it dictates which kinds of
+# nodes and edges appear, how they are laid out, and which kinds are visually
+# prominent.  Modes are mutually exclusive (one at a time); MODE_ALL is the
+# permissive default that lets the Layers panel decide everything.
+
+MODE_ALL = "all"
+MODE_RELATIONSHIP = "relationship"
+MODE_THEME = "theme"
+MODE_STRUCTURE = "structure"
+MODE_QUANTUM = "quantum"
+MODE_PSYKE = "psyke"
+MODE_MEANING = "meaning"
+
+NODE_KIND_WAVEFUNCTION = "wavefunction"
+NODE_KIND_BRANCH = "branch"
+
+
+@dataclass(frozen=True)
+class ModeProfile:
+    """Self-contained recipe for one narrative-mode view of the graph."""
+    name: str
+    visible_kinds: frozenset[str]
+    visible_edge_types: frozenset[str]
+    layout: str  # "circular" | "linear_timeline" | "theme_centered" | "quantum_tree"
+    prominence: dict[str, float] = field(default_factory=dict)
+    meaning_overlay: bool = False
+    uses_quantum: bool = False
+    description: str = ""
+
+
+MODE_PROFILES: dict[str, ModeProfile] = {
+    MODE_ALL: ModeProfile(
+        name=MODE_ALL,
+        visible_kinds=frozenset(LAYER_KINDS),
+        visible_edge_types=frozenset({
+            EDGE_PARTICIPATION, EDGE_CONTAINMENT, EDGE_PSYKE_RELATION,
+            EDGE_MENTION, EDGE_LINK,
+        }),
+        layout="circular",
+        description="Full graph — Layers panel controls visibility.",
+    ),
+    MODE_RELATIONSHIP: ModeProfile(
+        name=MODE_RELATIONSHIP,
+        visible_kinds=frozenset({NODE_KIND_CHARACTER}),
+        visible_edge_types=frozenset({EDGE_PARTICIPATION, EDGE_PSYKE_RELATION, EDGE_MENTION}),
+        layout="circular",
+        prominence={NODE_KIND_CHARACTER: 1.15},
+        description="Character relations only.",
+    ),
+    MODE_THEME: ModeProfile(
+        name=MODE_THEME,
+        visible_kinds=frozenset({NODE_KIND_THEME, NODE_KIND_CHARACTER, NODE_KIND_SCENE}),
+        visible_edge_types=frozenset({EDGE_PSYKE_RELATION, EDGE_PARTICIPATION, EDGE_MENTION}),
+        layout="theme_centered",
+        prominence={NODE_KIND_THEME: 1.5},
+        description="Themes and the entries they touch.",
+    ),
+    MODE_STRUCTURE: ModeProfile(
+        name=MODE_STRUCTURE,
+        visible_kinds=frozenset({NODE_KIND_ACT, NODE_KIND_SCENE}),
+        visible_edge_types=frozenset({EDGE_CONTAINMENT}),
+        layout="linear_timeline",
+        prominence={NODE_KIND_ACT: 1.3},
+        description="Acts and scenes laid out as a story timeline.",
+    ),
+    MODE_QUANTUM: ModeProfile(
+        name=MODE_QUANTUM,
+        visible_kinds=frozenset({NODE_KIND_WAVEFUNCTION, NODE_KIND_BRANCH}),
+        visible_edge_types=frozenset({EDGE_QUANTUM}),
+        layout="quantum_tree",
+        prominence={NODE_KIND_WAVEFUNCTION: 1.4},
+        uses_quantum=True,
+        description="Active wavefunctions and their alternate branches.",
+    ),
+    MODE_PSYKE: ModeProfile(
+        name=MODE_PSYKE,
+        visible_kinds=frozenset({
+            NODE_KIND_THEME, NODE_KIND_LORE, NODE_KIND_OBJECT, NODE_KIND_OTHER,
+        }),
+        visible_edge_types=frozenset({EDGE_PSYKE_RELATION}),
+        layout="circular",
+        description="PSYKE semantic network (themes, lore, objects, other).",
+    ),
+    MODE_MEANING: ModeProfile(
+        name=MODE_MEANING,
+        visible_kinds=frozenset({
+            NODE_KIND_CHARACTER, NODE_KIND_SCENE, NODE_KIND_THEME, NODE_KIND_ACT,
+        }),
+        visible_edge_types=frozenset({
+            EDGE_PARTICIPATION, EDGE_CONTAINMENT, EDGE_PSYKE_RELATION,
+        }),
+        layout="circular",
+        meaning_overlay=True,
+        description="Symbolic resonance — state colors, importance, arcs.",
+    ),
+}
+
+MODE_ORDER: tuple[str, ...] = (
+    MODE_ALL, MODE_RELATIONSHIP, MODE_THEME, MODE_STRUCTURE,
+    MODE_QUANTUM, MODE_PSYKE, MODE_MEANING,
+)
+
+
+def get_mode_profile(mode: str) -> ModeProfile:
+    return MODE_PROFILES.get(mode, MODE_PROFILES[MODE_ALL])
 
 _PSYKE_SUBTYPE_MAP = {
     "character": NODE_KIND_CHARACTER,
@@ -550,6 +663,12 @@ class FocusGraphView(QWidget):
         self._active_layers: set[str] = set(LAYER_KINDS)
         self._layer_checks: dict[str, QCheckBox] = {}
         self._zoom: float = 1.0
+        # Narrative mode — controls layout, filters, and prominence.
+        self._mode: str = MODE_ALL
+        self._mode_buttons: dict[str, QPushButton] = {}
+        # Quantum data only loaded when entering Quantum mode.
+        self._quantum_nodes: dict[str, GraphNode] = {}
+        self._quantum_edges: list[GraphEdge] = []
 
         self._node_items: dict[str, object] = {}
         self._label_items: dict[str, QGraphicsSimpleTextItem] = {}
@@ -562,6 +681,34 @@ class FocusGraphView(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
+
+        # -- Mode selector (segmented buttons) -------------------------------
+        mode_bar = QWidget()
+        mode_bar.setObjectName("graphModeBar")
+        mb = QHBoxLayout(mode_bar)
+        mb.setContentsMargins(10, 4, 10, 4)
+        mb.setSpacing(2)
+        mb.addWidget(QLabel("Mode:"))
+        labels = {
+            MODE_ALL: "All",
+            MODE_RELATIONSHIP: "Relationship",
+            MODE_THEME: "Theme",
+            MODE_STRUCTURE: "Structure",
+            MODE_QUANTUM: "Quantum",
+            MODE_PSYKE: "PSYKE",
+            MODE_MEANING: "Meaning",
+        }
+        for mode in MODE_ORDER:
+            btn = QPushButton(labels[mode])
+            btn.setCheckable(True)
+            btn.setFlat(True)
+            btn.setToolTip(MODE_PROFILES[mode].description)
+            btn.clicked.connect(lambda _=False, m=mode: self._on_mode_changed(m))
+            mb.addWidget(btn)
+            self._mode_buttons[mode] = btn
+        self._mode_buttons[MODE_ALL].setChecked(True)
+        mb.addStretch()
+        outer.addWidget(mode_bar)
 
         # -- Toolbar ---------------------------------------------------------
         toolbar = QWidget()
@@ -725,6 +872,96 @@ class FocusGraphView(QWidget):
             cb.blockSignals(False)
         self._rebuild_view()
 
+    # -- Narrative mode ------------------------------------------------------
+
+    def _on_mode_changed(self, mode: str) -> None:
+        if mode not in MODE_PROFILES:
+            mode = MODE_ALL
+        self._mode = mode
+        profile = MODE_PROFILES[mode]
+
+        for m, btn in self._mode_buttons.items():
+            btn.blockSignals(True)
+            btn.setChecked(m == mode)
+            btn.blockSignals(False)
+
+        if mode == MODE_ALL:
+            target_layers = set(LAYER_KINDS)
+        else:
+            target_layers = set(profile.visible_kinds)
+        self._active_layers = target_layers
+        for kind, cb in self._layer_checks.items():
+            cb.blockSignals(True)
+            cb.setChecked(kind in target_layers)
+            cb.setEnabled(mode == MODE_ALL)
+            cb.blockSignals(False)
+
+        if profile.uses_quantum:
+            self._load_quantum_data()
+        else:
+            self._quantum_nodes = {}
+            self._quantum_edges = []
+
+        self._meaning_enabled = profile.meaning_overlay
+        if hasattr(self, "_meaning_check"):
+            self._meaning_check.blockSignals(True)
+            self._meaning_check.setChecked(profile.meaning_overlay)
+            self._meaning_check.setEnabled(mode == MODE_ALL)
+            self._meaning_check.blockSignals(False)
+
+        if self._skeleton_btn.isChecked() and mode != MODE_ALL:
+            self._skeleton_btn.blockSignals(True)
+            self._skeleton_btn.setChecked(False)
+            self._skeleton_btn.blockSignals(False)
+        self._skeleton_btn.setEnabled(mode == MODE_ALL)
+
+        self._rebuild_view()
+
+    def _load_quantum_data(self) -> None:
+        """Pull live wavefunctions + branches into graph nodes for Quantum mode."""
+        self._quantum_nodes = {}
+        self._quantum_edges = []
+        try:
+            from storyplanner.quantum_outliner import list_active_wavefunctions
+            wfs = list_active_wavefunctions(self._project_id)
+        except Exception:
+            return
+        for wf in wfs:
+            wf_id_raw = wf.get("wavefunction_id") if isinstance(wf, dict) else getattr(wf, "id", None)
+            anchor = wf.get("anchor") if isinstance(wf, dict) else getattr(wf, "anchor", "")
+            if not wf_id_raw:
+                continue
+            wf_node_id = f"Wavefunction:{wf_id_raw}"
+            self._quantum_nodes[wf_node_id] = GraphNode(
+                wf_node_id, "Wavefunction", 0, anchor or "wavefunction",
+                subtype=NODE_KIND_WAVEFUNCTION,
+            )
+            branches = wf.get("branches", []) if isinstance(wf, dict) else getattr(wf, "branches", [])
+            for branch in branches:
+                if isinstance(branch, dict):
+                    b_id_raw = branch.get("id")
+                    b_title = branch.get("title") or b_id_raw or "branch"
+                else:
+                    b_id_raw = getattr(branch, "id", None)
+                    b_title = getattr(branch, "title", None) or b_id_raw or "branch"
+                if not b_id_raw:
+                    continue
+                b_node_id = f"Branch:{b_id_raw}"
+                self._quantum_nodes[b_node_id] = GraphNode(
+                    b_node_id, "Branch", 0, b_title,
+                    subtype=NODE_KIND_BRANCH,
+                )
+                self._quantum_edges.append(
+                    GraphEdge(wf_node_id, b_node_id, edge_type=EDGE_QUANTUM),
+                )
+
+    def set_mode(self, mode: str) -> None:
+        """Public API: switch the narrative mode."""
+        self._on_mode_changed(mode)
+
+    def get_mode(self) -> str:
+        return self._mode
+
     # -- Zoom + culling ------------------------------------------------------
 
     def _on_zoom(self, zoom: float) -> None:
@@ -752,14 +989,39 @@ class FocusGraphView(QWidget):
         self._graph_data = build_graph_data(self._db, self._project_id)
         self._rebuild_view()
 
+    def _active_graph_data(self) -> GraphData | None:
+        """Return the GraphData backing the current mode.
+
+        In Quantum mode the graph is built from live wavefunctions/branches
+        and replaces the regular project graph entirely.  Otherwise the
+        regular project graph is used.
+        """
+        if self._mode == MODE_QUANTUM:
+            qdata = GraphData()
+            qdata.nodes = dict(self._quantum_nodes)
+            qdata.edges = list(self._quantum_edges)
+            for nid in qdata.nodes:
+                qdata.adjacency.setdefault(nid, set())
+            for e in qdata.edges:
+                qdata.adjacency.setdefault(e.source_id, set()).add(e.target_id)
+                qdata.adjacency.setdefault(e.target_id, set()).add(e.source_id)
+            return qdata
+        return self._graph_data
+
     def _rebuild_view(self) -> None:
         self._gscene.clear()
         self._node_items.clear()
         self._label_items.clear()
         self._edge_items.clear()
 
-        if not self._graph_data or not self._graph_data.nodes:
-            text = self._gscene.addSimpleText("No graph data. Add [[links]] or PSYKE relations.")
+        active = self._active_graph_data()
+
+        if not active or not active.nodes:
+            if self._mode == MODE_QUANTUM:
+                msg = "No active wavefunctions. Generate quantum branches first."
+            else:
+                msg = "No graph data. Add [[links]] or PSYKE relations."
+            text = self._gscene.addSimpleText(msg)
             text.setPos(0, 0)
             return
 
@@ -769,18 +1031,21 @@ class FocusGraphView(QWidget):
             text.setPos(0, 0)
             return
 
+        profile = MODE_PROFILES[self._mode]
+        visible_edges = profile.visible_edge_types
+
         temporal_active = None
-        if self._temporal_enabled:
+        if self._temporal_enabled and self._mode != MODE_QUANTUM:
             temporal_active = filter_by_scene_order(
-                self._db, self._project_id, self._graph_data, self._temporal_max_order,
+                self._db, self._project_id, active, self._temporal_max_order,
             )
 
-        if self._meaning_enabled:
+        if self._meaning_enabled and self._mode != MODE_QUANTUM:
             self._meaning_data = compute_meaning(self._db, self._project_id, visible)
         else:
             self._meaning_data = None
 
-        positions = self._layout_nodes(visible)
+        positions = self._layout_nodes(visible, data=active)
 
         if self._meaning_data:
             for arc_link in self._meaning_data.arc_links:
@@ -789,12 +1054,15 @@ class FocusGraphView(QWidget):
                 if src_pos and tgt_pos:
                     self._draw_arc_link(src_pos, tgt_pos, arc_link.plotline)
 
-        for edge in self._graph_data.edges:
-            if edge.source_id in visible and edge.target_id in visible:
-                src_pos = positions.get(edge.source_id)
-                tgt_pos = positions.get(edge.target_id)
-                if src_pos and tgt_pos:
-                    self._draw_edge(src_pos, tgt_pos, edge)
+        for edge in active.edges:
+            if edge.source_id not in visible or edge.target_id not in visible:
+                continue
+            if edge.edge_type not in visible_edges:
+                continue
+            src_pos = positions.get(edge.source_id)
+            tgt_pos = positions.get(edge.target_id)
+            if src_pos and tgt_pos:
+                self._draw_edge(src_pos, tgt_pos, edge)
 
         if self._meaning_data:
             for src_id, tgt_id in self._meaning_data.flow_pairs:
@@ -805,7 +1073,7 @@ class FocusGraphView(QWidget):
 
         for nid in visible:
             pos = positions[nid]
-            node = self._graph_data.nodes[nid]
+            node = active.nodes[nid]
             is_focal = (nid == self._focus_node)
             is_dimmed = (
                 temporal_active is not None
@@ -818,32 +1086,51 @@ class FocusGraphView(QWidget):
             self._draw_node(pos[0], pos[1], node, is_focal, is_dimmed, node_meaning)
 
     def _compute_visible_nodes(self) -> set[str]:
-        if not self._graph_data:
+        active = self._active_graph_data()
+        if not active:
             return set()
 
-        visible = set(self._graph_data.nodes.keys())
+        visible = set(active.nodes.keys())
 
-        if self._focus_node and self._focus_node in self._graph_data.nodes:
-            visible = get_neighborhood(self._graph_data, self._focus_node, self._hops)
+        if self._focus_node and self._focus_node in active.nodes:
+            visible = get_neighborhood(active, self._focus_node, self._hops)
 
         if self._type_filter != "All":
-            type_nodes = filter_by_type(self._graph_data, {self._type_filter})
+            type_nodes = filter_by_type(active, {self._type_filter})
             visible = visible & type_nodes
 
         # Layer mask — restrict to enabled semantic kinds.
         if self._active_layers != set(LAYER_KINDS):
-            layer_nodes = filter_by_layers(self._graph_data, self._active_layers)
+            layer_nodes = filter_by_layers(active, self._active_layers)
             visible = visible & layer_nodes
 
-        if self._temporal_enabled and not self._show_future:
+        if self._temporal_enabled and not self._show_future and self._mode != MODE_QUANTUM:
             temporal_active = filter_by_scene_order(
-                self._db, self._project_id, self._graph_data, self._temporal_max_order,
+                self._db, self._project_id, active, self._temporal_max_order,
             )
             visible = visible & temporal_active
 
         return visible
 
-    def _layout_nodes(self, visible: set[str]) -> dict[str, tuple[float, float]]:
+    def _layout_nodes(
+        self, visible: set[str], data: GraphData | None = None,
+    ) -> dict[str, tuple[float, float]]:
+        if data is None:
+            data = self._active_graph_data()
+        if not visible or data is None:
+            return {}
+        layout = MODE_PROFILES[self._mode].layout
+        if layout == "linear_timeline":
+            return self._layout_linear_timeline(visible, data)
+        if layout == "theme_centered":
+            return self._layout_theme_centered(visible, data)
+        if layout == "quantum_tree":
+            return self._layout_quantum_tree(visible, data)
+        return self._layout_circular(visible)
+
+    def _layout_circular(
+        self, visible: set[str],
+    ) -> dict[str, tuple[float, float]]:
         nodes_list = sorted(visible)
         count = len(nodes_list)
         if count == 0:
@@ -870,6 +1157,163 @@ class FocusGraphView(QWidget):
             positions[nid] = (x, y)
         return positions
 
+    def _layout_linear_timeline(
+        self, visible: set[str], data: GraphData,
+    ) -> dict[str, tuple[float, float]]:
+        """Acts on a top band, their scenes laid out left-to-right beneath."""
+        positions: dict[str, tuple[float, float]] = {}
+        scenes = self._db.get_all_scenes(self._project_id)
+        scene_order = {f"Scene:{s.id}": s.sort_order for s in scenes}
+        scene_act = {f"Scene:{s.id}": (s.act or "").strip() for s in scenes}
+
+        # Group visible scenes per act.
+        per_act: dict[str, list[str]] = {}
+        unassigned: list[str] = []
+        for nid in visible:
+            if not nid.startswith("Scene:"):
+                continue
+            act = scene_act.get(nid, "")
+            if act:
+                per_act.setdefault(act, []).append(nid)
+            else:
+                unassigned.append(nid)
+        for arr in per_act.values():
+            arr.sort(key=lambda n: scene_order.get(n, 0))
+        unassigned.sort(key=lambda n: scene_order.get(n, 0))
+
+        # Act nodes — order by their first scene's sort_order so the timeline
+        # progresses correctly across acts.
+        act_nodes_visible = [nid for nid in visible if nid.startswith("Act:")]
+        act_node_by_name: dict[str, str] = {}
+        for nid in act_nodes_visible:
+            node = data.nodes.get(nid)
+            if node:
+                act_node_by_name[node.name] = nid
+        act_names_ordered = sorted(
+            act_node_by_name.keys(),
+            key=lambda name: min(
+                (scene_order.get(s, 0) for s in per_act.get(name, [])),
+                default=10_000,
+            ),
+        )
+
+        x_step = 120.0
+        y_act = -80.0
+        y_scene = 60.0
+        x_cursor = 0.0
+        for act_name in act_names_ordered:
+            act_id = act_node_by_name[act_name]
+            scenes_for_act = per_act.get(act_name, [])
+            act_width = max(len(scenes_for_act) - 1, 0) * x_step
+            act_x = x_cursor + act_width / 2
+            positions[act_id] = (act_x, y_act)
+            for s_id in scenes_for_act:
+                positions[s_id] = (x_cursor, y_scene)
+                x_cursor += x_step
+            x_cursor += x_step * 0.5  # gap between acts
+
+        for s_id in unassigned:
+            positions[s_id] = (x_cursor, y_scene)
+            x_cursor += x_step
+
+        # Centre the whole strip on 0.
+        if positions:
+            xs = [p[0] for p in positions.values()]
+            shift = -(max(xs) + min(xs)) / 2
+            positions = {nid: (p[0] + shift, p[1]) for nid, p in positions.items()}
+
+        # Any leftover (non-scene non-act) visible nodes: ring around the centre.
+        leftover = [
+            nid for nid in visible if nid not in positions
+        ]
+        if leftover:
+            radius = max(_GRAPH_RADIUS, len(leftover) * 16)
+            for i, nid in enumerate(sorted(leftover)):
+                angle = 2 * math.pi * i / len(leftover) - math.pi / 2
+                positions[nid] = (
+                    radius * math.cos(angle), radius * math.sin(angle) + 200,
+                )
+        return positions
+
+    def _layout_theme_centered(
+        self, visible: set[str], data: GraphData,
+    ) -> dict[str, tuple[float, float]]:
+        """Themes anchored at the centre, satellites radiating out."""
+        themes = [
+            nid for nid in visible
+            if node_kind(data.nodes.get(nid, GraphNode("", "", 0, ""))) == NODE_KIND_THEME
+        ]
+        positions: dict[str, tuple[float, float]] = {}
+        if not themes:
+            return self._layout_circular(visible)
+        # Place themes on an inner circle.
+        inner_r = max(80.0, 30.0 * len(themes))
+        for i, nid in enumerate(sorted(themes)):
+            angle = 2 * math.pi * i / len(themes) - math.pi / 2
+            positions[nid] = (inner_r * math.cos(angle), inner_r * math.sin(angle))
+
+        # Satellites: orbit their nearest theme.
+        satellites = [n for n in visible if n not in positions]
+        theme_count = len(themes)
+        for j, nid in enumerate(sorted(satellites)):
+            theme_idx = j % theme_count
+            theme_id = sorted(themes)[theme_idx]
+            tx, ty = positions[theme_id]
+            # Spread around the theme.
+            local_angle = 2 * math.pi * (j // theme_count) / max(
+                1, math.ceil(len(satellites) / theme_count),
+            )
+            r = inner_r * 0.9
+            positions[nid] = (tx + r * math.cos(local_angle),
+                              ty + r * math.sin(local_angle))
+        return positions
+
+    def _layout_quantum_tree(
+        self, visible: set[str], data: GraphData,
+    ) -> dict[str, tuple[float, float]]:
+        """Wavefunctions across the top, their branches fanning down."""
+        wfs = [nid for nid in visible if nid.startswith("Wavefunction:")]
+        branches = [nid for nid in visible if nid.startswith("Branch:")]
+        positions: dict[str, tuple[float, float]] = {}
+        if not wfs:
+            return self._layout_circular(visible)
+
+        wf_step = 220.0
+        for i, wf_id in enumerate(sorted(wfs)):
+            positions[wf_id] = (i * wf_step, -100.0)
+
+        # Children of each wavefunction = branches it edges to.
+        for wf_id in wfs:
+            children = [
+                e.target_id for e in data.edges
+                if e.source_id == wf_id and e.target_id in visible
+            ]
+            children.sort()
+            wf_x, wf_y = positions[wf_id]
+            child_step = 80.0
+            child_width = max(0, len(children) - 1) * child_step
+            start_x = wf_x - child_width / 2
+            for k, ch in enumerate(children):
+                positions[ch] = (start_x + k * child_step, wf_y + 160.0)
+
+        # Centre on 0.
+        if positions:
+            xs = [p[0] for p in positions.values()]
+            shift = -(max(xs) + min(xs)) / 2
+            positions = {nid: (p[0] + shift, p[1]) for nid, p in positions.items()}
+
+        # Any orphan branch (no parent in visible set): ring outside.
+        leftover = [nid for nid in visible if nid not in positions]
+        if leftover:
+            radius = max(_GRAPH_RADIUS, len(leftover) * 14)
+            for i, nid in enumerate(sorted(leftover)):
+                angle = 2 * math.pi * i / len(leftover) - math.pi / 2
+                positions[nid] = (
+                    radius * math.cos(angle),
+                    radius * math.sin(angle) + 100,
+                )
+        return positions
+
     # -- Drawing -------------------------------------------------------------
 
     def _draw_node(
@@ -880,6 +1324,11 @@ class FocusGraphView(QWidget):
         radius = _FOCUS_RADIUS if is_focal else _NODE_RADIUS
         kind = node_kind(node)
         color_hex = _KIND_COLORS.get(kind, "#9e9e9e")
+
+        # Mode-specific prominence multiplier — used to make certain kinds
+        # visually dominant (e.g. themes in Theme mode, acts in Structure).
+        prom = MODE_PROFILES[self._mode].prominence.get(kind, 1.0)
+        radius = radius * prom
 
         if meaning:
             radius += importance_radius_delta(meaning.importance)
