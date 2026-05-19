@@ -36,6 +36,14 @@ from PySide6.QtGui import QPolygonF
 from PySide6.QtCore import QPointF
 
 from storyplanner.db import Database
+from storyplanner.graph_gravity import (
+    GRAVITY_GLOW_THRESHOLD,
+    StoryGravity,
+    compute_gravity,
+    gravity_centrality_pull,
+    gravity_glow_alpha,
+    gravity_radius_multiplier,
+)
 from storyplanner.graph_meaning import (
     MeaningData,
     NodeMeaning,
@@ -669,6 +677,9 @@ class FocusGraphView(QWidget):
         # Quantum data only loaded when entering Quantum mode.
         self._quantum_nodes: dict[str, GraphNode] = {}
         self._quantum_edges: list[GraphEdge] = []
+        # Story Gravity — narrative-importance weights per node.
+        self._gravity_enabled: bool = True
+        self._gravity_map: dict[str, StoryGravity] = {}
 
         self._node_items: dict[str, object] = {}
         self._label_items: dict[str, QGraphicsSimpleTextItem] = {}
@@ -772,6 +783,16 @@ class FocusGraphView(QWidget):
         self._meaning_check.setToolTip("Show narrative insight: state, importance, arcs")
         self._meaning_check.toggled.connect(self._on_meaning_toggled)
         tb.addWidget(self._meaning_check)
+
+        tb.addSpacing(8)
+
+        self._gravity_check = QCheckBox("Gravity")
+        self._gravity_check.setChecked(True)
+        self._gravity_check.setToolTip(
+            "Story Gravity: protagonists, themes and climaxes pull the graph."
+        )
+        self._gravity_check.toggled.connect(self._on_gravity_toggled)
+        tb.addWidget(self._gravity_check)
 
         tb.addSpacing(12)
 
@@ -1045,6 +1066,11 @@ class FocusGraphView(QWidget):
         else:
             self._meaning_data = None
 
+        if self._gravity_enabled:
+            self._gravity_map = compute_gravity(self._db, self._project_id, active)
+        else:
+            self._gravity_map = {}
+
         positions = self._layout_nodes(visible, data=active)
 
         if self._meaning_data:
@@ -1136,6 +1162,13 @@ class FocusGraphView(QWidget):
         if count == 0:
             return {}
 
+        def _pull(nid: str) -> float:
+            """Story-Gravity centrality multiplier — 1.0 if gravity off."""
+            if not self._gravity_enabled:
+                return 1.0
+            g = self._gravity_map.get(nid)
+            return gravity_centrality_pull(g) if g else 1.0
+
         if self._focus_node and self._focus_node in visible:
             center_id = self._focus_node
             others = [n for n in nodes_list if n != center_id]
@@ -1143,18 +1176,16 @@ class FocusGraphView(QWidget):
             radius = max(_GRAPH_RADIUS, len(others) * 18)
             for i, nid in enumerate(others):
                 angle = 2 * math.pi * i / max(len(others), 1) - math.pi / 2
-                x = radius * math.cos(angle)
-                y = radius * math.sin(angle)
-                positions[nid] = (x, y)
+                r = radius * _pull(nid)
+                positions[nid] = (r * math.cos(angle), r * math.sin(angle))
             return positions
 
         radius = max(_GRAPH_RADIUS, count * 18)
         positions: dict[str, tuple[float, float]] = {}
         for i, nid in enumerate(nodes_list):
             angle = 2 * math.pi * i / count - math.pi / 2
-            x = radius * math.cos(angle)
-            y = radius * math.sin(angle)
-            positions[nid] = (x, y)
+            r = radius * _pull(nid)
+            positions[nid] = (r * math.cos(angle), r * math.sin(angle))
         return positions
 
     def _layout_linear_timeline(
@@ -1330,6 +1361,13 @@ class FocusGraphView(QWidget):
         prom = MODE_PROFILES[self._mode].prominence.get(kind, 1.0)
         radius = radius * prom
 
+        gravity = (
+            self._gravity_map.get(node.node_id)
+            if self._gravity_enabled else None
+        )
+        if gravity is not None:
+            radius *= gravity_radius_multiplier(gravity)
+
         if meaning:
             radius += importance_radius_delta(meaning.importance)
             if meaning.state_warmth != "neutral" and node.etype == "Character":
@@ -1341,6 +1379,9 @@ class FocusGraphView(QWidget):
 
         if meaning and meaning.is_dead_zone:
             color.setHsvF(color.hueF(), color.saturationF() * 0.5, color.valueF())
+
+        if gravity is not None and gravity.total >= GRAVITY_GLOW_THRESHOLD and not is_dimmed:
+            self._draw_gravity_halo(x, y, radius, color_hex, gravity)
 
         if is_dimmed:
             color.setAlphaF(_DIM_OPACITY)
@@ -1449,6 +1490,23 @@ class FocusGraphView(QWidget):
         arrow.setZValue(-1)
         self._gscene.addItem(arrow)
 
+    def _draw_gravity_halo(
+        self, x: float, y: float, radius: float,
+        color_hex: str, gravity: StoryGravity,
+    ) -> None:
+        """Translucent halo behind high-gravity nodes."""
+        alpha = gravity_glow_alpha(gravity)
+        if alpha <= 0:
+            return
+        halo_r = radius * 1.7
+        halo = QGraphicsEllipseItem(x - halo_r, y - halo_r, halo_r * 2, halo_r * 2)
+        glow_color = QColor(color_hex)
+        glow_color.setAlphaF(alpha)
+        halo.setBrush(QBrush(glow_color))
+        halo.setPen(QPen(Qt.PenStyle.NoPen))
+        halo.setZValue(-2)
+        self._gscene.addItem(halo)
+
     # -- Interaction ---------------------------------------------------------
 
     def _on_node_click(self, node_id: str) -> None:
@@ -1526,6 +1584,16 @@ class FocusGraphView(QWidget):
     def _on_future_toggled(self, checked: bool) -> None:
         self._show_future = checked
         self._rebuild_view()
+
+    def _on_gravity_toggled(self, checked: bool) -> None:
+        self._gravity_enabled = checked
+        self._rebuild_view()
+
+    def is_gravity_enabled(self) -> bool:
+        return self._gravity_enabled
+
+    def get_gravity_map(self) -> dict[str, StoryGravity]:
+        return dict(self._gravity_map)
 
     def _on_meaning_toggled(self, checked: bool) -> None:
         self._meaning_enabled = checked
