@@ -36,6 +36,16 @@ from PySide6.QtGui import QPolygonF
 from PySide6.QtCore import QPointF
 
 from storyplanner.db import Database
+from storyplanner.graph_flow import (
+    FLOW_ACTS,
+    FLOW_ARC,
+    FLOW_CAUSAL,
+    FLOW_TIMELINE,
+    FLOW_TYPES,
+    FlowSegment,
+    band_color,
+    compute_flow,
+)
 from storyplanner.graph_gravity import (
     GRAVITY_GLOW_THRESHOLD,
     StoryGravity,
@@ -680,6 +690,9 @@ class FocusGraphView(QWidget):
         # Story Gravity — narrative-importance weights per node.
         self._gravity_enabled: bool = True
         self._gravity_map: dict[str, StoryGravity] = {}
+        # Temporal narrative flow — story-order overlay.
+        self._flow_enabled: bool = False
+        self._flow_type: str = FLOW_TIMELINE
 
         self._node_items: dict[str, object] = {}
         self._label_items: dict[str, QGraphicsSimpleTextItem] = {}
@@ -793,6 +806,25 @@ class FocusGraphView(QWidget):
         )
         self._gravity_check.toggled.connect(self._on_gravity_toggled)
         tb.addWidget(self._gravity_check)
+
+        tb.addSpacing(8)
+
+        self._flow_check = QCheckBox("Flow")
+        self._flow_check.setToolTip(
+            "Temporal narrative flow — draws the story's order as a path"
+            " through the scenes."
+        )
+        self._flow_check.toggled.connect(self._on_flow_toggled)
+        tb.addWidget(self._flow_check)
+
+        self._flow_combo = QComboBox()
+        self._flow_combo.addItem("Timeline", userData=FLOW_TIMELINE)
+        self._flow_combo.addItem("Acts", userData=FLOW_ACTS)
+        self._flow_combo.addItem("Arc", userData=FLOW_ARC)
+        self._flow_combo.addItem("Causal", userData=FLOW_CAUSAL)
+        self._flow_combo.setEnabled(False)
+        self._flow_combo.currentIndexChanged.connect(self._on_flow_type_changed)
+        tb.addWidget(self._flow_combo)
 
         tb.addSpacing(12)
 
@@ -1110,6 +1142,72 @@ class FocusGraphView(QWidget):
                 self._meaning_data.node_meanings.get(nid) if self._meaning_data else None
             )
             self._draw_node(pos[0], pos[1], node, is_focal, is_dimmed, node_meaning)
+
+        if self._flow_enabled and self._mode != MODE_QUANTUM:
+            self._draw_flow_overlay(positions, visible)
+
+    def _draw_flow_overlay(
+        self,
+        positions: dict[str, tuple[float, float]],
+        visible: set[str],
+    ) -> None:
+        """Draw the temporal narrative flow overlay above the existing graph."""
+        from PySide6.QtGui import QPainterPath
+        try:
+            segments = compute_flow(self._db, self._project_id, self._flow_type)
+        except Exception:
+            return
+        if not segments:
+            return
+
+        # Determine an arc apex offset for Arc flow (above the scene strip).
+        arc_apex = 0.0
+        if self._flow_type == FLOW_ARC and positions:
+            ys = [p[1] for nid, p in positions.items() if nid.startswith("Scene:")]
+            if ys:
+                arc_apex = min(ys) - 180.0
+
+        n_segs = len(segments)
+        for i, seg in enumerate(segments):
+            src_key = f"Scene:{seg.from_scene_id}"
+            tgt_key = f"Scene:{seg.to_scene_id}"
+            if src_key not in visible or tgt_key not in visible:
+                continue
+            src = positions.get(src_key)
+            tgt = positions.get(tgt_key)
+            if src is None or tgt is None:
+                continue
+
+            color = QColor(band_color(seg.band))
+            color.setAlphaF(0.7)
+
+            path = QPainterPath()
+            path.moveTo(src[0], src[1])
+            if self._flow_type == FLOW_ARC:
+                # Quadratic curve whose control point arches upward; midway
+                # segments arch the highest (climax over midpoint).
+                progress = i / max(n_segs - 1, 1) if n_segs > 1 else 0.5
+                arc_factor = 1.0 - abs(progress - 0.5) * 2.0  # 1 at midpoint, 0 at ends
+                mid_x = (src[0] + tgt[0]) / 2
+                ctrl_y = ((src[1] + tgt[1]) / 2) + (arc_apex * arc_factor)
+                path.quadTo(mid_x, ctrl_y, tgt[0], tgt[1])
+            else:
+                mid_x = (src[0] + tgt[0]) / 2
+                mid_y = (src[1] + tgt[1]) / 2 - 28.0  # gentle upward bow
+                path.quadTo(mid_x, mid_y, tgt[0], tgt[1])
+
+            item = QGraphicsPathItem(path)
+            pen = QPen(color, 2.6)
+            if self._flow_type == FLOW_CAUSAL:
+                pen.setStyle(Qt.PenStyle.SolidLine)
+                pen.setWidthF(2.0)
+            elif self._flow_type == FLOW_ACTS and seg.act_boundary:
+                pen.setStyle(Qt.PenStyle.DashLine)
+                pen.setWidthF(3.2)
+            item.setPen(pen)
+            item.setBrush(QBrush(Qt.GlobalColor.transparent))
+            item.setZValue(-3)  # below nodes & gravity halos
+            self._gscene.addItem(item)
 
     def _compute_visible_nodes(self) -> set[str]:
         active = self._active_graph_data()
@@ -1594,6 +1692,41 @@ class FocusGraphView(QWidget):
 
     def get_gravity_map(self) -> dict[str, StoryGravity]:
         return dict(self._gravity_map)
+
+    # -- Temporal narrative flow --------------------------------------------
+
+    def _on_flow_toggled(self, checked: bool) -> None:
+        self._flow_enabled = checked
+        self._flow_combo.setEnabled(checked)
+        self._rebuild_view()
+
+    def _on_flow_type_changed(self, _idx: int) -> None:
+        value = self._flow_combo.currentData() or FLOW_TIMELINE
+        self._flow_type = value
+        if self._flow_enabled:
+            self._rebuild_view()
+
+    def is_flow_enabled(self) -> bool:
+        return self._flow_enabled
+
+    def get_flow_type(self) -> str:
+        return self._flow_type
+
+    def set_flow(self, enabled: bool, flow_type: str | None = None) -> None:
+        """Public API: enable/disable the flow overlay and pick its type."""
+        if flow_type and flow_type in FLOW_TYPES:
+            self._flow_type = flow_type
+            idx = self._flow_combo.findData(flow_type)
+            if idx >= 0:
+                self._flow_combo.blockSignals(True)
+                self._flow_combo.setCurrentIndex(idx)
+                self._flow_combo.blockSignals(False)
+        self._flow_check.blockSignals(True)
+        self._flow_check.setChecked(enabled)
+        self._flow_check.blockSignals(False)
+        self._flow_enabled = enabled
+        self._flow_combo.setEnabled(enabled)
+        self._rebuild_view()
 
     def _on_meaning_toggled(self, checked: bool) -> None:
         self._meaning_enabled = checked
