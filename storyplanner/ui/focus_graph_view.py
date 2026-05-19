@@ -19,7 +19,9 @@ from PySide6.QtWidgets import (
     QFrame,
     QGraphicsEllipseItem,
     QGraphicsLineItem,
+    QGraphicsPathItem,
     QGraphicsPolygonItem,
+    QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsSimpleTextItem,
     QGraphicsView,
@@ -52,12 +54,104 @@ _TYPE_COLORS = {
     "PSYKE": "#4ade80",
 }
 
+# -- Semantic node kinds (subtype-aware) --------------------------------------
+# Visible node kinds the user can toggle via the Layers panel. Each kind maps
+# to a distinct shape + color so types are recognizable at a glance.
+
+NODE_KIND_CHARACTER = "character"
+NODE_KIND_PLACE = "place"
+NODE_KIND_OBJECT = "object"
+NODE_KIND_THEME = "theme"
+NODE_KIND_LORE = "lore"
+NODE_KIND_SCENE = "scene"
+NODE_KIND_ACT = "act"
+NODE_KIND_NOTE = "note"
+NODE_KIND_OTHER = "other"
+
+LAYER_KINDS: tuple[str, ...] = (
+    NODE_KIND_CHARACTER, NODE_KIND_PLACE, NODE_KIND_OBJECT,
+    NODE_KIND_THEME, NODE_KIND_LORE, NODE_KIND_SCENE,
+    NODE_KIND_ACT, NODE_KIND_NOTE, NODE_KIND_OTHER,
+)
+
+SKELETON_LAYERS: frozenset[str] = frozenset({
+    NODE_KIND_CHARACTER, NODE_KIND_THEME, NODE_KIND_ACT,
+})
+
+_KIND_COLORS: dict[str, str] = {
+    NODE_KIND_CHARACTER: "#42a5f5",
+    NODE_KIND_PLACE: "#66bb6a",
+    NODE_KIND_OBJECT: "#f59e0b",
+    NODE_KIND_THEME: "#c084fc",
+    NODE_KIND_LORE: "#22d3ee",
+    NODE_KIND_SCENE: "#ffa726",
+    NODE_KIND_ACT: "#94a3b8",
+    NODE_KIND_NOTE: "#ab47bc",
+    NODE_KIND_OTHER: "#9e9e9e",
+}
+
+_KIND_SHAPES: dict[str, str] = {
+    NODE_KIND_CHARACTER: "circle",
+    NODE_KIND_PLACE: "square",
+    NODE_KIND_OBJECT: "triangle",
+    NODE_KIND_THEME: "diamond",
+    NODE_KIND_LORE: "hexagon",
+    NODE_KIND_SCENE: "rounded_rect",
+    NODE_KIND_ACT: "act_band",
+    NODE_KIND_NOTE: "small_circle",
+    NODE_KIND_OTHER: "circle",
+}
+
+# -- Semantic edge kinds ------------------------------------------------------
+
+EDGE_LINK = "link"                  # generic / unknown
+EDGE_MENTION = "mention"            # [[text-link]] reference
+EDGE_PSYKE_RELATION = "psyke_relation"   # PSYKE entry ↔ related entry
+EDGE_PARTICIPATION = "participation"     # scene ↔ character / place
+EDGE_CONTAINMENT = "containment"         # Act → Scene
+
+EDGE_STYLE: dict[str, dict] = {
+    EDGE_PARTICIPATION: {"color": "#4ade80", "width": 1.3, "dash": "solid"},
+    EDGE_CONTAINMENT:   {"color": "#60a5fa", "width": 2.4, "dash": "solid"},
+    EDGE_PSYKE_RELATION:{"color": "#c084fc", "width": 1.6, "dash": "solid"},
+    EDGE_MENTION:       {"color": "#94a3b8", "width": 0.9, "dash": "dash"},
+    EDGE_LINK:          {"color": "#4a5568", "width": 1.2, "dash": "solid"},
+}
+
+_PSYKE_SUBTYPE_MAP = {
+    "character": NODE_KIND_CHARACTER,
+    "place": NODE_KIND_PLACE,
+    "object": NODE_KIND_OBJECT,
+    "theme": NODE_KIND_THEME,
+    "lore": NODE_KIND_LORE,
+    "other": NODE_KIND_OTHER,
+}
+
+
+def node_kind(node: "GraphNode") -> str:
+    """Resolve the semantic kind of a node — uses subtype when available."""
+    if node.subtype:
+        return node.subtype
+    etype = (node.etype or "").lower()
+    if etype in {NODE_KIND_CHARACTER, NODE_KIND_PLACE, NODE_KIND_SCENE,
+                 NODE_KIND_NOTE, NODE_KIND_ACT}:
+        return etype
+    if node.etype == "PSYKE":
+        return NODE_KIND_OTHER
+    return NODE_KIND_OTHER
+
+
 _NODE_RADIUS = 22
 _FOCUS_RADIUS = 28
 _GRAPH_RADIUS = 200
 _EDGE_COLOR = "#4a5568"
 _EDGE_HIGHLIGHT = "#4ade80"
 _DIM_OPACITY = 0.25
+
+# Zoom thresholds — below these, parts of the graph are progressively hidden.
+_ZOOM_HIDE_LABELS = 0.6
+_ZOOM_HIDE_MENTIONS = 0.5
+_ZOOM_HIDE_WEAK_EDGES = 0.3
 
 _ARC_PALETTE = ["#42a5f5", "#ab47bc", "#ef5350", "#26a69a", "#ffa726", "#78909c"]
 
@@ -75,6 +169,7 @@ class GraphNode:
     etype: str
     entity_id: int
     name: str
+    subtype: str = ""  # e.g. "theme", "lore", "object" for PSYKE entries
 
 
 @dataclass
@@ -83,6 +178,7 @@ class GraphEdge:
 
     source_id: str
     target_id: str
+    edge_type: str = EDGE_LINK
 
 
 @dataclass
@@ -95,7 +191,8 @@ class GraphData:
 
 
 def build_graph_data(db: Database, project_id: int) -> GraphData:
-    """Build structured graph data from DB link graph + PSYKE relations."""
+    """Build structured graph data from DB link graph + PSYKE relations,
+    enriched with subtypes, Act clusters, and semantic edge types."""
     raw_nodes, raw_edges = db.build_link_graph(project_id)
 
     data = GraphData()
@@ -108,17 +205,25 @@ def build_graph_data(db: Database, project_id: int) -> GraphData:
     psyke_entries = db.get_all_psyke_entries(project_id)
     for entry in psyke_entries:
         node_id = f"PSYKE:{entry.id}"
+        sub = _PSYKE_SUBTYPE_MAP.get((entry.entry_type or "").lower(), NODE_KIND_OTHER)
         if node_id not in data.nodes:
-            data.nodes[node_id] = GraphNode(node_id, "PSYKE", entry.id, entry.name)
+            data.nodes[node_id] = GraphNode(
+                node_id, "PSYKE", entry.id, entry.name, subtype=sub,
+            )
             data.adjacency.setdefault(node_id, set())
+        else:
+            data.nodes[node_id].subtype = sub
 
         related = db.get_related_psyke_entries(entry.id)
         for rel in related:
             rel_id = f"PSYKE:{rel.id}"
+            rel_sub = _PSYKE_SUBTYPE_MAP.get((rel.entry_type or "").lower(), NODE_KIND_OTHER)
             if rel_id not in data.nodes:
-                data.nodes[rel_id] = GraphNode(rel_id, "PSYKE", rel.id, rel.name)
+                data.nodes[rel_id] = GraphNode(
+                    rel_id, "PSYKE", rel.id, rel.name, subtype=rel_sub,
+                )
                 data.adjacency.setdefault(rel_id, set())
-            data.edges.append(GraphEdge(node_id, rel_id))
+            data.edges.append(GraphEdge(node_id, rel_id, edge_type=EDGE_PSYKE_RELATION))
             data.adjacency.setdefault(node_id, set()).add(rel_id)
             data.adjacency.setdefault(rel_id, set()).add(node_id)
 
@@ -130,11 +235,91 @@ def build_graph_data(db: Database, project_id: int) -> GraphData:
         src_id = name_to_id.get(src_name.lower())
         tgt_id = name_to_id.get(tgt_name.lower())
         if src_id and tgt_id:
-            data.edges.append(GraphEdge(src_id, tgt_id))
+            data.edges.append(GraphEdge(src_id, tgt_id, edge_type=EDGE_MENTION))
             data.adjacency.setdefault(src_id, set()).add(tgt_id)
             data.adjacency.setdefault(tgt_id, set()).add(src_id)
 
+    # Participation: scene ↔ character / place from the junction tables.
+    # To avoid polluting the graph with isolated scenes (no participants, no
+    # mentions, no act), we only ADD a scene node here if it has at least one
+    # participant, place, or act assignment. Scenes already in data.nodes
+    # (because they were referenced via [[link]]) are kept as-is.
+    char_name_by_id = {c.id: c.name for c in db.get_all_characters(project_id)}
+    place_name_by_id = {p.id: p.name for p in db.get_all_places(project_id)}
+    scenes = db.get_all_scenes(project_id)
+    for scene in scenes:
+        scene_id = f"Scene:{scene.id}"
+        char_ids = db.get_scene_character_ids(scene.id)
+        place_ids = db.get_scene_place_ids(scene.id)
+        has_act = bool((scene.act or "").strip())
+        has_participants = bool(char_ids) or bool(place_ids) or has_act
+        already_in_graph = scene_id in data.nodes
+        if not already_in_graph and not has_participants:
+            continue
+        if not already_in_graph:
+            data.nodes[scene_id] = GraphNode(scene_id, "Scene", scene.id, scene.title)
+            data.adjacency.setdefault(scene_id, set())
+        for cid in char_ids:
+            char_id = f"Character:{cid}"
+            if char_id not in data.nodes:
+                name = char_name_by_id.get(cid, f"Character {cid}")
+                data.nodes[char_id] = GraphNode(char_id, "Character", cid, name)
+                data.adjacency.setdefault(char_id, set())
+            data.edges.append(GraphEdge(scene_id, char_id, edge_type=EDGE_PARTICIPATION))
+            data.adjacency.setdefault(scene_id, set()).add(char_id)
+            data.adjacency.setdefault(char_id, set()).add(scene_id)
+        for pid in place_ids:
+            place_id = f"Place:{pid}"
+            if place_id not in data.nodes:
+                name = place_name_by_id.get(pid, f"Place {pid}")
+                data.nodes[place_id] = GraphNode(place_id, "Place", pid, name)
+                data.adjacency.setdefault(place_id, set())
+            data.edges.append(GraphEdge(scene_id, place_id, edge_type=EDGE_PARTICIPATION))
+            data.adjacency.setdefault(scene_id, set()).add(place_id)
+            data.adjacency.setdefault(place_id, set()).add(scene_id)
+
+    # Act cluster nodes — one per distinct non-empty scene.act.  We only emit
+    # an act node if at least one scene with that act ended up in the graph.
+    act_order: dict[str, int] = {}
+    for scene in scenes:
+        scene_id = f"Scene:{scene.id}"
+        if scene_id not in data.nodes:
+            continue
+        act = (scene.act or "").strip()
+        if act and act not in act_order:
+            act_order[act] = len(act_order) + 1
+    for act, idx in act_order.items():
+        act_id = f"Act:{idx}"
+        data.nodes[act_id] = GraphNode(act_id, "Act", idx, act, subtype=NODE_KIND_ACT)
+        data.adjacency.setdefault(act_id, set())
+    for scene in scenes:
+        scene_id = f"Scene:{scene.id}"
+        if scene_id not in data.nodes:
+            continue
+        act = (scene.act or "").strip()
+        if not act:
+            continue
+        act_id = f"Act:{act_order[act]}"
+        data.edges.append(GraphEdge(act_id, scene_id, edge_type=EDGE_CONTAINMENT))
+        data.adjacency[act_id].add(scene_id)
+        data.adjacency.setdefault(scene_id, set()).add(act_id)
+
     return data
+
+
+def default_skeleton_layers() -> frozenset[str]:
+    """The minimal narrative skeleton: characters, themes, acts."""
+    return SKELETON_LAYERS
+
+
+def filter_by_layers(data: GraphData, layers: set[str]) -> set[str]:
+    """Return node IDs whose semantic kind is in *layers*.
+
+    Empty set means 'no layers active' → returns empty.
+    """
+    if not layers:
+        return set()
+    return {nid for nid, node in data.nodes.items() if node_kind(node) in layers}
 
 
 def get_neighborhood(data: GraphData, node_id: str, hops: int = 1) -> set[str]:
@@ -195,16 +380,14 @@ def filter_by_scene_order(
 # UI Widget
 # =============================================================================
 
-class _FocusNode(QGraphicsEllipseItem):
-    """Clickable, hoverable graph node."""
+class _NodeInteractionMixin:
+    """Click + hover behaviour shared across node shapes."""
 
-    def __init__(
-        self, x: float, y: float, radius: float,
-        node_id: str,
-        on_click: Callable[[str], None] | None = None,
-        on_hover: Callable[[str, bool], None] | None = None,
+    def _init_interaction(
+        self, node_id: str,
+        on_click: Callable[[str], None] | None,
+        on_hover: Callable[[str, bool], None] | None,
     ) -> None:
-        super().__init__(x - radius, y - radius, radius * 2, radius * 2)
         self.node_id = node_id
         self._on_click = on_click
         self._on_hover = on_hover
@@ -225,6 +408,116 @@ class _FocusNode(QGraphicsEllipseItem):
         if self._on_hover:
             self._on_hover(self.node_id, False)
         super().hoverLeaveEvent(event)
+
+
+class _FocusNode(_NodeInteractionMixin, QGraphicsEllipseItem):
+    """Clickable, hoverable graph node — ellipse shape (back-compat)."""
+
+    def __init__(
+        self, x: float, y: float, radius: float,
+        node_id: str,
+        on_click: Callable[[str], None] | None = None,
+        on_hover: Callable[[str, bool], None] | None = None,
+    ) -> None:
+        QGraphicsEllipseItem.__init__(
+            self, x - radius, y - radius, radius * 2, radius * 2,
+        )
+        self._init_interaction(node_id, on_click, on_hover)
+
+
+class _PolygonNode(_NodeInteractionMixin, QGraphicsPolygonItem):
+    """Clickable, hoverable polygon node (triangle, diamond, hexagon)."""
+
+    def __init__(
+        self, polygon: "QPolygonF",
+        node_id: str,
+        on_click: Callable[[str], None] | None = None,
+        on_hover: Callable[[str, bool], None] | None = None,
+    ) -> None:
+        QGraphicsPolygonItem.__init__(self, polygon)
+        self._init_interaction(node_id, on_click, on_hover)
+
+
+class _RectNode(_NodeInteractionMixin, QGraphicsRectItem):
+    """Clickable, hoverable rect node (square, scene)."""
+
+    def __init__(
+        self, x: float, y: float, w: float, h: float,
+        node_id: str,
+        on_click: Callable[[str], None] | None = None,
+        on_hover: Callable[[str, bool], None] | None = None,
+    ) -> None:
+        QGraphicsRectItem.__init__(self, x - w / 2, y - h / 2, w, h)
+        self._init_interaction(node_id, on_click, on_hover)
+
+
+def _make_shape_node(
+    kind: str, x: float, y: float, radius: float, node_id: str,
+    on_click: Callable[[str], None] | None,
+    on_hover: Callable[[str, bool], None] | None,
+):
+    """Factory: return a node graphics-item matching the kind's shape."""
+    shape = _KIND_SHAPES.get(kind, "circle")
+
+    if shape == "small_circle":
+        return _FocusNode(x, y, radius * 0.7, node_id, on_click, on_hover)
+    if shape == "circle":
+        return _FocusNode(x, y, radius, node_id, on_click, on_hover)
+    if shape == "square":
+        side = radius * 1.7
+        return _RectNode(x, y, side, side, node_id, on_click, on_hover)
+    if shape == "rounded_rect":
+        return _RectNode(x, y, radius * 2.2, radius * 1.5, node_id, on_click, on_hover)
+    if shape == "act_band":
+        return _RectNode(x, y, radius * 3.0, radius * 1.4, node_id, on_click, on_hover)
+    if shape == "triangle":
+        h = radius * 1.7
+        poly = QPolygonF([
+            QPointF(x, y - h),
+            QPointF(x - h * 0.9, y + h * 0.7),
+            QPointF(x + h * 0.9, y + h * 0.7),
+        ])
+        return _PolygonNode(poly, node_id, on_click, on_hover)
+    if shape == "diamond":
+        r = radius * 1.2
+        poly = QPolygonF([
+            QPointF(x, y - r), QPointF(x + r, y),
+            QPointF(x, y + r), QPointF(x - r, y),
+        ])
+        return _PolygonNode(poly, node_id, on_click, on_hover)
+    if shape == "hexagon":
+        r = radius
+        pts = []
+        for i in range(6):
+            angle = math.pi / 3 * i - math.pi / 2
+            pts.append(QPointF(x + r * math.cos(angle), y + r * math.sin(angle)))
+        return _PolygonNode(QPolygonF(pts), node_id, on_click, on_hover)
+    # Fallback
+    return _FocusNode(x, y, radius, node_id, on_click, on_hover)
+
+
+class _ZoomGraphicsView(QGraphicsView):
+    """QGraphicsView that reports zoom changes to the parent on wheel events."""
+
+    def __init__(self, scene, on_zoom: Callable[[float], None] | None = None) -> None:
+        super().__init__(scene)
+        self._on_zoom = on_zoom
+        self._zoom = 1.0
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+
+    def wheelEvent(self, event) -> None:
+        if event.angleDelta().y() > 0:
+            factor = 1.15
+        else:
+            factor = 1 / 1.15
+        new_zoom = self._zoom * factor
+        # Clamp to a sane range.
+        new_zoom = max(0.1, min(5.0, new_zoom))
+        actual = new_zoom / self._zoom
+        self._zoom = new_zoom
+        self.scale(actual, actual)
+        if self._on_zoom:
+            self._on_zoom(self._zoom)
 
 
 class FocusGraphView(QWidget):
@@ -253,8 +546,12 @@ class FocusGraphView(QWidget):
         self._suggestions_visible = False
         self._suggestions = None  # GraphSuggestions | None
         self._trace_highlight: list[str] = []
+        # Layers panel — which semantic kinds are visible.  Default: all.
+        self._active_layers: set[str] = set(LAYER_KINDS)
+        self._layer_checks: dict[str, QCheckBox] = {}
+        self._zoom: float = 1.0
 
-        self._node_items: dict[str, _FocusNode] = {}
+        self._node_items: dict[str, object] = {}
         self._label_items: dict[str, QGraphicsSimpleTextItem] = {}
         self._edge_items: list[QGraphicsLineItem] = []
 
@@ -293,11 +590,21 @@ class FocusGraphView(QWidget):
 
         tb.addSpacing(12)
 
-        tb.addWidget(QLabel("Type:"))
+        # Type combo kept for back-compat with the old single-type filter.
+        # Hidden by default — superseded by the Layers panel below.
         self._type_combo = QComboBox()
         self._type_combo.addItems(["All", "Character", "Place", "Scene", "Note", "PSYKE"])
         self._type_combo.currentTextChanged.connect(self._on_type_changed)
+        self._type_combo.setVisible(False)
         tb.addWidget(self._type_combo)
+
+        self._skeleton_btn = QPushButton("Skeleton")
+        self._skeleton_btn.setCheckable(True)
+        self._skeleton_btn.setToolTip(
+            "Narrative skeleton — Characters + Themes + Acts only"
+        )
+        self._skeleton_btn.toggled.connect(self._on_skeleton_toggled)
+        tb.addWidget(self._skeleton_btn)
 
         tb.addSpacing(12)
 
@@ -329,14 +636,17 @@ class FocusGraphView(QWidget):
         tb.addStretch()
         outer.addWidget(toolbar)
 
-        # -- Main area: graph + suggestion panel -----------------------------
+        # -- Main area: layers panel + graph + suggestion panel --------------
         content_area = QWidget()
         content_layout = QHBoxLayout(content_area)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
 
+        self._layers_panel = self._build_layers_panel()
+        content_layout.addWidget(self._layers_panel)
+
         self._gscene = QGraphicsScene()
-        self._gview = QGraphicsView(self._gscene)
+        self._gview = _ZoomGraphicsView(self._gscene, on_zoom=self._on_zoom)
         self._gview.setObjectName("focusGraphView")
         self._gview.setRenderHints(self._gview.renderHints())
         content_layout.addWidget(self._gview, stretch=3)
@@ -352,6 +662,89 @@ class FocusGraphView(QWidget):
         content_layout.addWidget(self._suggest_panel, stretch=1)
 
         outer.addWidget(content_area)
+
+    # -- Layers panel --------------------------------------------------------
+
+    def _build_layers_panel(self) -> QFrame:
+        """Vertical column of layer toggles — one checkbox per semantic kind."""
+        panel = QFrame()
+        panel.setObjectName("graphLayersPanel")
+        panel.setFixedWidth(132)
+        lay = QVBoxLayout(panel)
+        lay.setContentsMargins(8, 8, 8, 8)
+        lay.setSpacing(4)
+
+        header = QLabel("Layers")
+        header.setStyleSheet(
+            f"color: {theme.TEXT_SECONDARY}; font-size: 11px; font-weight: bold;"
+        )
+        lay.addWidget(header)
+
+        labels = {
+            NODE_KIND_CHARACTER: "Characters",
+            NODE_KIND_PLACE: "Places",
+            NODE_KIND_OBJECT: "Objects",
+            NODE_KIND_THEME: "Themes",
+            NODE_KIND_LORE: "Lore",
+            NODE_KIND_SCENE: "Scenes",
+            NODE_KIND_ACT: "Acts",
+            NODE_KIND_NOTE: "Notes",
+            NODE_KIND_OTHER: "Other",
+        }
+        for kind in LAYER_KINDS:
+            cb = QCheckBox(labels[kind])
+            cb.setChecked(True)
+            cb.setStyleSheet(
+                f"QCheckBox {{ color: {theme.TEXT_PRIMARY}; font-size: 11px; }}"
+            )
+            cb.toggled.connect(lambda checked, k=kind: self._on_layer_toggled(k, checked))
+            lay.addWidget(cb)
+            self._layer_checks[kind] = cb
+
+        lay.addStretch()
+        return panel
+
+    def _on_layer_toggled(self, kind: str, checked: bool) -> None:
+        if checked:
+            self._active_layers.add(kind)
+        else:
+            self._active_layers.discard(kind)
+        # Skeleton button stays pressed only while skeleton-set is active.
+        if self._skeleton_btn.isChecked() and self._active_layers != set(SKELETON_LAYERS):
+            self._skeleton_btn.blockSignals(True)
+            self._skeleton_btn.setChecked(False)
+            self._skeleton_btn.blockSignals(False)
+        self._rebuild_view()
+
+    def _on_skeleton_toggled(self, checked: bool) -> None:
+        target = set(SKELETON_LAYERS) if checked else set(LAYER_KINDS)
+        self._active_layers = target
+        for kind, cb in self._layer_checks.items():
+            cb.blockSignals(True)
+            cb.setChecked(kind in target)
+            cb.blockSignals(False)
+        self._rebuild_view()
+
+    # -- Zoom + culling ------------------------------------------------------
+
+    def _on_zoom(self, zoom: float) -> None:
+        self._zoom = zoom
+        self._apply_zoom_culling()
+
+    def _apply_zoom_culling(self) -> None:
+        """Hide labels and weak edges progressively as the user zooms out."""
+        show_labels = self._zoom >= _ZOOM_HIDE_LABELS
+        for label in self._label_items.values():
+            label.setVisible(show_labels)
+
+        for edge_item in self._edge_items:
+            etype = edge_item.data(0)
+            if self._zoom < _ZOOM_HIDE_WEAK_EDGES:
+                edge_item.setVisible(etype == EDGE_CONTAINMENT)
+            elif self._zoom < _ZOOM_HIDE_MENTIONS:
+                edge_item.setVisible(etype != EDGE_MENTION)
+            else:
+                edge_item.setVisible(True)
 
     # -- Data loading --------------------------------------------------------
 
@@ -437,6 +830,11 @@ class FocusGraphView(QWidget):
             type_nodes = filter_by_type(self._graph_data, {self._type_filter})
             visible = visible & type_nodes
 
+        # Layer mask — restrict to enabled semantic kinds.
+        if self._active_layers != set(LAYER_KINDS):
+            layer_nodes = filter_by_layers(self._graph_data, self._active_layers)
+            visible = visible & layer_nodes
+
         if self._temporal_enabled and not self._show_future:
             temporal_active = filter_by_scene_order(
                 self._db, self._project_id, self._graph_data, self._temporal_max_order,
@@ -480,7 +878,8 @@ class FocusGraphView(QWidget):
         meaning: NodeMeaning | None = None,
     ) -> None:
         radius = _FOCUS_RADIUS if is_focal else _NODE_RADIUS
-        color_hex = _TYPE_COLORS.get(node.etype, "#9e9e9e")
+        kind = node_kind(node)
+        color_hex = _KIND_COLORS.get(kind, "#9e9e9e")
 
         if meaning:
             radius += importance_radius_delta(meaning.importance)
@@ -497,22 +896,22 @@ class FocusGraphView(QWidget):
         if is_dimmed:
             color.setAlphaF(_DIM_OPACITY)
 
-        ellipse = _FocusNode(
-            x, y, radius, node.node_id,
+        item = _make_shape_node(
+            kind, x, y, radius, node.node_id,
             on_click=self._on_node_click,
             on_hover=self._on_node_hover,
         )
-        ellipse.setBrush(QBrush(color))
+        item.setBrush(QBrush(color))
         pen_color = color.darker(120) if not is_dimmed else QColor(color_hex)
         pen_color.setAlphaF(0.4 if is_dimmed else 1.0)
         pen_width = 3 if is_focal else 2
         if meaning and meaning.state_warmth != "neutral" and node.etype == "Character":
             pen_color = QColor(state_color(meaning.state_warmth))
             pen_width = 3
-        ellipse.setPen(QPen(pen_color, pen_width))
-        ellipse.setZValue(2 if is_focal else 1)
-        self._gscene.addItem(ellipse)
-        self._node_items[node.node_id] = ellipse
+        item.setPen(QPen(pen_color, pen_width))
+        item.setZValue(2 if is_focal else 1)
+        self._gscene.addItem(item)
+        self._node_items[node.node_id] = item
 
         label = QGraphicsSimpleTextItem(node.name)
         font = QFont()
@@ -538,11 +937,23 @@ class FocusGraphView(QWidget):
             self._focus_node is not None
             and (edge.source_id == self._focus_node or edge.target_id == self._focus_node)
         )
-        color = QColor(_EDGE_HIGHLIGHT if is_highlight else _EDGE_COLOR)
-        width = 2.0 if is_highlight else 1.2
+        style = EDGE_STYLE.get(edge.edge_type, EDGE_STYLE[EDGE_LINK])
+        if is_highlight:
+            color = QColor(_EDGE_HIGHLIGHT)
+            width = max(style["width"] + 0.8, 2.0)
+        else:
+            color = QColor(style["color"])
+            width = style["width"]
+        pen = QPen(color, width)
+        if style.get("dash") == "dash":
+            pen.setStyle(Qt.PenStyle.DashLine)
+        elif style.get("dash") == "dot":
+            pen.setStyle(Qt.PenStyle.DotLine)
         line = QGraphicsLineItem(src[0], src[1], tgt[0], tgt[1])
-        line.setPen(QPen(color, width))
-        line.setZValue(0)
+        line.setPen(pen)
+        line.setZValue(0 if edge.edge_type != EDGE_CONTAINMENT else -1)
+        # Tag with edge_type so zoom-culling can target specific kinds.
+        line.setData(0, edge.edge_type)
         self._gscene.addItem(line)
         self._edge_items.append(line)
 
