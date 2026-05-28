@@ -70,7 +70,8 @@ def test_all_modes_have_profiles():
 
 
 def test_mode_order_matches_registry():
-    assert set(MODE_ORDER) == set(MODE_PROFILES.keys())
+    from storyplanner.ui.focus_graph_view import SCREENPLAY_MODE_ORDER
+    assert set(MODE_ORDER) | set(SCREENPLAY_MODE_ORDER) == set(MODE_PROFILES.keys())
 
 
 def test_relationship_profile_characters_only():
