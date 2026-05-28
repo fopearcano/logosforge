@@ -862,9 +862,13 @@ class AssistantPanel(QWidget):
         return ""
 
     def set_project(self, project_id: int) -> None:
+        # Drop anything the previous project queued up — the next prompt
+        # must be evaluated against the new project's context.
+        self._pending_messages = None
         self._project_id = project_id
         quantum_load_state(self._db, project_id)
         self._quantum_timeline._project_id = project_id
+        self._quantum_timeline.refresh()
         self._mode_strip.refresh()
 
     def set_active_scene(self, scene_id: int) -> None:

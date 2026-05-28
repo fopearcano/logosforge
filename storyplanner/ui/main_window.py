@@ -435,7 +435,7 @@ class MainWindow(QMainWindow):
             "Health", "Balance", "Pacing", "Adapt", "Narrative", "PSYKE", "Plugins",
             "Stages", "Chat",
         ]
-        _nav_handlers = {
+        self._nav_section_handlers = {
             "Projects": self._show_projects,
             "Dashboard": self._show_dashboard,
             "Notes": self._show_notes,
@@ -463,7 +463,7 @@ class MainWindow(QMainWindow):
         for label in self._nav_labels:
             btn = self.sidebar_buttons[label]
             btn.setCheckable(True)
-            handler = _nav_handlers[label]
+            handler = self._nav_section_handlers[label]
             btn.clicked.connect(
                 lambda _, l=label, h=handler: (
                     self._set_active_section(l), h()
@@ -1170,9 +1170,8 @@ class MainWindow(QMainWindow):
             return
 
         new_project_id = import_json(self._db, data)
-        self._switch_project(new_project_id)
         self._set_active_section("Dashboard")
-        self._show_dashboard()
+        self._switch_project(new_project_id)
         QMessageBox.information(
             self, "Import", f"Project imported successfully (ID {new_project_id})."
         )
@@ -1523,9 +1522,10 @@ class MainWindow(QMainWindow):
             narrative_engine=dlg.get_engine(),
             default_writing_format=dlg.get_format(),
         )
-        self._switch_project(project.id)
+        # New projects land on the Dashboard so the user sees the empty
+        # state for the new project rather than (say) an empty Plot view.
         self._set_active_section("Dashboard")
-        self._show_dashboard()
+        self._switch_project(project.id)
 
     def _on_project_settings(self) -> None:
         if not self._project_id:
@@ -1533,9 +1533,8 @@ class MainWindow(QMainWindow):
         from storyplanner.ui.project_settings_dialog import ProjectSettingsDialog
         dlg = ProjectSettingsDialog(self._db, self._project_id, parent=self)
         if dlg.exec():
-            # Re-enter the current section so views rebuild against the new
-            # engine/format. Simpler than wiring a refresh signal into every
-            # section.
+            # Re-enter the current project so the active view rebuilds
+            # against the new engine/format.
             self._switch_project(self._project_id)
 
     def _on_save(self) -> None:
@@ -1603,9 +1602,8 @@ class MainWindow(QMainWindow):
         dlg = VersionHistoryDialog(self._versions, parent=self)
         result = dlg.exec()
         if result and dlg.restored_project_id is not None:
-            self._switch_project(dlg.restored_project_id)
             self._set_active_section("Dashboard")
-            self._show_dashboard()
+            self._switch_project(dlg.restored_project_id)
 
     def _menu_ai_preset(self, preset: str) -> None:
         if not self._assistant_panel.isVisible():
@@ -1707,12 +1705,12 @@ class MainWindow(QMainWindow):
             return
 
         new_project_id = import_json(self._db, data)
+        # Land on the Dashboard so the user sees the new project's summary.
+        self._set_active_section("Dashboard")
         self._switch_project(new_project_id, file_path=path)
         recent_projects.add(path)
         self._refresh_recent_menu()
         get_settings().set("last_project_path", str(Path(path).resolve()))
-        self._set_active_section("Dashboard")
-        self._show_dashboard()
 
     def load_file_quiet(self, path: str) -> bool:
         """Load a project file without showing dialogs on failure."""
@@ -1734,12 +1732,11 @@ class MainWindow(QMainWindow):
             self._read_only = False
 
         new_id = import_json(self._db, data)
+        self._set_active_section("Dashboard")
         self._switch_project(new_id, file_path=path)
         recent_projects.add(path)
         self._refresh_recent_menu()
         self._update_title()
-        self._set_active_section("Dashboard")
-        self._show_dashboard()
         return True
 
     def _on_save_as(self) -> None:
@@ -1878,10 +1875,24 @@ class MainWindow(QMainWindow):
             view.refresh()
 
     def _switch_project(self, new_id: int, file_path: str | None = None) -> None:
-        """Update all subsystems to point at *new_id*."""
+        """Update all subsystems to point at *new_id*.
+
+        Clears project-scoped caches, swaps sub-systems, and rebuilds the
+        currently-active content view so it shows the new project's data
+        — no caller-side navigation needed.
+        """
+        old_id = self._project_id
         # Release the lock on whatever project we were on before switching.
         if self._current_file and self._current_file != file_path:
             release_lock(self._current_file)
+
+        # 1. Tear down project-scoped module caches BEFORE swapping the id
+        # so each hook sees the project it's clearing.
+        from storyplanner.project_lifecycle import clear_project_caches
+        clear_project_caches(old_id)
+
+        # 2. Swap the active project id and hand it to long-lived
+        # sub-systems.
         self._project_id = new_id
         self._psyke_console.set_project(new_id)
         self._set_current_file(file_path)
@@ -1890,10 +1901,13 @@ class MainWindow(QMainWindow):
         self._assistant_panel.set_project(new_id)
         if hasattr(self, '_system_command_handlers'):
             self._system_command_handlers.set_project(new_id)
+
+        # 3. Drop MainWindow's own per-project caches.
         self._cached_scenes_view = None
         self._cached_scene_entry_scene = None
         self._cached_scene_entry_ids = None
         self._external_change_warned = False
+
         if file_path:
             try:
                 acquire_lock(file_path)
@@ -1901,6 +1915,26 @@ class MainWindow(QMainWindow):
                 pass
         self._mark_clean()
         self._update_storage_indicator()
+
+        # 4. Rebuild the currently visible content view so it shows the
+        # new project's data without forcing the user to a different
+        # section.
+        self._rebuild_active_section()
+
+    def _rebuild_active_section(self) -> None:
+        """Re-invoke the handler for the currently active sidebar section.
+
+        The content widgets read project_id at construction time, so
+        rebuilding from scratch is what guarantees they show the new
+        project's data.
+        """
+        if not hasattr(self, "_nav_section_handlers"):
+            return
+        handler = self._nav_section_handlers.get(self._current_section)
+        if handler is None:
+            handler = self._nav_section_handlers.get("Dashboard")
+        if handler is not None:
+            handler()
 
     def _on_data_changed(self) -> None:
         self._dirty = True

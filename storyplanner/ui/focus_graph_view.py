@@ -972,8 +972,15 @@ class FocusGraphView(QWidget):
         self._flow_combo.setEnabled(self._flow_enabled)
         self._rebuild_view()
 
+    def _graph_state_key(self) -> str:
+        """Project-scoped settings key for the graph view state."""
+        return f"graph_state:{self._project_id}"
+
+    def _graph_presets_key(self) -> str:
+        return f"graph_presets:{self._project_id}"
+
     def restore_persisted_state(self) -> None:
-        """Restore last-saved filter/mode/flow state from global settings.
+        """Restore last-saved filter/mode/flow state for THIS project.
 
         Not called automatically — the host (MainWindow) calls this after
         construction so that headless tests stay isolated from the user's
@@ -981,7 +988,7 @@ class FocusGraphView(QWidget):
         """
         try:
             from storyplanner.settings import get_manager
-            state = get_manager().get("graph_state")
+            state = get_manager().get(self._graph_state_key())
         except Exception:
             return
         if isinstance(state, dict) and state:
@@ -990,14 +997,14 @@ class FocusGraphView(QWidget):
     def _persist_state(self) -> None:
         try:
             from storyplanner.settings import get_manager
-            get_manager().set("graph_state", self._capture_state())
+            get_manager().set(self._graph_state_key(), self._capture_state())
         except Exception:
             pass
 
     def get_saved_presets(self) -> dict[str, dict]:
         try:
             from storyplanner.settings import get_manager
-            raw = get_manager().get("graph_presets") or {}
+            raw = get_manager().get(self._graph_presets_key()) or {}
         except Exception:
             return {}
         return raw if isinstance(raw, dict) else {}
@@ -1009,11 +1016,11 @@ class FocusGraphView(QWidget):
         try:
             from storyplanner.settings import get_manager
             mgr = get_manager()
-            presets = mgr.get("graph_presets") or {}
+            presets = mgr.get(self._graph_presets_key()) or {}
             if not isinstance(presets, dict):
                 presets = {}
             presets[name] = self._capture_state()
-            mgr.set("graph_presets", presets)
+            mgr.set(self._graph_presets_key(), presets)
         except Exception:
             return
 
@@ -1029,11 +1036,11 @@ class FocusGraphView(QWidget):
         try:
             from storyplanner.settings import get_manager
             mgr = get_manager()
-            presets = mgr.get("graph_presets") or {}
+            presets = mgr.get(self._graph_presets_key()) or {}
             if not isinstance(presets, dict):
                 return
             presets.pop(name, None)
-            mgr.set("graph_presets", presets)
+            mgr.set(self._graph_presets_key(), presets)
         except Exception:
             return
 
