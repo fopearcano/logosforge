@@ -45,4 +45,28 @@ SCREENPLAY_ENGINE = NarrativeEngine(
     ),
     default_format="screenplay",
     compatible_formats=("screenplay", "series"),
+    system_prompt_overlay=(
+        "Reason cinematically. Every scene must be evaluated as a unit of "
+        "SCREEN TIME, not page count. Prioritize what the CAMERA SEES and "
+        "what the AUDIENCE HEARS.\n"
+        "Key questions for every scene:\n"
+        "- Does this scene TURN? (emotional state at exit ≠ entry)\n"
+        "- Is the conflict VISIBLE? (can you film it?)\n"
+        "- Is there subtext? (what is NOT said matters more than what is)\n"
+        "- Is the dialogue economical? (characters want things, not explain things)\n"
+        "- Does blocking reveal character? (physical action = inner state)\n"
+        "- Are setup/payoff links honored? (every gun shown must fire)\n"
+        "- Is continuity maintained? (wounds, props, costumes, knowledge)\n"
+        "- Does the scene earn its screen time? (cut ruthlessly)"
+    ),
+    feedback_patterns=(
+        "Scene does not turn — entry and exit emotional states are identical",
+        "Dialogue is expositional — characters explain instead of want",
+        "No visible conflict — nothing the camera can film",
+        "Blocking is static — characters talk but don't move or act",
+        "Subtext absent — everything is on the surface",
+        "Setup without payoff — element introduced but never resolved",
+        "Continuity break — state contradicts a prior scene",
+        "Scene overstays — content doesn't justify screen time",
+    ),
 )

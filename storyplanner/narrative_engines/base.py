@@ -25,6 +25,9 @@ class NarrativeEngine:
     default_format: str = "prose"          # WritingFormat name to suggest
     compatible_formats: tuple[str, ...] = ()
 
+    system_prompt_overlay: str = ""
+    feedback_patterns: tuple[str, ...] = ()
+
     # -- Helper accessors (so consumers don't reach into fields) -----------
 
     def get_structural_units(self) -> tuple[str, ...]:
@@ -63,4 +66,11 @@ class NarrativeEngine:
             lines.append(
                 "Review checks: " + ", ".join(self.review_checks[:8])
             )
+        if self.feedback_patterns:
+            lines.append(
+                "Feedback signals: " + "; ".join(self.feedback_patterns[:8])
+            )
+        if self.system_prompt_overlay:
+            lines.append("")
+            lines.append(self.system_prompt_overlay)
         return "\n".join(lines)

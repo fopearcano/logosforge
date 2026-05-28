@@ -76,6 +76,7 @@ def gather_scene_context(
     places_section = _build_places_section(db, project_id, scene_id)
     position_section = _build_position_section(all_scenes, current_idx)
     continuity_section = _build_continuity_section(db, scene_id)
+    screenplay_section = _build_screenplay_context(db, project_id, scene_id)
 
     sections: list[str] = []
     if scene_section:
@@ -88,6 +89,8 @@ def gather_scene_context(
         sections.append(f"[Places]\n{places_section}")
     if continuity_section:
         sections.append(f"[Continuity]\n{continuity_section}")
+    if screenplay_section:
+        sections.append(f"[Screenplay Analysis]\n{screenplay_section}")
     if position_section:
         sections.append(f"[Story Position]\n{position_section}")
 
@@ -111,6 +114,74 @@ def _build_continuity_section(db: Database, scene_id: int) -> str:
         label = _LABELS.get(it.memory_type, it.memory_type)
         target = f" — {it.target}" if it.target else ""
         lines.append(f"  {label}{target}: {it.value}")
+    return "\n".join(lines)
+
+
+def _build_screenplay_context(
+    db: Database, project_id: int, scene_id: int,
+) -> str:
+    """Build screenplay-specific analysis context: duration, setup/payoff, subtext."""
+    try:
+        from storyplanner.narrative_engines import engine_for_project
+        project = db.get_project_by_id(project_id)
+        engine = engine_for_project(project)
+        if engine.name != "screenplay":
+            return ""
+    except Exception:
+        return ""
+
+    scene = db.get_scene_by_id(scene_id)
+    if scene is None:
+        return ""
+
+    lines: list[str] = []
+
+    # Duration estimate
+    duration = getattr(scene, "estimated_duration_minutes", 0) or 0
+    if duration:
+        lines.append(f"Estimated duration: {duration} min")
+
+    # Setup/payoff links from scene field
+    setup_payoff = getattr(scene, "setup_payoff_links", "") or ""
+    if setup_payoff:
+        lines.append(f"Setup/payoff links: {setup_payoff}")
+
+    # Typed PSYKE relations for characters in scene
+    char_ids = db.get_scene_character_ids(scene_id)
+    if char_ids:
+        entries = db.get_all_psyke_entries(project_id)
+        char_names = {c.name.lower(): c for c in db.get_all_characters(project_id)}
+        entry_by_name: dict[str, int] = {}
+        for e in entries:
+            entry_by_name[e.name.lower()] = e.id
+
+        typed_lines: list[str] = []
+        seen_pairs: set[tuple[int, int]] = set()
+        for cid in char_ids:
+            char = db.get_character_by_id(cid)
+            if char is None:
+                continue
+            eid = entry_by_name.get(char.name.lower())
+            if eid is None:
+                continue
+            typed = db.get_typed_related_psyke_entries(eid)
+            for related_entry, rel_type in typed:
+                pair = (min(eid, related_entry.id), max(eid, related_entry.id))
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
+                typed_lines.append(
+                    f"  {char.name} —[{rel_type}]→ {related_entry.name}"
+                )
+        if typed_lines:
+            lines.append("Typed relations:")
+            lines.extend(typed_lines)
+
+    # Montage group
+    montage = getattr(scene, "montage_group", "") or ""
+    if montage:
+        lines.append(f"Montage group: {montage}")
+
     return "\n".join(lines)
 
 

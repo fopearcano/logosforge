@@ -918,7 +918,16 @@ class AssistantPanel(QWidget):
         return True
 
     def _get_section_system_prompt(self) -> str:
-        return SECTION_SYSTEM_PROMPTS.get(self._active_section, "")
+        base = SECTION_SYSTEM_PROMPTS.get(self._active_section, "")
+        try:
+            from storyplanner.narrative_engines import engine_for_project
+            project = self._db.get_project_by_id(self._project_id)
+            engine = engine_for_project(project)
+            if engine.system_prompt_overlay:
+                return base + "\n\n" + engine.system_prompt_overlay if base else engine.system_prompt_overlay
+        except Exception:
+            pass
+        return base
 
     # -- Sending requests ------------------------------------------------------
 

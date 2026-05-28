@@ -168,6 +168,103 @@ def generate_scene_hints(
                     message=f"{entry.name} hasn't appeared in {gap} scenes",
                 ))
 
+    # Screenplay-specific checks
+    try:
+        from storyplanner.narrative_engines import engine_for_project
+        project = db.get_project_by_id(project_id)
+        engine = engine_for_project(project)
+        if engine.name == "screenplay":
+            hints.extend(_screenplay_scene_hints(db, project_id, scene_id, scene, content))
+    except Exception:
+        pass
+
+    return hints
+
+
+def _screenplay_scene_hints(
+    db: Any, project_id: int, scene_id: int,
+    scene: Any, content: str,
+) -> list[SceneHint]:
+    """Screenplay-specific scene hints: turn, visible conflict, dialogue, blocking."""
+    hints: list[SceneHint] = []
+    words = content.split()
+    word_count = len(words)
+
+    # Scene doesn't turn — no emotional_turn defined on a non-trivial scene
+    if word_count > _SHORT_THRESHOLD:
+        emotional_turn = getattr(scene, "emotional_turn", "") or ""
+        if not emotional_turn:
+            hints.append(SceneHint(
+                scene_id=scene_id,
+                hint_type="no_turn",
+                message="Scene has no emotional turn defined",
+            ))
+
+    # No visible conflict
+    if word_count > _SHORT_THRESHOLD:
+        visible = getattr(scene, "visible_conflict", "") or ""
+        if not visible and not scene.conflict:
+            hints.append(SceneHint(
+                scene_id=scene_id,
+                hint_type="no_visible_conflict",
+                message="No visible conflict — nothing the camera can film",
+            ))
+
+    # Dialogue economy — detect exposition-heavy passages
+    if word_count > _LONG_THRESHOLD:
+        lines = content.split("\n")
+        dialogue_lines = sum(1 for l in lines if l.strip().startswith('"') or l.strip().startswith('“'))
+        total_lines = max(sum(1 for l in lines if l.strip()), 1)
+        if dialogue_lines > 0 and dialogue_lines / total_lines > 0.7:
+            hints.append(SceneHint(
+                scene_id=scene_id,
+                hint_type="dialogue_heavy",
+                message="Scene is >70% dialogue — check for exposition",
+            ))
+
+    # Static blocking — no physical_action defined
+    if word_count > _SHORT_THRESHOLD:
+        physical = getattr(scene, "physical_action", "") or ""
+        blocking = getattr(scene, "blocking_notes", "") or ""
+        if not physical and not blocking:
+            hints.append(SceneHint(
+                scene_id=scene_id,
+                hint_type="static_blocking",
+                message="No blocking or physical action defined",
+            ))
+
+    # No subtext
+    if word_count > _SHORT_THRESHOLD:
+        hidden = getattr(scene, "hidden_conflict", "") or ""
+        subtext = getattr(scene, "subtext_notes", "") or ""
+        if not hidden and not subtext:
+            hints.append(SceneHint(
+                scene_id=scene_id,
+                hint_type="no_subtext",
+                message="No subtext or hidden conflict defined",
+            ))
+
+    # Continuity check — scene has characters but no continuity items tracked
+    if word_count > _SHORT_THRESHOLD:
+        char_ids = db.get_scene_character_ids(scene_id)
+        if char_ids:
+            cont_items = db.get_continuity_for_scene(scene_id)
+            if not cont_items:
+                hints.append(SceneHint(
+                    scene_id=scene_id,
+                    hint_type="no_continuity",
+                    message="Characters present but no continuity items tracked",
+                ))
+
+    # Duration missing
+    duration = getattr(scene, "estimated_duration_minutes", 0) or 0
+    if word_count > _SHORT_THRESHOLD and not duration:
+        hints.append(SceneHint(
+            scene_id=scene_id,
+            hint_type="no_duration",
+            message="No estimated duration — hard to evaluate pacing",
+        ))
+
     return hints
 
 
