@@ -105,6 +105,13 @@ class Scene(SQLModel, table=True):
     montage_group: str = ""
     cinematic_pacing: str = ""         # "fast" | "medium" | "slow" | ""
     continuity_notes: str = ""
+    # -- Screenplay PSYKE extensions (cinematic + performative data) -------
+    visible_conflict: str = ""         # what the audience sees
+    hidden_conflict: str = ""          # subtext layer, who-wants-what
+    emotional_turn: str = ""           # internal arc of the scene
+    who_knows_what: str = ""           # knowledge state across characters
+    physical_action: str = ""          # concrete physical action beat
+    visual_symbolism: str = ""         # symbols / motifs in frame
     sort_order: int = 0
     created_at: datetime = Field(default_factory=_now)
 
@@ -147,10 +154,26 @@ class PsykeEntry(SQLModel, table=True):
 
 
 class PsykeRelation(SQLModel, table=True):
-    """Links two PSYKE entries (bidirectional, stored both ways)."""
+    """Links two PSYKE entries (bidirectional, stored both ways).
+
+    relation_type is optional — "" means a generic association. Screenplay
+    projects use typed relations: "supports_setup", "payoff",
+    "thematic_echo", "visual_motif", "subtext_opposition".
+    """
 
     entry_id: int = Field(foreign_key="psykeentry.id", primary_key=True)
     related_entry_id: int = Field(foreign_key="psykeentry.id", primary_key=True)
+    relation_type: str = ""
+
+
+PSYKE_RELATION_TYPES = (
+    "",                       # generic association
+    "supports_setup",         # this entry plants a setup that the other pays off
+    "payoff",                 # this entry is a payoff of the other's setup
+    "thematic_echo",          # entries that echo the same theme
+    "visual_motif",           # shared visual / cinematic motif
+    "subtext_opposition",     # entries that hold opposing subtextual stances
+)
 
 
 class PsykeProgression(SQLModel, table=True):

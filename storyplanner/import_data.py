@@ -153,6 +153,13 @@ def import_json(db: Database, data: dict) -> int:
             montage_group=scene_data.get("montage_group", ""),
             cinematic_pacing=scene_data.get("cinematic_pacing", ""),
             continuity_notes=scene_data.get("continuity_notes", ""),
+            # -- Screenplay PSYKE extensions (absent in legacy JSON) ----
+            visible_conflict=scene_data.get("visible_conflict", ""),
+            hidden_conflict=scene_data.get("hidden_conflict", ""),
+            emotional_turn=scene_data.get("emotional_turn", ""),
+            who_knows_what=scene_data.get("who_knows_what", ""),
+            physical_action=scene_data.get("physical_action", ""),
+            visual_symbolism=scene_data.get("visual_symbolism", ""),
             character_ids=character_ids,
             place_ids=place_ids,
             character_states=character_states,
@@ -197,9 +204,21 @@ def import_json(db: Database, data: dict) -> int:
             continue
         entry_id = psyke_id_by_name[name]
 
-        for related_name in entry_data.get("related_entries", []):
-            if related_name in psyke_id_by_name:
-                db.add_psyke_relation(entry_id, psyke_id_by_name[related_name])
+        typed = entry_data.get("typed_relations") or []
+        if typed:
+            for rel_data in typed:
+                rname = rel_data.get("name", "")
+                rtype = rel_data.get("relation_type", "")
+                if rname in psyke_id_by_name:
+                    db.add_psyke_relation(
+                        entry_id, psyke_id_by_name[rname], relation_type=rtype,
+                    )
+        else:
+            for related_name in entry_data.get("related_entries", []):
+                if related_name in psyke_id_by_name:
+                    db.add_psyke_relation(
+                        entry_id, psyke_id_by_name[related_name],
+                    )
 
         for prog_data in entry_data.get("progressions", []):
             text = prog_data.get("text", "").strip()
@@ -240,5 +259,18 @@ def import_json(db: Database, data: dict) -> int:
         for stitle in scene_titles:
             if stitle in scene_id_by_title:
                 db.link_note_to_scene(note_id, scene_id_by_title[stitle])
+
+    # Restore continuity items (screenplay PSYKE extension; absent in legacy)
+    for item in data.get("continuity", []):
+        stitle = item.get("scene_title", "")
+        sid = scene_id_by_title.get(stitle)
+        if sid is None:
+            continue
+        memory_type = item.get("memory_type", "")
+        target = item.get("target", "")
+        value = item.get("value", "")
+        if not memory_type or not value:
+            continue
+        db.add_memory(project_id, sid, memory_type, target, value)
 
     return project_id

@@ -50,6 +50,13 @@ _SCHEMAS: dict[str, list[FieldSpec]] = {
         FieldSpec("mannerisms", "Mannerisms / Habits", "multiline", 300, section="Voice & Arc"),
         FieldSpec("arc", "Character Arc", "multiline", 500, section="Voice & Arc"),
         FieldSpec("goals", "Story Goals", "multiline", 400, section="Voice & Arc"),
+        # Screenplay — cinematic and performative data
+        FieldSpec("spoken_voice", "Spoken Voice", "multiline", 400, section="Screenplay"),
+        FieldSpec("gesture_vocabulary", "Gesture Vocabulary", "multiline", 400, section="Screenplay"),
+        FieldSpec("silence_pattern", "Silence Pattern", "multiline", 300, section="Screenplay"),
+        FieldSpec("performance_mask", "Performance Mask", "multiline", 400, section="Screenplay"),
+        FieldSpec("subtext_strategy", "Subtext Strategy", "multiline", 400, section="Screenplay"),
+        FieldSpec("physical_behavior", "Physical Behavior", "multiline", 400, section="Screenplay"),
     ],
     "place": [
         # Geography

@@ -39,6 +39,29 @@ from storyplanner.models import (
 )
 
 
+# Inverse mapping for PSYKE typed relations. A "payoff" from A→B is stored as
+# a "supports_setup" on B→A so direction is preserved when traversing.
+_INVERSE_RELATION_TYPE: dict[str, str] = {
+    "supports_setup": "payoff",
+    "payoff": "supports_setup",
+    # Symmetric relation types map to themselves
+    "thematic_echo": "thematic_echo",
+    "visual_motif": "visual_motif",
+    "subtext_opposition": "subtext_opposition",
+}
+
+
+# Continuity memory_type values for StoryMemoryEntry — track per-scene
+# physical and mental state for continuity audits.
+CONTINUITY_MEMORY_TYPES = (
+    "continuity_wound",
+    "continuity_prop",
+    "continuity_costume",
+    "continuity_emotional_state",
+    "continuity_knowledge_state",
+)
+
+
 class Database:
     def __init__(self, path: Optional[str] = None) -> None:
         if path:
@@ -90,6 +113,9 @@ class Database:
                 "visual_objective", "dramatic_turn", "blocking_notes",
                 "subtext_notes", "setup_payoff_links", "montage_group",
                 "cinematic_pacing", "continuity_notes",
+                # PSYKE-screenplay extensions (cinematic + performative)
+                "visible_conflict", "hidden_conflict", "emotional_turn",
+                "who_knows_what", "physical_action", "visual_symbolism",
             )
             if rows:
                 columns = {row[1] for row in conn.execute(
@@ -104,6 +130,19 @@ class Database:
                         "ALTER TABLE scene ADD COLUMN"
                         " estimated_duration_minutes INTEGER DEFAULT 0"
                     ))
+                conn.commit()
+
+            # PSYKE relation typing — adds relation_type for screenplay
+            # extensions (setup/payoff/thematic_echo/visual_motif/etc.)
+            rel_rows = conn.execute(
+                text("PRAGMA table_info(psykerelation)"),
+            ).fetchall()
+            rel_columns = {row[1] for row in rel_rows}
+            if rel_rows and "relation_type" not in rel_columns:
+                conn.execute(text(
+                    "ALTER TABLE psykerelation ADD COLUMN"
+                    " relation_type TEXT DEFAULT ''"
+                ))
                 conn.commit()
 
     # -- Projects ------------------------------------------------------------
@@ -722,6 +761,13 @@ class Database:
         montage_group: str = "",
         cinematic_pacing: str = "",
         continuity_notes: str = "",
+        # -- Screenplay PSYKE extensions --------------------------------
+        visible_conflict: str = "",
+        hidden_conflict: str = "",
+        emotional_turn: str = "",
+        who_knows_what: str = "",
+        physical_action: str = "",
+        visual_symbolism: str = "",
         character_ids: list[int] | None = None,
         place_ids: list[int] | None = None,
         character_states: list[tuple[int, str]] | None = None,
@@ -765,6 +811,12 @@ class Database:
                 montage_group=montage_group,
                 cinematic_pacing=cinematic_pacing,
                 continuity_notes=continuity_notes,
+                visible_conflict=visible_conflict,
+                hidden_conflict=hidden_conflict,
+                emotional_turn=emotional_turn,
+                who_knows_what=who_knows_what,
+                physical_action=physical_action,
+                visual_symbolism=visual_symbolism,
                 sort_order=next_order,
             )
             session.add(scene)
@@ -813,6 +865,13 @@ class Database:
         montage_group: str | None = None,
         cinematic_pacing: str | None = None,
         continuity_notes: str | None = None,
+        # -- Screenplay PSYKE extensions (None = leave unchanged) -------
+        visible_conflict: str | None = None,
+        hidden_conflict: str | None = None,
+        emotional_turn: str | None = None,
+        who_knows_what: str | None = None,
+        physical_action: str | None = None,
+        visual_symbolism: str | None = None,
         character_ids: list[int] | None = None,
         place_ids: list[int] | None = None,
         character_states: list[tuple[int, str]] | None = None,
@@ -859,6 +918,18 @@ class Database:
                 scene.cinematic_pacing = cinematic_pacing
             if continuity_notes is not None:
                 scene.continuity_notes = continuity_notes
+            if visible_conflict is not None:
+                scene.visible_conflict = visible_conflict
+            if hidden_conflict is not None:
+                scene.hidden_conflict = hidden_conflict
+            if emotional_turn is not None:
+                scene.emotional_turn = emotional_turn
+            if who_knows_what is not None:
+                scene.who_knows_what = who_knows_what
+            if physical_action is not None:
+                scene.physical_action = physical_action
+            if visual_symbolism is not None:
+                scene.visual_symbolism = visual_symbolism
 
             # Replace character links
             old_char_links = session.exec(
@@ -1219,18 +1290,75 @@ class Database:
                 ).all()
             )
 
-    def add_psyke_relation(self, entry_id: int, related_entry_id: int) -> None:
+    def add_psyke_relation(
+        self,
+        entry_id: int,
+        related_entry_id: int,
+        relation_type: str = "",
+    ) -> None:
+        """Add a bidirectional PSYKE relation.
+
+        Screenplay extensions use typed relations to express
+        setup/payoff/echo/motif/opposition links. A "payoff" from A→B is
+        stored as a "supports_setup" inverse on B→A so direction is preserved.
+        """
         if entry_id == related_entry_id:
             return
+        inverse = _INVERSE_RELATION_TYPE.get(relation_type, relation_type)
         with Session(self._engine) as session:
             existing = session.get(PsykeRelation, (entry_id, related_entry_id))
             if existing:
+                if relation_type and existing.relation_type != relation_type:
+                    existing.relation_type = relation_type
+                    rev = session.get(PsykeRelation, (related_entry_id, entry_id))
+                    if rev:
+                        rev.relation_type = inverse
+                    session.commit()
                 return
-            session.add(PsykeRelation(entry_id=entry_id, related_entry_id=related_entry_id))
-            session.add(PsykeRelation(entry_id=related_entry_id, related_entry_id=entry_id))
+            session.add(PsykeRelation(
+                entry_id=entry_id,
+                related_entry_id=related_entry_id,
+                relation_type=relation_type,
+            ))
+            session.add(PsykeRelation(
+                entry_id=related_entry_id,
+                related_entry_id=entry_id,
+                relation_type=inverse,
+            ))
             session.commit()
             from storyplanner.quantum_outliner.lookahead_cache import invalidate_lookahead
             invalidate_lookahead()
+
+    def get_psyke_relation_type(
+        self, entry_id: int, related_entry_id: int,
+    ) -> str:
+        with Session(self._engine) as session:
+            rel = session.get(PsykeRelation, (entry_id, related_entry_id))
+            return rel.relation_type if rel else ""
+
+    def get_typed_related_psyke_entries(
+        self, entry_id: int,
+    ) -> list[tuple[PsykeEntry, str]]:
+        """Return (related_entry, relation_type) tuples for an entry."""
+        with Session(self._engine) as session:
+            stmt = select(PsykeRelation).where(
+                PsykeRelation.entry_id == entry_id,
+            )
+            rels = list(session.exec(stmt).all())
+            if not rels:
+                return []
+            related_ids = [r.related_entry_id for r in rels]
+            entries = list(
+                session.exec(
+                    select(PsykeEntry).where(PsykeEntry.id.in_(related_ids))
+                ).all()
+            )
+            by_id = {e.id: e for e in entries}
+            return [
+                (by_id[r.related_entry_id], r.relation_type)
+                for r in rels
+                if r.related_entry_id in by_id
+            ]
 
     def remove_psyke_relation(self, entry_id: int, related_entry_id: int) -> None:
         with Session(self._engine) as session:
@@ -1518,6 +1646,53 @@ class Database:
                 .where(StoryMemoryEntry.target == target)
             )
             return session.exec(stmt).first() is not None
+
+    # -- Continuity Tracking (Screenplay) -----------------------------------
+
+    def add_continuity_item(
+        self,
+        project_id: int,
+        scene_id: int,
+        category: str,
+        target: str,
+        value: str,
+    ) -> StoryMemoryEntry:
+        """Track a continuity item for a scene.
+
+        category is one of: "wound", "prop", "costume", "emotional_state",
+        "knowledge_state". target is the character/object name; value is
+        the state description.
+        """
+        memory_type = f"continuity_{category}"
+        if memory_type not in CONTINUITY_MEMORY_TYPES:
+            raise ValueError(
+                f"Unknown continuity category: {category!r}. "
+                f"Expected one of: wound, prop, costume, "
+                f"emotional_state, knowledge_state."
+            )
+        return self.add_memory(
+            project_id, scene_id, memory_type, target, value,
+        )
+
+    def get_continuity_for_scene(
+        self, scene_id: int,
+    ) -> list[StoryMemoryEntry]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(StoryMemoryEntry)
+                .where(StoryMemoryEntry.scene_id == scene_id)
+                .where(StoryMemoryEntry.memory_type.in_(
+                    CONTINUITY_MEMORY_TYPES,
+                ))
+                .order_by(StoryMemoryEntry.memory_type, StoryMemoryEntry.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def get_continuity_by_category(
+        self, project_id: int, category: str,
+    ) -> list[StoryMemoryEntry]:
+        memory_type = f"continuity_{category}"
+        return self.get_memories_by_type(project_id, memory_type)
 
     # -- Outline Nodes -------------------------------------------------------
 

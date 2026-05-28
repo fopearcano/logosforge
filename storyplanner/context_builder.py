@@ -75,6 +75,7 @@ def gather_scene_context(
     memory_section = _build_character_memory_section(db, project_id, scene_id)
     places_section = _build_places_section(db, project_id, scene_id)
     position_section = _build_position_section(all_scenes, current_idx)
+    continuity_section = _build_continuity_section(db, scene_id)
 
     sections: list[str] = []
     if scene_section:
@@ -85,10 +86,32 @@ def gather_scene_context(
         sections.append(f"[Character Memory]\n{memory_section}")
     if places_section:
         sections.append(f"[Places]\n{places_section}")
+    if continuity_section:
+        sections.append(f"[Continuity]\n{continuity_section}")
     if position_section:
         sections.append(f"[Story Position]\n{position_section}")
 
     return "\n\n".join(sections)
+
+
+def _build_continuity_section(db: Database, scene_id: int) -> str:
+    """Render screenplay continuity items for the scene."""
+    items = db.get_continuity_for_scene(scene_id)
+    if not items:
+        return ""
+    _LABELS = {
+        "continuity_wound": "Wound",
+        "continuity_prop": "Prop",
+        "continuity_costume": "Costume",
+        "continuity_emotional_state": "Emotional state",
+        "continuity_knowledge_state": "Knowledge state",
+    }
+    lines: list[str] = []
+    for it in items:
+        label = _LABELS.get(it.memory_type, it.memory_type)
+        target = f" — {it.target}" if it.target else ""
+        lines.append(f"  {label}{target}: {it.value}")
+    return "\n".join(lines)
 
 
 def gather_outline_context(db: Database, project_id: int) -> str:
@@ -217,6 +240,36 @@ def _build_scene_section(scene) -> str:
         parts.append(f"Synopsis: {scene.synopsis}")
     if scene.summary:
         parts.append(f"Summary: {scene.summary}")
+    # -- Screenplay-engine fields (only emit when populated) -------------
+    if getattr(scene, "slugline", ""):
+        parts.append(f"Slugline: {scene.slugline}")
+    if getattr(scene, "time_of_day", ""):
+        parts.append(f"Time of day: {scene.time_of_day}")
+    if getattr(scene, "visual_objective", ""):
+        parts.append(f"Visual objective: {scene.visual_objective}")
+    if getattr(scene, "dramatic_turn", ""):
+        parts.append(f"Dramatic turn: {scene.dramatic_turn}")
+    if getattr(scene, "subtext_notes", ""):
+        parts.append(f"Subtext: {scene.subtext_notes}")
+    if getattr(scene, "blocking_notes", ""):
+        parts.append(f"Blocking: {scene.blocking_notes}")
+    if getattr(scene, "cinematic_pacing", ""):
+        parts.append(f"Cinematic pacing: {scene.cinematic_pacing}")
+    if getattr(scene, "continuity_notes", ""):
+        parts.append(f"Continuity notes: {scene.continuity_notes}")
+    # -- Screenplay PSYKE extensions -------------------------------------
+    if getattr(scene, "visible_conflict", ""):
+        parts.append(f"Visible conflict: {scene.visible_conflict}")
+    if getattr(scene, "hidden_conflict", ""):
+        parts.append(f"Hidden conflict: {scene.hidden_conflict}")
+    if getattr(scene, "emotional_turn", ""):
+        parts.append(f"Emotional turn: {scene.emotional_turn}")
+    if getattr(scene, "who_knows_what", ""):
+        parts.append(f"Who knows what: {scene.who_knows_what}")
+    if getattr(scene, "physical_action", ""):
+        parts.append(f"Physical action: {scene.physical_action}")
+    if getattr(scene, "visual_symbolism", ""):
+        parts.append(f"Visual symbolism: {scene.visual_symbolism}")
     if scene.content:
         parts.append(f"\nScene Content:\n{_truncate(scene.content)}")
     return "\n".join(parts)

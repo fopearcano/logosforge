@@ -55,6 +55,13 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
                 "montage_group": scene.montage_group,
                 "cinematic_pacing": scene.cinematic_pacing,
                 "continuity_notes": scene.continuity_notes,
+                # -- Screenplay PSYKE extensions ------------------------
+                "visible_conflict": scene.visible_conflict,
+                "hidden_conflict": scene.hidden_conflict,
+                "emotional_turn": scene.emotional_turn,
+                "who_knows_what": scene.who_knows_what,
+                "physical_action": scene.physical_action,
+                "visual_symbolism": scene.visual_symbolism,
                 "characters": [
                     char_name_by_id[cid]
                     for cid in char_ids
@@ -83,7 +90,7 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
 
     psyke_list = []
     for e in psyke_entries:
-        related = db.get_related_psyke_entries(e.id)
+        typed_related = db.get_typed_related_psyke_entries(e.id)
         progressions = db.get_psyke_progressions(e.id)
         psyke_list.append({
             "name": e.name,
@@ -92,7 +99,11 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
             "notes": e.notes,
             "is_global": e.is_global,
             "details": db.get_psyke_entry_details(e.id),
-            "related_entries": [r.name for r in related],
+            "related_entries": [r.name for r, _ in typed_related],
+            "typed_relations": [
+                {"name": r.name, "relation_type": rtype}
+                for r, rtype in typed_related
+            ],
             "progressions": [
                 {
                     "text": p.text,
@@ -104,6 +115,16 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
                 for p in progressions
             ],
         })
+
+    continuity_items = []
+    for scene in scenes:
+        for item in db.get_continuity_for_scene(scene.id):
+            continuity_items.append({
+                "scene_title": scene.title,
+                "memory_type": item.memory_type,
+                "target": item.target,
+                "value": item.value,
+            })
 
     outline_nodes = db.get_outline_nodes(project_id)
     children_map: dict[int | None, list] = {}
@@ -158,6 +179,7 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
         "scenes": scene_list,
         "psyke_entries": psyke_list,
         "outline": _build_outline_tree(None),
+        "continuity": continuity_items,
     }
 
     quantum = export_quantum_state(db, project_id)
