@@ -1930,7 +1930,7 @@ class WritingCoreView(QWidget):
                 return e
         return None
 
-    def _build_element_formats(self, elem):
+    def _build_element_formats(self, elem, *, preserve_inline: bool = False):
         _align_map = {
             "center": Qt.AlignmentFlag.AlignCenter,
             "right": Qt.AlignmentFlag.AlignRight,
@@ -1961,14 +1961,22 @@ class WritingCoreView(QWidget):
         if elem.font_size == _BODY_FONT_SIZE:
             font_size = self._font_size
         cfmt.setProperty(QTextCharFormat.Property.FontPixelSize, font_size)
-        cfmt.setFontWeight(
-            QFont.Weight.Bold if elem.bold else QFont.Weight.Normal,
-        )
-        cfmt.setFontItalic(elem.italic)
-        if elem.all_caps:
-            cfmt.setFontCapitalization(QFont.Capitalization.AllUppercase)
+        if preserve_inline:
+            if elem.bold:
+                cfmt.setFontWeight(QFont.Weight.Bold)
+            if elem.italic:
+                cfmt.setFontItalic(True)
+            if elem.all_caps:
+                cfmt.setFontCapitalization(QFont.Capitalization.AllUppercase)
         else:
-            cfmt.setFontCapitalization(QFont.Capitalization.MixedCase)
+            cfmt.setFontWeight(
+                QFont.Weight.Bold if elem.bold else QFont.Weight.Normal,
+            )
+            cfmt.setFontItalic(elem.italic)
+            if elem.all_caps:
+                cfmt.setFontCapitalization(QFont.Capitalization.AllUppercase)
+            else:
+                cfmt.setFontCapitalization(QFont.Capitalization.MixedCase)
         if elem.color_key == "muted":
             cfmt.setForeground(QColor(theme.TEXT_MUTED))
         return bfmt, cfmt
@@ -2010,14 +2018,16 @@ class WritingCoreView(QWidget):
                 elem = self._get_element_style(elem_name)
                 if elem:
                     block.setUserData(_BlockData(elem_name))
-                    bfmt, cfmt = self._build_element_formats(elem)
+                    bfmt, cfmt = self._build_element_formats(
+                        elem, preserve_inline=True,
+                    )
                     cursor = QTextCursor(block)
                     cursor.movePosition(
                         QTextCursor.MoveOperation.EndOfBlock,
                         QTextCursor.MoveMode.KeepAnchor,
                     )
-                    cursor.setBlockFormat(bfmt)
-                    cursor.setCharFormat(cfmt)
+                    cursor.mergeBlockFormat(bfmt)
+                    cursor.mergeCharFormat(cfmt)
                 block = block.next()
 
     def _on_editor_cursor_moved(self, editor: _SceneEditor) -> None:
