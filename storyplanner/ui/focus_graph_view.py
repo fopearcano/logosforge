@@ -143,6 +143,14 @@ EDGE_PARTICIPATION = "participation"     # scene ↔ character / place
 EDGE_CONTAINMENT = "containment"         # Act → Scene
 EDGE_QUANTUM = "quantum_branch"          # wavefunction → branch (in Quantum mode)
 
+# -- Screenplay-specific edge kinds ------------------------------------------
+EDGE_CAUSALITY = "causality"             # consecutive scenes sharing characters
+EDGE_SETUP_PAYOFF = "setup_payoff"       # PSYKE supports_setup / payoff relation
+EDGE_KNOWLEDGE = "knowledge"             # scenes sharing who_knows_what characters
+EDGE_SUBTEXT = "subtext"                 # PSYKE subtext_opposition relation
+EDGE_VISUAL_MOTIF = "visual_motif"       # PSYKE visual_motif relation
+EDGE_CONTINUITY = "continuity"           # continuity tracking across scenes
+
 EDGE_STYLE: dict[str, dict] = {
     EDGE_PARTICIPATION: {"color": "#4ade80", "width": 1.3, "dash": "solid"},
     EDGE_CONTAINMENT:   {"color": "#60a5fa", "width": 2.4, "dash": "solid"},
@@ -150,6 +158,12 @@ EDGE_STYLE: dict[str, dict] = {
     EDGE_MENTION:       {"color": "#94a3b8", "width": 0.9, "dash": "dash"},
     EDGE_QUANTUM:       {"color": "#f472b6", "width": 1.5, "dash": "dot"},
     EDGE_LINK:          {"color": "#4a5568", "width": 1.2, "dash": "solid"},
+    EDGE_CAUSALITY:     {"color": "#f59e0b", "width": 1.8, "dash": "solid"},
+    EDGE_SETUP_PAYOFF:  {"color": "#10b981", "width": 2.0, "dash": "solid"},
+    EDGE_KNOWLEDGE:     {"color": "#8b5cf6", "width": 1.5, "dash": "dash"},
+    EDGE_SUBTEXT:       {"color": "#ec4899", "width": 1.4, "dash": "dot"},
+    EDGE_VISUAL_MOTIF:  {"color": "#06b6d4", "width": 1.6, "dash": "dash"},
+    EDGE_CONTINUITY:    {"color": "#4ade80", "width": 1.4, "dash": "solid"},
 }
 
 # -- Narrative modes ---------------------------------------------------------
@@ -165,6 +179,14 @@ MODE_STRUCTURE = "structure"
 MODE_QUANTUM = "quantum"
 MODE_PSYKE = "psyke"
 MODE_MEANING = "meaning"
+
+# Screenplay-specific graph modes (only shown for screenplay projects).
+MODE_CAUSALITY = "causality"
+MODE_SETUP_PAYOFF = "setup_payoff"
+MODE_KNOWLEDGE = "knowledge"
+MODE_SUBTEXT = "subtext"
+MODE_VISUAL_MOTIFS = "visual_motifs"
+MODE_CONTINUITY_GRAPH = "continuity_graph"
 
 NODE_KIND_WAVEFUNCTION = "wavefunction"
 NODE_KIND_BRANCH = "branch"
@@ -248,11 +270,72 @@ MODE_PROFILES: dict[str, ModeProfile] = {
         meaning_overlay=True,
         description="Symbolic resonance — state colors, importance, arcs.",
     ),
+    # -- Screenplay-specific modes -------------------------------------------
+    MODE_CAUSALITY: ModeProfile(
+        name=MODE_CAUSALITY,
+        visible_kinds=frozenset({NODE_KIND_SCENE, NODE_KIND_CHARACTER}),
+        visible_edge_types=frozenset({EDGE_CAUSALITY, EDGE_PARTICIPATION}),
+        layout="linear_timeline",
+        prominence={NODE_KIND_SCENE: 1.1},
+        description="Scene causality — consecutive scenes linked by shared characters.",
+    ),
+    MODE_SETUP_PAYOFF: ModeProfile(
+        name=MODE_SETUP_PAYOFF,
+        visible_kinds=frozenset({
+            NODE_KIND_SCENE, NODE_KIND_THEME, NODE_KIND_OBJECT,
+        }),
+        visible_edge_types=frozenset({EDGE_SETUP_PAYOFF, EDGE_PSYKE_RELATION}),
+        layout="circular",
+        description="Setup/payoff — narrative plants and their resolutions.",
+    ),
+    MODE_KNOWLEDGE: ModeProfile(
+        name=MODE_KNOWLEDGE,
+        visible_kinds=frozenset({NODE_KIND_SCENE, NODE_KIND_CHARACTER}),
+        visible_edge_types=frozenset({EDGE_KNOWLEDGE, EDGE_PARTICIPATION}),
+        layout="circular",
+        prominence={NODE_KIND_CHARACTER: 1.15},
+        description="Character knowledge — who knows what and when.",
+    ),
+    MODE_SUBTEXT: ModeProfile(
+        name=MODE_SUBTEXT,
+        visible_kinds=frozenset({
+            NODE_KIND_SCENE, NODE_KIND_THEME, NODE_KIND_CHARACTER,
+        }),
+        visible_edge_types=frozenset({EDGE_SUBTEXT, EDGE_PSYKE_RELATION}),
+        layout="circular",
+        prominence={NODE_KIND_THEME: 1.3},
+        description="Subtext — hidden tensions and oppositions.",
+    ),
+    MODE_VISUAL_MOTIFS: ModeProfile(
+        name=MODE_VISUAL_MOTIFS,
+        visible_kinds=frozenset({
+            NODE_KIND_SCENE, NODE_KIND_OBJECT, NODE_KIND_THEME,
+        }),
+        visible_edge_types=frozenset({EDGE_VISUAL_MOTIF, EDGE_PSYKE_RELATION}),
+        layout="circular",
+        prominence={NODE_KIND_OBJECT: 1.2},
+        description="Visual motifs — recurring images and symbols.",
+    ),
+    MODE_CONTINUITY_GRAPH: ModeProfile(
+        name=MODE_CONTINUITY_GRAPH,
+        visible_kinds=frozenset({
+            NODE_KIND_SCENE, NODE_KIND_CHARACTER, NODE_KIND_PLACE,
+        }),
+        visible_edge_types=frozenset({EDGE_CONTINUITY, EDGE_PARTICIPATION}),
+        layout="linear_timeline",
+        prominence={NODE_KIND_SCENE: 1.1},
+        description="Continuity — tracked props, wounds, and states across scenes.",
+    ),
 }
 
 MODE_ORDER: tuple[str, ...] = (
     MODE_ALL, MODE_RELATIONSHIP, MODE_THEME, MODE_STRUCTURE,
     MODE_QUANTUM, MODE_PSYKE, MODE_MEANING,
+)
+
+SCREENPLAY_MODE_ORDER: tuple[str, ...] = (
+    MODE_CAUSALITY, MODE_SETUP_PAYOFF, MODE_KNOWLEDGE,
+    MODE_SUBTEXT, MODE_VISUAL_MOTIFS, MODE_CONTINUITY_GRAPH,
 )
 
 
@@ -446,6 +529,77 @@ def build_graph_data(db: Database, project_id: int) -> GraphData:
         data.adjacency.setdefault(scene_id, set()).add(act_id)
 
     return data
+
+
+def enrich_screenplay_edges(
+    db: Database, project_id: int, data: GraphData,
+) -> None:
+    """Add screenplay-specific typed edges to an existing graph.
+
+    Called after build_graph_data() for screenplay projects to produce
+    causality, setup/payoff, knowledge, subtext, visual-motif, and
+    continuity edges from scene metadata, PSYKE typed relations, and
+    story-memory entries.
+    """
+    scenes = db.get_all_scenes(project_id)
+    scenes_sorted = sorted(scenes, key=lambda s: s.sort_order)
+
+    scene_chars: dict[int, set[int]] = {}
+    for s in scenes_sorted:
+        scene_chars[s.id] = set(db.get_scene_character_ids(s.id))
+
+    seen: set[tuple[str, str, str]] = set()
+
+    def _add(src: str, tgt: str, etype: str) -> None:
+        key = (min(src, tgt), max(src, tgt), etype)
+        if key in seen or src not in data.nodes or tgt not in data.nodes:
+            return
+        seen.add(key)
+        data.edges.append(GraphEdge(src, tgt, edge_type=etype))
+        data.adjacency.setdefault(src, set()).add(tgt)
+        data.adjacency.setdefault(tgt, set()).add(src)
+
+    # 1. Causality: consecutive scenes sharing at least one character.
+    for i in range(len(scenes_sorted) - 1):
+        s1, s2 = scenes_sorted[i], scenes_sorted[i + 1]
+        if scene_chars.get(s1.id, set()) & scene_chars.get(s2.id, set()):
+            _add(f"Scene:{s1.id}", f"Scene:{s2.id}", EDGE_CAUSALITY)
+
+    # 2–4. Typed PSYKE relations → setup/payoff, subtext, visual-motif edges.
+    _PSYKE_EDGE_MAP: dict[str, str] = {
+        "supports_setup": EDGE_SETUP_PAYOFF,
+        "payoff": EDGE_SETUP_PAYOFF,
+        "subtext_opposition": EDGE_SUBTEXT,
+        "visual_motif": EDGE_VISUAL_MOTIF,
+    }
+    for entry in db.get_all_psyke_entries(project_id):
+        for rel_entry, rel_type in db.get_typed_related_psyke_entries(entry.id):
+            edge_type = _PSYKE_EDGE_MAP.get(rel_type)
+            if edge_type:
+                _add(f"PSYKE:{entry.id}", f"PSYKE:{rel_entry.id}", edge_type)
+
+    # 5. Knowledge: scenes with who_knows_what sharing characters.
+    knowledge_scenes = [s for s in scenes_sorted if (s.who_knows_what or "").strip()]
+    for i, s1 in enumerate(knowledge_scenes):
+        for s2 in knowledge_scenes[i + 1:]:
+            if scene_chars.get(s1.id, set()) & scene_chars.get(s2.id, set()):
+                _add(f"Scene:{s1.id}", f"Scene:{s2.id}", EDGE_KNOWLEDGE)
+
+    # 6. Continuity: same target tracked across multiple scenes.
+    memories = db.get_memories(project_id)
+    target_scenes: dict[tuple[str, str], list[int]] = {}
+    for m in memories:
+        if not m.memory_type.startswith("continuity_"):
+            continue
+        target_scenes.setdefault((m.target, m.memory_type), []).append(m.scene_id)
+    for scene_ids in target_scenes.values():
+        unique_ids = sorted(set(scene_ids))
+        for i in range(len(unique_ids) - 1):
+            _add(
+                f"Scene:{unique_ids[i]}",
+                f"Scene:{unique_ids[i + 1]}",
+                EDGE_CONTINUITY,
+            )
 
 
 def default_skeleton_layers() -> frozenset[str]:
@@ -698,6 +852,12 @@ class FocusGraphView(QWidget):
         self._on_node_selected = on_node_selected
         self._on_send_to_assistant = on_send_to_assistant
 
+        try:
+            project = db.get_project_by_id(project_id)
+            self._screenplay_mode = (project.format_mode == "screenplay") if project else False
+        except Exception:
+            self._screenplay_mode = False
+
         self._graph_data: GraphData | None = None
         self._focus_node: str | None = None
         self._hops = 1
@@ -739,6 +899,12 @@ class FocusGraphView(QWidget):
             EDGE_PSYKE_RELATION: True,
             EDGE_QUANTUM: True,
             EDGE_LINK: True,
+            EDGE_CAUSALITY: True,
+            EDGE_SETUP_PAYOFF: True,
+            EDGE_KNOWLEDGE: True,
+            EDGE_SUBTEXT: True,
+            EDGE_VISUAL_MOTIF: True,
+            EDGE_CONTINUITY: True,
         }
 
         self._node_items: dict[str, object] = {}
@@ -937,6 +1103,28 @@ class FocusGraphView(QWidget):
             mb.addWidget(btn)
             self._mode_buttons[mode] = btn
         self._mode_buttons[MODE_ALL].setChecked(True)
+        if self._screenplay_mode:
+            _sep = QLabel("|")
+            _sep.setStyleSheet(f"color: {theme.TEXT_MUTED}; padding: 0 4px;")
+            mb.addWidget(_sep)
+            _sp_labels = {
+                MODE_CAUSALITY: "Causality",
+                MODE_SETUP_PAYOFF: "Setup/Payoff",
+                MODE_KNOWLEDGE: "Knowledge",
+                MODE_SUBTEXT: "Subtext",
+                MODE_VISUAL_MOTIFS: "Motifs",
+                MODE_CONTINUITY_GRAPH: "Continuity",
+            }
+            for _m in SCREENPLAY_MODE_ORDER:
+                btn = QPushButton(_sp_labels[_m])
+                btn.setCheckable(True)
+                btn.setFlat(True)
+                btn.setToolTip(MODE_PROFILES[_m].description)
+                btn.clicked.connect(
+                    lambda _=False, m=_m: self._on_mode_changed(m),
+                )
+                mb.addWidget(btn)
+                self._mode_buttons[_m] = btn
         mb.addStretch()
 
         mb.addWidget(QLabel("Preset:"))
@@ -1334,6 +1522,8 @@ class FocusGraphView(QWidget):
 
     def refresh(self) -> None:
         self._graph_data = build_graph_data(self._db, self._project_id)
+        if self._screenplay_mode:
+            enrich_screenplay_edges(self._db, self._project_id, self._graph_data)
         self._rebuild_view()
 
     def _active_graph_data(self) -> GraphData | None:
@@ -1393,7 +1583,10 @@ class FocusGraphView(QWidget):
             self._meaning_data = None
 
         if self._gravity_enabled:
-            self._gravity_map = compute_gravity(self._db, self._project_id, active)
+            self._gravity_map = compute_gravity(
+                self._db, self._project_id, active,
+                screenplay_mode=self._screenplay_mode,
+            )
         else:
             self._gravity_map = {}
 

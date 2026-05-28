@@ -56,6 +56,7 @@ class StoryGravity:
 
 def compute_gravity(
     db: "Database", project_id: int, data: "GraphData",
+    *, screenplay_mode: bool = False,
 ) -> dict[str, StoryGravity]:
     """Compute Story Gravity for every node in *data*."""
     result: dict[str, StoryGravity] = {}
@@ -65,6 +66,11 @@ def compute_gravity(
     scenes = db.get_all_scenes(project_id)
     n_scenes = len(scenes)
     scene_index = {s.id: i for i, s in enumerate(scenes)}
+    scene_map = {s.id: s for s in scenes}
+    max_duration = 1
+    if screenplay_mode:
+        _durs = [getattr(s, "estimated_duration_minutes", 0) or 0 for s in scenes]
+        max_duration = max(_durs, default=1) or 1
 
     char_scene_count: dict[int, int] = {}
     place_scene_count: dict[int, int] = {}
@@ -143,6 +149,14 @@ def compute_gravity(
                 g.structural = _scene_structural_weight(idx, n_scenes)
             if str(node.entity_id) in ci_scene_alignment:
                 g.thematic = max(g.thematic, 0.7)
+            if screenplay_mode:
+                scene = scene_map.get(node.entity_id)
+                if scene:
+                    if (getattr(scene, "setup_payoff_links", "") or "").strip():
+                        g.structural = max(g.structural, 0.7)
+                    dur = getattr(scene, "estimated_duration_minutes", 0) or 0
+                    if dur > 0:
+                        g.narrative = max(g.narrative, dur / max_duration)
 
         elif node.etype == "PSYKE":
             sub = (node.subtype or "").lower()
