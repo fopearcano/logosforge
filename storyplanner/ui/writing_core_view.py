@@ -711,6 +711,7 @@ class _SceneEditor(QTextEdit):
     _on_nav_next = None
     _on_nav_prev = None
     _on_new_block = None
+    _on_tab_cycle = None
     _on_psyke_context_action = None
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -833,6 +834,13 @@ class _SceneEditor(QTextEdit):
     # -- keyboard --
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() == Qt.Key.Key_Tab and self._on_tab_cycle is not None:
+            forward = not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            self._on_tab_cycle(self, forward)
+            return
+        if event.key() == Qt.Key.Key_Backtab and self._on_tab_cycle is not None:
+            self._on_tab_cycle(self, False)
+            return
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             prev_elem = None
             data = self.textCursor().block().userData()
@@ -1735,6 +1743,7 @@ class WritingCoreView(QWidget):
         editor._on_nav_next = lambda e=editor: self._navigate_next_editor(e)
         editor._on_nav_prev = lambda e=editor: self._navigate_prev_editor(e)
         editor._on_new_block = self._on_new_block_created
+        editor._on_tab_cycle = self._on_tab_cycle_element
         editor._on_psyke_context_action = self._handle_psyke_context
         editor._smart_quotes = self._smart_quotes
         editor._grammar_enabled = self._grammar_checking
@@ -1952,8 +1961,14 @@ class WritingCoreView(QWidget):
         if elem.font_size == _BODY_FONT_SIZE:
             font_size = self._font_size
         cfmt.setProperty(QTextCharFormat.Property.FontPixelSize, font_size)
+        cfmt.setFontWeight(
+            QFont.Weight.Bold if elem.bold else QFont.Weight.Normal,
+        )
+        cfmt.setFontItalic(elem.italic)
         if elem.all_caps:
             cfmt.setFontCapitalization(QFont.Capitalization.AllUppercase)
+        else:
+            cfmt.setFontCapitalization(QFont.Capitalization.MixedCase)
         if elem.color_key == "muted":
             cfmt.setForeground(QColor(theme.TEXT_MUTED))
         return bfmt, cfmt
@@ -2001,8 +2016,8 @@ class WritingCoreView(QWidget):
                         QTextCursor.MoveOperation.EndOfBlock,
                         QTextCursor.MoveMode.KeepAnchor,
                     )
-                    cursor.mergeBlockFormat(bfmt)
-                    cursor.mergeCharFormat(cfmt)
+                    cursor.setBlockFormat(bfmt)
+                    cursor.setCharFormat(cfmt)
                 block = block.next()
 
     def _on_editor_cursor_moved(self, editor: _SceneEditor) -> None:
@@ -2033,6 +2048,32 @@ class WritingCoreView(QWidget):
             next_elem = transitions[previous_element]
         else:
             next_elem = self._format.default_element
+        self._apply_element_to_block(editor, next_elem)
+        self._element_combo.blockSignals(True)
+        for i in range(self._element_combo.count()):
+            if self._element_combo.itemData(i) == next_elem:
+                self._element_combo.setCurrentIndex(i)
+                break
+        self._element_combo.blockSignals(False)
+
+    def _on_tab_cycle_element(
+        self, editor: _SceneEditor, forward: bool = True,
+    ) -> None:
+        data = editor.textCursor().block().userData()
+        current = (
+            data.element
+            if isinstance(data, _BlockData) and data.element
+            else self._format.default_element
+        )
+        names = [e.name for e in self._format.elements]
+        if not names:
+            return
+        try:
+            idx = names.index(current)
+        except ValueError:
+            idx = 0
+        idx = (idx + (1 if forward else -1)) % len(names)
+        next_elem = names[idx]
         self._apply_element_to_block(editor, next_elem)
         self._element_combo.blockSignals(True)
         for i in range(self._element_combo.count()):
