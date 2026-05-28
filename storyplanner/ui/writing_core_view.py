@@ -86,7 +86,7 @@ from storyplanner.ui.psyke_highlighter import PsykeClickHandler, PsykeHighlighte
 from storyplanner.ui.psyke_quick_create import PsykeQuickCreateDialog
 from storyplanner.ui.suggestion_banner import SuggestionBanner
 from storyplanner.temporal_psyke import TemporalGraph
-from storyplanner.writing_formats import ALL_FORMATS, FORMAT_ORDER, WritingFormat
+from storyplanner.writing_formats import ALL_FORMATS, WritingFormat
 
 
 _CANVAS_MAX_WIDTH = 680
@@ -1303,7 +1303,8 @@ class WritingCoreView(QWidget):
         self._on_open_psyke_entry = on_open_psyke_entry
         self._on_content_saved = on_content_saved or on_data_changed
         project = db.get_project_by_id(project_id)
-        fmt_name = (project.format_mode if project else "novel") or "novel"
+        from storyplanner.project_compat import get_project_writing_format
+        fmt_name = get_project_writing_format(project) or "novel"
         self._format: WritingFormat = ALL_FORMATS.get(fmt_name, ALL_FORMATS["novel"])
         _settings = db.get_project_settings(project_id)
         self._focus_mode = False
@@ -1441,17 +1442,34 @@ class WritingCoreView(QWidget):
         )
         tb_layout.addWidget(self._word_count_label)
 
-        # 2. WritingMode
-        self._format_combo = QComboBox()
-        self._format_combo.setObjectName("writingFormatCombo")
-        self._format_combo.setFixedWidth(130)
-        for key in FORMAT_ORDER:
-            fmt = ALL_FORMATS[key]
-            self._format_combo.addItem(fmt.label, key)
-        idx = FORMAT_ORDER.index(self._format.name) if self._format.name in FORMAT_ORDER else 0
-        self._format_combo.setCurrentIndex(idx)
-        self._format_combo.currentIndexChanged.connect(self._on_format_changed)
-        tb_layout.addWidget(self._format_combo)
+        # 2. Project format badge — read-only indicator + link to Project
+        # Settings. The project's narrative engine and default writing format
+        # are owned by the project model, not the manuscript editor.
+        from storyplanner.project_compat import (
+            ENGINE_LABELS,
+            FORMAT_LABELS,
+            get_project_narrative_engine,
+            get_project_writing_format,
+        )
+        _proj = self._db.get_project_by_id(self._project_id)
+        _engine_label = ENGINE_LABELS.get(
+            get_project_narrative_engine(_proj), "Novel",
+        )
+        _format_label = FORMAT_LABELS.get(
+            get_project_writing_format(_proj), "Prose",
+        )
+        self._format_badge = QPushButton(
+            f"{_engine_label} · {_format_label}"
+        )
+        self._format_badge.setObjectName("writingFormatBadge")
+        self._format_badge.setFlat(True)
+        self._format_badge.setToolTip(
+            "Project narrative engine and default writing format —"
+            " click to change in Project Settings."
+        )
+        self._format_badge.setStyleSheet(_tb_btn_style)
+        self._format_badge.clicked.connect(self._open_project_settings)
+        tb_layout.addWidget(self._format_badge)
 
         # 3. ModeFormat
         self._element_combo = QComboBox()
@@ -1898,12 +1916,34 @@ class WritingCoreView(QWidget):
         self._element_combo.setCurrentIndex(idx)
         self._element_combo.blockSignals(False)
 
-    def _on_format_changed(self, index: int) -> None:
-        key = self._format_combo.itemData(index)
-        if not key or key not in ALL_FORMATS:
-            return
-        self._format = ALL_FORMATS[key]
-        self._db.update_project_format(self._project_id, key)
+    def _open_project_settings(self) -> None:
+        """Open the Project Settings dialog and refresh on change."""
+        from storyplanner.ui.project_settings_dialog import ProjectSettingsDialog
+        dlg = ProjectSettingsDialog(self._db, self._project_id, parent=self)
+        if dlg.exec():
+            self.reload_project_format()
+
+    def reload_project_format(self) -> None:
+        """Re-read the project's writing format and rebuild block grammar.
+
+        Called when Project Settings changes the engine/format so the editor
+        adapts to the new defaults without re-instantiating the view.
+        """
+        from storyplanner.project_compat import (
+            ENGINE_LABELS,
+            FORMAT_LABELS,
+            get_project_narrative_engine,
+            get_project_writing_format,
+        )
+        project = self._db.get_project_by_id(self._project_id)
+        fmt_name = get_project_writing_format(project)
+        self._format = ALL_FORMATS.get(fmt_name, ALL_FORMATS["novel"])
+        if hasattr(self, "_format_badge"):
+            engine_label = ENGINE_LABELS.get(
+                get_project_narrative_engine(project), "Novel",
+            )
+            format_label = FORMAT_LABELS.get(fmt_name, "Prose")
+            self._format_badge.setText(f"{engine_label} · {format_label}")
         self._populate_element_combo()
         self._setup_element_shortcuts()
         self._apply_format_to_all_blocks()

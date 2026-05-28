@@ -1296,6 +1296,10 @@ class MainWindow(QMainWindow):
         open_folder_action.triggered.connect(self._on_open_project_folder)
         file_menu.addAction(open_folder_action)
 
+        proj_settings_action = QAction("Project Settings...", self)
+        proj_settings_action.triggered.connect(self._on_project_settings)
+        file_menu.addAction(proj_settings_action)
+
         file_menu.addSeparator()
 
         export_action = QAction("Export...", self)
@@ -1509,11 +1513,30 @@ class MainWindow(QMainWindow):
     # -- Menu action handlers ---------------------------------------------------
 
     def _on_new_project(self) -> None:
+        from storyplanner.ui.new_project_dialog import NewProjectDialog
+        dlg = NewProjectDialog(parent=self)
+        if not dlg.exec():
+            return
         self._read_only = False
-        project = self._db.create_project("Untitled")
+        project = self._db.create_project(
+            dlg.get_title(),
+            narrative_engine=dlg.get_engine(),
+            default_writing_format=dlg.get_format(),
+        )
         self._switch_project(project.id)
         self._set_active_section("Dashboard")
         self._show_dashboard()
+
+    def _on_project_settings(self) -> None:
+        if not self._project_id:
+            return
+        from storyplanner.ui.project_settings_dialog import ProjectSettingsDialog
+        dlg = ProjectSettingsDialog(self._db, self._project_id, parent=self)
+        if dlg.exec():
+            # Re-enter the current section so views rebuild against the new
+            # engine/format. Simpler than wiring a refresh signal into every
+            # section.
+            self._switch_project(self._project_id)
 
     def _on_save(self) -> None:
         if self._current_file:

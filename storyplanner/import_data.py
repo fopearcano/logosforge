@@ -27,7 +27,12 @@ def import_json(db: Database, data: dict) -> int:
     project_info = data.get("project", {})
     title = project_info.get("title", "Imported Project")
     format_mode = project_info.get("format_mode", "novel")
-    project = db.create_project(title, format_mode=format_mode)
+    project = db.create_project(
+        title,
+        format_mode=format_mode,
+        narrative_engine=project_info.get("narrative_engine", ""),
+        default_writing_format=project_info.get("default_writing_format", ""),
+    )
     project_id = project.id
 
     # Create characters and build name → id mapping

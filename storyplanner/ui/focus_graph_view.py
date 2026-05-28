@@ -854,7 +854,8 @@ class FocusGraphView(QWidget):
 
         try:
             project = db.get_project_by_id(project_id)
-            self._screenplay_mode = (project.format_mode == "screenplay") if project else False
+            from storyplanner.project_compat import is_screenplay_project
+            self._screenplay_mode = is_screenplay_project(project)
         except Exception:
             self._screenplay_mode = False
 

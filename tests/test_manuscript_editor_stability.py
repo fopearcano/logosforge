@@ -60,7 +60,8 @@ def test_format_change_uses_content_saved_callback():
         on_data_changed=lambda: data_calls.append(1),
         on_content_saved=lambda: content_calls.append(1),
     )
-    view._format_combo.setCurrentIndex(1)
+    db.update_project_writing_format(proj.id, "screenplay")
+    view.reload_project_format()
     assert content_calls, "Expected content_saved to be called on format change"
     assert data_calls == []
 

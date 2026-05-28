@@ -202,7 +202,8 @@ class _TimelineStrip(_SceneCardContextMixin, QWidget):
         self._filters: PlotFilters | None = None
 
         project = self._db.get_project_by_id(self._project_id)
-        self._screenplay_mode = (project.format_mode if project else "") == "screenplay"
+        from storyplanner.project_compat import is_screenplay_project
+        self._screenplay_mode = is_screenplay_project(project)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)

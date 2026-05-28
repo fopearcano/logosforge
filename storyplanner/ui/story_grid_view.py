@@ -426,7 +426,19 @@ class StoryGridView(QWidget):
         self._columns: list[_ActSection] = []
 
         project = self._db.get_project_by_id(self._project_id)
-        self._format_mode = (project.format_mode if project else "novel") or "novel"
+        from storyplanner.project_compat import (
+            get_project_narrative_engine,
+            get_project_writing_format,
+        )
+        engine = get_project_narrative_engine(project)
+        # Story grid still keys most branches off the writing format, but
+        # falls back to "screenplay" when the engine is screenplay so the
+        # scene-grid affordances appear even if the format was overridden.
+        self._format_mode = (
+            "screenplay"
+            if engine == "screenplay"
+            else get_project_writing_format(project) or "novel"
+        )
 
         self._build_ui()
         self.refresh()

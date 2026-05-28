@@ -97,6 +97,36 @@ class Database:
                     text("ALTER TABLE project ADD COLUMN settings_json TEXT DEFAULT ''")
                 )
                 conn.commit()
+            if rows and "narrative_engine" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE project ADD COLUMN"
+                    " narrative_engine TEXT DEFAULT ''"
+                ))
+                conn.commit()
+            if rows and "default_writing_format" not in columns:
+                conn.execute(text(
+                    "ALTER TABLE project ADD COLUMN"
+                    " default_writing_format TEXT DEFAULT ''"
+                ))
+                conn.commit()
+            # Backfill engine + format from legacy format_mode for rows
+            # that haven't been touched by the new UI yet.
+            from storyplanner.project_compat import resolve_legacy_format
+            existing = conn.execute(text(
+                "SELECT id, format_mode, narrative_engine,"
+                " default_writing_format FROM project"
+            )).fetchall()
+            for pid, fmode, engine, fmt in existing:
+                if not (engine or "").strip() or not (fmt or "").strip():
+                    e2, f2 = resolve_legacy_format(fmode or "")
+                    conn.execute(
+                        text(
+                            "UPDATE project SET narrative_engine=:e,"
+                            " default_writing_format=:f WHERE id=:i"
+                        ),
+                        {"e": engine or e2, "f": fmt or f2, "i": pid},
+                    )
+            conn.commit()
 
             rows = conn.execute(text("PRAGMA table_info(scene)")).fetchall()
             columns = {row[1] for row in rows}
@@ -155,19 +185,79 @@ class Database:
         with Session(self._engine) as session:
             return list(session.exec(select(Project)).all())
 
-    def create_project(self, title: str, format_mode: str = "novel") -> Project:
+    def create_project(
+        self,
+        title: str,
+        format_mode: str | None = None,
+        *,
+        narrative_engine: str = "",
+        default_writing_format: str = "",
+    ) -> Project:
+        from storyplanner.project_compat import (
+            default_format_for_engine,
+            resolve_legacy_format,
+        )
+        engine = (narrative_engine or "").strip()
+        fmt = (default_writing_format or "").strip()
+        legacy_provided = format_mode is not None
+        legacy = (format_mode or "novel").strip()
+
+        # Derive whichever new field is missing.
+        if not engine and not fmt:
+            engine, fmt = resolve_legacy_format(legacy)
+        elif not engine:
+            engine = resolve_legacy_format(legacy)[0]
+        elif not fmt:
+            fmt = default_format_for_engine(engine)
+
+        # When the caller explicitly passed a legacy format_mode (e.g.
+        # imports, legacy tests, or `_make_project(db, "series")`), keep
+        # it exactly so round-trips stay faithful. Otherwise mirror the
+        # chosen writing format into format_mode so back-compat readers
+        # see the new selection.
+        stored_format_mode = legacy if legacy_provided else fmt
+
         with Session(self._engine) as session:
-            project = Project(title=title, format_mode=format_mode)
+            project = Project(
+                title=title,
+                format_mode=stored_format_mode,
+                narrative_engine=engine,
+                default_writing_format=fmt,
+            )
             session.add(project)
             session.commit()
             session.refresh(project)
             return project
 
     def update_project_format(self, project_id: int, format_mode: str) -> None:
+        """Legacy: change the writing format and keep new fields in sync."""
         with Session(self._engine) as session:
             project = session.get(Project, project_id)
             if project:
                 project.format_mode = format_mode
+                if format_mode:
+                    project.default_writing_format = format_mode
+                session.commit()
+
+    def update_project_narrative_engine(
+        self, project_id: int, engine: str,
+    ) -> None:
+        with Session(self._engine) as session:
+            project = session.get(Project, project_id)
+            if project and engine:
+                project.narrative_engine = engine
+                session.commit()
+
+    def update_project_writing_format(
+        self, project_id: int, writing_format: str,
+    ) -> None:
+        with Session(self._engine) as session:
+            project = session.get(Project, project_id)
+            if project and writing_format:
+                project.default_writing_format = writing_format
+                # Keep legacy format_mode in sync so the manuscript editor
+                # and exporters that still read format_mode keep working.
+                project.format_mode = writing_format
                 session.commit()
 
     def get_project_settings(self, project_id: int) -> dict:

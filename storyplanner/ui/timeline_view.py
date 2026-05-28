@@ -90,7 +90,8 @@ class TimelineView(QWidget):
         self._on_data_changed = on_data_changed
 
         project = self._db.get_project_by_id(self._project_id)
-        self._screenplay_mode = (project.format_mode if project else "") == "screenplay"
+        from storyplanner.project_compat import is_screenplay_project
+        self._screenplay_mode = is_screenplay_project(project)
 
         # Scene data: (row, col) → (scene_id, title, plotline)
         self._cell_data: dict[tuple[int, int], tuple[int, str, str]] = {}

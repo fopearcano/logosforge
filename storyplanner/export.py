@@ -145,11 +145,17 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
 
     from storyplanner.quantum_outliner.persistence import export_quantum_state
 
+    from storyplanner.project_compat import (
+        get_project_narrative_engine,
+        get_project_writing_format,
+    )
     data = {
         "project": {
             "title": project.title if project else "Untitled",
             "description": project.description if project else "",
             "format_mode": (project.format_mode if project else "novel") or "novel",
+            "narrative_engine": get_project_narrative_engine(project),
+            "default_writing_format": get_project_writing_format(project),
         },
         "characters": [
             {"name": c.name, "description": c.description} for c in characters

@@ -1850,45 +1850,49 @@ def test_transitions_reference_valid_elements():
 
 # -- Format combo --------------------------------------------------------------
 
-def test_view_has_format_combo():
+def test_view_has_format_badge():
+    """Top bar shows a read-only project-format badge (not a combo)."""
     db = Database()
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
-    assert view._format_combo.count() == len(FORMAT_ORDER)
+    assert hasattr(view, "_format_badge")
+    assert not hasattr(view, "_format_combo")
 
 
-def test_format_combo_default_novel():
+def test_format_badge_default_novel():
     db = Database()
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
-    assert view._format_combo.currentData() == "novel"
+    assert "Novel" in view._format_badge.text()
     assert view._format.name == "novel"
 
 
-def test_format_combo_respects_project():
+def test_format_badge_respects_project():
     db = Database()
     proj = db.create_project("Script", format_mode="screenplay")
     db.create_scene(proj.id, "Scene", content="Action.")
     view = WritingCoreView(db, proj.id)
-    assert view._format_combo.currentData() == "screenplay"
+    assert "Screenplay" in view._format_badge.text()
     assert view._format.name == "screenplay"
 
 
-def test_format_change_persists():
+def test_format_change_via_project_settings_persists():
+    """Format change goes through the project layer, not the manuscript."""
     db = Database()
     proj, *_ = _setup_project(db)
-    view = WritingCoreView(db, proj.id)
-    view._format_combo.setCurrentIndex(FORMAT_ORDER.index("screenplay"))
+    db.update_project_writing_format(proj.id, "screenplay")
     updated = db.get_project_by_id(proj.id)
+    assert updated.default_writing_format == "screenplay"
     assert updated.format_mode == "screenplay"
 
 
-def test_format_change_updates_element_combo():
+def test_reload_project_format_updates_element_combo():
     db = Database()
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
     novel_count = view._element_combo.count()
-    view._format_combo.setCurrentIndex(FORMAT_ORDER.index("screenplay"))
+    db.update_project_writing_format(proj.id, "screenplay")
+    view.reload_project_format()
     screenplay_count = view._element_combo.count()
     assert novel_count != screenplay_count
     assert screenplay_count == len(ALL_FORMATS["screenplay"].elements)
@@ -2015,7 +2019,8 @@ def test_element_shortcuts_rebuild_on_format_change():
     proj, *_ = _setup_project(db)
     view = WritingCoreView(db, proj.id)
     novel_count = len(view._element_shortcuts)
-    view._format_combo.setCurrentIndex(FORMAT_ORDER.index("screenplay"))
+    db.update_project_writing_format(proj.id, "screenplay")
+    view.reload_project_format()
     screenplay_count = len(view._element_shortcuts)
     assert screenplay_count > 0
     assert novel_count != screenplay_count
@@ -2056,7 +2061,8 @@ def test_format_change_applies_to_blocks():
     data = block.userData()
     assert isinstance(data, _BlockData)
     assert data.element == "body"
-    view._format_combo.setCurrentIndex(FORMAT_ORDER.index("screenplay"))
+    db.update_project_writing_format(proj.id, "screenplay")
+    view.reload_project_format()
     block = editor.document().begin()
     data = block.userData()
     assert isinstance(data, _BlockData)

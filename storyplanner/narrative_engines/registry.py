@@ -32,7 +32,12 @@ def get_engine(name: str | None) -> NarrativeEngine:
 
 
 def engine_for_project(project: "Project | None") -> NarrativeEngine:
-    """Pick the engine for a Project — driven by project.format_mode today."""
+    """Pick the engine for a Project.
+
+    Reads `project.narrative_engine` if set (new field), otherwise
+    falls back to the legacy `format_mode` mapping via project_compat.
+    """
     if project is None:
         return NOVEL_ENGINE
-    return get_engine(getattr(project, "format_mode", "novel"))
+    from storyplanner.project_compat import get_project_narrative_engine
+    return get_engine(get_project_narrative_engine(project))
