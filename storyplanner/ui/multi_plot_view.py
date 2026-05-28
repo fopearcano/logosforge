@@ -201,6 +201,9 @@ class _TimelineStrip(_SceneCardContextMixin, QWidget):
         self._on_open_scene = on_open_scene
         self._filters: PlotFilters | None = None
 
+        project = self._db.get_project_by_id(self._project_id)
+        self._screenplay_mode = (project.format_mode if project else "") == "screenplay"
+
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -287,6 +290,45 @@ class _TimelineStrip(_SceneCardContextMixin, QWidget):
             lbl.setObjectName("timelineCardSummary")
             lbl.setWordWrap(True)
             layout.addWidget(lbl)
+
+        if self._screenplay_mode:
+            sp_parts: list[str] = []
+            duration = getattr(scene, "estimated_duration_minutes", 0) or 0
+            if duration:
+                sp_parts.append(f"{duration}m")
+            location = getattr(scene, "location", "") or ""
+            if location:
+                sp_parts.append(location[:15])
+            ie = getattr(scene, "interior_exterior", "") or ""
+            tod = getattr(scene, "time_of_day", "") or ""
+            if ie or tod:
+                sp_parts.append(f"{ie}/{tod}" if ie and tod else (ie or tod))
+            if sp_parts:
+                sp_lbl = QLabel(" · ".join(sp_parts))
+                sp_lbl.setObjectName("timelineCardMeta")
+                sp_lbl.setStyleSheet(
+                    f"color: {theme.TEXT_MUTED}; font-size: 10px;"
+                )
+                layout.addWidget(sp_lbl)
+
+            emotional_turn = getattr(scene, "emotional_turn", "") or ""
+            if emotional_turn:
+                et_short = emotional_turn[:25] + "..." if len(emotional_turn) > 25 else emotional_turn
+                et_lbl = QLabel(f"↻ {et_short}")
+                et_lbl.setObjectName("timelineCardTurn")
+                et_lbl.setStyleSheet(
+                    f"color: {theme.ACCENT_DIM}; font-size: 10px; font-style: italic;"
+                )
+                layout.addWidget(et_lbl)
+
+            montage = getattr(scene, "montage_group", "") or ""
+            if montage:
+                mg_lbl = QLabel(f"▸ {montage}")
+                mg_lbl.setObjectName("timelineCardMontage")
+                mg_lbl.setStyleSheet(
+                    f"color: {theme.TEXT_SECONDARY}; font-size: 10px;"
+                )
+                layout.addWidget(mg_lbl)
 
         self._layout.addWidget(card)
         self._layout.addSpacing(4)

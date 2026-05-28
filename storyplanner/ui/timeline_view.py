@@ -89,6 +89,9 @@ class TimelineView(QWidget):
         self._on_scene_selected = on_scene_selected
         self._on_data_changed = on_data_changed
 
+        project = self._db.get_project_by_id(self._project_id)
+        self._screenplay_mode = (project.format_mode if project else "") == "screenplay"
+
         # Scene data: (row, col) → (scene_id, title, plotline)
         self._cell_data: dict[tuple[int, int], tuple[int, str, str]] = {}
         self._selected_scene_id: int | None = None
@@ -411,6 +414,43 @@ class TimelineView(QWidget):
             )
             state_label.setWordWrap(True)
             card_layout.addWidget(state_label)
+
+        if self._screenplay_mode:
+            sp_parts: list[str] = []
+            duration = getattr(scene, "estimated_duration_minutes", 0) or 0
+            if duration:
+                sp_parts.append(f"{duration}m")
+            location = getattr(scene, "location", "") or ""
+            if location:
+                sp_parts.append(_truncate(location, 20))
+            ie = getattr(scene, "interior_exterior", "") or ""
+            tod = getattr(scene, "time_of_day", "") or ""
+            if ie or tod:
+                sp_parts.append(f"{ie}/{tod}" if ie and tod else (ie or tod))
+            if sp_parts:
+                sp_label = QLabel(" \u00b7 ".join(sp_parts))
+                sp_label.setStyleSheet(
+                    f"color: {theme.TEXT_MUTED}; font-size: 10px;"
+                )
+                card_layout.addWidget(sp_label)
+
+            dramatic_turn = getattr(scene, "dramatic_turn", "") or ""
+            if dramatic_turn:
+                dt_label = QLabel(f"\u21bb {_truncate(dramatic_turn, 40)}")
+                dt_label.setStyleSheet(
+                    f"color: {theme.TEXT_SECONDARY}; font-size: 10px; font-style: italic;"
+                )
+                dt_label.setWordWrap(True)
+                card_layout.addWidget(dt_label)
+
+            setup_payoff = getattr(scene, "setup_payoff_links", "") or ""
+            if setup_payoff:
+                sp_link_label = QLabel(f"\u2693 {_truncate(setup_payoff, 40)}")
+                sp_link_label.setStyleSheet(
+                    f"color: {theme.ACCENT_DIM}; font-size: 10px;"
+                )
+                sp_link_label.setWordWrap(True)
+                card_layout.addWidget(sp_link_label)
 
         return card
 

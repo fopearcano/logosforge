@@ -70,6 +70,7 @@ class _SceneCard(QFrame):
         scene_type: SceneType | None = None,
         char_colors: list[str] | None = None,
         pacing_warning: bool = False,
+        screenplay_mode: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -116,6 +117,43 @@ class _SceneCard(QFrame):
             summary_text = summary_text[:77] + "..."
         self._summary_label.setText(summary_text)
         layout.addWidget(self._summary_label)
+
+        # -- Screenplay metadata line -------------------------------------------
+        self._screenplay_label = QLabel()
+        self._screenplay_label.setObjectName("gridCardMeta")
+        if screenplay_mode:
+            sp_parts: list[str] = []
+            duration = getattr(scene, "estimated_duration_minutes", 0) or 0
+            if duration:
+                sp_parts.append(f"{duration}m")
+            location = getattr(scene, "location", "") or ""
+            if location:
+                loc_short = location[:20] + "..." if len(location) > 20 else location
+                sp_parts.append(loc_short)
+            ie = getattr(scene, "interior_exterior", "") or ""
+            tod = getattr(scene, "time_of_day", "") or ""
+            if ie or tod:
+                sp_parts.append(f"{ie}/{tod}" if ie and tod else (ie or tod))
+            self._screenplay_label.setText(" · ".join(sp_parts) if sp_parts else "")
+        layout.addWidget(self._screenplay_label)
+
+        # -- Dramatic turn / setup-payoff markers --------------------------------
+        self._turn_label = QLabel()
+        self._turn_label.setObjectName("gridCardMeta")
+        if screenplay_mode:
+            turn_parts: list[str] = []
+            dramatic_turn = getattr(scene, "dramatic_turn", "") or ""
+            if dramatic_turn:
+                dt_short = dramatic_turn[:30] + "..." if len(dramatic_turn) > 30 else dramatic_turn
+                turn_parts.append(f"↻ {dt_short}")
+            setup_payoff = getattr(scene, "setup_payoff_links", "") or ""
+            if setup_payoff:
+                turn_parts.append("⚓")  # anchor = setup/payoff marker
+            self._turn_label.setText("  ".join(turn_parts))
+            self._turn_label.setToolTip(
+                f"Setup/payoff: {setup_payoff}" if setup_payoff else ""
+            )
+        layout.addWidget(self._turn_label)
 
         # -- Meta line -----------------------------------------------------------
         self._meta_label = QLabel()
@@ -171,28 +209,34 @@ class _SceneCard(QFrame):
 
         layout.addStretch()
 
-        self._apply_zoom(zoom, flow_visible)
+        self._apply_zoom(zoom, flow_visible, screenplay_mode)
         self._apply_accent(color_accent)
         self._apply_pacing_warning(pacing_warning, flow_visible)
 
         self._drag_start: QPoint | None = None
 
-    def _apply_zoom(self, zoom: int, flow_visible: bool = False) -> None:
+    def _apply_zoom(self, zoom: int, flow_visible: bool = False, screenplay_mode: bool = False) -> None:
         if zoom == 0:
             self._summary_label.hide()
             self._meta_label.hide()
             self._char_row.hide()
             self._type_label.hide()
+            self._screenplay_label.hide()
+            self._turn_label.hide()
         elif zoom == 1:
             self._summary_label.setVisible(bool(self._summary_label.text()))
             self._meta_label.hide()
             self._char_row.setVisible(flow_visible)
             self._type_label.setVisible(flow_visible)
+            self._screenplay_label.setVisible(screenplay_mode and bool(self._screenplay_label.text()))
+            self._turn_label.hide()
         else:
             self._summary_label.setVisible(bool(self._summary_label.text()))
             self._meta_label.setVisible(bool(self._meta_label.text()))
             self._char_row.setVisible(flow_visible)
             self._type_label.setVisible(flow_visible)
+            self._screenplay_label.setVisible(screenplay_mode and bool(self._screenplay_label.text()))
+            self._turn_label.setVisible(screenplay_mode and bool(self._turn_label.text()))
 
     def _apply_accent(self, color: str) -> None:
         if color:
@@ -412,13 +456,19 @@ class StoryGridView(QWidget):
 
         tb_layout.addWidget(QLabel("Group:"))
         self._group_combo = QComboBox()
-        self._group_combo.addItems(["By Act", "By Chapter"])
+        group_items = ["By Act", "By Chapter"]
+        if self._format_mode == "screenplay":
+            group_items.append("By Location")
+        self._group_combo.addItems(group_items)
         self._group_combo.currentIndexChanged.connect(self._on_group_changed)
         tb_layout.addWidget(self._group_combo)
 
         tb_layout.addWidget(QLabel("Color:"))
         self._color_combo = QComboBox()
-        self._color_combo.addItems(["None", "Plotline", "Tag", "Beat"])
+        color_items = ["None", "Plotline", "Tag", "Beat"]
+        if self._format_mode == "screenplay":
+            color_items.extend(["Pacing", "Continuity"])
+        self._color_combo.addItems(color_items)
         self._color_combo.currentIndexChanged.connect(self._on_color_changed)
         tb_layout.addWidget(self._color_combo)
 
@@ -475,11 +525,12 @@ class StoryGridView(QWidget):
 
         groups: dict[str, list] = {}
         for scene in scenes:
-            key = (
-                (scene.act or "").strip()
-                if self._group_by == "act"
-                else (scene.chapter or "").strip()
-            )
+            if self._group_by == "act":
+                key = (scene.act or "").strip()
+            elif self._group_by == "location":
+                key = (getattr(scene, "location", "") or "").strip()
+            else:
+                key = (scene.chapter or "").strip()
             if not key:
                 key = ""
             groups.setdefault(key, []).append(scene)
@@ -536,6 +587,7 @@ class StoryGridView(QWidget):
                     scene_type=scene_type,
                     char_colors=char_colors,
                     pacing_warning=scene.id in warned_ids,
+                    screenplay_mode=self._format_mode == "screenplay",
                 )
                 card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                 card.customContextMenuRequested.connect(
@@ -582,6 +634,11 @@ class StoryGridView(QWidget):
         if self._color_mode == "none":
             return {}
 
+        if self._color_mode == "pacing":
+            return self._build_pacing_color_map(scenes)
+        if self._color_mode == "continuity":
+            return self._build_continuity_color_map(scenes)
+
         assignments: dict[str, str] = {}
         result: dict[int, str] = {}
         idx = 0
@@ -605,6 +662,33 @@ class StoryGridView(QWidget):
                 idx += 1
             result[scene.id] = assignments[key]
 
+        return result
+
+    def _build_pacing_color_map(self, scenes) -> dict[int, str]:
+        """Color scenes by cinematic pacing: fast/medium/slow."""
+        _PACING_COLORS = {
+            "fast": "#f87171",    # red — high energy
+            "medium": "#facc15",  # amber — moderate
+            "slow": "#60a5fa",    # blue — deliberate
+        }
+        result: dict[int, str] = {}
+        for scene in scenes:
+            pacing = (getattr(scene, "cinematic_pacing", "") or "").strip().lower()
+            if pacing in _PACING_COLORS:
+                result[scene.id] = _PACING_COLORS[pacing]
+        return result
+
+    def _build_continuity_color_map(self, scenes) -> dict[int, str]:
+        """Color scenes that have continuity items tracked vs not."""
+        result: dict[int, str] = {}
+        for scene in scenes:
+            items = self._db.get_continuity_for_scene(scene.id)
+            if items:
+                result[scene.id] = "#4ade80"  # green — tracked
+            else:
+                char_ids = self._db.get_scene_character_ids(scene.id)
+                if char_ids:
+                    result[scene.id] = "#f87171"  # red — characters but no continuity
         return result
 
     # -- Drag and drop -------------------------------------------------------
@@ -832,12 +916,17 @@ class StoryGridView(QWidget):
     # -- Group / color switching ---------------------------------------------
 
     def _on_group_changed(self, index: int) -> None:
-        self._group_by = "act" if index == 0 else "chapter"
+        group_modes = ["act", "chapter"]
+        if self._format_mode == "screenplay":
+            group_modes.append("location")
+        self._group_by = group_modes[index] if index < len(group_modes) else "act"
         self.refresh()
 
     def _on_color_changed(self, index: int) -> None:
         modes = ["none", "plotline", "tag", "beat"]
-        self._color_mode = modes[index]
+        if self._format_mode == "screenplay":
+            modes.extend(["pacing", "continuity"])
+        self._color_mode = modes[index] if index < len(modes) else "none"
         self.refresh()
 
     def get_color_mode(self) -> str:
