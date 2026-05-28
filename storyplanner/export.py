@@ -41,6 +41,20 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
                 "chapter": scene.chapter,
                 "plotline": scene.plotline,
                 "color_label": scene.color_label,
+                # -- Screenplay-engine fields (empty for non-screenplay scenes)
+                "slugline": scene.slugline,
+                "location": scene.location,
+                "interior_exterior": scene.interior_exterior,
+                "time_of_day": scene.time_of_day,
+                "estimated_duration_minutes": scene.estimated_duration_minutes,
+                "visual_objective": scene.visual_objective,
+                "dramatic_turn": scene.dramatic_turn,
+                "blocking_notes": scene.blocking_notes,
+                "subtext_notes": scene.subtext_notes,
+                "setup_payoff_links": scene.setup_payoff_links,
+                "montage_group": scene.montage_group,
+                "cinematic_pacing": scene.cinematic_pacing,
+                "continuity_notes": scene.continuity_notes,
                 "characters": [
                     char_name_by_id[cid]
                     for cid in char_ids

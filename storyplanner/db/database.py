@@ -83,6 +83,29 @@ class Database:
                 )
                 conn.commit()
 
+            # Screenplay-engine fields — added safely; existing rows pick up
+            # the defaults and Novel projects simply ignore them.
+            _screenplay_text_fields = (
+                "slugline", "location", "interior_exterior", "time_of_day",
+                "visual_objective", "dramatic_turn", "blocking_notes",
+                "subtext_notes", "setup_payoff_links", "montage_group",
+                "cinematic_pacing", "continuity_notes",
+            )
+            if rows:
+                columns = {row[1] for row in conn.execute(
+                    text("PRAGMA table_info(scene)")).fetchall()}
+                for col in _screenplay_text_fields:
+                    if col not in columns:
+                        conn.execute(text(
+                            f"ALTER TABLE scene ADD COLUMN {col} TEXT DEFAULT ''"
+                        ))
+                if "estimated_duration_minutes" not in columns:
+                    conn.execute(text(
+                        "ALTER TABLE scene ADD COLUMN"
+                        " estimated_duration_minutes INTEGER DEFAULT 0"
+                    ))
+                conn.commit()
+
     # -- Projects ------------------------------------------------------------
 
     def get_project_by_id(self, project_id: int) -> Project | None:
@@ -685,6 +708,20 @@ class Database:
         chapter: str = "",
         plotline: str = "",
         color_label: str = "",
+        # -- Screenplay-engine fields ------------------------------------
+        slugline: str = "",
+        location: str = "",
+        interior_exterior: str = "",
+        time_of_day: str = "",
+        estimated_duration_minutes: int = 0,
+        visual_objective: str = "",
+        dramatic_turn: str = "",
+        blocking_notes: str = "",
+        subtext_notes: str = "",
+        setup_payoff_links: str = "",
+        montage_group: str = "",
+        cinematic_pacing: str = "",
+        continuity_notes: str = "",
         character_ids: list[int] | None = None,
         place_ids: list[int] | None = None,
         character_states: list[tuple[int, str]] | None = None,
@@ -715,6 +752,19 @@ class Database:
                 chapter=chapter,
                 plotline=plotline,
                 color_label=color_label,
+                slugline=slugline,
+                location=location,
+                interior_exterior=interior_exterior,
+                time_of_day=time_of_day,
+                estimated_duration_minutes=estimated_duration_minutes,
+                visual_objective=visual_objective,
+                dramatic_turn=dramatic_turn,
+                blocking_notes=blocking_notes,
+                subtext_notes=subtext_notes,
+                setup_payoff_links=setup_payoff_links,
+                montage_group=montage_group,
+                cinematic_pacing=cinematic_pacing,
+                continuity_notes=continuity_notes,
                 sort_order=next_order,
             )
             session.add(scene)
@@ -749,6 +799,20 @@ class Database:
         chapter: str = "",
         plotline: str = "",
         color_label: str | None = None,
+        # -- Screenplay-engine fields (None = leave unchanged) -----------
+        slugline: str | None = None,
+        location: str | None = None,
+        interior_exterior: str | None = None,
+        time_of_day: str | None = None,
+        estimated_duration_minutes: int | None = None,
+        visual_objective: str | None = None,
+        dramatic_turn: str | None = None,
+        blocking_notes: str | None = None,
+        subtext_notes: str | None = None,
+        setup_payoff_links: str | None = None,
+        montage_group: str | None = None,
+        cinematic_pacing: str | None = None,
+        continuity_notes: str | None = None,
         character_ids: list[int] | None = None,
         place_ids: list[int] | None = None,
         character_states: list[tuple[int, str]] | None = None,
@@ -769,6 +833,32 @@ class Database:
             scene.plotline = plotline
             if color_label is not None:
                 scene.color_label = color_label
+            if slugline is not None:
+                scene.slugline = slugline
+            if location is not None:
+                scene.location = location
+            if interior_exterior is not None:
+                scene.interior_exterior = interior_exterior
+            if time_of_day is not None:
+                scene.time_of_day = time_of_day
+            if estimated_duration_minutes is not None:
+                scene.estimated_duration_minutes = estimated_duration_minutes
+            if visual_objective is not None:
+                scene.visual_objective = visual_objective
+            if dramatic_turn is not None:
+                scene.dramatic_turn = dramatic_turn
+            if blocking_notes is not None:
+                scene.blocking_notes = blocking_notes
+            if subtext_notes is not None:
+                scene.subtext_notes = subtext_notes
+            if setup_payoff_links is not None:
+                scene.setup_payoff_links = setup_payoff_links
+            if montage_group is not None:
+                scene.montage_group = montage_group
+            if cinematic_pacing is not None:
+                scene.cinematic_pacing = cinematic_pacing
+            if continuity_notes is not None:
+                scene.continuity_notes = continuity_notes
 
             # Replace character links
             old_char_links = session.exec(

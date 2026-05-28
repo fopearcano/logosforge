@@ -91,6 +91,20 @@ class Scene(SQLModel, table=True):
     chapter: str = ""
     plotline: str = ""
     color_label: str = ""
+    # -- Screenplay-engine fields (optional, default-safe) -----------------
+    slugline: str = ""
+    location: str = ""
+    interior_exterior: str = ""        # "INT" | "EXT" | "INT/EXT" | ""
+    time_of_day: str = ""              # "DAY" | "NIGHT" | "DUSK" | ...
+    estimated_duration_minutes: int = 0
+    visual_objective: str = ""
+    dramatic_turn: str = ""
+    blocking_notes: str = ""
+    subtext_notes: str = ""
+    setup_payoff_links: str = ""       # CSV of related scene IDs
+    montage_group: str = ""
+    cinematic_pacing: str = ""         # "fast" | "medium" | "slow" | ""
+    continuity_notes: str = ""
     sort_order: int = 0
     created_at: datetime = Field(default_factory=_now)
 
