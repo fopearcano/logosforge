@@ -1261,6 +1261,35 @@ class Database:
                     arc.append((scene.id, scene.title, idx + 1, state))
         return arc
 
+    def get_character_arc_by_name(
+        self, project_id: int, name: str
+    ) -> list[tuple[int, str, int, str]]:
+        """Arc for a character identified by name.
+
+        The Arcs selector is sourced from PSYKE character entries (the
+        source of truth), but scene character-states are keyed by
+        Character-table id. This resolves the PSYKE entry name to any
+        matching Character rows (case-insensitive) and returns their
+        combined arc. Returns [] when the character has no recorded scene
+        states yet.
+        """
+        name_l = (name or "").strip().lower()
+        if not name_l:
+            return []
+        char_ids = {
+            c.id for c in self.get_all_characters(project_id)
+            if (c.name or "").strip().lower() == name_l
+        }
+        if not char_ids:
+            return []
+        scenes = self.get_all_scenes(project_id)
+        arc: list[tuple[int, str, int, str]] = []
+        for idx, scene in enumerate(scenes):
+            for cid, state in self.get_scene_character_states(scene.id):
+                if cid in char_ids:
+                    arc.append((scene.id, scene.title, idx + 1, state))
+        return arc
+
     # -- PSYKE (Story Bible) ------------------------------------------------
 
     def get_psyke_entry_by_id(self, entry_id: int) -> PsykeEntry | None:

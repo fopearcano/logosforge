@@ -1,4 +1,9 @@
-"""Character Arc view — ordered list of a character's states across scenes."""
+"""Character Arc view — ordered list of a character's states across scenes.
+
+Characters come from PSYKE entries of type "character" (the project's
+source of truth), so every story-bible character is selectable. Arc data
+is resolved by name against recorded scene character-states.
+"""
 
 from collections.abc import Callable
 from typing import Optional
@@ -45,29 +50,104 @@ class CharacterArcView(QWidget):
         self._empty_label.setWordWrap(True)
         layout.addWidget(self._empty_label)
 
+        self._connect_events()
         self._load_characters()
 
-    def _load_characters(self) -> None:
+    # -- Event wiring --------------------------------------------------------
+
+    def _connect_events(self) -> None:
+        """Rebuild the selector when the project or PSYKE entries change.
+
+        Bound-method connections auto-disconnect when this widget is
+        destroyed, so replaced views never leak."""
+        try:
+            from storyplanner.project_events import get_event_bus
+            bus = get_event_bus()
+            bus.project_loaded.connect(self._on_project_changed)
+            bus.project_created.connect(self._on_project_changed)
+            for signal in (
+                bus.psyke_changed,
+                bus.psyke_list_changed,
+                bus.project_data_changed,
+            ):
+                signal.connect(self._on_data_event)
+        except Exception:
+            pass
+
+    def _on_project_changed(self, project_id: int) -> None:
+        self.set_project(project_id)
+
+    def _on_data_event(self, *_args) -> None:
+        self.refresh()
+
+    def set_project(self, project_id: int) -> None:
+        """Point at a new project and reload its PSYKE characters, dropping
+        any characters from the previous project."""
+        self._project_id = project_id
+        self.refresh()
+
+    def _is_alive(self) -> bool:
+        try:
+            self._char_combo.count()
+            return True
+        except RuntimeError:
+            return False
+
+    def refresh(self) -> None:
+        """Rebuild the character selector from current PSYKE characters,
+        preserving the current selection by name when still present."""
+        if not self._is_alive():
+            return
+        previous = self._char_combo.currentData()
+        self._load_characters(preserve=previous)
+
+    # -- Data ----------------------------------------------------------------
+
+    def _psyke_characters(self):
+        entries = self._db.get_all_psyke_entries(self._project_id)
+        chars = [
+            e for e in entries
+            if (getattr(e, "entry_type", "") or "").lower() == "character"
+        ]
+        chars.sort(key=lambda e: (e.name or "").lower())
+        return chars
+
+    def _load_characters(self, preserve: str | None = None) -> None:
         self._char_combo.blockSignals(True)
         self._char_combo.clear()
         self._char_combo.addItem("-- Select Character --", None)
-        for char in self._db.get_all_characters(self._project_id):
-            self._char_combo.addItem(char.name, char.id)
+        # Source of truth: PSYKE character entries for THIS project. The
+        # item data is the character name, used to resolve arc states.
+        restore_index = 0
+        for entry in self._psyke_characters():
+            self._char_combo.addItem(entry.name, entry.name)
+            if preserve is not None and entry.name == preserve:
+                restore_index = self._char_combo.count() - 1
         self._char_combo.blockSignals(False)
-        self._char_combo.setCurrentIndex(0)
-        self._arc_list.clear()
-        self._empty_label.setText("Select a character to view their arc.")
-        self._empty_label.setVisible(True)
+
+        if restore_index > 0:
+            self._char_combo.setCurrentIndex(restore_index)
+            self._on_character_changed(restore_index)
+        else:
+            self._char_combo.setCurrentIndex(0)
+            self._arc_list.clear()
+            if self._char_combo.count() <= 1:
+                self._empty_label.setText(
+                    "No characters yet. Create a character entry in PSYKE."
+                )
+            else:
+                self._empty_label.setText("Select a character to view their arc.")
+            self._empty_label.setVisible(True)
 
     def _on_character_changed(self, index: int) -> None:
-        char_id = self._char_combo.currentData()
-        if char_id is None:
+        name = self._char_combo.currentData()
+        if not name:
             self._arc_list.clear()
             self._empty_label.setText("Select a character to view their arc.")
             self._empty_label.setVisible(True)
             return
 
-        arc = self._db.get_character_arc(self._project_id, char_id)
+        arc = self._db.get_character_arc_by_name(self._project_id, name)
         self._arc_list.clear()
 
         if not arc:
@@ -80,7 +160,7 @@ class CharacterArcView(QWidget):
 
         self._empty_label.setVisible(False)
         for scene_id, title, order_index, state in arc:
-            text = f"[{order_index}] {title}  \u2192  \"{state}\""
+            text = f"[{order_index}] {title}  →  \"{state}\""
             item = QListWidgetItem(text)
             item.setData(USER_ROLE, scene_id)
             self._arc_list.addItem(item)
