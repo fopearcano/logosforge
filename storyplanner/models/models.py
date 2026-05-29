@@ -114,6 +114,18 @@ class Scene(SQLModel, table=True):
     who_knows_what: str = ""           # knowledge state across characters
     physical_action: str = ""          # concrete physical action beat
     visual_symbolism: str = ""         # symbols / motifs in frame
+    # -- Stage-script fields (optional, default-safe) ----------------------
+    # time_of_day, dramatic_turn, blocking_notes and continuity_notes above
+    # are reused; these add theatre-specific metadata.
+    stage_location: str = ""
+    set_description: str = ""
+    scene_objective: str = ""
+    entrance_exit_notes: str = ""
+    prop_notes: str = ""
+    cue_notes: str = ""
+    offstage_events: str = ""
+    audience_visibility_notes: str = ""
+    performance_duration_minutes: int = 0
     sort_order: int = 0
     created_at: datetime = Field(default_factory=_now)
 
@@ -427,4 +439,65 @@ class GraphicNovelContinuityAppearance(SQLModel, table=True):
     state_description: str = ""
     continuity_status: str = "consistent"   # GN_CONTINUITY_STATUSES
     sort_order: int = 0
+    created_at: datetime = Field(default_factory=_now)
+
+
+# ---------------------------------------------------------------------------
+# Stage Script — theatrical / performance metadata
+#
+# Lightweight, scene-scoped structures for the Stage Script engine. Props
+# are NOT duplicated here: stage business references a PSYKE object entry.
+# New tables are created by create_all() on open; existing project files
+# gain them non-destructively.
+# ---------------------------------------------------------------------------
+
+STAGE_ENTRANCE_EXIT_TYPES = ("entrance", "exit")
+STAGE_CUE_TYPES = ("light", "sound", "music", "prop", "movement", "other")
+
+
+class StageEntranceExit(SQLModel, table=True):
+    """A character entering or leaving the stage within a scene."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    scene_id: int = Field(foreign_key="scene.id")
+    character_id: Optional[int] = Field(
+        default=None, foreign_key="character.id",
+    )
+    type: str = "entrance"           # STAGE_ENTRANCE_EXIT_TYPES
+    moment_order: int = 0
+    cue_text: str = ""
+    notes: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+class StageCue(SQLModel, table=True):
+    """A technical cue (light / sound / music / prop / movement) in a scene."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    scene_id: int = Field(foreign_key="scene.id")
+    cue_type: str = "other"          # STAGE_CUE_TYPES
+    moment_order: int = 0
+    cue_text: str = ""
+    notes: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+class StageBusiness(SQLModel, table=True):
+    """Stage business: a prop used by a character with a stage action.
+
+    The prop is a PSYKE object entry (prop_psyke_entry_id) rather than a
+    duplicated prop record.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    scene_id: int = Field(foreign_key="scene.id")
+    prop_psyke_entry_id: Optional[int] = Field(
+        default=None, foreign_key="psykeentry.id",
+    )
+    character_id: Optional[int] = Field(
+        default=None, foreign_key="character.id",
+    )
+    stage_action: str = ""
+    continuity_note: str = ""
+    moment_order: int = 0
     created_at: datetime = Field(default_factory=_now)

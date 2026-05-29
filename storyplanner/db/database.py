@@ -36,6 +36,9 @@ from storyplanner.models import (
     SceneCharacterLink,
     SceneCharacterState,
     ScenePlaceLink,
+    StageBusiness,
+    StageCue,
+    StageEntranceExit,
     Stage,
     StageBranch,
     StageSnapshot,
@@ -164,6 +167,30 @@ class Database:
                     conn.execute(text(
                         "ALTER TABLE scene ADD COLUMN"
                         " estimated_duration_minutes INTEGER DEFAULT 0"
+                    ))
+                conn.commit()
+
+            # Stage-script scene fields — added safely; existing rows pick up
+            # the defaults and other engines simply ignore them. time_of_day,
+            # dramatic_turn, blocking_notes and continuity_notes are reused
+            # from the screenplay set above.
+            _stage_text_fields = (
+                "stage_location", "set_description", "scene_objective",
+                "entrance_exit_notes", "prop_notes", "cue_notes",
+                "offstage_events", "audience_visibility_notes",
+            )
+            if rows:
+                columns = {row[1] for row in conn.execute(
+                    text("PRAGMA table_info(scene)")).fetchall()}
+                for col in _stage_text_fields:
+                    if col not in columns:
+                        conn.execute(text(
+                            f"ALTER TABLE scene ADD COLUMN {col} TEXT DEFAULT ''"
+                        ))
+                if "performance_duration_minutes" not in columns:
+                    conn.execute(text(
+                        "ALTER TABLE scene ADD COLUMN"
+                        " performance_duration_minutes INTEGER DEFAULT 0"
                     ))
                 conn.commit()
 
@@ -863,6 +890,16 @@ class Database:
         who_knows_what: str = "",
         physical_action: str = "",
         visual_symbolism: str = "",
+        # -- Stage-script fields -----------------------------------------
+        stage_location: str = "",
+        set_description: str = "",
+        scene_objective: str = "",
+        entrance_exit_notes: str = "",
+        prop_notes: str = "",
+        cue_notes: str = "",
+        offstage_events: str = "",
+        audience_visibility_notes: str = "",
+        performance_duration_minutes: int = 0,
         character_ids: list[int] | None = None,
         place_ids: list[int] | None = None,
         character_states: list[tuple[int, str]] | None = None,
@@ -912,6 +949,15 @@ class Database:
                 who_knows_what=who_knows_what,
                 physical_action=physical_action,
                 visual_symbolism=visual_symbolism,
+                stage_location=stage_location,
+                set_description=set_description,
+                scene_objective=scene_objective,
+                entrance_exit_notes=entrance_exit_notes,
+                prop_notes=prop_notes,
+                cue_notes=cue_notes,
+                offstage_events=offstage_events,
+                audience_visibility_notes=audience_visibility_notes,
+                performance_duration_minutes=performance_duration_minutes,
                 sort_order=next_order,
             )
             session.add(scene)
@@ -967,6 +1013,16 @@ class Database:
         who_knows_what: str | None = None,
         physical_action: str | None = None,
         visual_symbolism: str | None = None,
+        # -- Stage-script fields (None = leave unchanged) ---------------
+        stage_location: str | None = None,
+        set_description: str | None = None,
+        scene_objective: str | None = None,
+        entrance_exit_notes: str | None = None,
+        prop_notes: str | None = None,
+        cue_notes: str | None = None,
+        offstage_events: str | None = None,
+        audience_visibility_notes: str | None = None,
+        performance_duration_minutes: int | None = None,
         character_ids: list[int] | None = None,
         place_ids: list[int] | None = None,
         character_states: list[tuple[int, str]] | None = None,
@@ -1025,6 +1081,24 @@ class Database:
                 scene.physical_action = physical_action
             if visual_symbolism is not None:
                 scene.visual_symbolism = visual_symbolism
+            if stage_location is not None:
+                scene.stage_location = stage_location
+            if set_description is not None:
+                scene.set_description = set_description
+            if scene_objective is not None:
+                scene.scene_objective = scene_objective
+            if entrance_exit_notes is not None:
+                scene.entrance_exit_notes = entrance_exit_notes
+            if prop_notes is not None:
+                scene.prop_notes = prop_notes
+            if cue_notes is not None:
+                scene.cue_notes = cue_notes
+            if offstage_events is not None:
+                scene.offstage_events = offstage_events
+            if audience_visibility_notes is not None:
+                scene.audience_visibility_notes = audience_visibility_notes
+            if performance_duration_minutes is not None:
+                scene.performance_duration_minutes = performance_duration_minutes
 
             # Replace character links
             old_char_links = session.exec(
@@ -1578,6 +1652,113 @@ class Database:
                     setattr(row, key, value)
             session.add(row)
             session.commit()
+
+    # -- Stage Script: entrances/exits, cues, stage business ----------------
+
+    def create_stage_entrance_exit(
+        self, scene_id: int, *, character_id: int | None = None,
+        type: str = "entrance", moment_order: int | None = None,
+        cue_text: str = "", notes: str = "",
+    ) -> StageEntranceExit:
+        with Session(self._engine) as session:
+            if moment_order is None:
+                existing = session.exec(
+                    select(StageEntranceExit).where(
+                        StageEntranceExit.scene_id == scene_id,
+                    )
+                ).all()
+                moment_order = len(existing)
+            row = StageEntranceExit(
+                scene_id=scene_id, character_id=character_id, type=type,
+                moment_order=moment_order, cue_text=cue_text, notes=notes,
+            )
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return row
+
+    def get_stage_entrances_exits(self, scene_id: int) -> list[StageEntranceExit]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(StageEntranceExit)
+                .where(StageEntranceExit.scene_id == scene_id)
+                .order_by(StageEntranceExit.moment_order, StageEntranceExit.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def delete_stage_entrance_exit(self, row_id: int) -> None:
+        with Session(self._engine) as session:
+            row = session.get(StageEntranceExit, row_id)
+            if row:
+                session.delete(row)
+                session.commit()
+
+    def create_stage_cue(
+        self, scene_id: int, *, cue_type: str = "other",
+        moment_order: int | None = None, cue_text: str = "", notes: str = "",
+    ) -> StageCue:
+        with Session(self._engine) as session:
+            if moment_order is None:
+                existing = session.exec(
+                    select(StageCue).where(StageCue.scene_id == scene_id)
+                ).all()
+                moment_order = len(existing)
+            row = StageCue(
+                scene_id=scene_id, cue_type=cue_type,
+                moment_order=moment_order, cue_text=cue_text, notes=notes,
+            )
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return row
+
+    def get_stage_cues(self, scene_id: int) -> list[StageCue]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(StageCue)
+                .where(StageCue.scene_id == scene_id)
+                .order_by(StageCue.moment_order, StageCue.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def delete_stage_cue(self, row_id: int) -> None:
+        with Session(self._engine) as session:
+            row = session.get(StageCue, row_id)
+            if row:
+                session.delete(row)
+                session.commit()
+
+    def create_stage_business(
+        self, scene_id: int, *, prop_psyke_entry_id: int | None = None,
+        character_id: int | None = None, stage_action: str = "",
+        continuity_note: str = "", moment_order: int | None = None,
+    ) -> StageBusiness:
+        with Session(self._engine) as session:
+            if moment_order is None:
+                existing = session.exec(
+                    select(StageBusiness).where(
+                        StageBusiness.scene_id == scene_id,
+                    )
+                ).all()
+                moment_order = len(existing)
+            row = StageBusiness(
+                scene_id=scene_id, prop_psyke_entry_id=prop_psyke_entry_id,
+                character_id=character_id, stage_action=stage_action,
+                continuity_note=continuity_note, moment_order=moment_order,
+            )
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return row
+
+    def get_stage_business(self, scene_id: int) -> list[StageBusiness]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(StageBusiness)
+                .where(StageBusiness.scene_id == scene_id)
+                .order_by(StageBusiness.moment_order, StageBusiness.id)
+            )
+            return list(session.exec(stmt).all())
 
     # -- PSYKE (Story Bible) ------------------------------------------------
 
