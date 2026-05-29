@@ -218,6 +218,20 @@ def build_series_memory_context(
         if em["paid_off"]:
             lines.append("Paid off here: " + ", ".join(em["paid_off"][:_MAX]))
 
+    # Setup → payoff chains (which arcs already have both ends tracked).
+    try:
+        from storyplanner.series_plot import get_setup_payoff_chains
+        chains = get_setup_payoff_chains(db, project_id)
+    except Exception:
+        chains = []
+    if chains:
+        bits = [
+            f"{c['title']} (ep#{(c['setup_order'] or 0) + 1}→"
+            f"ep#{(c['payoff_order'] or 0) + 1})"
+            for c in chains[:_MAX]
+        ]
+        lines.append("Setup→payoff chains: " + "; ".join(bits))
+
     if not lines:
         return ""
     return "[Series Memory]\n" + "\n".join(lines)

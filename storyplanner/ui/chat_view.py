@@ -611,6 +611,9 @@ class ChatView(QWidget):
 
     def _handle_slash_command(self, text: str) -> bool:
         cmd = text.strip().lower()
+        if cmd == "/series" or cmd.startswith("/series "):
+            self._handle_series_command(text)
+            return True
         if cmd == "/context":
             ctx = build_chat_context(
                 self._db, self._project_id,
@@ -649,6 +652,24 @@ class ChatView(QWidget):
             self._add_message_bubble("system", out)
             return True
         return False
+
+    def _handle_series_command(self, text: str) -> None:
+        """Render a /series … response (only meaningful for Series projects)."""
+        sub = text.strip()[len("/series"):].strip()
+        self._add_message_bubble("user", text)
+        try:
+            from storyplanner.narrative_engines import engine_for_project
+            project = self._db.get_project_by_id(self._project_id)
+            is_series = engine_for_project(project).name == "series"
+        except Exception:
+            is_series = False
+        if not is_series:
+            out = "/series commands are only available for Series-engine projects."
+        else:
+            from storyplanner.series_review import format_series_command
+            out = format_series_command(self._db, self._project_id, sub)
+        self._db.add_chat_message(self._project_id, "system", out)
+        self._add_message_bubble("system", out)
 
     # -- Memory --------------------------------------------------------------
 
