@@ -1496,6 +1496,17 @@ class Database:
     def assign_gn_page_to_sequence(self, page_id: int, sequence_id: int | None) -> None:
         self._patch_row(GraphicNovelPage, page_id, {"sequence_id": sequence_id})
 
+    def reorder_gn_pages(self, project_id: int, ordered_page_ids: list[int]) -> None:
+        """Renumber project pages to match *ordered_page_ids* (page_number +
+        sort_order both follow the given order, 1-based page numbers)."""
+        with Session(self._engine) as session:
+            for idx, pid in enumerate(ordered_page_ids):
+                page = session.get(GraphicNovelPage, pid)
+                if page and page.project_id == project_id:
+                    page.page_number = idx + 1
+                    page.sort_order = idx
+            session.commit()
+
     def delete_gn_page(self, page_id: int) -> None:
         with Session(self._engine) as session:
             for panel in session.exec(

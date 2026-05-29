@@ -339,6 +339,7 @@ class MainWindow(QMainWindow):
             "Assistant": "\U0001F916",
             "Chat": "\U0001F4AC",
             "Stages": "\U0001F4DC",
+            "Pages": "\U0001F5BC",
         }
 
         self._toggle_btn = QPushButton("\u00ab")
@@ -346,11 +347,23 @@ class MainWindow(QMainWindow):
         self._toggle_btn.clicked.connect(self._toggle_sidebar)
         sidebar_layout.addWidget(self._toggle_btn)
 
+        # Pages is a Graphic-Novel-only surface — include it in the sidebar
+        # only for GN projects so group expand/collapse can't re-show it.
+        try:
+            from storyplanner.project_compat import get_project_narrative_engine
+            _project = self._db.get_project_by_id(self._project_id)
+            self._is_graphic_novel = (
+                get_project_narrative_engine(_project) == "graphic_novel"
+            )
+        except Exception:
+            self._is_graphic_novel = False
+        _plan_members = ["Outline", "Scenes", "Timeline", "Plot"]
+        if self._is_graphic_novel:
+            _plan_members.append("Pages")
+
         _SIDEBAR_LAYOUT: list = [
             "Projects", "Dashboard", "Notes", "Manuscript",
-            ("group", "Plan", [
-                "Outline", "Scenes", "Timeline", "Plot",
-            ]),
+            ("group", "Plan", _plan_members),
             ("group", "Structure", ["Structure", "Acts", "Beats", "Arcs"]),
             "Tags", "Graph",
             ("group", "Analytics", ["Health", "Balance", "Pacing", "Narrative"]),
@@ -435,6 +448,8 @@ class MainWindow(QMainWindow):
             "Health", "Balance", "Pacing", "Adapt", "Narrative", "PSYKE", "Plugins",
             "Stages", "Chat",
         ]
+        if self._is_graphic_novel:
+            self._nav_labels.append("Pages")
         self._nav_section_handlers = {
             "Projects": self._show_projects,
             "Dashboard": self._show_dashboard,
@@ -459,6 +474,7 @@ class MainWindow(QMainWindow):
             "Plugins": self._show_plugins,
             "Chat": self._show_chat,
             "Stages": self._show_stages,
+            "Pages": self._show_gn_pages,
         }
         for label in self._nav_labels:
             btn = self.sidebar_buttons[label]
@@ -1023,6 +1039,16 @@ class MainWindow(QMainWindow):
                 self._project_id,
                 on_data_changed=self._on_data_changed,
                 get_active_scene_id=self._detect_active_scene_id,
+            )
+        )
+
+    def _show_gn_pages(self) -> None:
+        from storyplanner.ui.graphic_novel_pages_view import GraphicNovelPagesView
+        self._set_content(
+            GraphicNovelPagesView(
+                self._db,
+                self._project_id,
+                on_data_changed=self._on_data_changed,
             )
         )
 
