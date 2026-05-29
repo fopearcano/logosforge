@@ -2031,6 +2031,12 @@ class Database:
     def set_psyke_theatre_memory(self, entry_id: int, theatre: dict) -> None:
         self._set_psyke_detail_section(entry_id, "theatre", theatre)
 
+    def get_psyke_series_memory(self, entry_id: int) -> dict:
+        return self._get_psyke_detail_section(entry_id, "series")
+
+    def set_psyke_series_memory(self, entry_id: int, series: dict) -> None:
+        self._set_psyke_detail_section(entry_id, "series", series)
+
     def _get_psyke_detail_section(self, entry_id: int, section: str) -> dict:
         data = self.get_psyke_entry_details(entry_id).get(section)
         return data if isinstance(data, dict) else {}

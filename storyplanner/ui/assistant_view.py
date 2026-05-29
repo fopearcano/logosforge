@@ -1173,6 +1173,25 @@ class AssistantPanel(QWidget):
         except Exception:
             pass
 
+        # Series — when the engine is series, surface compact long-form
+        # memory (current season/episode, active arcs, unresolved threads,
+        # continuity risks, character state history).
+        try:
+            from storyplanner.narrative_engines import engine_for_project
+            project = self._db.get_project_by_id(self._project_id)
+            if engine_for_project(project).name == "series":
+                from storyplanner.psyke_series import build_series_memory_context
+                series_ctx = build_series_memory_context(
+                    self._db, self._project_id,
+                )
+                if series_ctx:
+                    structural_ctx = (
+                        series_ctx + "\n\n" + structural_ctx
+                        if structural_ctx else series_ctx
+                    )
+        except Exception:
+            pass
+
         return scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orchestration_debug, notes_ctx, graph_ctx, mode_ctx, structural_ctx, irrational_ctx, controlling_idea_ctx
 
     def _send_preset(self, action_key: str) -> None:
