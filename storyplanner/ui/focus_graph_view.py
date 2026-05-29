@@ -102,6 +102,12 @@ NODE_KIND_PANEL = "panel"
 NODE_KIND_MOTIF = "motif"
 NODE_KIND_GN_OBJECT = "gn_object"
 
+# -- Stage Script node kinds --------------------------------------------------
+# Characters / scenes / set-locations / props reuse the existing character /
+# scene / place / object kinds. Cues and offstage events are new.
+NODE_KIND_CUE = "cue"
+NODE_KIND_OFFSTAGE = "offstage"
+
 LAYER_KINDS: tuple[str, ...] = (
     NODE_KIND_CHARACTER, NODE_KIND_PLACE, NODE_KIND_OBJECT,
     NODE_KIND_THEME, NODE_KIND_LORE, NODE_KIND_SCENE,
@@ -128,6 +134,8 @@ _KIND_COLORS: dict[str, str] = {
     NODE_KIND_PANEL: "#fbbf24",
     NODE_KIND_MOTIF: "#06b6d4",
     NODE_KIND_GN_OBJECT: "#f59e0b",
+    NODE_KIND_CUE: "#eab308",
+    NODE_KIND_OFFSTAGE: "#a78bfa",
 }
 
 _KIND_SHAPES: dict[str, str] = {
@@ -146,6 +154,8 @@ _KIND_SHAPES: dict[str, str] = {
     NODE_KIND_PANEL: "square",
     NODE_KIND_MOTIF: "diamond",
     NODE_KIND_GN_OBJECT: "triangle",
+    NODE_KIND_CUE: "small_circle",
+    NODE_KIND_OFFSTAGE: "hexagon",
 }
 
 # -- Semantic edge kinds ------------------------------------------------------
@@ -173,6 +183,15 @@ EDGE_GN_MOTIF = "gn_motif"                   # motif ↔ page it appears on
 EDGE_GN_SYMBOL_ECHO = "gn_symbol_echo"       # page ↔ page sharing a motif
 EDGE_GN_OBJECT_CONTINUITY = "gn_object_continuity"  # object ↔ page it appears on
 
+# -- Stage Script-specific edge kinds ----------------------------------------
+EDGE_SS_PRESSURE = "ss_pressure"           # pressures/confronts/dominates...
+EDGE_SS_SUBTEXT = "ss_subtext"             # subtext_opposition / avoids
+EDGE_SS_ENTRANCE_EXIT = "ss_entrance_exit"  # character ↔ scene (enter/exit)
+EDGE_SS_USES_PROP = "ss_uses_prop"         # character → prop, prop → scene
+EDGE_SS_BLOCKING = "ss_blocking"           # scene ↔ set location
+EDGE_SS_CUE = "ss_cue"                      # scene → cue
+EDGE_SS_OFFSTAGE = "ss_offstage"           # character/scene ↔ offstage event
+
 EDGE_STYLE: dict[str, dict] = {
     EDGE_PARTICIPATION: {"color": "#4ade80", "width": 1.3, "dash": "solid"},
     EDGE_CONTAINMENT:   {"color": "#60a5fa", "width": 2.4, "dash": "solid"},
@@ -192,6 +211,13 @@ EDGE_STYLE: dict[str, dict] = {
     EDGE_GN_MOTIF:      {"color": "#06b6d4", "width": 1.4, "dash": "dash"},
     EDGE_GN_SYMBOL_ECHO: {"color": "#22d3ee", "width": 1.6, "dash": "dot"},
     EDGE_GN_OBJECT_CONTINUITY: {"color": "#f59e0b", "width": 1.4, "dash": "solid"},
+    EDGE_SS_PRESSURE:   {"color": "#ef4444", "width": 1.8, "dash": "solid"},
+    EDGE_SS_SUBTEXT:    {"color": "#ec4899", "width": 1.4, "dash": "dot"},
+    EDGE_SS_ENTRANCE_EXIT: {"color": "#4ade80", "width": 1.5, "dash": "solid"},
+    EDGE_SS_USES_PROP:  {"color": "#f59e0b", "width": 1.4, "dash": "dash"},
+    EDGE_SS_BLOCKING:   {"color": "#60a5fa", "width": 1.4, "dash": "solid"},
+    EDGE_SS_CUE:        {"color": "#eab308", "width": 1.0, "dash": "dot"},
+    EDGE_SS_OFFSTAGE:   {"color": "#a78bfa", "width": 1.3, "dash": "dash"},
 }
 
 # -- Narrative modes ---------------------------------------------------------
@@ -222,6 +248,14 @@ MODE_GN_PANEL_CAUSALITY = "gn_panel_causality"
 MODE_GN_SYMBOL_RECURRENCE = "gn_symbol_recurrence"
 MODE_GN_PAGE_RHYTHM = "gn_page_rhythm"
 MODE_GN_OBJECT_CONTINUITY = "gn_object_continuity"
+
+# Stage-script-specific graph modes (only shown for stage_script projects).
+MODE_SS_PRESSURE = "ss_character_pressure"
+MODE_SS_ENTRANCE_EXIT = "ss_entrance_exit"
+MODE_SS_PROP = "ss_prop_continuity"
+MODE_SS_BLOCKING = "ss_blocking_spatial"
+MODE_SS_SUBTEXT = "ss_subtext_conflict"
+MODE_SS_OFFSTAGE = "ss_offstage_knowledge"
 
 NODE_KIND_WAVEFUNCTION = "wavefunction"
 NODE_KIND_BRANCH = "branch"
@@ -402,6 +436,59 @@ MODE_PROFILES: dict[str, ModeProfile] = {
         prominence={NODE_KIND_GN_OBJECT: 1.3},
         description="Object continuity — where tracked objects reappear.",
     ),
+    # -- Stage Script modes --------------------------------------------------
+    MODE_SS_PRESSURE: ModeProfile(
+        name=MODE_SS_PRESSURE,
+        visible_kinds=frozenset({NODE_KIND_CHARACTER}),
+        visible_edge_types=frozenset({EDGE_SS_PRESSURE}),
+        layout="circular",
+        prominence={NODE_KIND_CHARACTER: 1.2},
+        description="Character pressure — who pressures/confronts whom.",
+    ),
+    MODE_SS_ENTRANCE_EXIT: ModeProfile(
+        name=MODE_SS_ENTRANCE_EXIT,
+        visible_kinds=frozenset({NODE_KIND_SCENE, NODE_KIND_CHARACTER}),
+        visible_edge_types=frozenset({EDGE_SS_ENTRANCE_EXIT}),
+        layout="linear_timeline",
+        prominence={NODE_KIND_SCENE: 1.1},
+        description="Entrances/exits — who enters and leaves each scene.",
+    ),
+    MODE_SS_PROP: ModeProfile(
+        name=MODE_SS_PROP,
+        visible_kinds=frozenset({
+            NODE_KIND_OBJECT, NODE_KIND_SCENE, NODE_KIND_CHARACTER,
+        }),
+        visible_edge_types=frozenset({EDGE_SS_USES_PROP}),
+        layout="circular",
+        prominence={NODE_KIND_OBJECT: 1.3},
+        description="Prop continuity — who uses which prop, and where.",
+    ),
+    MODE_SS_BLOCKING: ModeProfile(
+        name=MODE_SS_BLOCKING,
+        visible_kinds=frozenset({NODE_KIND_SCENE, NODE_KIND_PLACE}),
+        visible_edge_types=frozenset({EDGE_SS_BLOCKING}),
+        layout="theme_centered",
+        prominence={NODE_KIND_PLACE: 1.3},
+        description="Blocking / spatial — scenes staged in each set location.",
+    ),
+    MODE_SS_SUBTEXT: ModeProfile(
+        name=MODE_SS_SUBTEXT,
+        visible_kinds=frozenset({NODE_KIND_CHARACTER}),
+        visible_edge_types=frozenset({EDGE_SS_SUBTEXT}),
+        layout="circular",
+        prominence={NODE_KIND_CHARACTER: 1.15},
+        description="Subtext conflict — opposing/avoiding stances.",
+    ),
+    MODE_SS_OFFSTAGE: ModeProfile(
+        name=MODE_SS_OFFSTAGE,
+        visible_kinds=frozenset({
+            NODE_KIND_CHARACTER, NODE_KIND_OFFSTAGE, NODE_KIND_SCENE,
+        }),
+        visible_edge_types=frozenset({EDGE_SS_OFFSTAGE}),
+        layout="circular",
+        prominence={NODE_KIND_OFFSTAGE: 1.2},
+        description="Offstage knowledge — events offstage and who is present.",
+    ),
 }
 
 MODE_ORDER: tuple[str, ...] = (
@@ -417,6 +504,11 @@ SCREENPLAY_MODE_ORDER: tuple[str, ...] = (
 GRAPHIC_NOVEL_MODE_ORDER: tuple[str, ...] = (
     MODE_GN_MOTIF, MODE_GN_PANEL_CAUSALITY, MODE_GN_SYMBOL_RECURRENCE,
     MODE_GN_PAGE_RHYTHM, MODE_GN_OBJECT_CONTINUITY,
+)
+
+STAGE_SCRIPT_MODE_ORDER: tuple[str, ...] = (
+    MODE_SS_PRESSURE, MODE_SS_ENTRANCE_EXIT, MODE_SS_PROP,
+    MODE_SS_BLOCKING, MODE_SS_SUBTEXT, MODE_SS_OFFSTAGE,
 )
 
 
@@ -778,6 +870,161 @@ def gn_filter_node_ids(data: GraphData, filter_name: str) -> set[str]:
     return {nid for nid, node in data.nodes.items() if node_kind(node) in kinds}
 
 
+def enrich_stage_script_graph(
+    db: Database, project_id: int, data: GraphData,
+) -> None:
+    """Inject stage-script nodes + edges into the graph.
+
+    Adds cue and offstage-event nodes (which don't live in the base
+    graph) plus the edges that drive the stage graph modes: character
+    pressure / subtext (PSYKE theatre relations), entrances/exits
+    (character ↔ scene), prop usage (character → prop → scene), blocking
+    (scene ↔ set location), cues (scene → cue) and offstage events.
+    """
+    scenes = db.get_all_scenes(project_id)
+    if not scenes:
+        return
+
+    char_name = {}
+    try:
+        char_name = {c.id: c.name for c in db.get_all_characters(project_id)}
+    except Exception:
+        char_name = {}
+    place_name = {}
+    try:
+        place_name = {p.id: p.name for p in db.get_all_places(project_id)}
+    except Exception:
+        place_name = {}
+
+    def _node(node_id, etype, eid, name, kind):
+        if node_id not in data.nodes:
+            data.nodes[node_id] = GraphNode(node_id, etype, eid, name, subtype=kind)
+            data.adjacency.setdefault(node_id, set())
+
+    def _edge(src, tgt, etype):
+        if src not in data.nodes or tgt not in data.nodes:
+            return
+        data.edges.append(GraphEdge(src, tgt, edge_type=etype))
+        data.adjacency.setdefault(src, set()).add(tgt)
+        data.adjacency.setdefault(tgt, set()).add(src)
+
+    # 1. Pressure / subtext — typed PSYKE theatre relations.
+    _PRESSURE = {"pressures", "confronts", "dominates", "deceives", "interrupts"}
+    _SUBTEXT = {"subtext_opposition", "avoids"}
+    seen_rel: set[tuple[str, str, str]] = set()
+    for entry in db.get_all_psyke_entries(project_id):
+        try:
+            typed = db.get_typed_related_psyke_entries(entry.id)
+        except Exception:
+            typed = []
+        for rel_entry, rel_type in typed:
+            etype = (
+                EDGE_SS_PRESSURE if rel_type in _PRESSURE
+                else EDGE_SS_SUBTEXT if rel_type in _SUBTEXT
+                else None
+            )
+            if etype is None:
+                continue
+            src, tgt = f"PSYKE:{entry.id}", f"PSYKE:{rel_entry.id}"
+            key = (min(src, tgt), max(src, tgt), etype)
+            if key in seen_rel:
+                continue
+            seen_rel.add(key)
+            _edge(src, tgt, etype)
+
+    # 2. Entrances/exits — character ↔ scene.
+    for scene in scenes:
+        scene_node = f"Scene:{scene.id}"
+        if scene_node not in data.nodes:
+            _node(scene_node, "Scene", scene.id, scene.title, NODE_KIND_SCENE)
+        for ee in db.get_stage_entrances_exits(scene.id):
+            if ee.character_id is None:
+                continue
+            cnode = f"Character:{ee.character_id}"
+            _node(cnode, "Character", ee.character_id,
+                  char_name.get(ee.character_id, f"#{ee.character_id}"),
+                  NODE_KIND_CHARACTER)
+            _edge(cnode, scene_node, EDGE_SS_ENTRANCE_EXIT)
+
+    # 3. Prop usage — character → prop → scene.
+    for scene in scenes:
+        scene_node = f"Scene:{scene.id}"
+        for biz in db.get_stage_business(scene.id):
+            if biz.prop_psyke_entry_id is None:
+                continue
+            prop_node = f"PSYKE:{biz.prop_psyke_entry_id}"
+            if prop_node not in data.nodes:
+                continue  # prop entry should exist in the base graph
+            if biz.character_id is not None:
+                cnode = f"Character:{biz.character_id}"
+                _node(cnode, "Character", biz.character_id,
+                      char_name.get(biz.character_id, f"#{biz.character_id}"),
+                      NODE_KIND_CHARACTER)
+                _edge(cnode, prop_node, EDGE_SS_USES_PROP)
+            _edge(prop_node, scene_node, EDGE_SS_USES_PROP)
+
+    # 4. Blocking — scene ↔ set location.
+    for scene in scenes:
+        scene_node = f"Scene:{scene.id}"
+        try:
+            place_ids = db.get_scene_place_ids(scene.id)
+        except Exception:
+            place_ids = []
+        for pid in place_ids:
+            pnode = f"Place:{pid}"
+            _node(pnode, "Place", pid, place_name.get(pid, f"#{pid}"),
+                  NODE_KIND_PLACE)
+            _edge(scene_node, pnode, EDGE_SS_BLOCKING)
+
+    # 5. Cues — scene → cue.
+    for scene in scenes:
+        scene_node = f"Scene:{scene.id}"
+        for cue in db.get_stage_cues(scene.id):
+            cue_node = f"Cue:{cue.id}"
+            _node(cue_node, "Cue", cue.id,
+                  cue.cue_type + (f": {cue.cue_text}" if cue.cue_text else ""),
+                  NODE_KIND_CUE)
+            _edge(scene_node, cue_node, EDGE_SS_CUE)
+
+    # 6. Offstage events — scene → offstage node ↔ on-stage characters.
+    for scene in scenes:
+        if not (getattr(scene, "offstage_events", "") or "").strip():
+            continue
+        scene_node = f"Scene:{scene.id}"
+        off_node = f"Offstage:{scene.id}"
+        _node(off_node, "Offstage", scene.id, scene.offstage_events,
+              NODE_KIND_OFFSTAGE)
+        _edge(scene_node, off_node, EDGE_SS_OFFSTAGE)
+        try:
+            cids = db.get_scene_character_ids(scene.id)
+        except Exception:
+            cids = []
+        for cid in cids:
+            cnode = f"Character:{cid}"
+            _node(cnode, "Character", cid, char_name.get(cid, f"#{cid}"),
+                  NODE_KIND_CHARACTER)
+            _edge(cnode, off_node, EDGE_SS_OFFSTAGE)
+
+
+def ss_filter_node_ids(data: GraphData, filter_name: str) -> set[str]:
+    """Return node ids matching a stage-script filter preset.
+
+    "characters_on_stage", "props", "entrances_exits" (characters +
+    scenes), "cue_relations" (cues + scenes), "conflict_pressure"
+    (characters), "offstage_events" (offstage + scenes).
+    """
+    kinds_by_filter = {
+        "characters_on_stage": {NODE_KIND_CHARACTER},
+        "props": {NODE_KIND_OBJECT},
+        "entrances_exits": {NODE_KIND_CHARACTER, NODE_KIND_SCENE},
+        "cue_relations": {NODE_KIND_CUE, NODE_KIND_SCENE},
+        "conflict_pressure": {NODE_KIND_CHARACTER},
+        "offstage_events": {NODE_KIND_OFFSTAGE, NODE_KIND_SCENE},
+    }
+    kinds = kinds_by_filter.get(filter_name, set())
+    return {nid for nid, node in data.nodes.items() if node_kind(node) in kinds}
+
+
 def default_skeleton_layers() -> frozenset[str]:
     """The minimal narrative skeleton: characters, themes, acts."""
     return SKELETON_LAYERS
@@ -1035,12 +1282,13 @@ class FocusGraphView(QWidget):
                 is_screenplay_project,
             )
             self._screenplay_mode = is_screenplay_project(project)
-            self._graphic_novel_mode = (
-                get_project_narrative_engine(project) == "graphic_novel"
-            )
+            _engine = get_project_narrative_engine(project)
+            self._graphic_novel_mode = _engine == "graphic_novel"
+            self._stage_script_mode = _engine == "stage_script"
         except Exception:
             self._screenplay_mode = False
             self._graphic_novel_mode = False
+            self._stage_script_mode = False
 
         self._graph_data: GraphData | None = None
         self._focus_node: str | None = None
@@ -1095,6 +1343,13 @@ class FocusGraphView(QWidget):
             EDGE_GN_MOTIF: True,
             EDGE_GN_SYMBOL_ECHO: True,
             EDGE_GN_OBJECT_CONTINUITY: True,
+            EDGE_SS_PRESSURE: True,
+            EDGE_SS_SUBTEXT: True,
+            EDGE_SS_ENTRANCE_EXIT: True,
+            EDGE_SS_USES_PROP: True,
+            EDGE_SS_BLOCKING: True,
+            EDGE_SS_CUE: True,
+            EDGE_SS_OFFSTAGE: True,
         }
 
         self._node_items: dict[str, object] = {}
@@ -1335,6 +1590,28 @@ class FocusGraphView(QWidget):
             }
             for _m in GRAPHIC_NOVEL_MODE_ORDER:
                 btn = QPushButton(_gn_labels[_m])
+                btn.setCheckable(True)
+                btn.setFlat(True)
+                btn.setToolTip(MODE_PROFILES[_m].description)
+                btn.clicked.connect(
+                    lambda _=False, m=_m: self._on_mode_changed(m),
+                )
+                mb.addWidget(btn)
+                self._mode_buttons[_m] = btn
+        if self._stage_script_mode:
+            _sep3 = QLabel("|")
+            _sep3.setStyleSheet(f"color: {theme.TEXT_MUTED}; padding: 0 4px;")
+            mb.addWidget(_sep3)
+            _ss_labels = {
+                MODE_SS_PRESSURE: "Pressure",
+                MODE_SS_ENTRANCE_EXIT: "Entrances",
+                MODE_SS_PROP: "Props",
+                MODE_SS_BLOCKING: "Blocking",
+                MODE_SS_SUBTEXT: "Subtext",
+                MODE_SS_OFFSTAGE: "Offstage",
+            }
+            for _m in STAGE_SCRIPT_MODE_ORDER:
+                btn = QPushButton(_ss_labels[_m])
                 btn.setCheckable(True)
                 btn.setFlat(True)
                 btn.setToolTip(MODE_PROFILES[_m].description)
@@ -1744,6 +2021,8 @@ class FocusGraphView(QWidget):
             enrich_screenplay_edges(self._db, self._project_id, self._graph_data)
         if self._graphic_novel_mode:
             enrich_graphic_novel_graph(self._db, self._project_id, self._graph_data)
+        if self._stage_script_mode:
+            enrich_stage_script_graph(self._db, self._project_id, self._graph_data)
         self._rebuild_view()
 
     def _active_graph_data(self) -> GraphData | None:
