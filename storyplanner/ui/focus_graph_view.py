@@ -96,6 +96,12 @@ NODE_KIND_ACT = "act"
 NODE_KIND_NOTE = "note"
 NODE_KIND_OTHER = "other"
 
+# -- Graphic Novel node kinds -------------------------------------------------
+NODE_KIND_PAGE = "page"
+NODE_KIND_PANEL = "panel"
+NODE_KIND_MOTIF = "motif"
+NODE_KIND_GN_OBJECT = "gn_object"
+
 LAYER_KINDS: tuple[str, ...] = (
     NODE_KIND_CHARACTER, NODE_KIND_PLACE, NODE_KIND_OBJECT,
     NODE_KIND_THEME, NODE_KIND_LORE, NODE_KIND_SCENE,
@@ -118,6 +124,10 @@ _KIND_COLORS: dict[str, str] = {
     NODE_KIND_OTHER: "#9e9e9e",
     "wavefunction": "#ec4899",
     "branch": "#f472b6",
+    NODE_KIND_PAGE: "#ffa726",
+    NODE_KIND_PANEL: "#fbbf24",
+    NODE_KIND_MOTIF: "#06b6d4",
+    NODE_KIND_GN_OBJECT: "#f59e0b",
 }
 
 _KIND_SHAPES: dict[str, str] = {
@@ -132,6 +142,10 @@ _KIND_SHAPES: dict[str, str] = {
     NODE_KIND_OTHER: "circle",
     "wavefunction": "hexagon",
     "branch": "small_circle",
+    NODE_KIND_PAGE: "rounded_rect",
+    NODE_KIND_PANEL: "square",
+    NODE_KIND_MOTIF: "diamond",
+    NODE_KIND_GN_OBJECT: "triangle",
 }
 
 # -- Semantic edge kinds ------------------------------------------------------
@@ -151,6 +165,14 @@ EDGE_SUBTEXT = "subtext"                 # PSYKE subtext_opposition relation
 EDGE_VISUAL_MOTIF = "visual_motif"       # PSYKE visual_motif relation
 EDGE_CONTINUITY = "continuity"           # continuity tracking across scenes
 
+# -- Graphic Novel-specific edge kinds ---------------------------------------
+EDGE_GN_CONTAINS = "gn_contains"             # page → panel
+EDGE_GN_PAGE_FLOW = "gn_page_flow"           # page → next page (reading order)
+EDGE_GN_PANEL_CAUSALITY = "gn_panel_causality"  # panel → next panel
+EDGE_GN_MOTIF = "gn_motif"                   # motif ↔ page it appears on
+EDGE_GN_SYMBOL_ECHO = "gn_symbol_echo"       # page ↔ page sharing a motif
+EDGE_GN_OBJECT_CONTINUITY = "gn_object_continuity"  # object ↔ page it appears on
+
 EDGE_STYLE: dict[str, dict] = {
     EDGE_PARTICIPATION: {"color": "#4ade80", "width": 1.3, "dash": "solid"},
     EDGE_CONTAINMENT:   {"color": "#60a5fa", "width": 2.4, "dash": "solid"},
@@ -164,6 +186,12 @@ EDGE_STYLE: dict[str, dict] = {
     EDGE_SUBTEXT:       {"color": "#ec4899", "width": 1.4, "dash": "dot"},
     EDGE_VISUAL_MOTIF:  {"color": "#06b6d4", "width": 1.6, "dash": "dash"},
     EDGE_CONTINUITY:    {"color": "#4ade80", "width": 1.4, "dash": "solid"},
+    EDGE_GN_CONTAINS:   {"color": "#60a5fa", "width": 1.6, "dash": "solid"},
+    EDGE_GN_PAGE_FLOW:  {"color": "#ffa726", "width": 2.0, "dash": "solid"},
+    EDGE_GN_PANEL_CAUSALITY: {"color": "#fbbf24", "width": 1.5, "dash": "solid"},
+    EDGE_GN_MOTIF:      {"color": "#06b6d4", "width": 1.4, "dash": "dash"},
+    EDGE_GN_SYMBOL_ECHO: {"color": "#22d3ee", "width": 1.6, "dash": "dot"},
+    EDGE_GN_OBJECT_CONTINUITY: {"color": "#f59e0b", "width": 1.4, "dash": "solid"},
 }
 
 # -- Narrative modes ---------------------------------------------------------
@@ -187,6 +215,13 @@ MODE_KNOWLEDGE = "knowledge"
 MODE_SUBTEXT = "subtext"
 MODE_VISUAL_MOTIFS = "visual_motifs"
 MODE_CONTINUITY_GRAPH = "continuity_graph"
+
+# Graphic-novel-specific graph modes (only shown for graphic_novel projects).
+MODE_GN_MOTIF = "gn_visual_motif"
+MODE_GN_PANEL_CAUSALITY = "gn_panel_causality"
+MODE_GN_SYMBOL_RECURRENCE = "gn_symbol_recurrence"
+MODE_GN_PAGE_RHYTHM = "gn_page_rhythm"
+MODE_GN_OBJECT_CONTINUITY = "gn_object_continuity"
 
 NODE_KIND_WAVEFUNCTION = "wavefunction"
 NODE_KIND_BRANCH = "branch"
@@ -326,6 +361,47 @@ MODE_PROFILES: dict[str, ModeProfile] = {
         prominence={NODE_KIND_SCENE: 1.1},
         description="Continuity — tracked props, wounds, and states across scenes.",
     ),
+    # -- Graphic Novel modes -------------------------------------------------
+    MODE_GN_MOTIF: ModeProfile(
+        name=MODE_GN_MOTIF,
+        visible_kinds=frozenset({NODE_KIND_MOTIF, NODE_KIND_PAGE}),
+        visible_edge_types=frozenset({EDGE_GN_MOTIF}),
+        layout="theme_centered",
+        prominence={NODE_KIND_MOTIF: 1.5},
+        description="Visual motifs and the pages they appear on.",
+    ),
+    MODE_GN_PANEL_CAUSALITY: ModeProfile(
+        name=MODE_GN_PANEL_CAUSALITY,
+        visible_kinds=frozenset({NODE_KIND_PAGE, NODE_KIND_PANEL}),
+        visible_edge_types=frozenset({EDGE_GN_PANEL_CAUSALITY, EDGE_GN_CONTAINS}),
+        layout="linear_timeline",
+        prominence={NODE_KIND_PAGE: 1.2},
+        description="Panel flow / causality across the reading order.",
+    ),
+    MODE_GN_SYMBOL_RECURRENCE: ModeProfile(
+        name=MODE_GN_SYMBOL_RECURRENCE,
+        visible_kinds=frozenset({NODE_KIND_MOTIF, NODE_KIND_PAGE}),
+        visible_edge_types=frozenset({EDGE_GN_SYMBOL_ECHO, EDGE_GN_MOTIF}),
+        layout="circular",
+        prominence={NODE_KIND_MOTIF: 1.4},
+        description="Symbol recurrence — pages echoing the same motif.",
+    ),
+    MODE_GN_PAGE_RHYTHM: ModeProfile(
+        name=MODE_GN_PAGE_RHYTHM,
+        visible_kinds=frozenset({NODE_KIND_PAGE}),
+        visible_edge_types=frozenset({EDGE_GN_PAGE_FLOW}),
+        layout="linear_timeline",
+        prominence={NODE_KIND_PAGE: 1.2},
+        description="Page rhythm — reading progression through the pages.",
+    ),
+    MODE_GN_OBJECT_CONTINUITY: ModeProfile(
+        name=MODE_GN_OBJECT_CONTINUITY,
+        visible_kinds=frozenset({NODE_KIND_GN_OBJECT, NODE_KIND_PAGE}),
+        visible_edge_types=frozenset({EDGE_GN_OBJECT_CONTINUITY}),
+        layout="circular",
+        prominence={NODE_KIND_GN_OBJECT: 1.3},
+        description="Object continuity — where tracked objects reappear.",
+    ),
 }
 
 MODE_ORDER: tuple[str, ...] = (
@@ -336,6 +412,11 @@ MODE_ORDER: tuple[str, ...] = (
 SCREENPLAY_MODE_ORDER: tuple[str, ...] = (
     MODE_CAUSALITY, MODE_SETUP_PAYOFF, MODE_KNOWLEDGE,
     MODE_SUBTEXT, MODE_VISUAL_MOTIFS, MODE_CONTINUITY_GRAPH,
+)
+
+GRAPHIC_NOVEL_MODE_ORDER: tuple[str, ...] = (
+    MODE_GN_MOTIF, MODE_GN_PANEL_CAUSALITY, MODE_GN_SYMBOL_RECURRENCE,
+    MODE_GN_PAGE_RHYTHM, MODE_GN_OBJECT_CONTINUITY,
 )
 
 
@@ -602,6 +683,101 @@ def enrich_screenplay_edges(
             )
 
 
+def enrich_graphic_novel_graph(
+    db: Database, project_id: int, data: GraphData,
+) -> None:
+    """Inject graphic-novel nodes + edges into the graph.
+
+    Adds page, panel, motif and object nodes (which don't live in the base
+    link graph) plus the edges that drive the GN graph modes: page-panel
+    containment, page-flow / panel-causality (reading order), motif
+    appearances + symbol echoes, and object-continuity appearances.
+    """
+    pages = db.get_gn_pages(project_id)
+    if not pages:
+        return
+
+    def _node(node_id: str, etype: str, eid: int, name: str, kind: str) -> None:
+        if node_id not in data.nodes:
+            data.nodes[node_id] = GraphNode(node_id, etype, eid, name, subtype=kind)
+            data.adjacency.setdefault(node_id, set())
+
+    def _edge(src: str, tgt: str, etype: str) -> None:
+        if src not in data.nodes or tgt not in data.nodes:
+            return
+        data.edges.append(GraphEdge(src, tgt, edge_type=etype))
+        data.adjacency.setdefault(src, set()).add(tgt)
+        data.adjacency.setdefault(tgt, set()).add(src)
+
+    page_node = {p.id: f"GNPage:{p.id}" for p in pages}
+    page_number = {p.id: p.page_number for p in pages}
+
+    # Page + panel nodes, containment, panel reading order.
+    motif_pages: dict[str, list[int]] = {}
+    last_panel_node: str | None = None
+    for page in pages:
+        pn = page_node[page.id]
+        _node(pn, "GNPage", page.id, f"Page {page.page_number}", NODE_KIND_PAGE)
+        panels = db.get_gn_panels_for_page(page.id)
+        for panel in panels:
+            paneln = f"GNPanel:{panel.id}"
+            _node(paneln, "GNPanel", panel.id,
+                  f"P{page.page_number}.{panel.panel_number}", NODE_KIND_PANEL)
+            _edge(pn, paneln, EDGE_GN_CONTAINS)
+            if last_panel_node is not None:
+                _edge(last_panel_node, paneln, EDGE_GN_PANEL_CAUSALITY)
+            last_panel_node = paneln
+            for motif in db.csv_split(panel.visual_motifs):
+                motif_pages.setdefault(motif, [])
+                if page.id not in motif_pages[motif]:
+                    motif_pages[motif].append(page.id)
+
+    # Page-flow (reading rhythm).
+    for i in range(len(pages) - 1):
+        _edge(page_node[pages[i].id], page_node[pages[i + 1].id], EDGE_GN_PAGE_FLOW)
+
+    # Motif nodes + appearances + symbol echoes (pages sharing a motif).
+    for idx, (motif, pids) in enumerate(sorted(motif_pages.items())):
+        motif_node = f"GNMotif:{motif}"
+        _node(motif_node, "GNMotif", idx, motif, NODE_KIND_MOTIF)
+        for pid in pids:
+            _edge(motif_node, page_node[pid], EDGE_GN_MOTIF)
+        ordered = sorted(pids, key=lambda x: page_number.get(x, 0))
+        for i in range(len(ordered) - 1):
+            _edge(page_node[ordered[i]], page_node[ordered[i + 1]],
+                  EDGE_GN_SYMBOL_ECHO)
+
+    # Object continuity nodes + appearances.
+    for item in db.get_gn_continuity_items(project_id):
+        obj_node = f"GNObject:{item.id}"
+        _node(obj_node, "GNObject", item.id, item.name, NODE_KIND_GN_OBJECT)
+        for app in db.get_gn_continuity_appearances(item.id):
+            pid = app.page_id
+            if pid is None and app.panel_id is not None:
+                panel = db.get_gn_panel_by_id(app.panel_id)
+                pid = panel.page_id if panel else None
+            if pid is not None and pid in page_node:
+                _edge(obj_node, page_node[pid], EDGE_GN_OBJECT_CONTINUITY)
+
+
+# Filter presets (§2): name → predicate over node kinds / id prefixes.
+def gn_filter_node_ids(data: GraphData, filter_name: str) -> set[str]:
+    """Return node ids matching a graphic-novel filter preset.
+
+    "motifs", "pages", "panel_continuity" (pages + panels),
+    "symbolic_echoes" (motifs + pages).
+    """
+    kinds_by_filter = {
+        "motifs": {NODE_KIND_MOTIF},
+        "pages": {NODE_KIND_PAGE},
+        "panel_continuity": {NODE_KIND_PAGE, NODE_KIND_PANEL},
+        "symbolic_echoes": {NODE_KIND_MOTIF, NODE_KIND_PAGE},
+        "objects": {NODE_KIND_GN_OBJECT, NODE_KIND_PAGE},
+    }
+    kinds = kinds_by_filter.get(filter_name, set())
+    return {nid for nid, node in data.nodes.items() if node_kind(node) in kinds}
+
+
 def default_skeleton_layers() -> frozenset[str]:
     """The minimal narrative skeleton: characters, themes, acts."""
     return SKELETON_LAYERS
@@ -854,10 +1030,17 @@ class FocusGraphView(QWidget):
 
         try:
             project = db.get_project_by_id(project_id)
-            from storyplanner.project_compat import is_screenplay_project
+            from storyplanner.project_compat import (
+                get_project_narrative_engine,
+                is_screenplay_project,
+            )
             self._screenplay_mode = is_screenplay_project(project)
+            self._graphic_novel_mode = (
+                get_project_narrative_engine(project) == "graphic_novel"
+            )
         except Exception:
             self._screenplay_mode = False
+            self._graphic_novel_mode = False
 
         self._graph_data: GraphData | None = None
         self._focus_node: str | None = None
@@ -906,6 +1089,12 @@ class FocusGraphView(QWidget):
             EDGE_SUBTEXT: True,
             EDGE_VISUAL_MOTIF: True,
             EDGE_CONTINUITY: True,
+            EDGE_GN_CONTAINS: True,
+            EDGE_GN_PAGE_FLOW: True,
+            EDGE_GN_PANEL_CAUSALITY: True,
+            EDGE_GN_MOTIF: True,
+            EDGE_GN_SYMBOL_ECHO: True,
+            EDGE_GN_OBJECT_CONTINUITY: True,
         }
 
         self._node_items: dict[str, object] = {}
@@ -1125,6 +1314,27 @@ class FocusGraphView(QWidget):
             }
             for _m in SCREENPLAY_MODE_ORDER:
                 btn = QPushButton(_sp_labels[_m])
+                btn.setCheckable(True)
+                btn.setFlat(True)
+                btn.setToolTip(MODE_PROFILES[_m].description)
+                btn.clicked.connect(
+                    lambda _=False, m=_m: self._on_mode_changed(m),
+                )
+                mb.addWidget(btn)
+                self._mode_buttons[_m] = btn
+        if self._graphic_novel_mode:
+            _sep2 = QLabel("|")
+            _sep2.setStyleSheet(f"color: {theme.TEXT_MUTED}; padding: 0 4px;")
+            mb.addWidget(_sep2)
+            _gn_labels = {
+                MODE_GN_MOTIF: "Motifs",
+                MODE_GN_PANEL_CAUSALITY: "Panel Flow",
+                MODE_GN_SYMBOL_RECURRENCE: "Symbols",
+                MODE_GN_PAGE_RHYTHM: "Page Rhythm",
+                MODE_GN_OBJECT_CONTINUITY: "Objects",
+            }
+            for _m in GRAPHIC_NOVEL_MODE_ORDER:
+                btn = QPushButton(_gn_labels[_m])
                 btn.setCheckable(True)
                 btn.setFlat(True)
                 btn.setToolTip(MODE_PROFILES[_m].description)
@@ -1532,6 +1742,8 @@ class FocusGraphView(QWidget):
         self._graph_data = build_graph_data(self._db, self._project_id)
         if self._screenplay_mode:
             enrich_screenplay_edges(self._db, self._project_id, self._graph_data)
+        if self._graphic_novel_mode:
+            enrich_graphic_novel_graph(self._db, self._project_id, self._graph_data)
         self._rebuild_view()
 
     def _active_graph_data(self) -> GraphData | None:
@@ -1594,6 +1806,7 @@ class FocusGraphView(QWidget):
             self._gravity_map = compute_gravity(
                 self._db, self._project_id, active,
                 screenplay_mode=self._screenplay_mode,
+                graphic_novel_mode=self._graphic_novel_mode,
             )
         else:
             self._gravity_map = {}

@@ -56,12 +56,23 @@ class StoryGravity:
 
 def compute_gravity(
     db: "Database", project_id: int, data: "GraphData",
-    *, screenplay_mode: bool = False,
+    *, screenplay_mode: bool = False, graphic_novel_mode: bool = False,
 ) -> dict[str, StoryGravity]:
     """Compute Story Gravity for every node in *data*."""
     result: dict[str, StoryGravity] = {}
     if not data or not data.nodes:
         return result
+
+    # Graphic-novel node weights: pages by panel count + position, motifs by
+    # recurrence (degree), objects by appearance count. Computed once here so
+    # important motifs/pages render larger and pull toward centre.
+    gn_page_panels: dict[str, int] = {}
+    gn_max_panels = 1
+    if graphic_novel_mode:
+        for nid, node in data.nodes.items():
+            if getattr(node, "etype", "") == "GNPage":
+                gn_page_panels[nid] = len(data.adjacency.get(nid, set()))
+        gn_max_panels = max(gn_page_panels.values(), default=1) or 1
 
     scenes = db.get_all_scenes(project_id)
     n_scenes = len(scenes)
@@ -186,6 +197,26 @@ def compute_gravity(
 
         elif node.etype == "Branch":
             g.structural = 0.5
+
+        elif node.etype == "GNPage":
+            # Denser pages (more panels) and recurrence hubs weigh more.
+            cnt = gn_page_panels.get(nid, 0)
+            g.narrative = cnt / gn_max_panels
+            g.structural = 0.3 + 0.5 * (cnt / gn_max_panels)
+
+        elif node.etype == "GNMotif":
+            # Recurrence = thematic weight; degree counts pages it touches.
+            deg = len(data.adjacency.get(nid, set()))
+            g.thematic = min(1.0, deg / 4.0)
+            g.narrative = min(1.0, deg / 6.0)
+
+        elif node.etype == "GNObject":
+            deg = len(data.adjacency.get(nid, set()))
+            g.narrative = min(1.0, deg / 4.0)
+            g.structural = min(0.6, 0.2 * deg)
+
+        elif node.etype == "GNPanel":
+            g.structural = 0.2
 
         result[nid] = g
 
