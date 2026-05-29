@@ -219,13 +219,19 @@ _ELEMENT_TRANSITIONS: dict[str, dict[str, str]] = {
         "transition": "scene_heading",
     },
     "series": {
-        "episode": "act_break",
+        "season_heading": "episode_heading",
+        "episode_heading": "act_heading",
+        "act_heading": "scene_heading",
+        "teaser": "scene_heading",
         "cold_open": "scene_heading",
-        "act_break": "scene_heading",
         "scene_heading": "action",
         "action": "action",
         "character": "dialogue",
         "dialogue": "action",
+        "a_plot": "scene_heading",
+        "b_plot": "scene_heading",
+        "c_plot": "scene_heading",
+        "tag": "action",
     },
 }
 

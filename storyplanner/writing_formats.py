@@ -335,21 +335,21 @@ SERIES = WritingFormat(
     default_element="action",
     elements=[
         ElementStyle(
-            name="episode",
+            name="season_heading",
+            font_size=22, bold=True, all_caps=True, align="center",
+            top_spacing=56, bottom_spacing=18,
+        ),
+        ElementStyle(
+            name="episode_heading",
             shortcut="Ctrl+1",
             font_size=18, bold=True, all_caps=True, align="center",
-            top_spacing=48, bottom_spacing=12,
+            top_spacing=44, bottom_spacing=12,
         ),
         ElementStyle(
-            name="cold_open",
-            font_size=15, bold=True, all_caps=True, align="center",
-            top_spacing=24, bottom_spacing=12,
-        ),
-        ElementStyle(
-            name="act_break",
+            name="act_heading",
             shortcut="Ctrl+2",
             font_size=15, bold=True, all_caps=True, align="center",
-            top_spacing=24, bottom_spacing=18,
+            top_spacing=24, bottom_spacing=14,
         ),
         ElementStyle(
             name="scene_heading",
@@ -376,6 +376,66 @@ SERIES = WritingFormat(
             font_size=15,
             left_margin=120, right_margin=180,
             bottom_spacing=0,
+        ),
+        # -- Plot-line labels (colored tags) -------------------------------
+        ElementStyle(
+            name="a_plot",
+            font_size=13, bold=True, all_caps=True,
+            color_key="accent", background_key="sfx",
+            top_spacing=10, bottom_spacing=4,
+        ),
+        ElementStyle(
+            name="b_plot",
+            font_size=13, bold=True, all_caps=True,
+            color_key="secondary", background_key="panel",
+            top_spacing=10, bottom_spacing=4,
+        ),
+        ElementStyle(
+            name="c_plot",
+            font_size=13, bold=True, all_caps=True,
+            color_key="muted", background_key="panel",
+            top_spacing=10, bottom_spacing=4,
+        ),
+        # -- Opener blocks (distinctive) -----------------------------------
+        ElementStyle(
+            name="teaser",
+            font_size=15, bold=True, all_caps=True, align="center",
+            background_key="panel",
+            top_spacing=20, bottom_spacing=12,
+        ),
+        ElementStyle(
+            name="cold_open",
+            font_size=15, bold=True, all_caps=True, align="center",
+            background_key="panel",
+            top_spacing=20, bottom_spacing=12,
+        ),
+        ElementStyle(
+            name="tag",
+            font_size=14, bold=True, all_caps=True, align="center",
+            color_key="secondary",
+            top_spacing=18, bottom_spacing=10,
+        ),
+        # -- Cliffhanger — marked but not loud -----------------------------
+        ElementStyle(
+            name="cliffhanger",
+            font_size=15, italic=True,
+            color_key="accent",
+            top_spacing=10, bottom_spacing=10,
+        ),
+        # -- Editorial notes — muted ---------------------------------------
+        ElementStyle(
+            name="recap_note",
+            font_size=13, italic=True,
+            left_margin=60,
+            color_key="muted",
+            bottom_spacing=8,
+        ),
+        ElementStyle(
+            name="continuity_note",
+            font_size=13, italic=True,
+            left_margin=60,
+            color_key="muted",
+            bottom_spacing=8,
         ),
     ],
 )

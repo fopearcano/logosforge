@@ -68,8 +68,8 @@ def test_series_format():
     assert SERIES.name == "series"
     assert SERIES.default_element == "action"
     names = [e.name for e in SERIES.elements]
-    assert "episode" in names
-    assert "act_break" in names
+    assert "episode_heading" in names
+    assert "act_heading" in names
     assert "scene_heading" in names
 
 
