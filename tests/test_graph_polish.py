@@ -31,6 +31,24 @@ def _qapp():
     yield app
 
 
+@pytest.fixture(autouse=True)
+def _isolated_settings(monkeypatch, tmp_path):
+    """Isolate the settings file per test.
+
+    Graph state and presets are now persisted under per-project keys
+    (graph_state:<id> / graph_presets:<id>). In-memory test DBs reuse
+    project id 1, so without isolation those keys leak across tests via
+    the shared global settings file. A fresh settings file per test
+    keeps each case clean.
+    """
+    import storyplanner.settings as settings
+    settings._instance = None
+    monkeypatch.setattr(settings, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(settings, "SETTINGS_FILE", tmp_path / "settings.json")
+    yield
+    settings._instance = None
+
+
 def _project_with_mentions():
     db = Database()
     proj = db.create_project("Polish")
@@ -186,12 +204,11 @@ def test_persist_state_writes_to_settings():
     db, proj, *_ = _project_with_mentions()
     view = FocusGraphView(db, proj.id)
     view._on_gravity_toggled(False)  # triggers _persist_state
-    state = get_manager().get("graph_state")
+    # Graph state is persisted under a per-project key.
+    state = get_manager().get(view._graph_state_key())
     assert isinstance(state, dict)
     assert "gravity" in state
     assert state["gravity"] is False
-    # Cleanup.
-    get_manager().set("graph_state", {})
 
 
 def test_restore_persisted_state_no_op_when_empty():
