@@ -64,6 +64,7 @@ PROVIDER_CAPABILITIES: dict[str, ProviderCapabilities] = {
         supports_local=False,
         default_models=[
             "o3",
+            "o3-pro",
             "o4-mini",
             "o3-mini",
             "o1",
@@ -86,6 +87,7 @@ PROVIDER_CAPABILITIES: dict[str, ProviderCapabilities] = {
         default_base_url="https://api.anthropic.com",
         supports_local=False,
         default_models=[
+            "claude-opus-4-8",
             "claude-opus-4-7",
             "claude-sonnet-4-6",
             "claude-opus-4-6",
@@ -106,11 +108,13 @@ PROVIDER_CAPABILITIES: dict[str, ProviderCapabilities] = {
         supports_local=False,
         default_models=[
             "openrouter/auto",
+            "anthropic/claude-opus-4-8",
             "anthropic/claude-opus-4-7",
             "anthropic/claude-sonnet-4-6",
             "anthropic/claude-opus-4-6",
             "anthropic/claude-haiku-4.5",
             "openai/o3",
+            "openai/o3-pro",
             "openai/o4-mini",
             "openai/gpt-4.1",
             "openai/gpt-4.1-mini",

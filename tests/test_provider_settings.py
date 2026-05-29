@@ -76,6 +76,62 @@ def test_repeated_provider_switching_is_stable():
     assert final.name in PROVIDER_NAMES
 
 
+# =========================================================================
+# 2b. Updated model presets (newer OpenAI / Anthropic Claude IDs)
+# =========================================================================
+
+def test_anthropic_presets_include_latest():
+    from storyplanner.providers import PROVIDER_CAPABILITIES
+    models = PROVIDER_CAPABILITIES["Anthropic"].default_models
+    assert "claude-opus-4-8" in models
+    # Existing IDs are preserved (nothing removed).
+    assert "claude-sonnet-4-6" in models
+    assert "claude-3-opus-20240229" in models
+
+
+def test_anthropic_default_is_latest():
+    from storyplanner.providers import default_config
+    assert default_config("Anthropic").model == "claude-opus-4-8"
+
+
+def test_openai_presets_updated_and_preserved():
+    from storyplanner.providers import PROVIDER_CAPABILITIES
+    models = PROVIDER_CAPABILITIES["OpenAI"].default_models
+    assert "o3-pro" in models
+    # Existing IDs are preserved.
+    for keep in ("o3", "o4-mini", "gpt-4.1", "gpt-4o", "gpt-3.5-turbo"):
+        assert keep in models
+
+
+def test_openrouter_presets_updated():
+    from storyplanner.providers import PROVIDER_CAPABILITIES
+    models = PROVIDER_CAPABILITIES["OpenRouter"].default_models
+    assert "anthropic/claude-opus-4-8" in models
+    assert "openai/o3-pro" in models
+
+
+def test_unknown_custom_model_is_handled_gracefully():
+    """A model ID not in the preset list must still be selectable and
+    produce a valid config — presets are convenience, not a whitelist."""
+    from storyplanner.providers import ProviderConfig, validate_provider
+    cfg = ProviderConfig(
+        name="Anthropic",
+        base_url="https://api.anthropic.com",
+        api_key="k",
+        model="claude-some-future-model",
+    )
+    assert validate_provider(cfg) is None
+
+
+def test_custom_model_typed_into_combo_survives():
+    """Typing a custom model the presets don't contain is kept verbatim."""
+    w = ProviderSettingsWidget(compact=True)
+    w._provider_combo.setCurrentText("OpenAI")
+    w._model_combo.setCurrentText("my-finetuned-model:v2")
+    assert w.get_provider_config().model == "my-finetuned-model:v2"
+
+
+
 def test_switch_to_local_then_cloud_then_local():
     w = ProviderSettingsWidget(compact=True)
     w._provider_combo.setCurrentText("LM Studio")
