@@ -98,6 +98,7 @@ class TimelineView(QWidget):
         _engine = get_project_narrative_engine(project)
         self._graphic_novel_mode = _engine == "graphic_novel"
         self._stage_script_mode = _engine == "stage_script"
+        self._series_mode = _engine == "series"
 
         # Scene data: (row, col) → (scene_id, title, plotline)
         self._cell_data: dict[tuple[int, int], tuple[int, str, str]] = {}
@@ -244,6 +245,31 @@ class TimelineView(QWidget):
             return []
         from storyplanner.stage_script_plot import get_cue_markers
         return get_cue_markers(self._db, scene_id)
+
+    # -- Series timeline (season/episode-aware) -----------------------------
+
+    def is_series_mode(self) -> bool:
+        return self._series_mode
+
+    def get_series_timeline_rows(self) -> list[dict]:
+        """Episode-order rows (season, active arcs, setup/payoff,
+        cliffhanger). [] for non-series projects."""
+        if not self._series_mode:
+            return []
+        from storyplanner.series_plot import get_series_timeline
+        return get_series_timeline(self._db, self._project_id)
+
+    def get_series_season_progression(self) -> list[str]:
+        if not self._series_mode:
+            return []
+        from storyplanner.series_plot import get_season_progression
+        return get_season_progression(self._db, self._project_id)
+
+    def get_series_setup_payoff_chains(self) -> list[dict]:
+        if not self._series_mode:
+            return []
+        from storyplanner.series_plot import get_setup_payoff_chains
+        return get_setup_payoff_chains(self._db, self._project_id)
 
     # -- Focus character -----------------------------------------------------
 

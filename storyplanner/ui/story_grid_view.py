@@ -433,6 +433,7 @@ class StoryGridView(QWidget):
         engine = get_project_narrative_engine(project)
         self._graphic_novel_mode = engine == "graphic_novel"
         self._stage_script_mode = engine == "stage_script"
+        self._series_mode = engine == "series"
         # Story grid still keys most branches off the writing format, but
         # falls back to "screenplay" when the engine is screenplay so the
         # scene-grid affordances appear even if the format was overridden.
@@ -449,9 +450,37 @@ class StoryGridView(QWidget):
     def _block_unit(self) -> str:
         if self._graphic_novel_mode:
             return "sequence"
+        if self._series_mode:
+            return "episode"
         if self._format_mode == "screenplay" or self._stage_script_mode:
             return "scene"
         return "chapter"
+
+    # -- Series plot (episodes grouped by seasons) --------------------------
+
+    def is_series_mode(self) -> bool:
+        return self._series_mode
+
+    def get_series_plot_blocks(self) -> list[dict]:
+        """Episode plot blocks (logline, A/B/C indicators, active arcs,
+        cliffhanger, setup/payoff markers, runtime). [] for non-series."""
+        if not self._series_mode:
+            return []
+        from storyplanner.series_plot import get_series_plot_blocks
+        return get_series_plot_blocks(self._db, self._project_id)
+
+    def get_series_plot_seasons(self) -> list[dict]:
+        """Episodes grouped by season. [] for non-series projects."""
+        if not self._series_mode:
+            return []
+        from storyplanner.series_plot import get_series_plot_seasons
+        return get_series_plot_seasons(self._db, self._project_id)
+
+    def get_series_episode_detail(self, episode_id: int) -> dict:
+        if not self._series_mode:
+            return {}
+        from storyplanner.series_plot import get_episode_detail
+        return get_episode_detail(self._db, self._project_id, episode_id)
 
     # -- Stage Script plot (scenes grouped by acts) -------------------------
 
@@ -494,6 +523,8 @@ class StoryGridView(QWidget):
     def _block_number_label(self, index: int) -> str:
         if self._block_unit == "sequence":
             return f"Seq {index}"
+        if self._block_unit == "episode":
+            return f"Ep {index}"
         if self._block_unit == "scene":
             return f"Scene {index}"
         return f"Ch {index}"
