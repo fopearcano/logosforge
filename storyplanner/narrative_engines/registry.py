@@ -9,6 +9,7 @@ from storyplanner.narrative_engines.novel import NOVEL_ENGINE
 from storyplanner.narrative_engines.screenplay import SCREENPLAY_ENGINE
 from storyplanner.narrative_engines.graphic_novel import GRAPHIC_NOVEL_ENGINE
 from storyplanner.narrative_engines.stage_script import STAGE_SCRIPT_ENGINE
+from storyplanner.narrative_engines.series import SERIES_ENGINE
 
 if TYPE_CHECKING:
     from storyplanner.models.models import Project
@@ -19,16 +20,16 @@ ALL_ENGINES: dict[str, NarrativeEngine] = {
     SCREENPLAY_ENGINE.name: SCREENPLAY_ENGINE,
     GRAPHIC_NOVEL_ENGINE.name: GRAPHIC_NOVEL_ENGINE,
     STAGE_SCRIPT_ENGINE.name: STAGE_SCRIPT_ENGINE,
+    SERIES_ENGINE.name: SERIES_ENGINE,
 }
 
-# Display order in pickers.  The remaining format_mode value (series)
-# doesn't have an engine implementation yet — it transparently falls back
-# to the Novel engine so existing projects keep working.
+# Display order in pickers. Every format_mode now has a real engine.
 ENGINE_ORDER: tuple[str, ...] = (
     NOVEL_ENGINE.name,
     SCREENPLAY_ENGINE.name,
     GRAPHIC_NOVEL_ENGINE.name,
     STAGE_SCRIPT_ENGINE.name,
+    SERIES_ENGINE.name,
 )
 
 

@@ -20,6 +20,7 @@ from storyplanner.narrative_engines.novel import NOVEL_ENGINE
 from storyplanner.narrative_engines.screenplay import SCREENPLAY_ENGINE
 from storyplanner.narrative_engines.graphic_novel import GRAPHIC_NOVEL_ENGINE
 from storyplanner.narrative_engines.stage_script import STAGE_SCRIPT_ENGINE
+from storyplanner.narrative_engines.series import SERIES_ENGINE
 from storyplanner.narrative_engines.registry import (
     ALL_ENGINES,
     ENGINE_ORDER,
@@ -33,6 +34,7 @@ __all__ = [
     "SCREENPLAY_ENGINE",
     "GRAPHIC_NOVEL_ENGINE",
     "STAGE_SCRIPT_ENGINE",
+    "SERIES_ENGINE",
     "ALL_ENGINES",
     "ENGINE_ORDER",
     "engine_for_project",

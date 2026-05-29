@@ -37,11 +37,12 @@ def test_get_engine_returns_screenplay():
 
 
 def test_unknown_engine_falls_back_to_novel():
-    """series still lacks an engine implementation — it must fall back to
-    Novel, never crash. novel/screenplay/graphic_novel/stage_script are real.
+    """Truly unknown engine names fall back to Novel, never crash. All
+    five named engines (novel/screenplay/graphic_novel/stage_script/series)
+    are real.
     """
-    assert get_engine("series") is NOVEL_ENGINE
     assert get_engine("nonsense") is NOVEL_ENGINE
+    assert get_engine("brand_new_engine") is NOVEL_ENGINE
 
 
 def test_engine_for_project_none_returns_novel():

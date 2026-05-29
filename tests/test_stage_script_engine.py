@@ -199,8 +199,7 @@ def test_screenplay_projects_unaffected():
     assert engine_for_project(proj) is SCREENPLAY_ENGINE
 
 
-def test_series_still_falls_back():
-    assert get_engine("series") is NOVEL_ENGINE
+def test_unknown_engine_falls_back():
     assert get_engine("nonsense") is NOVEL_ENGINE
 
 
