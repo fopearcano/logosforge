@@ -36,7 +36,8 @@ class ElementStyle:
     bottom_spacing: int = 12
     first_line_indent: int = 0
     line_height: float = 1.5
-    color_key: str = "text"
+    color_key: str = "text"          # text | muted | secondary | accent
+    background_key: str = ""         # "" | panel | sfx | note  (subtle band)
 
 
 @dataclass(frozen=True)
@@ -145,9 +146,19 @@ SCREENPLAY = WritingFormat(
 # ---------------------------------------------------------------------------
 # Graphic Novel  (Dark Horse / DC "full script" style)
 #
-# Page and panel headers full-width.  Description at 0.5 in indent (60 px).
-# Character, dialogue, caption, SFX at 1.5 in indent (180 px) per
-# Creator Resource / Blambot standard (1.5–2.0 in range).
+# Spatial-sequential scripting workspace. Block types are visually distinct:
+#   Page          — large, bold, ALL CAPS header; generous top space so pages
+#                   read as separated sections.
+#   Panel         — bold sub-header beneath its page.
+#   Description   — the panel's staging/action, indented + boxed (panel band).
+#   Character     — ALL CAPS bold speaker, indented toward the balloon column.
+#   Dialogue      — speech, indented under its character.
+#   Internal Thought — italic, secondary colour (thought balloon).
+#   Caption       — italic narration box, muted.
+#   SFX           — stylized: bold ALL CAPS, accent colour on a band.
+#   Art Direction — visually muted italic note to the artist.
+#   Transition    — ALL CAPS, right-aligned beat between pages/sequences.
+#   Note          — small muted aside.
 # ---------------------------------------------------------------------------
 GRAPHIC_NOVEL = WritingFormat(
     name="graphic_novel",
@@ -157,21 +168,22 @@ GRAPHIC_NOVEL = WritingFormat(
         ElementStyle(
             name="page",
             shortcut="Ctrl+1",
-            font_size=15, bold=True, all_caps=True,
-            top_spacing=36, bottom_spacing=12,
+            font_size=22, bold=True, all_caps=True,
+            top_spacing=44, bottom_spacing=14,
         ),
         ElementStyle(
             name="panel",
             shortcut="Ctrl+2",
-            font_size=15, bold=True,
-            top_spacing=20, bottom_spacing=4,
+            font_size=16, bold=True,
+            top_spacing=22, bottom_spacing=4,
         ),
         ElementStyle(
             name="description",
             shortcut="Ctrl+3",
             font_size=15,
-            left_margin=60,
-            bottom_spacing=8,
+            left_margin=60, right_margin=24,
+            background_key="panel",
+            top_spacing=2, bottom_spacing=10,
         ),
         ElementStyle(
             name="character",
@@ -188,17 +200,45 @@ GRAPHIC_NOVEL = WritingFormat(
             bottom_spacing=8,
         ),
         ElementStyle(
+            name="internal_thought",
+            font_size=15, italic=True,
+            left_margin=180,
+            color_key="secondary",
+            bottom_spacing=8,
+        ),
+        ElementStyle(
             name="caption",
             shortcut="Ctrl+6",
             font_size=15, italic=True,
-            left_margin=180,
+            left_margin=120,
             color_key="muted",
             bottom_spacing=8,
         ),
         ElementStyle(
             name="sfx",
-            font_size=15, bold=True, all_caps=True,
-            left_margin=180,
+            font_size=18, bold=True, all_caps=True,
+            left_margin=120,
+            color_key="accent",
+            background_key="sfx",
+            top_spacing=4, bottom_spacing=8,
+        ),
+        ElementStyle(
+            name="art_direction",
+            font_size=14, italic=True,
+            left_margin=60, right_margin=24,
+            color_key="muted",
+            bottom_spacing=8,
+        ),
+        ElementStyle(
+            name="transition",
+            font_size=15, bold=True, all_caps=True, align="right",
+            top_spacing=12, bottom_spacing=12,
+        ),
+        ElementStyle(
+            name="note",
+            font_size=13, italic=True,
+            left_margin=60,
+            color_key="muted",
             bottom_spacing=8,
         ),
     ],

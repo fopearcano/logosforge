@@ -11,6 +11,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QEasingCurve, QEvent, QPointF, QPropertyAnimation, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import (
     QAction,
+    QBrush,
     QColor,
     QFont,
     QKeyEvent,
@@ -164,6 +165,24 @@ _BODY_LINE_HEIGHT = 1.5
 _FOCUS_LINE_HEIGHT = 1.6
 _FADE_ALPHA_PARA = 70
 _FADE_ALPHA_SCENE = 110
+
+
+def _element_text_color(color_key: str) -> str:
+    """Resolve an ElementStyle.color_key to a live theme colour, or ""."""
+    return {
+        "muted": theme.TEXT_MUTED,
+        "secondary": theme.TEXT_SECONDARY,
+        "accent": theme.ACCENT,
+    }.get(color_key, "")
+
+
+def _element_bg_color(background_key: str) -> str:
+    """Resolve an ElementStyle.background_key to a subtle band colour, or ""."""
+    return {
+        "panel": theme.BG_PANEL,
+        "sfx": theme.BG_HOVER,
+        "note": theme.BG_PANEL,
+    }.get(background_key, "")
 
 _ELEMENT_TRANSITIONS: dict[str, dict[str, str]] = {
     "screenplay": {
@@ -1981,6 +2000,14 @@ class WritingCoreView(QWidget):
         bfmt.setRightMargin(elem.right_margin)
         bfmt.setTopMargin(elem.top_spacing)
         bfmt.setBottomMargin(elem.bottom_spacing)
+        # Optional subtle background band (e.g. boxed panel descriptions,
+        # stylized SFX). Always set explicitly so re-applying a format
+        # clears any previous band rather than leaving it stale. Resolved
+        # live from the theme so palette changes are honored.
+        bg = _element_bg_color(getattr(elem, "background_key", "") or "")
+        bfmt.setBackground(
+            QBrush(QColor(bg)) if bg else QBrush(Qt.GlobalColor.transparent)
+        )
         lh = elem.line_height
         if self._focus_mode:
             lh = max(lh, _FOCUS_LINE_HEIGHT)
@@ -2017,8 +2044,9 @@ class WritingCoreView(QWidget):
                 cfmt.setFontCapitalization(QFont.Capitalization.AllUppercase)
             else:
                 cfmt.setFontCapitalization(QFont.Capitalization.MixedCase)
-        if elem.color_key == "muted":
-            cfmt.setForeground(QColor(theme.TEXT_MUTED))
+        color = _element_text_color(elem.color_key)
+        if color:
+            cfmt.setForeground(QColor(color))
         return bfmt, cfmt
 
     def _apply_element_to_block(
