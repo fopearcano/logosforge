@@ -185,3 +185,98 @@ def get_cue_markers(db: Any, scene_id: int) -> list[dict]:
         }
         for c in db.get_stage_cues(scene_id)
     ]
+
+
+# ---------------------------------------------------------------------------
+# Assistant context (§3):  scene objective / entrances-exits / blocking /
+# stage layout / props / subtext / offstage knowledge
+# ---------------------------------------------------------------------------
+
+def _scene_place_layouts(db: Any, project_id: int, scene_id: int) -> list[str]:
+    """Stage layouts for the scene's places, via matching PSYKE place
+    entries' theatre memory."""
+    try:
+        place_ids = db.get_scene_place_ids(scene_id)
+        place_names = {p.id: p.name for p in db.get_all_places(project_id)}
+        wanted = {place_names.get(pid, "").lower() for pid in place_ids}
+    except Exception:
+        wanted = set()
+    layouts: list[str] = []
+    for e in db.get_all_psyke_entries(project_id):
+        if (e.entry_type or "").lower() != "place":
+            continue
+        if wanted and e.name.lower() not in wanted:
+            continue
+        tm = db.get_psyke_theatre_memory(e.id)
+        if tm.get("stage_layout"):
+            layouts.append(f"{e.name}: {tm['stage_layout']}")
+    return layouts
+
+
+def build_stage_script_context(
+    db: Any, project_id: int, scene_id: int | None = None,
+) -> str:
+    """Compact ``[Stage Script Context]`` block for the Assistant (§3).
+
+    Scene-focused when *scene_id* is given. Returns "" when there is no
+    scene to describe.
+    """
+    scene = None
+    if scene_id is not None:
+        scene = db.get_scene_by_id(scene_id)
+    if scene is None:
+        scenes = db.get_all_scenes(project_id)
+        scene = scenes[0] if scenes else None
+    if scene is None:
+        return ""
+
+    names = _character_names(db, project_id)
+    psyke_names = _psyke_names(db, project_id)
+    lines = ["[Stage Script Context]", f"Scene: {scene.title}"]
+
+    if (getattr(scene, "scene_objective", "") or "").strip():
+        lines.append(f"Objective: {scene.scene_objective}")
+    if (getattr(scene, "blocking_notes", "") or "").strip():
+        lines.append(f"Blocking: {scene.blocking_notes}")
+
+    ee = get_entrance_exit_markers(db, project_id, scene.id)
+    movers = [
+        f"{m['character'] or '?'} {m['type']}"
+        for m in ee if m["type"] in ("entrance", "exit")
+    ]
+    if movers:
+        lines.append("Entrances/Exits: " + ", ".join(movers))
+
+    layouts = _scene_place_layouts(db, project_id, scene.id)
+    if layouts:
+        lines.append("Stage layout: " + "; ".join(layouts))
+
+    props = _important_props(db, scene, psyke_names)
+    if props:
+        lines.append("Props: " + ", ".join(props))
+
+    if (getattr(scene, "subtext_notes", "") or "").strip():
+        lines.append(f"Subtext: {scene.subtext_notes}")
+    if (getattr(scene, "offstage_events", "") or "").strip():
+        lines.append(f"Offstage: {scene.offstage_events}")
+
+    # Offstage knowledge of the characters on stage.
+    on_stage = _characters_on_stage(db, scene.id, names)
+    name_to_entry = {
+        e.name: e for e in db.get_all_psyke_entries(project_id)
+        if (e.entry_type or "").lower() == "character"
+    }
+    knowledge: list[str] = []
+    for cname in on_stage:
+        entry = name_to_entry.get(cname)
+        if entry is None:
+            continue
+        tm = db.get_psyke_theatre_memory(entry.id)
+        if tm.get("offstage_knowledge"):
+            knowledge.append(f"{cname}: {tm['offstage_knowledge']}")
+    if knowledge:
+        lines.append("Offstage knowledge: " + "; ".join(knowledge))
+
+    if len(lines) <= 2:  # only header + scene title → nothing meaningful
+        return ""
+    return "\n".join(lines)

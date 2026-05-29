@@ -1149,14 +1149,26 @@ class AssistantPanel(QWidget):
             from storyplanner.narrative_engines import engine_for_project
             project = self._db.get_project_by_id(self._project_id)
             if engine_for_project(project).name == "stage_script":
+                stage_blocks: list[str] = []
+                from storyplanner.stage_script_plot import (
+                    build_stage_script_context,
+                )
+                stage_ctx = build_stage_script_context(
+                    self._db, self._project_id, scene_id,
+                )
+                if stage_ctx:
+                    stage_blocks.append(stage_ctx)
                 from storyplanner.psyke_theatre import build_theatre_memory_context
                 theatre_ctx = build_theatre_memory_context(
                     self._db, self._project_id,
                 )
                 if theatre_ctx:
+                    stage_blocks.append(theatre_ctx)
+                if stage_blocks:
+                    block = "\n\n".join(stage_blocks)
                     structural_ctx = (
-                        theatre_ctx + "\n\n" + structural_ctx
-                        if structural_ctx else theatre_ctx
+                        block + "\n\n" + structural_ctx
+                        if structural_ctx else block
                     )
         except Exception:
             pass
