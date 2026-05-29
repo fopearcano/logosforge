@@ -431,6 +431,7 @@ class StoryGridView(QWidget):
             get_project_writing_format,
         )
         engine = get_project_narrative_engine(project)
+        self._graphic_novel_mode = engine == "graphic_novel"
         # Story grid still keys most branches off the writing format, but
         # falls back to "screenplay" when the engine is screenplay so the
         # scene-grid affordances appear even if the format was overridden.
@@ -445,11 +446,33 @@ class StoryGridView(QWidget):
 
     @property
     def _block_unit(self) -> str:
+        if self._graphic_novel_mode:
+            return "sequence"
         if self._format_mode == "screenplay":
             return "scene"
         return "chapter"
 
+    # -- Graphic Novel plot (page/panel-aware) ------------------------------
+
+    def is_graphic_novel_mode(self) -> bool:
+        return self._graphic_novel_mode
+
+    def get_gn_plot_blocks(self, unit: str | None = None) -> list[dict]:
+        """Page/sequence plot blocks for graphic-novel projects.
+
+        Returns [] for non-graphic-novel projects. unit defaults to the
+        engine's plot block unit ("sequence"); pass "page" for page blocks.
+        """
+        if not self._graphic_novel_mode:
+            return []
+        from storyplanner.graphic_novel_plot import get_gn_plot_blocks
+        return get_gn_plot_blocks(
+            self._db, self._project_id, unit=unit or "sequence",
+        )
+
     def _block_number_label(self, index: int) -> str:
+        if self._block_unit == "sequence":
+            return f"Seq {index}"
         if self._block_unit == "scene":
             return f"Scene {index}"
         return f"Ch {index}"

@@ -90,8 +90,14 @@ class TimelineView(QWidget):
         self._on_data_changed = on_data_changed
 
         project = self._db.get_project_by_id(self._project_id)
-        from storyplanner.project_compat import is_screenplay_project
+        from storyplanner.project_compat import (
+            get_project_narrative_engine,
+            is_screenplay_project,
+        )
         self._screenplay_mode = is_screenplay_project(project)
+        self._graphic_novel_mode = (
+            get_project_narrative_engine(project) == "graphic_novel"
+        )
 
         # Scene data: (row, col) → (scene_id, title, plotline)
         self._cell_data: dict[tuple[int, int], tuple[int, str, str]] = {}
@@ -182,6 +188,31 @@ class TimelineView(QWidget):
         self._refresh_focus_characters()
         self._refresh_filter()
         self._reload()
+
+    # -- Graphic Novel timeline (page/panel-aware) --------------------------
+
+    def is_graphic_novel_mode(self) -> bool:
+        return self._graphic_novel_mode
+
+    def get_gn_timeline_rows(self) -> list[dict]:
+        """Reading-flow rows (rhythm / reveal timing / action density /
+        pacing) for graphic-novel projects; [] otherwise."""
+        if not self._graphic_novel_mode:
+            return []
+        from storyplanner.graphic_novel_plot import get_gn_timeline
+        return get_gn_timeline(self._db, self._project_id)
+
+    def get_gn_silence_action_pattern(self) -> list[str]:
+        if not self._graphic_novel_mode:
+            return []
+        from storyplanner.graphic_novel_plot import get_silence_action_pattern
+        return get_silence_action_pattern(self._db, self._project_id)
+
+    def get_gn_page_turn_map(self) -> list[dict]:
+        if not self._graphic_novel_mode:
+            return []
+        from storyplanner.graphic_novel_plot import get_page_turn_map
+        return get_page_turn_map(self._db, self._project_id)
 
     # -- Focus character -----------------------------------------------------
 
