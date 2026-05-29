@@ -508,3 +508,95 @@ class StageBusiness(SQLModel, table=True):
     continuity_note: str = ""
     moment_order: int = 0
     created_at: datetime = Field(default_factory=_now)
+
+
+# ---------------------------------------------------------------------------
+# Series — season / episode / arc / plotline metadata
+#
+# Hierarchy: Project -> Season -> Episode -> EpisodePlotline; SeriesArc spans
+# episodes. All rows are project-scoped and default-safe. New tables are
+# created by create_all() on open; existing project files gain them
+# non-destructively (no ALTER, no data migration).
+# ---------------------------------------------------------------------------
+
+SEASON_STATUSES = ("planned", "active", "complete", "")
+EPISODE_STATUSES = ("planned", "outlined", "drafted", "final", "")
+SERIES_ARC_SCOPES = (
+    "series", "season", "episode", "character", "relationship", "mystery",
+)
+SERIES_ARC_STATUSES = ("active", "resolved", "abandoned", "delayed")
+EPISODE_PLOTLINE_TYPES = ("A", "B", "C", "runner")
+
+
+class Season(SQLModel, table=True):
+    """A season of a series."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id")
+    season_number: int = 0
+    title: str = ""
+    summary: str = ""
+    season_arc: str = ""
+    central_question: str = ""
+    finale_payoff: str = ""
+    status: str = ""
+    order_index: int = 0
+    created_at: datetime = Field(default_factory=_now)
+
+
+class Episode(SQLModel, table=True):
+    """An episode within a season."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    season_id: int = Field(foreign_key="season.id")
+    project_id: int = Field(foreign_key="project.id")
+    episode_number: int = 0
+    title: str = ""
+    logline: str = ""
+    summary: str = ""
+    episode_engine: str = ""        # the episode's dramatic engine / function
+    teaser: str = ""
+    act_breaks: str = ""            # free-text act-break notes
+    cliffhanger: str = ""
+    status: str = ""
+    estimated_runtime_minutes: int = 0
+    order_index: int = 0
+    created_at: datetime = Field(default_factory=_now)
+
+
+class SeriesArc(SQLModel, table=True):
+    """A long-running arc spanning episodes (series/season/character/...).
+
+    linked_psyke_entries is a CSV of PSYKE entry ids — arcs reuse PSYKE
+    rather than duplicating characters/themes.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id")
+    scope: str = "series"           # SERIES_ARC_SCOPES
+    title: str = ""
+    summary: str = ""
+    setup_episode_id: Optional[int] = Field(
+        default=None, foreign_key="episode.id",
+    )
+    payoff_episode_id: Optional[int] = Field(
+        default=None, foreign_key="episode.id",
+    )
+    status: str = "active"          # SERIES_ARC_STATUSES
+    linked_psyke_entries: str = ""  # CSV of PSYKE entry ids
+    notes: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+class EpisodePlotline(SQLModel, table=True):
+    """An A/B/C/runner plotline within an episode."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    episode_id: int = Field(foreign_key="episode.id")
+    type: str = "A"                 # EPISODE_PLOTLINE_TYPES
+    title: str = ""
+    summary: str = ""
+    characters: str = ""            # CSV of character / PSYKE refs
+    resolution_state: str = ""
+    order_index: int = 0
+    created_at: datetime = Field(default_factory=_now)

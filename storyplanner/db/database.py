@@ -39,6 +39,10 @@ from storyplanner.models import (
     StageBusiness,
     StageCue,
     StageEntranceExit,
+    Season,
+    Episode,
+    SeriesArc,
+    EpisodePlotline,
     Stage,
     StageBranch,
     StageSnapshot,
@@ -1762,6 +1766,174 @@ class Database:
                 select(StageBusiness)
                 .where(StageBusiness.scene_id == scene_id)
                 .order_by(StageBusiness.moment_order, StageBusiness.id)
+            )
+            return list(session.exec(stmt).all())
+
+    # -- Series: seasons / episodes / arcs / plotlines ----------------------
+
+    def create_season(
+        self, project_id: int, *, season_number: int | None = None,
+        title: str = "", summary: str = "", season_arc: str = "",
+        central_question: str = "", finale_payoff: str = "", status: str = "",
+        order_index: int | None = None,
+    ) -> Season:
+        with Session(self._engine) as session:
+            siblings = session.exec(
+                select(Season).where(Season.project_id == project_id)
+            ).all()
+            if season_number is None:
+                season_number = len(siblings) + 1
+            if order_index is None:
+                order_index = len(siblings)
+            row = Season(
+                project_id=project_id, season_number=season_number,
+                title=title, summary=summary, season_arc=season_arc,
+                central_question=central_question, finale_payoff=finale_payoff,
+                status=status, order_index=order_index,
+            )
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return row
+
+    def get_seasons(self, project_id: int) -> list[Season]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(Season)
+                .where(Season.project_id == project_id)
+                .order_by(Season.order_index, Season.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def get_season_by_id(self, season_id: int) -> Season | None:
+        with Session(self._engine) as session:
+            return session.get(Season, season_id)
+
+    def update_season(self, season_id: int, **fields) -> None:
+        self._patch_row(Season, season_id, fields)
+
+    def create_episode(
+        self, season_id: int, *, project_id: int | None = None,
+        episode_number: int | None = None, title: str = "", logline: str = "",
+        summary: str = "", episode_engine: str = "", teaser: str = "",
+        act_breaks: str = "", cliffhanger: str = "", status: str = "",
+        estimated_runtime_minutes: int = 0, order_index: int | None = None,
+    ) -> Episode:
+        with Session(self._engine) as session:
+            if project_id is None:
+                season = session.get(Season, season_id)
+                project_id = season.project_id if season else 0
+            siblings = session.exec(
+                select(Episode).where(Episode.season_id == season_id)
+            ).all()
+            if episode_number is None:
+                episode_number = len(siblings) + 1
+            if order_index is None:
+                order_index = len(siblings)
+            row = Episode(
+                season_id=season_id, project_id=project_id,
+                episode_number=episode_number, title=title, logline=logline,
+                summary=summary, episode_engine=episode_engine, teaser=teaser,
+                act_breaks=act_breaks, cliffhanger=cliffhanger, status=status,
+                estimated_runtime_minutes=estimated_runtime_minutes,
+                order_index=order_index,
+            )
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return row
+
+    def get_episodes_for_season(self, season_id: int) -> list[Episode]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(Episode)
+                .where(Episode.season_id == season_id)
+                .order_by(Episode.episode_number, Episode.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def get_episodes(self, project_id: int) -> list[Episode]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(Episode)
+                .where(Episode.project_id == project_id)
+                .order_by(Episode.order_index, Episode.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def get_episode_by_id(self, episode_id: int) -> Episode | None:
+        with Session(self._engine) as session:
+            return session.get(Episode, episode_id)
+
+    def update_episode(self, episode_id: int, **fields) -> None:
+        self._patch_row(Episode, episode_id, fields)
+
+    def create_series_arc(
+        self, project_id: int, *, scope: str = "series", title: str = "",
+        summary: str = "", setup_episode_id: int | None = None,
+        payoff_episode_id: int | None = None, status: str = "active",
+        linked_psyke_entries=None, notes: str = "",
+    ) -> SeriesArc:
+        with Session(self._engine) as session:
+            row = SeriesArc(
+                project_id=project_id, scope=scope, title=title,
+                summary=summary, setup_episode_id=setup_episode_id,
+                payoff_episode_id=payoff_episode_id, status=status,
+                linked_psyke_entries=self._csv_join(linked_psyke_entries),
+                notes=notes,
+            )
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return row
+
+    def get_series_arcs(self, project_id: int) -> list[SeriesArc]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(SeriesArc)
+                .where(SeriesArc.project_id == project_id)
+                .order_by(SeriesArc.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def update_series_arc(self, arc_id: int, **fields) -> None:
+        if "linked_psyke_entries" in fields and not isinstance(
+            fields["linked_psyke_entries"], str
+        ):
+            fields["linked_psyke_entries"] = self._csv_join(
+                fields["linked_psyke_entries"]
+            )
+        self._patch_row(SeriesArc, arc_id, fields)
+
+    def create_episode_plotline(
+        self, episode_id: int, *, type: str = "A", title: str = "",
+        summary: str = "", characters=None, resolution_state: str = "",
+        order_index: int | None = None,
+    ) -> EpisodePlotline:
+        with Session(self._engine) as session:
+            if order_index is None:
+                existing = session.exec(
+                    select(EpisodePlotline).where(
+                        EpisodePlotline.episode_id == episode_id
+                    )
+                ).all()
+                order_index = len(existing)
+            row = EpisodePlotline(
+                episode_id=episode_id, type=type, title=title,
+                summary=summary, characters=self._csv_join(characters),
+                resolution_state=resolution_state, order_index=order_index,
+            )
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return row
+
+    def get_episode_plotlines(self, episode_id: int) -> list[EpisodePlotline]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(EpisodePlotline)
+                .where(EpisodePlotline.episode_id == episode_id)
+                .order_by(EpisodePlotline.order_index, EpisodePlotline.id)
             )
             return list(session.exec(stmt).all())
 
