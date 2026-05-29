@@ -451,25 +451,36 @@ def test_changing_idea_invalidates_assistant_cache():
 # 8. Go McKee detection
 # ==========================================================================
 
-def test_gomckee_hint_only_when_loaded(monkeypatch):
-    from storyplanner import controlling_idea as ci_mod
-    from storyplanner.plugin_manager import PluginInfo
+def test_gomckee_hint_only_when_enabled(monkeypatch):
+    """The hint follows the real enabled toggle, not mere load state."""
 
-    # Force the plugin manager to report no Go McKee
     class FakeMgr:
-        plugins = []
+        def __init__(self):
+            self.plugins = []
+            self._states = {}
+
+        def is_enabled(self, pid):
+            return self._states.get(pid, False)
+
+    fake = FakeMgr()
     monkeypatch.setattr(
         "storyplanner.plugin_manager.get_plugin_manager",
-        lambda: FakeMgr,
+        lambda: fake,
     )
     db, proj = _setup()
     save(db, proj.id, ControllingIdea(value="x", cause="y", statement="z"))
-    block = gather_controlling_idea_context(db, proj.id)
-    assert "Go McKee" not in block
 
+    # No Go McKee plugin at all → no hint.
+    assert "Go McKee" not in gather_controlling_idea_context(db, proj.id)
+
+    # Plugin present but DISABLED (loaded is irrelevant) → no hint.
     class GMPlugin:
         id = "gomckee_plugin"
         loaded = True
-    FakeMgr.plugins = [GMPlugin()]
-    block_with = gather_controlling_idea_context(db, proj.id)
-    assert "Go McKee" in block_with
+        enabled = False
+    fake.plugins = [GMPlugin()]
+    assert "Go McKee" not in gather_controlling_idea_context(db, proj.id)
+
+    # Plugin ENABLED → hint appears.
+    fake._states["gomckee_plugin"] = True
+    assert "Go McKee" in gather_controlling_idea_context(db, proj.id)

@@ -1094,6 +1094,26 @@ class AssistantPanel(QWidget):
         except Exception:
             pass
 
+        # Go McKee — operational writing-intelligence layer. When the
+        # plugin is enabled it injects PSYKE-aware craft constraints and
+        # diagnostic checks; when disabled it contributes nothing, so
+        # toggling Go McKee genuinely changes Assistant behavior. Folded
+        # into structural_ctx (always threaded to build_messages) and
+        # placed first so its craft pressure leads.
+        try:
+            from storyplanner.gomckee_bridge import gather_gomckee_context
+            gomckee_ctx = gather_gomckee_context(
+                self._db, self._project_id, scene_id,
+                query_text=self._prompt_input.toPlainText().strip(),
+            )
+            if gomckee_ctx:
+                structural_ctx = (
+                    gomckee_ctx + "\n\n" + structural_ctx
+                    if structural_ctx else gomckee_ctx
+                )
+        except Exception:
+            pass
+
         return scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orchestration_debug, notes_ctx, graph_ctx, mode_ctx, structural_ctx, irrational_ctx, controlling_idea_ctx
 
     def _send_preset(self, action_key: str) -> None:

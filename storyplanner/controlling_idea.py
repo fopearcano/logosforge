@@ -223,16 +223,17 @@ def unlink_psyke_entry(db: Any, project_id: int, entry_id: int) -> None:
 # ---------------------------------------------------------------------------
 
 def _gomckee_active() -> bool:
-    """Return True iff a Go McKee plugin is currently loaded."""
+    """Return True iff the Go McKee plugin is ENABLED.
+
+    Uses the real persisted toggle (plugin_states), not mere load state,
+    so enabling/disabling Go McKee genuinely changes whether the
+    Controlling Idea is treated as the highest-priority constraint.
+    """
     try:
-        from storyplanner.plugin_manager import get_plugin_manager
-        mgr = get_plugin_manager()
-        for p in mgr.plugins:
-            if p.loaded and p.id.lower().startswith("gomckee"):
-                return True
+        from storyplanner.gomckee_bridge import is_gomckee_enabled
+        return is_gomckee_enabled()
     except Exception:
         return False
-    return False
 
 
 def gather_controlling_idea_context(
