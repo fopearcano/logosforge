@@ -432,6 +432,7 @@ class StoryGridView(QWidget):
         )
         engine = get_project_narrative_engine(project)
         self._graphic_novel_mode = engine == "graphic_novel"
+        self._stage_script_mode = engine == "stage_script"
         # Story grid still keys most branches off the writing format, but
         # falls back to "screenplay" when the engine is screenplay so the
         # scene-grid affordances appear even if the format was overridden.
@@ -448,9 +449,29 @@ class StoryGridView(QWidget):
     def _block_unit(self) -> str:
         if self._graphic_novel_mode:
             return "sequence"
-        if self._format_mode == "screenplay":
+        if self._format_mode == "screenplay" or self._stage_script_mode:
             return "scene"
         return "chapter"
+
+    # -- Stage Script plot (scenes grouped by acts) -------------------------
+
+    def is_stage_script_mode(self) -> bool:
+        return self._stage_script_mode
+
+    def get_stage_plot_blocks(self) -> list[dict]:
+        """Theatre scene blocks (objective, turn, characters on stage,
+        entrance/exit count, props, duration). [] for non-stage projects."""
+        if not self._stage_script_mode:
+            return []
+        from storyplanner.stage_script_plot import get_stage_plot_blocks
+        return get_stage_plot_blocks(self._db, self._project_id)
+
+    def get_stage_plot_acts(self) -> list[dict]:
+        """Scenes grouped by act. [] for non-stage projects."""
+        if not self._stage_script_mode:
+            return []
+        from storyplanner.stage_script_plot import get_stage_plot_acts
+        return get_stage_plot_acts(self._db, self._project_id)
 
     # -- Graphic Novel plot (page/panel-aware) ------------------------------
 
@@ -476,6 +497,8 @@ class StoryGridView(QWidget):
         if self._block_unit == "scene":
             return f"Scene {index}"
         return f"Ch {index}"
+
+    # NOTE: stage_script and screenplay both use the "scene" block unit.
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)

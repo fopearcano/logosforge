@@ -95,9 +95,9 @@ class TimelineView(QWidget):
             is_screenplay_project,
         )
         self._screenplay_mode = is_screenplay_project(project)
-        self._graphic_novel_mode = (
-            get_project_narrative_engine(project) == "graphic_novel"
-        )
+        _engine = get_project_narrative_engine(project)
+        self._graphic_novel_mode = _engine == "graphic_novel"
+        self._stage_script_mode = _engine == "stage_script"
 
         # Scene data: (row, col) → (scene_id, title, plotline)
         self._cell_data: dict[tuple[int, int], tuple[int, str, str]] = {}
@@ -213,6 +213,37 @@ class TimelineView(QWidget):
             return []
         from storyplanner.graphic_novel_plot import get_page_turn_map
         return get_page_turn_map(self._db, self._project_id)
+
+    # -- Stage Script timeline (theatre-aware) ------------------------------
+
+    def is_stage_script_mode(self) -> bool:
+        return self._stage_script_mode
+
+    def get_stage_timeline_rows(self) -> list[dict]:
+        """Performance-order rows (entrances/exits, cues, offstage events,
+        prop continuity, emotional pressure). [] for non-stage projects."""
+        if not self._stage_script_mode:
+            return []
+        from storyplanner.stage_script_plot import get_stage_timeline
+        return get_stage_timeline(self._db, self._project_id)
+
+    def get_stage_act_progression(self) -> list[str]:
+        if not self._stage_script_mode:
+            return []
+        from storyplanner.stage_script_plot import get_act_progression
+        return get_act_progression(self._db, self._project_id)
+
+    def get_stage_entrance_exit_markers(self, scene_id: int) -> list[dict]:
+        if not self._stage_script_mode:
+            return []
+        from storyplanner.stage_script_plot import get_entrance_exit_markers
+        return get_entrance_exit_markers(self._db, self._project_id, scene_id)
+
+    def get_stage_cue_markers(self, scene_id: int) -> list[dict]:
+        if not self._stage_script_mode:
+            return []
+        from storyplanner.stage_script_plot import get_cue_markers
+        return get_cue_markers(self._db, scene_id)
 
     # -- Focus character -----------------------------------------------------
 
