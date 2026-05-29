@@ -1141,6 +1141,26 @@ class AssistantPanel(QWidget):
         except Exception:
             pass
 
+        # Stage Script — when the engine is stage_script, surface compact
+        # theatrical PSYKE (objectives, pressures, knowledge, entrances/
+        # exits, props, staging concerns) so the Assistant reasons for the
+        # stage.
+        try:
+            from storyplanner.narrative_engines import engine_for_project
+            project = self._db.get_project_by_id(self._project_id)
+            if engine_for_project(project).name == "stage_script":
+                from storyplanner.psyke_theatre import build_theatre_memory_context
+                theatre_ctx = build_theatre_memory_context(
+                    self._db, self._project_id,
+                )
+                if theatre_ctx:
+                    structural_ctx = (
+                        theatre_ctx + "\n\n" + structural_ctx
+                        if structural_ctx else theatre_ctx
+                    )
+        except Exception:
+            pass
+
         return scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orchestration_debug, notes_ctx, graph_ctx, mode_ctx, structural_ctx, irrational_ctx, controlling_idea_ctx
 
     def _send_preset(self, action_key: str) -> None:

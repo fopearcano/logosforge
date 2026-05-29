@@ -11,6 +11,7 @@ from storyplanner.models.models import (
     GN_TRANSITION_TYPES,
     STAGE_CUE_TYPES,
     STAGE_ENTRANCE_EXIT_TYPES,
+    THEATRE_RELATION_TYPES,
     ChatMessage,
     ChatSummary,
     Character,
@@ -86,4 +87,5 @@ __all__ = [
     "StageBusiness",
     "STAGE_ENTRANCE_EXIT_TYPES",
     "STAGE_CUE_TYPES",
+    "THEATRE_RELATION_TYPES",
 ]

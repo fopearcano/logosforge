@@ -454,6 +454,13 @@ class GraphicNovelContinuityAppearance(SQLModel, table=True):
 STAGE_ENTRANCE_EXIT_TYPES = ("entrance", "exit")
 STAGE_CUE_TYPES = ("light", "sound", "music", "prop", "movement", "other")
 
+# Theatrical PSYKE relation types (PsykeRelation.relation_type). Directional
+# except dominates/submits which form an antonym pair.
+THEATRE_RELATION_TYPES = (
+    "pressures", "confronts", "avoids", "dominates",
+    "submits", "deceives", "overhears", "interrupts",
+)
+
 
 class StageEntranceExit(SQLModel, table=True):
     """A character entering or leaving the stage within a scene."""

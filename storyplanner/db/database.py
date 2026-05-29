@@ -56,6 +56,11 @@ _INVERSE_RELATION_TYPE: dict[str, str] = {
     "thematic_echo": "thematic_echo",
     "visual_motif": "visual_motif",
     "subtext_opposition": "subtext_opposition",
+    # Theatre relation types — dominates/submits are a natural antonym pair;
+    # the remaining directional types store the same type on the reverse
+    # edge (the context layer dedupes by unordered pair).
+    "dominates": "submits",
+    "submits": "dominates",
 }
 
 
@@ -1843,10 +1848,25 @@ class Database:
     # details keys are preserved).
 
     def get_psyke_visual_memory(self, entry_id: int) -> dict:
-        visual = self.get_psyke_entry_details(entry_id).get("visual")
-        return visual if isinstance(visual, dict) else {}
+        return self._get_psyke_detail_section(entry_id, "visual")
 
     def set_psyke_visual_memory(self, entry_id: int, visual: dict) -> None:
+        self._set_psyke_detail_section(entry_id, "visual", visual)
+
+    def get_psyke_theatre_memory(self, entry_id: int) -> dict:
+        return self._get_psyke_detail_section(entry_id, "theatre")
+
+    def set_psyke_theatre_memory(self, entry_id: int, theatre: dict) -> None:
+        self._set_psyke_detail_section(entry_id, "theatre", theatre)
+
+    def _get_psyke_detail_section(self, entry_id: int, section: str) -> dict:
+        data = self.get_psyke_entry_details(entry_id).get(section)
+        return data if isinstance(data, dict) else {}
+
+    def _set_psyke_detail_section(
+        self, entry_id: int, section: str, values: dict,
+    ) -> None:
+        """Merge *values* into details_json[section] (empty value clears)."""
         import json
         with Session(self._engine) as session:
             entry = session.get(PsykeEntry, entry_id)
@@ -1858,16 +1878,15 @@ class Database:
                 details = {}
             if not isinstance(details, dict):
                 details = {}
-            current = details.get("visual")
+            current = details.get(section)
             if not isinstance(current, dict):
                 current = {}
-            # Merge: only overwrite provided keys; drop empty values.
-            for key, value in visual.items():
+            for key, value in values.items():
                 if value in (None, ""):
                     current.pop(key, None)
                 else:
                     current[key] = value
-            details["visual"] = current
+            details[section] = current
             entry.details_json = json.dumps(details)
             session.commit()
 
