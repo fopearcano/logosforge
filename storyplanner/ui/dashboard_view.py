@@ -52,26 +52,90 @@ class DashboardView(QWidget):
         self._layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         scroll.setWidget(self._container)
 
+        self._connect_events()
         self._build()
 
+    # -- Event wiring --------------------------------------------------------
+
+    def _connect_events(self) -> None:
+        """Recompute whenever the active project changes or its data is
+        mutated. Bound-method connections auto-disconnect when this widget
+        is destroyed, so persisted/replaced dashboards never leak."""
+        from storyplanner.project_events import get_event_bus
+        bus = get_event_bus()
+        # Lifecycle: a different project is now active — re-point + recompute.
+        bus.project_loaded.connect(self._on_project_changed)
+        bus.project_created.connect(self._on_project_changed)
+        # Data mutations within the current project — recompute in place.
+        for signal in (
+            bus.project_data_changed,
+            bus.scene_changed,
+            bus.scenes_changed,
+            bus.outline_changed,
+            bus.psyke_changed,
+            bus.psyke_list_changed,
+            bus.plot_changed,
+            bus.notes_changed,
+        ):
+            signal.connect(self._on_data_event)
+
+    def _on_project_changed(self, project_id: int) -> None:
+        """A new project became active. Drop everything tied to the old
+        project, re-point at the new one, and recompute from scratch."""
+        self.set_project(project_id)
+
+    def _on_data_event(self, *_args) -> None:
+        """Project data changed — recompute for the current project."""
+        self.refresh()
+
+    def set_project(self, project_id: int) -> None:
+        """Point the dashboard at *project_id*, clearing old state first
+        so no metrics from the previous project can survive."""
+        self._project_id = project_id
+        self.refresh()
+
     def refresh(self) -> None:
+        if not self._is_alive():
+            return
+        # Clear old dashboard state first — recompute is total, so no
+        # metric from a previous project (or a stale data version) remains.
         while self._layout.count():
             item = self._layout.takeAt(0)
             widget = item.widget()
             if widget:
-                widget.deleteLater()
+                self._discard_widget(widget)
             else:
                 sublayout = item.layout()
                 if sublayout is not None:
                     self._drop_layout(sublayout)
         self._build()
 
+    def _is_alive(self) -> bool:
+        """Guard against signals arriving after the C++ widget is gone."""
+        try:
+            self._layout.count()
+            return True
+        except RuntimeError:
+            return False
+
+    @staticmethod
+    def _discard_widget(widget) -> None:
+        """Detach a widget synchronously, then schedule its deletion.
+
+        deleteLater() alone defers removal to the event loop, so old
+        labels would linger in the widget tree (and on screen) between a
+        project switch and the next loop tick. Re-parenting to None
+        removes them immediately, guaranteeing no stale metrics remain.
+        """
+        widget.setParent(None)
+        widget.deleteLater()
+
     def _drop_layout(self, layout) -> None:
         while layout.count():
             item = layout.takeAt(0)
             widget = item.widget()
             if widget:
-                widget.deleteLater()
+                self._discard_widget(widget)
             elif item.layout() is not None:
                 self._drop_layout(item.layout())
 

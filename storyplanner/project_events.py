@@ -23,6 +23,11 @@ from PySide6.QtCore import QObject, Signal
 class ProjectEventBus(QObject):
     """Central pubsub for project-data mutations."""
 
+    # Lifecycle — the active project changed. Carries the new project_id
+    # so views can re-point and recompute against the right project.
+    project_loaded = Signal(int)           # project_id (load / switch / restore)
+    project_created = Signal(int)          # project_id (brand-new project)
+
     # Catch-all — any write fires this. Hosts that want a single
     # subscription should connect here.
     project_data_changed = Signal()
@@ -92,3 +97,15 @@ def emit_psyke_changed(entry_id: int) -> None:
 
 def emit_project_data_changed() -> None:
     get_event_bus().project_data_changed.emit()
+
+
+def emit_project_loaded(project_id: int) -> None:
+    """Announce that *project_id* is now the active project."""
+    get_event_bus().project_loaded.emit(project_id)
+
+
+def emit_project_created(project_id: int) -> None:
+    """Announce a brand-new project (also fires project_loaded)."""
+    bus = get_event_bus()
+    bus.project_created.emit(project_id)
+    bus.project_loaded.emit(project_id)

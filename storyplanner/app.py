@@ -69,6 +69,11 @@ def create_app() -> tuple[QApplication, MainWindow]:
     if last_path:
         window.load_file_quiet(last_path)
 
+    # Always land on Projects at startup — never Dashboard by default.
+    # Runs after any session restore so it wins the final navigation and
+    # rebuilds the Projects list against current data.
+    window.show_initial_section()
+
     window._refresh_plugins_menu()
 
     return app, window

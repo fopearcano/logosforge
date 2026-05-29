@@ -261,7 +261,7 @@ class MainWindow(QMainWindow):
         self._dirty = False
         self._read_only = False
         self._external_change_warned = False
-        self._current_section: str = "Dashboard"
+        self._current_section: str = "Projects"
 
         self._autosave = AutosaveManager(db, project_id, parent=self)
         self._autosave.status_changed.connect(self._on_autosave_status)
@@ -598,6 +598,18 @@ class MainWindow(QMainWindow):
                 on_save_as=self._on_save_as,
             )
         )
+
+    def show_initial_section(self) -> None:
+        """Land the app on the Projects section at startup.
+
+        Called once by the application factory after any session restore.
+        Projects — not Dashboard — is the default first view; Dashboard is
+        only shown when the user (or an explicit open) selects it. Building
+        a fresh ProjectsView here guarantees the recent-projects list
+        reflects the current state, including a just-restored session.
+        """
+        self._set_active_section("Projects")
+        self._show_projects()
 
     def _show_dashboard(self) -> None:
         self._set_content(
@@ -1532,6 +1544,10 @@ class MainWindow(QMainWindow):
         # state for the new project rather than (say) an empty Plot view.
         self._set_active_section("Dashboard")
         self._switch_project(project.id)
+        # _switch_project already emitted project_loaded; additionally
+        # announce that this project is brand new.
+        from storyplanner.project_events import get_event_bus
+        get_event_bus().project_created.emit(project.id)
 
     def _on_project_settings(self) -> None:
         if not self._project_id:
@@ -1926,6 +1942,12 @@ class MainWindow(QMainWindow):
         # new project's data without forcing the user to a different
         # section.
         self._rebuild_active_section()
+
+        # 5. Announce the load so self-subscribed views (e.g. Dashboard)
+        # re-point at the new project and recompute, regardless of whether
+        # they were rebuilt above.
+        from storyplanner.project_events import emit_project_loaded
+        emit_project_loaded(new_id)
 
     def _rebuild_active_section(self) -> None:
         """Re-invoke the handler for the currently active sidebar section.
