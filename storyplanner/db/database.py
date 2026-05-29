@@ -17,6 +17,11 @@ from storyplanner.models import (
     ChatMessage,
     ChatSummary,
     Character,
+    GraphicNovelContinuityAppearance,
+    GraphicNovelContinuityItem,
+    GraphicNovelPage,
+    GraphicNovelPanel,
+    GraphicNovelSequence,
     Note,
     NotePsykeLink,
     NoteSceneLink,
@@ -1289,6 +1294,290 @@ class Database:
                 if cid in char_ids:
                     arc.append((scene.id, scene.title, idx + 1, state))
         return arc
+
+    # -- Graphic Novel: sequences / pages / panels --------------------------
+    # Hierarchy: Sequence -> Pages -> Panels. List-valued panel fields are
+    # stored as CSV; create/update accept Python lists and join them.
+
+    @staticmethod
+    def _csv_join(values) -> str:
+        if values is None:
+            return ""
+        if isinstance(values, str):
+            return values
+        return ",".join(str(v).strip() for v in values if str(v).strip())
+
+    @staticmethod
+    def csv_split(value: str) -> list[str]:
+        return [v.strip() for v in (value or "").split(",") if v.strip()]
+
+    # Sequences -------------------------------------------------------------
+
+    def create_gn_sequence(
+        self, project_id: int, *, title: str = "", summary: str = "",
+        dramatic_purpose: str = "", visual_purpose: str = "",
+        emotional_beat: str = "", issue: str = "", chapter: str = "",
+        sort_order: int | None = None,
+    ) -> GraphicNovelSequence:
+        with Session(self._engine) as session:
+            if sort_order is None:
+                existing = session.exec(
+                    select(GraphicNovelSequence).where(
+                        GraphicNovelSequence.project_id == project_id,
+                    )
+                ).all()
+                sort_order = len(existing)
+            seq = GraphicNovelSequence(
+                project_id=project_id, title=title, summary=summary,
+                dramatic_purpose=dramatic_purpose, visual_purpose=visual_purpose,
+                emotional_beat=emotional_beat, issue=issue, chapter=chapter,
+                sort_order=sort_order,
+            )
+            session.add(seq)
+            session.commit()
+            session.refresh(seq)
+            return seq
+
+    def get_gn_sequences(self, project_id: int) -> list[GraphicNovelSequence]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(GraphicNovelSequence)
+                .where(GraphicNovelSequence.project_id == project_id)
+                .order_by(GraphicNovelSequence.sort_order, GraphicNovelSequence.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def get_gn_sequence_by_id(self, sequence_id: int) -> GraphicNovelSequence | None:
+        with Session(self._engine) as session:
+            return session.get(GraphicNovelSequence, sequence_id)
+
+    def update_gn_sequence(self, sequence_id: int, **fields) -> None:
+        self._patch_row(GraphicNovelSequence, sequence_id, fields)
+
+    # Pages -----------------------------------------------------------------
+
+    def create_gn_page(
+        self, project_id: int, *, sequence_id: int | None = None,
+        page_number: int | None = None, summary: str = "",
+        emotional_beat: str = "", density_level: str = "",
+        reveal_type: str = "", splash_page: bool = False, notes: str = "",
+        sort_order: int | None = None,
+    ) -> GraphicNovelPage:
+        with Session(self._engine) as session:
+            siblings = session.exec(
+                select(GraphicNovelPage).where(
+                    GraphicNovelPage.project_id == project_id,
+                )
+            ).all()
+            if page_number is None:
+                page_number = len(siblings) + 1
+            if sort_order is None:
+                sort_order = len(siblings)
+            page = GraphicNovelPage(
+                project_id=project_id, sequence_id=sequence_id,
+                page_number=page_number, summary=summary,
+                emotional_beat=emotional_beat, density_level=density_level,
+                reveal_type=reveal_type, splash_page=splash_page,
+                notes=notes, sort_order=sort_order,
+            )
+            session.add(page)
+            session.commit()
+            session.refresh(page)
+            return page
+
+    def get_gn_pages(self, project_id: int) -> list[GraphicNovelPage]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(GraphicNovelPage)
+                .where(GraphicNovelPage.project_id == project_id)
+                .order_by(GraphicNovelPage.page_number, GraphicNovelPage.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def get_gn_pages_for_sequence(self, sequence_id: int) -> list[GraphicNovelPage]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(GraphicNovelPage)
+                .where(GraphicNovelPage.sequence_id == sequence_id)
+                .order_by(GraphicNovelPage.page_number, GraphicNovelPage.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def get_gn_page_by_id(self, page_id: int) -> GraphicNovelPage | None:
+        with Session(self._engine) as session:
+            return session.get(GraphicNovelPage, page_id)
+
+    def update_gn_page(self, page_id: int, **fields) -> None:
+        self._patch_row(GraphicNovelPage, page_id, fields)
+
+    def assign_gn_page_to_sequence(self, page_id: int, sequence_id: int | None) -> None:
+        self._patch_row(GraphicNovelPage, page_id, {"sequence_id": sequence_id})
+
+    def delete_gn_page(self, page_id: int) -> None:
+        with Session(self._engine) as session:
+            for panel in session.exec(
+                select(GraphicNovelPanel).where(
+                    GraphicNovelPanel.page_id == page_id,
+                )
+            ).all():
+                session.delete(panel)
+            page = session.get(GraphicNovelPage, page_id)
+            if page:
+                session.delete(page)
+            session.commit()
+
+    # Panels ----------------------------------------------------------------
+
+    def create_gn_panel(
+        self, page_id: int, *, project_id: int | None = None,
+        panel_number: int | None = None, description: str = "",
+        camera_angle: str = "", shot_type: str = "", emotional_tone: str = "",
+        action: str = "", characters_present=None, dialogue_refs=None,
+        visual_motifs=None, reading_priority: int = 0,
+        transition_type: str = "", sort_order: int | None = None,
+    ) -> GraphicNovelPanel:
+        with Session(self._engine) as session:
+            if project_id is None:
+                page = session.get(GraphicNovelPage, page_id)
+                project_id = page.project_id if page else 0
+            siblings = session.exec(
+                select(GraphicNovelPanel).where(
+                    GraphicNovelPanel.page_id == page_id,
+                )
+            ).all()
+            if panel_number is None:
+                panel_number = len(siblings) + 1
+            if sort_order is None:
+                sort_order = len(siblings)
+            panel = GraphicNovelPanel(
+                page_id=page_id, project_id=project_id,
+                panel_number=panel_number, description=description,
+                camera_angle=camera_angle, shot_type=shot_type,
+                emotional_tone=emotional_tone, action=action,
+                characters_present=self._csv_join(characters_present),
+                dialogue_refs=self._csv_join(dialogue_refs),
+                visual_motifs=self._csv_join(visual_motifs),
+                reading_priority=reading_priority,
+                transition_type=transition_type, sort_order=sort_order,
+            )
+            session.add(panel)
+            session.commit()
+            session.refresh(panel)
+            return panel
+
+    def get_gn_panels_for_page(self, page_id: int) -> list[GraphicNovelPanel]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(GraphicNovelPanel)
+                .where(GraphicNovelPanel.page_id == page_id)
+                .order_by(GraphicNovelPanel.panel_number, GraphicNovelPanel.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def get_gn_panel_by_id(self, panel_id: int) -> GraphicNovelPanel | None:
+        with Session(self._engine) as session:
+            return session.get(GraphicNovelPanel, panel_id)
+
+    def update_gn_panel(self, panel_id: int, **fields) -> None:
+        # Normalize list-valued fields to CSV.
+        for key in ("characters_present", "dialogue_refs", "visual_motifs"):
+            if key in fields and not isinstance(fields[key], str):
+                fields[key] = self._csv_join(fields[key])
+        self._patch_row(GraphicNovelPanel, panel_id, fields)
+
+    def reorder_gn_panels(self, page_id: int, ordered_panel_ids: list[int]) -> None:
+        with Session(self._engine) as session:
+            for idx, pid in enumerate(ordered_panel_ids):
+                panel = session.get(GraphicNovelPanel, pid)
+                if panel and panel.page_id == page_id:
+                    panel.panel_number = idx + 1
+                    panel.sort_order = idx
+            session.commit()
+
+    def delete_gn_panel(self, panel_id: int) -> None:
+        with Session(self._engine) as session:
+            panel = session.get(GraphicNovelPanel, panel_id)
+            if panel:
+                session.delete(panel)
+                session.commit()
+
+    # Continuity ------------------------------------------------------------
+
+    def create_gn_continuity_item(
+        self, project_id: int, name: str, *, item_type: str = "other",
+        description: str = "", linked_psyke_entry_id: int | None = None,
+        notes: str = "",
+    ) -> GraphicNovelContinuityItem:
+        with Session(self._engine) as session:
+            item = GraphicNovelContinuityItem(
+                project_id=project_id, name=name, item_type=item_type,
+                description=description,
+                linked_psyke_entry_id=linked_psyke_entry_id, notes=notes,
+            )
+            session.add(item)
+            session.commit()
+            session.refresh(item)
+            return item
+
+    def get_gn_continuity_items(self, project_id: int) -> list[GraphicNovelContinuityItem]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(GraphicNovelContinuityItem)
+                .where(GraphicNovelContinuityItem.project_id == project_id)
+                .order_by(GraphicNovelContinuityItem.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def add_gn_continuity_appearance(
+        self, continuity_item_id: int, *, page_id: int | None = None,
+        panel_id: int | None = None, state_description: str = "",
+        continuity_status: str = "consistent",
+    ) -> GraphicNovelContinuityAppearance:
+        with Session(self._engine) as session:
+            existing = session.exec(
+                select(GraphicNovelContinuityAppearance).where(
+                    GraphicNovelContinuityAppearance.continuity_item_id
+                    == continuity_item_id,
+                )
+            ).all()
+            appearance = GraphicNovelContinuityAppearance(
+                continuity_item_id=continuity_item_id, page_id=page_id,
+                panel_id=panel_id, state_description=state_description,
+                continuity_status=continuity_status, sort_order=len(existing),
+            )
+            session.add(appearance)
+            session.commit()
+            session.refresh(appearance)
+            return appearance
+
+    def get_gn_continuity_appearances(
+        self, continuity_item_id: int,
+    ) -> list[GraphicNovelContinuityAppearance]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(GraphicNovelContinuityAppearance)
+                .where(
+                    GraphicNovelContinuityAppearance.continuity_item_id
+                    == continuity_item_id,
+                )
+                .order_by(
+                    GraphicNovelContinuityAppearance.sort_order,
+                    GraphicNovelContinuityAppearance.id,
+                )
+            )
+            return list(session.exec(stmt).all())
+
+    def _patch_row(self, model, row_id: int, fields: dict) -> None:
+        """Set provided attributes on a row, ignoring unknown keys."""
+        with Session(self._engine) as session:
+            row = session.get(model, row_id)
+            if row is None:
+                return
+            for key, value in fields.items():
+                if hasattr(row, key):
+                    setattr(row, key, value)
+            session.add(row)
+            session.commit()
 
     # -- PSYKE (Story Bible) ------------------------------------------------
 
