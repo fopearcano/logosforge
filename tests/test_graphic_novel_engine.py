@@ -213,7 +213,6 @@ def test_screenplay_projects_unaffected():
 
 
 def test_unknown_engine_still_falls_back():
-    assert get_engine("stage_script") is NOVEL_ENGINE
     assert get_engine("series") is NOVEL_ENGINE
     assert get_engine("nonsense") is NOVEL_ENGINE
 
