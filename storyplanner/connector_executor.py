@@ -77,6 +77,13 @@ def execute_action(
     if isinstance(result, dict) and "error" in result:
         return _error(result["error"])
 
+    # Announce the write through the central event bus so the active
+    # UI can refresh without each caller having to wire its own
+    # callback. Read actions stay silent.
+    if action_def.category == "write":
+        from storyplanner.project_events import emit_action_completed
+        emit_action_completed(action_name)
+
     return {"ok": True, "action": action_name, "result": result}
 
 

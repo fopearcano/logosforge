@@ -490,6 +490,12 @@ class MainWindow(QMainWindow):
         self._assistant_panel.panel_closed.connect(self._hide_assistant)
         self._assistant_panel.overlay_toggled.connect(self._on_overlay_toggled)
         self._assistant_panel.setVisible(False)
+
+        # Subscribe to the project event bus so any write — Assistant
+        # direct edits or Connector-mediated actions — refreshes the
+        # active view without each path needing its own callback.
+        from storyplanner.project_events import get_event_bus
+        get_event_bus().project_data_changed.connect(self._on_data_changed)
         self._assistant_panel.setSizePolicy(
             QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred,
         )

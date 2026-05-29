@@ -1503,6 +1503,13 @@ class AssistantPanel(QWidget):
         return text
 
     def _notify_data_changed(self) -> None:
+        # Primary path: emit through the project event bus. MainWindow
+        # subscribes to project_data_changed and routes it through its
+        # own _on_data_changed handler.
+        from storyplanner.project_events import emit_project_data_changed
+        emit_project_data_changed()
+        # Back-compat: also invoke the legacy callback so headless tests
+        # and non-MainWindow hosts that pass a callback continue to work.
         if self._on_data_changed:
             self._on_data_changed()
 
