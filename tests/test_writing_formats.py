@@ -58,8 +58,8 @@ def test_stage_script_format():
     assert STAGE_SCRIPT.name == "stage_script"
     assert STAGE_SCRIPT.default_element == "dialogue"
     names = [e.name for e in STAGE_SCRIPT.elements]
-    assert "act" in names
-    assert "scene" in names
+    assert "act_heading" in names
+    assert "scene_heading" in names
     assert "character" in names
     assert "dialogue" in names
 

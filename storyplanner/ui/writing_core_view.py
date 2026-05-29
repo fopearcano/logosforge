@@ -208,12 +208,15 @@ _ELEMENT_TRANSITIONS: dict[str, dict[str, str]] = {
         "sfx": "panel",
     },
     "stage_script": {
-        "act": "scene",
-        "scene": "stage_direction",
-        "stage_direction": "character",
+        "act_heading": "scene_heading",
+        "scene_heading": "stage_direction",
+        "stage_direction": "dialogue",
         "character": "dialogue",
         "dialogue": "character",
         "parenthetical": "dialogue",
+        "aside": "dialogue",
+        "cue": "dialogue",
+        "transition": "scene_heading",
     },
     "series": {
         "episode": "act_break",
