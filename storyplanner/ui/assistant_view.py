@@ -1114,6 +1114,23 @@ class AssistantPanel(QWidget):
         except Exception:
             pass
 
+        # Graphic Novel visual memory — when the project's engine is
+        # graphic_novel, surface PSYKE visual identity + recurring motifs /
+        # objects so the Assistant can reason about visual consistency.
+        try:
+            from storyplanner.narrative_engines import engine_for_project
+            project = self._db.get_project_by_id(self._project_id)
+            if engine_for_project(project).name == "graphic_novel":
+                from storyplanner.psyke_visual import build_visual_memory_context
+                visual_ctx = build_visual_memory_context(self._db, self._project_id)
+                if visual_ctx:
+                    structural_ctx = (
+                        visual_ctx + "\n\n" + structural_ctx
+                        if structural_ctx else visual_ctx
+                    )
+        except Exception:
+            pass
+
         return scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orchestration_debug, notes_ctx, graph_ctx, mode_ctx, structural_ctx, irrational_ctx, controlling_idea_ctx
 
     def _send_preset(self, action_key: str) -> None:

@@ -1656,6 +1656,40 @@ class Database:
         except (json.JSONDecodeError, TypeError):
             return {}
 
+    # -- PSYKE visual memory (Graphic Novel) --------------------------------
+    # Visual storytelling metadata lives under details_json["visual"] so it
+    # extends PSYKE without a schema change and merges in place (other
+    # details keys are preserved).
+
+    def get_psyke_visual_memory(self, entry_id: int) -> dict:
+        visual = self.get_psyke_entry_details(entry_id).get("visual")
+        return visual if isinstance(visual, dict) else {}
+
+    def set_psyke_visual_memory(self, entry_id: int, visual: dict) -> None:
+        import json
+        with Session(self._engine) as session:
+            entry = session.get(PsykeEntry, entry_id)
+            if entry is None:
+                return
+            try:
+                details = json.loads(entry.details_json) if entry.details_json else {}
+            except (json.JSONDecodeError, TypeError):
+                details = {}
+            if not isinstance(details, dict):
+                details = {}
+            current = details.get("visual")
+            if not isinstance(current, dict):
+                current = {}
+            # Merge: only overwrite provided keys; drop empty values.
+            for key, value in visual.items():
+                if value in (None, ""):
+                    current.pop(key, None)
+                else:
+                    current[key] = value
+            details["visual"] = current
+            entry.details_json = json.dumps(details)
+            session.commit()
+
     def delete_psyke_entry(self, entry_id: int) -> None:
         with Session(self._engine) as session:
             for rel in session.exec(
