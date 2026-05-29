@@ -108,6 +108,15 @@ NODE_KIND_GN_OBJECT = "gn_object"
 NODE_KIND_CUE = "cue"
 NODE_KIND_OFFSTAGE = "offstage"
 
+# -- Series node kinds --------------------------------------------------------
+# Characters / scenes reuse the existing kinds. Seasons, episodes, arcs,
+# mysteries and A/B/C plotlines are the new long-form structural nodes.
+NODE_KIND_SEASON = "season"
+NODE_KIND_EPISODE = "episode"
+NODE_KIND_ARC = "arc"
+NODE_KIND_MYSTERY = "mystery"
+NODE_KIND_PLOTLINE = "plotline"
+
 LAYER_KINDS: tuple[str, ...] = (
     NODE_KIND_CHARACTER, NODE_KIND_PLACE, NODE_KIND_OBJECT,
     NODE_KIND_THEME, NODE_KIND_LORE, NODE_KIND_SCENE,
@@ -136,6 +145,11 @@ _KIND_COLORS: dict[str, str] = {
     NODE_KIND_GN_OBJECT: "#f59e0b",
     NODE_KIND_CUE: "#eab308",
     NODE_KIND_OFFSTAGE: "#a78bfa",
+    NODE_KIND_SEASON: "#06b6d4",
+    NODE_KIND_EPISODE: "#ffa726",
+    NODE_KIND_ARC: "#f59e0b",
+    NODE_KIND_MYSTERY: "#eab308",
+    NODE_KIND_PLOTLINE: "#ef4444",
 }
 
 _KIND_SHAPES: dict[str, str] = {
@@ -156,6 +170,11 @@ _KIND_SHAPES: dict[str, str] = {
     NODE_KIND_GN_OBJECT: "triangle",
     NODE_KIND_CUE: "small_circle",
     NODE_KIND_OFFSTAGE: "hexagon",
+    NODE_KIND_SEASON: "act_band",
+    NODE_KIND_EPISODE: "rounded_rect",
+    NODE_KIND_ARC: "triangle",
+    NODE_KIND_MYSTERY: "diamond",
+    NODE_KIND_PLOTLINE: "small_circle",
 }
 
 # -- Semantic edge kinds ------------------------------------------------------
@@ -192,6 +211,17 @@ EDGE_SS_BLOCKING = "ss_blocking"           # scene ↔ set location
 EDGE_SS_CUE = "ss_cue"                      # scene → cue
 EDGE_SS_OFFSTAGE = "ss_offstage"           # character/scene ↔ offstage event
 
+# -- Series-specific edge kinds ----------------------------------------------
+EDGE_SR_CONTAINS = "sr_contains"           # season → episode, episode → plotline
+EDGE_SR_CONTINUES = "sr_continues"         # episode → next episode (dependency)
+EDGE_SR_SETS_UP = "sr_sets_up"             # setup episode → arc
+EDGE_SR_PAYS_OFF = "sr_pays_off"           # payoff episode → arc (active)
+EDGE_SR_RESOLVES = "sr_resolves"           # payoff episode → arc (resolved)
+EDGE_SR_DELAYS = "sr_delays"               # payoff episode → arc (delayed)
+EDGE_SR_ESCALATES = "sr_escalates"         # mid-span episode → arc
+EDGE_SR_ECHOES = "sr_echoes"               # character → episode (progression/callback)
+EDGE_SR_CONTRADICTS = "sr_contradicts"     # character → episode (continuity risk)
+
 EDGE_STYLE: dict[str, dict] = {
     EDGE_PARTICIPATION: {"color": "#4ade80", "width": 1.3, "dash": "solid"},
     EDGE_CONTAINMENT:   {"color": "#60a5fa", "width": 2.4, "dash": "solid"},
@@ -218,6 +248,15 @@ EDGE_STYLE: dict[str, dict] = {
     EDGE_SS_BLOCKING:   {"color": "#60a5fa", "width": 1.4, "dash": "solid"},
     EDGE_SS_CUE:        {"color": "#eab308", "width": 1.0, "dash": "dot"},
     EDGE_SS_OFFSTAGE:   {"color": "#a78bfa", "width": 1.3, "dash": "dash"},
+    EDGE_SR_CONTAINS:   {"color": "#60a5fa", "width": 2.0, "dash": "solid"},
+    EDGE_SR_CONTINUES:  {"color": "#ffa726", "width": 1.8, "dash": "solid"},
+    EDGE_SR_SETS_UP:    {"color": "#10b981", "width": 1.8, "dash": "solid"},
+    EDGE_SR_PAYS_OFF:   {"color": "#22c55e", "width": 2.0, "dash": "solid"},
+    EDGE_SR_RESOLVES:   {"color": "#4ade80", "width": 2.0, "dash": "solid"},
+    EDGE_SR_DELAYS:     {"color": "#eab308", "width": 1.6, "dash": "dash"},
+    EDGE_SR_ESCALATES:  {"color": "#f97316", "width": 1.4, "dash": "dot"},
+    EDGE_SR_ECHOES:     {"color": "#a78bfa", "width": 1.4, "dash": "dash"},
+    EDGE_SR_CONTRADICTS:{"color": "#ef4444", "width": 1.8, "dash": "dot"},
 }
 
 # -- Narrative modes ---------------------------------------------------------
@@ -256,6 +295,15 @@ MODE_SS_PROP = "ss_prop_continuity"
 MODE_SS_BLOCKING = "ss_blocking_spatial"
 MODE_SS_SUBTEXT = "ss_subtext_conflict"
 MODE_SS_OFFSTAGE = "ss_offstage_knowledge"
+
+# Series-specific graph modes (only shown for series projects).
+MODE_SR_SEASON_ARC = "sr_season_arc"
+MODE_SR_EPISODE_DEP = "sr_episode_dependency"
+MODE_SR_ABC_PLOT = "sr_abc_plot"
+MODE_SR_MYSTERY = "sr_mystery_payoff"
+MODE_SR_CHARACTER = "sr_character_progression"
+MODE_SR_RELATIONSHIP = "sr_relationship_evolution"
+MODE_SR_CONTINUITY = "sr_continuity_risk"
 
 NODE_KIND_WAVEFUNCTION = "wavefunction"
 NODE_KIND_BRANCH = "branch"
@@ -489,6 +537,78 @@ MODE_PROFILES: dict[str, ModeProfile] = {
         prominence={NODE_KIND_OFFSTAGE: 1.2},
         description="Offstage knowledge — events offstage and who is present.",
     ),
+    # -- Series modes --------------------------------------------------------
+    MODE_SR_SEASON_ARC: ModeProfile(
+        name=MODE_SR_SEASON_ARC,
+        visible_kinds=frozenset({
+            NODE_KIND_SEASON, NODE_KIND_EPISODE, NODE_KIND_ARC,
+            NODE_KIND_MYSTERY,
+        }),
+        visible_edge_types=frozenset({
+            EDGE_SR_CONTAINS, EDGE_SR_CONTINUES, EDGE_SR_ESCALATES,
+            EDGE_SR_SETS_UP, EDGE_SR_PAYS_OFF, EDGE_SR_RESOLVES,
+        }),
+        layout="linear_timeline",
+        prominence={NODE_KIND_SEASON: 1.4},
+        description="Season arc — seasons, their episodes, and arcs escalating across them.",
+    ),
+    MODE_SR_EPISODE_DEP: ModeProfile(
+        name=MODE_SR_EPISODE_DEP,
+        visible_kinds=frozenset({NODE_KIND_EPISODE}),
+        visible_edge_types=frozenset({EDGE_SR_CONTINUES}),
+        layout="linear_timeline",
+        prominence={NODE_KIND_EPISODE: 1.2},
+        description="Episode dependency — reading order / what each episode depends on.",
+    ),
+    MODE_SR_ABC_PLOT: ModeProfile(
+        name=MODE_SR_ABC_PLOT,
+        visible_kinds=frozenset({NODE_KIND_EPISODE, NODE_KIND_PLOTLINE}),
+        visible_edge_types=frozenset({EDGE_SR_CONTAINS}),
+        layout="theme_centered",
+        prominence={NODE_KIND_PLOTLINE: 1.3},
+        description="A/B/C plot — episodes and the plotlines they carry.",
+    ),
+    MODE_SR_MYSTERY: ModeProfile(
+        name=MODE_SR_MYSTERY,
+        visible_kinds=frozenset({
+            NODE_KIND_EPISODE, NODE_KIND_MYSTERY, NODE_KIND_ARC,
+        }),
+        visible_edge_types=frozenset({
+            EDGE_SR_SETS_UP, EDGE_SR_PAYS_OFF, EDGE_SR_RESOLVES,
+            EDGE_SR_DELAYS,
+        }),
+        layout="circular",
+        prominence={NODE_KIND_MYSTERY: 1.4},
+        description="Mystery / payoff — setups tracked to their payoffs.",
+    ),
+    MODE_SR_CHARACTER: ModeProfile(
+        name=MODE_SR_CHARACTER,
+        visible_kinds=frozenset({NODE_KIND_CHARACTER, NODE_KIND_EPISODE}),
+        visible_edge_types=frozenset({EDGE_SR_ECHOES}),
+        layout="circular",
+        prominence={NODE_KIND_CHARACTER: 1.2},
+        description="Character progression — character state recorded across episodes.",
+    ),
+    MODE_SR_RELATIONSHIP: ModeProfile(
+        name=MODE_SR_RELATIONSHIP,
+        visible_kinds=frozenset({
+            NODE_KIND_CHARACTER, NODE_KIND_EPISODE, NODE_KIND_ARC,
+        }),
+        visible_edge_types=frozenset({
+            EDGE_SR_SETS_UP, EDGE_SR_PAYS_OFF, EDGE_SR_ECHOES,
+        }),
+        layout="circular",
+        prominence={NODE_KIND_CHARACTER: 1.15},
+        description="Relationship evolution — relationship arcs across the cast.",
+    ),
+    MODE_SR_CONTINUITY: ModeProfile(
+        name=MODE_SR_CONTINUITY,
+        visible_kinds=frozenset({NODE_KIND_CHARACTER, NODE_KIND_EPISODE}),
+        visible_edge_types=frozenset({EDGE_SR_CONTRADICTS}),
+        layout="circular",
+        prominence={NODE_KIND_CHARACTER: 1.2},
+        description="Continuity risk — flagged states and the episodes they touch.",
+    ),
 }
 
 MODE_ORDER: tuple[str, ...] = (
@@ -509,6 +629,12 @@ GRAPHIC_NOVEL_MODE_ORDER: tuple[str, ...] = (
 STAGE_SCRIPT_MODE_ORDER: tuple[str, ...] = (
     MODE_SS_PRESSURE, MODE_SS_ENTRANCE_EXIT, MODE_SS_PROP,
     MODE_SS_BLOCKING, MODE_SS_SUBTEXT, MODE_SS_OFFSTAGE,
+)
+
+SERIES_MODE_ORDER: tuple[str, ...] = (
+    MODE_SR_SEASON_ARC, MODE_SR_EPISODE_DEP, MODE_SR_ABC_PLOT,
+    MODE_SR_MYSTERY, MODE_SR_CHARACTER, MODE_SR_RELATIONSHIP,
+    MODE_SR_CONTINUITY,
 )
 
 
@@ -1025,6 +1151,166 @@ def ss_filter_node_ids(data: GraphData, filter_name: str) -> set[str]:
     return {nid for nid, node in data.nodes.items() if node_kind(node) in kinds}
 
 
+def enrich_series_graph(
+    db: Database, project_id: int, data: GraphData,
+) -> None:
+    """Inject series nodes + edges into the graph.
+
+    Adds season, episode, arc/mystery and A/B/C plotline nodes (which don't
+    live in the base link graph) plus the edges that drive the series graph
+    modes: season→episode containment, episode→episode dependency, arc
+    setups/payoffs/escalations (typed by status), character progression /
+    callback echoes and continuity-risk contradictions.
+    """
+    from storyplanner.series_plot import _ordered_episodes
+
+    episodes = _ordered_episodes(db, project_id)
+    if not episodes:
+        return
+
+    def _node(node_id, etype, eid, name, kind):
+        if node_id not in data.nodes:
+            data.nodes[node_id] = GraphNode(node_id, etype, eid, name, subtype=kind)
+            data.adjacency.setdefault(node_id, set())
+
+    def _edge(src, tgt, etype):
+        if src not in data.nodes or tgt not in data.nodes:
+            return
+        data.edges.append(GraphEdge(src, tgt, edge_type=etype))
+        data.adjacency.setdefault(src, set()).add(tgt)
+        data.adjacency.setdefault(tgt, set()).add(src)
+
+    ep_node = {ep.id: f"Episode:{ep.id}" for ep in episodes}
+    ep_order = {ep.id: i for i, ep in enumerate(episodes)}
+
+    # Season nodes + containment.
+    for season in db.get_seasons(project_id):
+        snode = f"Season:{season.id}"
+        _node(snode, "Season", season.id,
+              season.title or f"Season {season.season_number}", NODE_KIND_SEASON)
+        for ep in db.get_episodes_for_season(season.id):
+            enode = ep_node.get(ep.id)
+            if enode is None:
+                continue
+            _node(enode, "Episode", ep.id,
+                  ep.title or f"Episode {ep.episode_number}", NODE_KIND_EPISODE)
+            _edge(snode, enode, EDGE_SR_CONTAINS)
+
+    # Episode nodes (any not under a season) + A/B/C plotlines + dependency.
+    for ep in episodes:
+        enode = ep_node[ep.id]
+        _node(enode, "Episode", ep.id,
+              ep.title or f"Episode {ep.episode_number}", NODE_KIND_EPISODE)
+        for pl in db.get_episode_plotlines(ep.id):
+            pnode = f"Plotline:{pl.id}"
+            _node(pnode, "Plotline", pl.id,
+                  f"{pl.type}: {pl.title}" if pl.title else pl.type,
+                  NODE_KIND_PLOTLINE)
+            _edge(enode, pnode, EDGE_SR_CONTAINS)
+    for i in range(len(episodes) - 1):
+        _edge(ep_node[episodes[i].id], ep_node[episodes[i + 1].id],
+              EDGE_SR_CONTINUES)
+
+    # Arc / mystery nodes + setup / payoff / escalation edges.
+    _PAYOFF_EDGE = {
+        "resolved": EDGE_SR_RESOLVES,
+        "delayed": EDGE_SR_DELAYS,
+    }
+    for arc in db.get_series_arcs(project_id):
+        kind = NODE_KIND_MYSTERY if arc.scope == "mystery" else NODE_KIND_ARC
+        anode = f"SeriesArc:{arc.id}"
+        _node(anode, "SeriesArc", arc.id, arc.title or f"Arc {arc.id}", kind)
+        s_ord = ep_order.get(arc.setup_episode_id)
+        p_ord = ep_order.get(arc.payoff_episode_id)
+        if arc.setup_episode_id in ep_node:
+            _edge(ep_node[arc.setup_episode_id], anode, EDGE_SR_SETS_UP)
+        if arc.payoff_episode_id in ep_node:
+            _edge(ep_node[arc.payoff_episode_id], anode,
+                  _PAYOFF_EDGE.get(arc.status, EDGE_SR_PAYS_OFF))
+        # Escalation: episodes strictly between setup and payoff.
+        if s_ord is not None and p_ord is not None and p_ord - s_ord > 1:
+            for ep in episodes[s_ord + 1:p_ord]:
+                _edge(ep_node[ep.id], anode, EDGE_SR_ESCALATES)
+
+    # Character progression / callbacks (echoes) + continuity risk
+    # (contradicts) — both derive from PSYKE series memory on characters.
+    for entry in db.get_all_psyke_entries(project_id):
+        if (entry.entry_type or "").lower() != "character":
+            continue
+        cnode = f"PSYKE:{entry.id}"
+        if cnode not in data.nodes:
+            continue
+        try:
+            mem = db.get_psyke_series_memory(entry.id) or {}
+        except Exception:
+            mem = {}
+        status_map = mem.get("current_status_by_episode")
+        flagged = bool((mem.get("continuity_flags") or "").strip())
+        if isinstance(status_map, dict):
+            for raw_eid in status_map:
+                try:
+                    eid = int(raw_eid)
+                except (TypeError, ValueError):
+                    continue
+                enode = ep_node.get(eid)
+                if enode is None:
+                    continue
+                _edge(cnode, enode, EDGE_SR_ECHOES)
+                if flagged:
+                    _edge(cnode, enode, EDGE_SR_CONTRADICTS)
+
+
+def series_filter_node_ids(data: GraphData, filter_name: str) -> set[str]:
+    """Return node ids matching a series filter preset (§2).
+
+    "season" / "seasons" (seasons + episodes), "episode"/"episodes"
+    (episodes), "arcs"/"active_arcs"/"unresolved" (arcs + mysteries),
+    "character"/"characters", "mystery"/"mystery_thread" (mysteries +
+    episodes).
+    """
+    kinds_by_filter = {
+        "season": {NODE_KIND_SEASON, NODE_KIND_EPISODE},
+        "seasons": {NODE_KIND_SEASON, NODE_KIND_EPISODE},
+        "episode": {NODE_KIND_EPISODE},
+        "episodes": {NODE_KIND_EPISODE},
+        "arcs": {NODE_KIND_ARC, NODE_KIND_MYSTERY},
+        "active_arcs": {NODE_KIND_ARC, NODE_KIND_MYSTERY},
+        "unresolved": {NODE_KIND_ARC, NODE_KIND_MYSTERY},
+        "character": {NODE_KIND_CHARACTER},
+        "characters": {NODE_KIND_CHARACTER},
+        "mystery": {NODE_KIND_MYSTERY, NODE_KIND_EPISODE},
+        "mystery_thread": {NODE_KIND_MYSTERY, NODE_KIND_EPISODE},
+    }
+    kinds = kinds_by_filter.get(filter_name, set())
+    return {nid for nid, node in data.nodes.items() if node_kind(node) in kinds}
+
+
+def series_default_node_ids(
+    db: Database, project_id: int, data: GraphData,
+) -> set[str]:
+    """The non-hairball default view (§4): current season overview + active
+    arcs only — the current season node, its episodes, and arcs still open
+    (active/delayed). Empty set means "no restriction" (no series data)."""
+    seasons = db.get_seasons(project_id)
+    if not seasons:
+        return set()
+    current = seasons[-1]  # highest order_index = the current season
+    keep: set[str] = set()
+    snode = f"Season:{current.id}"
+    if snode in data.nodes:
+        keep.add(snode)
+    for ep in db.get_episodes_for_season(current.id):
+        enode = f"Episode:{ep.id}"
+        if enode in data.nodes:
+            keep.add(enode)
+    for arc in db.get_series_arcs(project_id):
+        if arc.status in ("active", "delayed"):
+            anode = f"SeriesArc:{arc.id}"
+            if anode in data.nodes:
+                keep.add(anode)
+    return keep
+
+
 def default_skeleton_layers() -> frozenset[str]:
     """The minimal narrative skeleton: characters, themes, acts."""
     return SKELETON_LAYERS
@@ -1285,10 +1571,15 @@ class FocusGraphView(QWidget):
             _engine = get_project_narrative_engine(project)
             self._graphic_novel_mode = _engine == "graphic_novel"
             self._stage_script_mode = _engine == "stage_script"
+            self._series_mode = _engine == "series"
         except Exception:
             self._screenplay_mode = False
             self._graphic_novel_mode = False
             self._stage_script_mode = False
+            self._series_mode = False
+        # Series default view (§4): restrict to current season + active arcs
+        # until the user changes mode or focuses a node.
+        self._series_default_active = self._series_mode
 
         self._graph_data: GraphData | None = None
         self._focus_node: str | None = None
@@ -1350,6 +1641,15 @@ class FocusGraphView(QWidget):
             EDGE_SS_BLOCKING: True,
             EDGE_SS_CUE: True,
             EDGE_SS_OFFSTAGE: True,
+            EDGE_SR_CONTAINS: True,
+            EDGE_SR_CONTINUES: True,
+            EDGE_SR_SETS_UP: True,
+            EDGE_SR_PAYS_OFF: True,
+            EDGE_SR_RESOLVES: True,
+            EDGE_SR_DELAYS: True,
+            EDGE_SR_ESCALATES: True,
+            EDGE_SR_ECHOES: True,
+            EDGE_SR_CONTRADICTS: True,
         }
 
         self._node_items: dict[str, object] = {}
@@ -1357,6 +1657,10 @@ class FocusGraphView(QWidget):
         self._edge_items: list[QGraphicsLineItem] = []
 
         self._build_ui()
+        if self._series_mode:
+            # Default to the Season Arc view (current season + active arcs),
+            # not a full-series hairball.
+            self._on_mode_changed(MODE_SR_SEASON_ARC, user=False)
         self.refresh()
 
     # -- Persistence --------------------------------------------------------
@@ -1620,6 +1924,29 @@ class FocusGraphView(QWidget):
                 )
                 mb.addWidget(btn)
                 self._mode_buttons[_m] = btn
+        if self._series_mode:
+            _sep4 = QLabel("|")
+            _sep4.setStyleSheet(f"color: {theme.TEXT_MUTED}; padding: 0 4px;")
+            mb.addWidget(_sep4)
+            _sr_labels = {
+                MODE_SR_SEASON_ARC: "Season Arc",
+                MODE_SR_EPISODE_DEP: "Episodes",
+                MODE_SR_ABC_PLOT: "A/B/C",
+                MODE_SR_MYSTERY: "Mystery/Payoff",
+                MODE_SR_CHARACTER: "Progression",
+                MODE_SR_RELATIONSHIP: "Relationships",
+                MODE_SR_CONTINUITY: "Continuity",
+            }
+            for _m in SERIES_MODE_ORDER:
+                btn = QPushButton(_sr_labels[_m])
+                btn.setCheckable(True)
+                btn.setFlat(True)
+                btn.setToolTip(MODE_PROFILES[_m].description)
+                btn.clicked.connect(
+                    lambda _=False, m=_m: self._on_mode_changed(m),
+                )
+                mb.addWidget(btn)
+                self._mode_buttons[_m] = btn
         mb.addStretch()
 
         mb.addWidget(QLabel("Preset:"))
@@ -1871,9 +2198,12 @@ class FocusGraphView(QWidget):
 
     # -- Narrative mode ------------------------------------------------------
 
-    def _on_mode_changed(self, mode: str) -> None:
+    def _on_mode_changed(self, mode: str, user: bool = True) -> None:
         if mode not in MODE_PROFILES:
             mode = MODE_ALL
+        # Any explicit mode switch lifts the series default restriction.
+        if user and self._series_mode:
+            self._series_default_active = False
         self._mode = mode
         profile = MODE_PROFILES[mode]
 
@@ -2023,6 +2353,8 @@ class FocusGraphView(QWidget):
             enrich_graphic_novel_graph(self._db, self._project_id, self._graph_data)
         if self._stage_script_mode:
             enrich_stage_script_graph(self._db, self._project_id, self._graph_data)
+        if self._series_mode:
+            enrich_series_graph(self._db, self._project_id, self._graph_data)
         self._rebuild_view()
 
     def _active_graph_data(self) -> GraphData | None:
@@ -2217,6 +2549,15 @@ class FocusGraphView(QWidget):
         if self._active_layers != set(LAYER_KINDS):
             layer_nodes = filter_by_layers(active, self._active_layers)
             visible = visible & layer_nodes
+
+        # Series default (§4): on first load, restrict to the current season
+        # overview + active arcs so the graph never opens as a full hairball.
+        if self._series_mode and self._series_default_active and not self._focus_node:
+            default_nodes = series_default_node_ids(
+                self._db, self._project_id, active,
+            )
+            if default_nodes:
+                visible = visible & default_nodes
 
         if self._temporal_enabled and not self._show_future and self._mode != MODE_QUANTUM:
             temporal_active = filter_by_scene_order(
@@ -2636,6 +2977,8 @@ class FocusGraphView(QWidget):
                 label.setOpacity(1.0)
 
     def focus_on(self, node_id: str) -> None:
+        if self._series_mode:
+            self._series_default_active = False
         self._focus_node = node_id
         self._rebuild_view()
         if self._suggestions_visible:

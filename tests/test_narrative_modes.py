@@ -73,6 +73,7 @@ def test_mode_order_matches_registry():
     from storyplanner.ui.focus_graph_view import (
         GRAPHIC_NOVEL_MODE_ORDER,
         SCREENPLAY_MODE_ORDER,
+        SERIES_MODE_ORDER,
         STAGE_SCRIPT_MODE_ORDER,
     )
     assert (
@@ -80,6 +81,7 @@ def test_mode_order_matches_registry():
         | set(SCREENPLAY_MODE_ORDER)
         | set(GRAPHIC_NOVEL_MODE_ORDER)
         | set(STAGE_SCRIPT_MODE_ORDER)
+        | set(SERIES_MODE_ORDER)
     ) == set(MODE_PROFILES.keys())
 
 
