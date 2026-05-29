@@ -18,6 +18,7 @@ narrative reasoning and editor rendering.
 from storyplanner.narrative_engines.base import NarrativeEngine
 from storyplanner.narrative_engines.novel import NOVEL_ENGINE
 from storyplanner.narrative_engines.screenplay import SCREENPLAY_ENGINE
+from storyplanner.narrative_engines.graphic_novel import GRAPHIC_NOVEL_ENGINE
 from storyplanner.narrative_engines.registry import (
     ALL_ENGINES,
     ENGINE_ORDER,
@@ -29,6 +30,7 @@ __all__ = [
     "NarrativeEngine",
     "NOVEL_ENGINE",
     "SCREENPLAY_ENGINE",
+    "GRAPHIC_NOVEL_ENGINE",
     "ALL_ENGINES",
     "ENGINE_ORDER",
     "engine_for_project",

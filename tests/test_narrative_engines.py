@@ -37,11 +37,10 @@ def test_get_engine_returns_screenplay():
 
 
 def test_unknown_engine_falls_back_to_novel():
-    """stage_script / graphic_novel / series exist as project format_modes
-    but don't have engine implementations yet — must fall back, never crash.
+    """stage_script / series still lack engine implementations — they must
+    fall back to Novel, never crash. graphic_novel now has a real engine.
     """
     assert get_engine("stage_script") is NOVEL_ENGINE
-    assert get_engine("graphic_novel") is NOVEL_ENGINE
     assert get_engine("series") is NOVEL_ENGINE
     assert get_engine("nonsense") is NOVEL_ENGINE
 
