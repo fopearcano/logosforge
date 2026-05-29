@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 from storyplanner.db import Database
 from storyplanner.models import GN_DENSITY_LEVELS, GN_TRANSITION_TYPES
 from storyplanner.ui import theme
+from storyplanner.ui.graphic_novel_page_canvas import GraphicNovelPageCanvas
 
 # Shot / camera vocabularies kept local — they are presentation choices, not
 # persisted enums (the columns are free-text on the model).
@@ -80,6 +81,7 @@ class GraphicNovelPagesView(QWidget):
         self._current_panel_id: int | None = None
         # Guards so programmatic list updates don't re-trigger selection logic.
         self._loading = False
+        self._canvas: GraphicNovelPageCanvas | None = None
 
         if self._graphic_novel_mode:
             self._build_ui()
@@ -104,12 +106,22 @@ class GraphicNovelPagesView(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
+        self._canvas = GraphicNovelPageCanvas(
+            self._db, on_panel_selected=self._on_canvas_panel_clicked,
+        )
+
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._build_page_pane())
         splitter.addWidget(self._build_panel_pane())
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 2)
+        splitter.addWidget(self._canvas)
+        splitter.setStretchFactor(0, 2)
+        splitter.setStretchFactor(1, 3)
+        splitter.setStretchFactor(2, 3)
         outer.addWidget(splitter)
+
+    def _on_canvas_panel_clicked(self, panel_id: int) -> None:
+        """Canvas box clicked → drive the shared selection."""
+        self.select_panel(panel_id)
 
     def _build_page_pane(self) -> QWidget:
         pane = QWidget()
@@ -256,6 +268,9 @@ class GraphicNovelPagesView(QWidget):
             self._reload_panels(None)
 
     def _reload_panels(self, page_id: int | None, select_id: int | None = None) -> None:
+        # Canvas mirrors the current page from the same source of truth.
+        if self._canvas is not None:
+            self._canvas.set_page(page_id)
         self._loading = True
         self._panel_list.clear()
         panels = self._db.get_gn_panels_for_page(page_id) if page_id else []
@@ -280,6 +295,8 @@ class GraphicNovelPagesView(QWidget):
         else:
             self._current_panel_id = None
             self._clear_panel_form()
+            if self._canvas is not None:
+                self._canvas.set_selected_panel(None)
 
     # -- Selection -----------------------------------------------------------
 
@@ -308,6 +325,8 @@ class GraphicNovelPagesView(QWidget):
             return
         self._current_panel_id = panel_id
         self._sync_list_selection(self._panel_list, panel_id)
+        if self._canvas is not None:
+            self._canvas.set_selected_panel(panel_id)
         panel = self._db.get_gn_panel_by_id(panel_id)
         if panel is not None:
             self._load_panel_form(panel)

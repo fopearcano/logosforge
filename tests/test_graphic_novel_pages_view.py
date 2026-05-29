@@ -288,3 +288,171 @@ def test_main_window_hides_pages_for_novel():
     win = MainWindow(db, p.id)
     assert "Pages" not in win.sidebar_buttons
     assert "Pages" not in win._nav_labels
+
+
+# =========================================================================
+# 7. Page Canvas (Slice 2)
+# =========================================================================
+
+from storyplanner.ui.graphic_novel_page_canvas import (  # noqa: E402
+    LAYOUT_AUTO_GRID,
+    LAYOUT_SPLASH,
+    GraphicNovelPageCanvas,
+)
+
+
+def test_canvas_present_for_gn():
+    db = Database()
+    p = _gn(db)
+    view = _view(db, p.id)
+    assert isinstance(view._canvas, GraphicNovelPageCanvas)
+
+
+def test_canvas_absent_for_novel():
+    db = Database()
+    p = db.create_project("Novel")
+    view = GraphicNovelPagesView(db, p.id)
+    assert view._canvas is None
+
+
+def test_canvas_renders_one_box_per_panel():
+    db = Database()
+    p = _gn(db)
+    view = _view(db, p.id)
+    p1 = view.add_page()
+    view.select_page(p1)
+    pn1 = view.add_panel()
+    pn2 = view.add_panel()
+    pn3 = view.add_panel()
+    assert view._canvas.panel_box_count() == 3
+    assert view._canvas.panel_box_ids() == [pn1, pn2, pn3]
+
+
+def test_canvas_empty_when_page_has_no_panels():
+    db = Database()
+    p = _gn(db)
+    view = _view(db, p.id)
+    p1 = view.add_page()
+    view.select_page(p1)
+    assert view._canvas.panel_box_count() == 0
+    assert view._canvas.page_id() == p1
+
+
+def test_clicking_canvas_box_selects_panel():
+    db = Database()
+    p = _gn(db)
+    view = _view(db, p.id)
+    p1 = view.add_page()
+    view.select_page(p1)
+    pn1 = view.add_panel()
+    pn2 = view.add_panel()
+    # Simulate a canvas box click on panel 2.
+    view._canvas._handle_panel_click(pn2)
+    assert view.current_panel_id() == pn2
+    # Editor reflects the clicked panel.
+    panel = db.get_gn_panel_by_id(pn2)
+    assert panel.id == pn2
+    # Canvas highlight follows.
+    assert view._canvas.selected_panel_id() == pn2
+
+
+def test_selecting_panel_in_list_highlights_canvas():
+    db = Database()
+    p = _gn(db)
+    view = _view(db, p.id)
+    p1 = view.add_page()
+    view.select_page(p1)
+    pn1 = view.add_panel()
+    pn2 = view.add_panel()
+    view.select_panel(pn1)
+    assert view._canvas.selected_panel_id() == pn1
+
+
+def test_editing_panel_description_updates_canvas():
+    db = Database()
+    p = _gn(db)
+    view = _view(db, p.id)
+    p1 = view.add_page()
+    view.select_page(p1)
+    pn1 = view.add_panel()
+    view.select_panel(pn1)
+    view._panel_desc.setPlainText("Hero bursts in")
+    view.save_panel_edits()
+    # Canvas re-rendered from the DB (same source of truth).
+    assert view._canvas.panel_box_ids() == [pn1]
+    assert db.get_gn_panel_by_id(pn1).description == "Hero bursts in"
+
+
+def test_reordering_panels_updates_canvas_order():
+    db = Database()
+    p = _gn(db)
+    view = _view(db, p.id)
+    p1 = view.add_page()
+    view.select_page(p1)
+    pn1 = view.add_panel()
+    pn2 = view.add_panel()
+    view.select_panel(pn2)
+    view.move_panel(-1)
+    assert view._canvas.panel_box_ids() == [pn2, pn1]
+
+
+def test_splash_page_uses_splash_layout():
+    db = Database()
+    p = _gn(db)
+    view = _view(db, p.id)
+    p1 = view.add_page()
+    view.select_page(p1)
+    view.add_panel()
+    assert view._canvas.layout_mode() == LAYOUT_AUTO_GRID
+    view._page_splash.setChecked(True)
+    view.save_page_edits()
+    assert view._canvas.layout_mode() == LAYOUT_SPLASH
+
+
+def test_page_metadata_change_updates_canvas_header():
+    db = Database()
+    p = _gn(db)
+    view = _view(db, p.id)
+    p1 = view.add_page()
+    view.select_page(p1)
+    view._page_density.setCurrentText("dense")
+    view._page_reveal.setCurrentText("cliffhanger")
+    view.save_page_edits()
+    header = view._canvas.header_text()
+    assert "Page 1" in header
+    assert "dense" in header
+    assert "cliffhanger" in header
+
+
+def test_selecting_page_reloads_canvas():
+    db = Database()
+    p = _gn(db)
+    view = _view(db, p.id)
+    p1 = view.add_page()
+    p2 = view.add_page()
+    view.select_page(p1)
+    view.add_panel()
+    view.add_panel()
+    view.select_page(p2)
+    assert view._canvas.page_id() == p2
+    assert view._canvas.panel_box_count() == 0  # p2 has no panels
+
+
+def test_deleting_page_clears_canvas():
+    db = Database()
+    p = _gn(db)
+    view = _view(db, p.id)
+    p1 = view.add_page()
+    view.select_page(p1)
+    view.add_panel()
+    view.delete_selected_page()
+    assert view._canvas.page_id() is None
+    assert view._canvas.panel_box_count() == 0
+
+
+def test_canvas_standalone_inert_without_page():
+    db = Database()
+    canvas = GraphicNovelPageCanvas(db)
+    assert canvas.page_id() is None
+    assert canvas.panel_box_count() == 0
+    assert canvas.header_text() == ""
