@@ -243,3 +243,72 @@ def get_page_turn_map(db: Any, project_id: int) -> list[dict]:
                 "reveal_type": setup.reveal_type,
             })
     return pairs
+
+
+# ---------------------------------------------------------------------------
+# Assistant context (§3):  page rhythm / visual motifs / density / continuity
+# ---------------------------------------------------------------------------
+
+def _recurring_motifs(db: Any, project_id: int) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for page in db.get_gn_pages(project_id):
+        for motif in _page_motifs(db, page.id):
+            counts[motif] = counts.get(motif, 0) + 1
+    return counts
+
+
+def _continuity_summary(db: Any, project_id: int) -> list[str]:
+    summary: list[str] = []
+    for item in db.get_gn_continuity_items(project_id):
+        apps = db.get_gn_continuity_appearances(item.id)
+        status = apps[-1].continuity_status if apps else "unknown"
+        summary.append(f"{item.name} [{item.item_type}]: {status}")
+    return summary
+
+
+def build_graphic_novel_context(
+    db: Any, project_id: int, page_id: int | None = None,
+) -> str:
+    """Compact ``[Graphic Novel Context]`` block for the Assistant (§3).
+
+    Surfaces page rhythm, recurring visual motifs, panel density, and
+    visual-continuity state. Returns "" when there is no GN data.
+    """
+    pages = db.get_gn_pages(project_id)
+    if not pages:
+        return ""
+
+    lines: list[str] = ["[Graphic Novel Context]"]
+
+    if page_id is not None:
+        page = db.get_gn_page_by_id(page_id)
+        if page is not None:
+            n_panels = len(db.get_gn_panels_for_page(page.id))
+            lines.append(
+                f"Page {page.page_number}: rhythm={page_rhythm(page.density_level)}"
+                f", density={page.density_level or 'n/a'}"
+                f", panels={n_panels}, pacing={classify_page_pacing(db, page)}"
+            )
+            if (page.reveal_type or "").strip():
+                lines.append(f"Reveal: {page.reveal_type}")
+    else:
+        rhythms = [page_rhythm(p.density_level) for p in pages]
+        lines.append("Page rhythm: " + " → ".join(rhythms[:12]))
+        density = ", ".join(
+            f"p{p.page_number}:{len(db.get_gn_panels_for_page(p.id))}"
+            for p in pages[:8]
+        )
+        lines.append("Panel density: " + density)
+
+    motifs = _recurring_motifs(db, project_id)
+    recurring = [f"{m} (×{c})" for m, c in motifs.items() if c >= 2]
+    if recurring:
+        lines.append("Recurring motifs: " + ", ".join(recurring[:10]))
+
+    continuity = _continuity_summary(db, project_id)
+    if continuity:
+        lines.append("Continuity: " + "; ".join(continuity[:8]))
+
+    if len(lines) == 1:
+        return ""
+    return "\n".join(lines)

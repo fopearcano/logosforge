@@ -1114,19 +1114,29 @@ class AssistantPanel(QWidget):
         except Exception:
             pass
 
-        # Graphic Novel visual memory — when the project's engine is
-        # graphic_novel, surface PSYKE visual identity + recurring motifs /
-        # objects so the Assistant can reason about visual consistency.
+        # Graphic Novel — when the project's engine is graphic_novel,
+        # surface page rhythm / motifs / density / continuity and PSYKE
+        # visual identity so the Assistant reasons visually.
         try:
             from storyplanner.narrative_engines import engine_for_project
             project = self._db.get_project_by_id(self._project_id)
             if engine_for_project(project).name == "graphic_novel":
+                gn_blocks: list[str] = []
+                from storyplanner.graphic_novel_plot import (
+                    build_graphic_novel_context,
+                )
+                gn_ctx = build_graphic_novel_context(self._db, self._project_id)
+                if gn_ctx:
+                    gn_blocks.append(gn_ctx)
                 from storyplanner.psyke_visual import build_visual_memory_context
                 visual_ctx = build_visual_memory_context(self._db, self._project_id)
                 if visual_ctx:
+                    gn_blocks.append(visual_ctx)
+                if gn_blocks:
+                    block = "\n\n".join(gn_blocks)
                     structural_ctx = (
-                        visual_ctx + "\n\n" + structural_ctx
-                        if structural_ctx else visual_ctx
+                        block + "\n\n" + structural_ctx
+                        if structural_ctx else block
                     )
         except Exception:
             pass
