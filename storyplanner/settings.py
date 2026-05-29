@@ -21,6 +21,7 @@ DEFAULTS: dict[str, object] = {
     "assistant_include_outline": False,
     "assistant_include_memory": False,
     "assistant_include_bible": False,
+    "assistant_include_notes": True,
     "assistant_irrational": False,
     "last_project_path": "",
     "plugin_states": {},

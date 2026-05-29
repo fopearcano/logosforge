@@ -561,9 +561,16 @@ class AssistantPanel(QWidget):
         self._outline_check = QCheckBox("Include story outline")
         self._story_memory_check = QCheckBox("Include story memory")
         self._psyke_check = QCheckBox("PSYKE")
+        self._notes_check = QCheckBox("Include Notes")
+        self._notes_check.setToolTip(
+            "Include relevant project Notes in the Assistant context "
+            "(scene-linked, PSYKE-linked, tag/name matches, and pinned "
+            "notes — not every note)."
+        )
         settings_layout.addWidget(self._outline_check)
         settings_layout.addWidget(self._story_memory_check)
         settings_layout.addWidget(self._psyke_check)
+        settings_layout.addWidget(self._notes_check)
 
         self._idea_check = QCheckBox("Idea di Controllo")
         self._idea_check.setToolTip(
@@ -701,6 +708,12 @@ class AssistantPanel(QWidget):
         self._timeout_spin.valueChanged.connect(
             lambda *_: self._persist_provider_settings()
         )
+        # Persist the Include Notes preference immediately on toggle.
+        self._notes_check.toggled.connect(
+            lambda checked: get_settings().set(
+                "assistant_include_notes", bool(checked)
+            )
+        )
 
     # -- Mode override ---------------------------------------------------------
 
@@ -800,6 +813,9 @@ class AssistantPanel(QWidget):
         self._outline_check.setChecked(bool(mgr.get("assistant_include_outline")))
         self._story_memory_check.setChecked(bool(mgr.get("assistant_include_memory")))
         self._psyke_check.setChecked(bool(mgr.get("assistant_include_bible")))
+        # Default ON (preserves prior always-included behavior) when unset.
+        notes_pref = mgr.get("assistant_include_notes")
+        self._notes_check.setChecked(True if notes_pref is None else bool(notes_pref))
         idea_default = bool(mgr.get("assistant_include_controlling_idea"))
         if mgr.get("assistant_include_controlling_idea") is None:
             idea_default = self._is_idea_plugin_enabled()
@@ -837,6 +853,7 @@ class AssistantPanel(QWidget):
         mgr.set("assistant_include_outline", self._outline_check.isChecked())
         mgr.set("assistant_include_memory", self._story_memory_check.isChecked())
         mgr.set("assistant_include_bible", self._psyke_check.isChecked())
+        mgr.set("assistant_include_notes", self._notes_check.isChecked())
         mgr.set(
             "assistant_include_controlling_idea",
             self._idea_check.isChecked(),
@@ -1017,11 +1034,17 @@ class AssistantPanel(QWidget):
                     query_text=query_text,
                 )
 
-        prompt_query = self._prompt_input.toPlainText().strip()
-        notes_ctx = gather_notes_context(
-            self._db, self._project_id, scene_id,
-            query_text=prompt_query,
-        )
+        # Notes are relevance-filtered (scene/PSYKE links, tags, names,
+        # pinned) inside gather_notes_context — never a blind dump. Built
+        # fresh from the DB each request, so it always reflects the latest
+        # notes (no stale cache to invalidate).
+        notes_ctx = ""
+        if self._notes_check.isChecked():
+            prompt_query = self._prompt_input.toPlainText().strip()
+            notes_ctx = gather_notes_context(
+                self._db, self._project_id, scene_id,
+                query_text=prompt_query,
+            )
 
         graph_ctx = ""
         if scene_id is not None and source in ("scene", "selection"):
