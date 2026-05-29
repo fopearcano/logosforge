@@ -693,6 +693,14 @@ class AssistantPanel(QWidget):
 
         self._mode_strip.refresh()
         self._restore_panel_settings()
+        # Persist provider/server settings immediately on change. Wired
+        # AFTER restore so restoring saved values never re-triggers a save.
+        self._provider_widget.settings_changed.connect(
+            self._persist_provider_settings
+        )
+        self._timeout_spin.valueChanged.connect(
+            lambda *_: self._persist_provider_settings()
+        )
 
     # -- Mode override ---------------------------------------------------------
 
@@ -799,6 +807,24 @@ class AssistantPanel(QWidget):
         self._irrational_check.setChecked(bool(mgr.get("assistant_irrational")))
         timeout_val = mgr.get("assistant_api_timeout")
         self._timeout_spin.setValue(int(timeout_val) if timeout_val else 0)
+
+    def _persist_provider_settings(self) -> None:
+        """Save provider / server settings to global settings immediately.
+
+        Provider config is global (app-wide), stored in
+        ~/.storyplanner/settings.json — it is not project-specific, so it
+        survives project switches and app restarts. Covers provider, base
+        URL, model, API key, and the API timeout. Local-server setups
+        (LM Studio / Ollama / OpenAI-compatible) persist via the same
+        provider + base_url + model keys.
+        """
+        mgr = get_settings()
+        pw = self._provider_widget
+        mgr.set("ai_provider", pw._provider_combo.currentText())
+        mgr.set("ai_model", pw._model_combo.currentText())
+        mgr.set("ai_api_key", pw._key_input.text())
+        mgr.set("ai_base_url", pw._url_input.text())
+        mgr.set("assistant_api_timeout", self._timeout_spin.value())
 
     def save_settings(self) -> None:
         mgr = get_settings()

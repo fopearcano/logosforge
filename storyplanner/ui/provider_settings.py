@@ -38,6 +38,11 @@ class _TestWorker(QThread):
 
 
 class ProviderSettingsWidget(QWidget):
+    # Emitted whenever the user changes any provider setting (provider,
+    # model, base URL, API key). Hosts connect this to persist settings
+    # immediately rather than waiting for a dialog accept / app close.
+    settings_changed = Signal()
+
     def __init__(self, compact: bool = False) -> None:
         super().__init__()
         self._test_worker: _TestWorker | None = None
@@ -51,6 +56,7 @@ class ProviderSettingsWidget(QWidget):
             self._build_wide(layout)
 
         self._on_provider_changed(self._provider_combo.currentText())
+        self._wire_change_signals()
 
     def _build_compact(self, layout: QVBoxLayout) -> None:
         layout.setSpacing(4)
@@ -66,6 +72,7 @@ class ProviderSettingsWidget(QWidget):
         self._model_combo = QComboBox()
         self._model_combo.setEditable(True)
         self._model_combo.setMaxVisibleItems(15)
+        self._tame_model_combo()
         layout.addWidget(self._model_combo)
 
         self._url_input = QLineEdit()
@@ -112,6 +119,7 @@ class ProviderSettingsWidget(QWidget):
         self._model_combo.setEditable(True)
         self._model_combo.setMaximumWidth(260)
         self._model_combo.setMaxVisibleItems(15)
+        self._tame_model_combo()
         row1.addWidget(self._model_combo)
 
         self._defaults_btn = QPushButton("Defaults")
@@ -147,12 +155,38 @@ class ProviderSettingsWidget(QWidget):
         row2.addStretch()
         layout.addLayout(row2)
 
+    def _tame_model_combo(self) -> None:
+        """Stop the editable model combo from flashing a completer popup.
+
+        The model combo is editable so users can type a custom model
+        name. By default an editable QComboBox installs a QCompleter whose
+        popup is a top-level window; when we rebuild the item list on a
+        provider switch (clear() + addItem() + setCurrentText()), that
+        popup briefly renders as a tiny floating window. Removing the
+        completer and disabling auto-insert keeps switching glitch-free
+        without losing the ability to type a model name.
+        """
+        self._model_combo.setCompleter(None)
+        self._model_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+
+    def _wire_change_signals(self) -> None:
+        """Emit settings_changed on any user edit so hosts can persist."""
+        self._model_combo.currentTextChanged.connect(
+            lambda *_: self.settings_changed.emit()
+        )
+        self._url_input.editingFinished.connect(self.settings_changed.emit)
+        self._key_input.editingFinished.connect(self.settings_changed.emit)
+
     def _on_provider_changed(self, name: str) -> None:
         caps = PROVIDER_CAPABILITIES.get(name)
         if caps is None:
             return
         self._url_input.setText(caps.default_base_url)
 
+        # Rebuild the model list with signals blocked so the editable
+        # combo doesn't emit spurious change events (or surface its popup)
+        # mid-rebuild. We emit settings_changed once at the end instead.
+        self._model_combo.blockSignals(True)
         self._model_combo.clear()
         for m in caps.default_models:
             self._model_combo.addItem(m)
@@ -163,6 +197,7 @@ class ProviderSettingsWidget(QWidget):
         self._model_combo.lineEdit().setPlaceholderText(
             caps.default_models[0] if caps.default_models else "server default"
         )
+        self._model_combo.blockSignals(False)
 
         self._key_label.setVisible(caps.requires_api_key)
         self._key_input.setVisible(caps.requires_api_key)
@@ -177,6 +212,7 @@ class ProviderSettingsWidget(QWidget):
         if not caps.requires_api_key:
             self._key_input.clear()
         self._status_label.setText("")
+        self.settings_changed.emit()
 
     def _load_defaults(self) -> None:
         name = self._provider_combo.currentText()
@@ -189,6 +225,7 @@ class ProviderSettingsWidget(QWidget):
         else:
             self._model_combo.setCurrentText("")
         self._status_label.setText("")
+        self.settings_changed.emit()
 
     def get_provider_config(self) -> ProviderConfig:
         name = self._provider_combo.currentText()
