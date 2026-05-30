@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QComboBox,
@@ -29,6 +29,28 @@ from storyplanner.ui import theme
 _NODE_ID_ROLE = Qt.ItemDataRole.UserRole
 
 
+class _OutlineGenWorker(QThread):
+    """Runs an outline-generation LLM request off the UI thread."""
+
+    completed = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, messages, provider) -> None:
+        super().__init__()
+        self._messages = messages
+        self._provider = provider
+
+    def run(self) -> None:
+        try:
+            from storyplanner.assistant import chat_completion
+            text, _from_cache = chat_completion(
+                self._messages, provider=self._provider,
+            )
+            self.completed.emit(text)
+        except Exception as e:  # pragma: no cover - network/provider errors
+            self.failed.emit(str(e))
+
+
 class OutlineView(QWidget):
     def __init__(
         self,
@@ -42,6 +64,14 @@ class OutlineView(QWidget):
         self._on_data_changed = on_data_changed
         self._current_node_id: int | None = None
         self._suppress = False
+        self._gen_worker: _OutlineGenWorker | None = None
+        self._pending_scope: str = "full"
+        self._pending_parent_id: int | None = None
+
+        from storyplanner.project_compat import get_project_narrative_engine
+        self._engine = get_project_narrative_engine(
+            db.get_project_by_id(project_id)
+        )
 
         self._save_timer = QTimer()
         self._save_timer.setSingleShot(True)
@@ -79,6 +109,33 @@ class OutlineView(QWidget):
         apply_btn.setToolTip("Replace outline with the selected template")
         apply_btn.clicked.connect(self._apply_template)
         tb.addWidget(apply_btn)
+
+        tb.addSpacing(16)
+
+        # -- AI generation -----------------------------------------------------
+        self._ai_outline_btn = QPushButton("✨ AI Generate Outline")
+        self._ai_outline_btn.setToolTip(
+            "Generate a full story outline with AI "
+            "(uses the project's narrative engine, selected template, and "
+            "PSYKE). You confirm before anything is written."
+        )
+        self._ai_outline_btn.clicked.connect(lambda: self._ai_generate("full"))
+        tb.addWidget(self._ai_outline_btn)
+
+        # Contextual generate — relabels to Act/Chapter/Scene by selection.
+        self._ai_node_btn = QPushButton("✨ AI Generate")
+        self._ai_node_btn.setToolTip(
+            "Generate structure under the selected outline node with AI."
+        )
+        self._ai_node_btn.clicked.connect(self._ai_generate_node)
+        self._ai_node_btn.setEnabled(False)
+        tb.addWidget(self._ai_node_btn)
+
+        self._ai_status = QLabel("")
+        self._ai_status.setStyleSheet(
+            f"color: {theme.TEXT_SECONDARY}; font-style: italic;"
+        )
+        tb.addWidget(self._ai_status)
 
         tb.addSpacing(16)
 
@@ -275,6 +332,7 @@ class OutlineView(QWidget):
         if current is None:
             self._current_node_id = None
             self._set_editor_enabled(False)
+            self._update_ai_node_button(None)
             return
 
         node_id = current.data(0, _NODE_ID_ROLE)
@@ -282,6 +340,7 @@ class OutlineView(QWidget):
         node = self._db.get_outline_node_by_id(node_id)
         if node is None:
             self._set_editor_enabled(False)
+            self._update_ai_node_button(None)
             return
 
         self._suppress = True
@@ -291,6 +350,35 @@ class OutlineView(QWidget):
         is_section = current.parent() is None
         self._editor_label.setText("Section" if is_section else "Beat")
         self._suppress = False
+        self._update_ai_node_button(current)
+
+    def _node_depth(self, item: QTreeWidgetItem) -> int:
+        depth = 0
+        p = item.parent()
+        while p is not None:
+            depth += 1
+            p = p.parent()
+        return depth
+
+    def _update_ai_node_button(self, item: QTreeWidgetItem | None) -> None:
+        """Relabel the contextual AI button to match the selection's level."""
+        if not hasattr(self, "_ai_node_btn"):
+            return
+        if item is None:
+            self._ai_node_btn.setEnabled(False)
+            self._ai_node_btn.setText("✨ AI Generate")
+            return
+        depth = self._node_depth(item)
+        label, scope = (
+            ("✨ AI Generate Act", "act") if depth == 0 else
+            ("✨ AI Generate Chapter", "chapter") if depth == 1 else
+            ("✨ AI Generate", "scene")
+        )
+        self._ai_node_btn.setText(label)
+        self._ai_node_btn.setToolTip(
+            f"Generate {scope}-level structure under the selected node."
+        )
+        self._ai_node_btn.setEnabled(True)
 
     def _on_title_changed(self, text: str) -> None:
         if self._suppress or self._current_node_id is None:
@@ -513,6 +601,147 @@ class OutlineView(QWidget):
         QMessageBox.information(self, "Export", f"Outline exported to {path}")
 
     # -- Helpers ---------------------------------------------------------------
+
+    # -- AI generation ---------------------------------------------------------
+
+    def _build_provider(self):
+        from storyplanner.providers import ProviderConfig
+        from storyplanner.settings import get_manager
+        mgr = get_manager()
+        name = str(mgr.get("ai_provider") or "")
+        base_url = str(mgr.get("ai_base_url") or "")
+        if not (name or base_url):
+            return None
+        return ProviderConfig(
+            name=name or "LM Studio",
+            base_url=base_url or "http://localhost:1234/v1",
+            model=str(mgr.get("ai_model") or ""),
+            api_key=str(mgr.get("ai_api_key") or ""),
+        )
+
+    def build_generation_prompt(self, scope: str, parent_id: int | None) -> str:
+        """Compose the outline-generation prompt (engine + template + PSYKE)."""
+        from storyplanner.outline_actions import build_outline_generation_prompt
+        # Selected template, if any.
+        template_name, beats = "", []
+        key = self._template_combo.currentData() if hasattr(self, "_template_combo") else ""
+        tmpl = OUTLINE_TEMPLATES.get(key) if key else None
+        if tmpl is not None:
+            template_name = tmpl.name
+            beats = [b.title for b in tmpl.beats]
+        # PSYKE context.
+        try:
+            from storyplanner.context_builder import gather_psyke_context
+            psyke = gather_psyke_context(self._db, self._project_id)
+        except Exception:
+            psyke = ""
+        target_title = ""
+        if parent_id is not None:
+            node = self._db.get_outline_node_by_id(parent_id)
+            target_title = node.title if node else ""
+        return build_outline_generation_prompt(
+            scope, engine=self._engine, template_name=template_name,
+            template_beats=beats, psyke_context=psyke,
+            target_title=target_title,
+        )
+
+    def _ai_generate_node(self) -> None:
+        current = self._tree.currentItem()
+        if current is None:
+            return
+        depth = self._node_depth(current)
+        scope = "act" if depth == 0 else "chapter" if depth == 1 else "scene"
+        self._ai_generate(scope, parent_id=current.data(0, _NODE_ID_ROLE))
+
+    def _ai_generate(self, scope: str = "full", parent_id: int | None = None) -> bool:
+        """Kick off an AI outline generation for *scope*. Returns False if busy
+        or no provider is configured."""
+        if self._gen_worker is not None:
+            return False
+        provider = self._build_provider()
+        if provider is None:
+            QMessageBox.information(
+                self, "AI Generate Outline",
+                "No AI provider is configured. Set one in Settings first.",
+            )
+            return False
+        self._pending_scope = scope
+        self._pending_parent_id = parent_id
+        prompt = self.build_generation_prompt(scope, parent_id)
+        messages = [
+            {"role": "system",
+             "content": "You are a story-structure assistant. Produce a "
+                        "clean, structured outline only — no prose."},
+            {"role": "user", "content": prompt},
+        ]
+        self._set_ai_busy(True)
+        self._gen_worker = _OutlineGenWorker(messages, provider)
+        self._gen_worker.completed.connect(self._on_generation_done)
+        self._gen_worker.failed.connect(self._on_generation_failed)
+        self._gen_worker.start()
+        return True
+
+    def _set_ai_busy(self, busy: bool) -> None:
+        self._ai_status.setText("Generating…" if busy else "")
+        if hasattr(self, "_ai_outline_btn"):
+            self._ai_outline_btn.setEnabled(not busy)
+            self._ai_node_btn.setEnabled(not busy and self._current_node_id is not None)
+
+    def _on_generation_failed(self, error: str) -> None:
+        self._gen_worker = None
+        self._set_ai_busy(False)
+        QMessageBox.warning(self, "AI Generate Outline",
+                            f"Generation failed:\n\n{error}")
+
+    def _on_generation_done(self, text: str) -> None:
+        self._gen_worker = None
+        self._set_ai_busy(False)
+        self.apply_generated_outline(text, self._pending_scope,
+                                     self._pending_parent_id)
+
+    def apply_generated_outline(
+        self, text: str, scope: str = "full", parent_id: int | None = None,
+        *, confirm: bool = True,
+    ) -> list[int]:
+        """Parse generated outline text, confirm, then apply additively.
+
+        For full-outline scope the nodes are added at the top level; for
+        act/chapter/scene scope they are nested under *parent_id*.
+        """
+        from storyplanner.outline_actions import (
+            apply_outline_ops,
+            count_ops,
+            format_outline_preview,
+            parse_outline_response,
+        )
+        ops = parse_outline_response(text or "")
+        if not ops:
+            QMessageBox.information(
+                self, "AI Generate Outline",
+                "The AI response did not contain a usable outline structure.",
+            )
+            return []
+        if confirm:
+            preview = format_outline_preview(ops)
+            answer = QMessageBox.question(
+                self, "Apply generated outline",
+                f"Add {count_ops(ops)} outline node(s)?\n\n"
+                "Existing nodes are kept; the new structure is appended.\n\n"
+                + preview,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return []
+        created = apply_outline_ops(self._db, self._project_id, ops, parent_id)
+        if created:
+            self._load_outline()
+            from storyplanner.project_events import get_event_bus
+            bus = get_event_bus()
+            bus.outline_changed.emit()
+            bus.project_data_changed.emit()
+            self._notify()
+        return created
 
     def _notify(self) -> None:
         if self._on_data_changed:

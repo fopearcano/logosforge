@@ -212,6 +212,69 @@ def format_outline_preview(ops: list[OutlineOp]) -> str:
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# AI generation prompt builder (scope-aware, engine-aware, PSYKE-aware)
+# ---------------------------------------------------------------------------
+
+# Per-narrative-engine outline vocabulary so the prompt fits the medium.
+_ENGINE_OUTLINE_GUIDE = {
+    "novel": "Structure as Acts → Chapters → Scenes/Beats.",
+    "screenplay": "Structure as Acts → Sequences → Scenes/Beats.",
+    "stage_script": "Structure as Acts → Scenes → Beats.",
+    "graphic_novel": "Structure as Issues/Acts → Sequences/Chapters → "
+                     "Pages/Scenes → Beats.",
+    "series": "Structure as Seasons/Acts → Episodes/Chapters → Scenes/Beats.",
+}
+
+
+def build_outline_generation_prompt(
+    scope: str = "full", *, engine: str = "novel", template_name: str = "",
+    template_beats: list[str] | None = None, psyke_context: str = "",
+    target_title: str = "", instructions: str = "",
+) -> str:
+    """Build the user prompt for an AI outline generation request.
+
+    scope: "full" | "act" | "chapter" | "scene". *engine* tailors the
+    structural vocabulary; *template_*/psyke_context/target_title are folded
+    in when present. Pure text — the caller sends it to the model.
+    """
+    guide = _ENGINE_OUTLINE_GUIDE.get(engine, _ENGINE_OUTLINE_GUIDE["novel"])
+    parts: list[str] = []
+
+    if scope == "act":
+        parts.append("Generate ONE act for the story outline, with its "
+                     "chapters and key scenes/beats.")
+    elif scope == "chapter":
+        parts.append("Generate ONE chapter for the story outline, with its "
+                     "scenes/beats.")
+    elif scope == "scene":
+        parts.append("Generate the scenes/beats for this part of the outline.")
+    else:
+        parts.append("Generate a complete story outline.")
+
+    if target_title:
+        parts.append(f"This continues under: {target_title}.")
+
+    parts.append(guide)
+    parts.append(
+        "Format as a Markdown outline using '#'/'##'/'###' headers and/or "
+        "'- ' bullets. Prefix items with Act/Chapter/Scene/Beat where "
+        "appropriate. Give each node a short title and a one-line "
+        "description. Do not write prose."
+    )
+
+    if template_name:
+        parts.append(f"Follow the '{template_name}' structure.")
+    if template_beats:
+        parts.append("Template beats to honour: " + "; ".join(template_beats))
+    if psyke_context:
+        parts.append(psyke_context)
+    if instructions:
+        parts.append(instructions)
+
+    return "\n\n".join(parts)
+
+
 def apply_outline_ops(
     db, project_id: int, ops: list[OutlineOp], parent_id: int | None = None,
 ) -> list[int]:
