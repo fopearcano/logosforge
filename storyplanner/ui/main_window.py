@@ -7,6 +7,7 @@ from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QUrl, QVariantA
 from PySide6.QtGui import QAction, QCloseEvent, QColor, QDesktopServices, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QFileDialog,
     QGraphicsDropShadowEffect,
     QHBoxLayout,
@@ -1301,6 +1302,81 @@ class MainWindow(QMainWindow):
 
         QMessageBox.information(self, "Export", f"Exported to {path}")
 
+    # -- Structured data export ---------------------------------------------
+
+    def _on_export_story_elements(self) -> None:
+        self._run_data_export("story_elements")
+
+    def _on_export_psyke_data(self) -> None:
+        self._run_data_export("psyke_data")
+
+    def _on_export_full_project(self) -> None:
+        self._run_data_export("full_project")
+
+    def _run_data_export(self, mode: str) -> None:
+        """Drive an :class:`ExportDataDialog` for *mode* and write the result."""
+        from storyplanner.data_export import (
+            build_full_export,
+            default_filename,
+            gather_export,
+            write_export,
+        )
+        from storyplanner.ui.export_data_dialog import ExportDataDialog
+
+        project = self._db.get_project_by_id(self._project_id)
+        if project is None:
+            QMessageBox.warning(self, "Export", "No project is open.")
+            return
+
+        dialog = ExportDataDialog(mode, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        opts = dialog.get_options()
+        fmt = opts.fmt
+
+        # Make sure any pending edits are flushed to disk before reading. The
+        # exporters read live from the DB (which already reflects committed
+        # changes), but this keeps the on-disk file consistent too.
+        try:
+            self._autosave.save_now()
+        except Exception:
+            pass
+
+        ext = {"json": "json", "markdown": "md", "csv": "csv"}[fmt]
+        suggested = default_filename(project.title, mode, ext)
+
+        filters = {
+            "json": "JSON (*.json)",
+            "markdown": "Markdown (*.md)",
+            "csv": "CSV (*.csv)",
+        }
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Data", suggested, filters[fmt],
+        )
+        if not path:
+            return
+
+        try:
+            if mode == "full_project":
+                data = build_full_export(self._db, self._project_id)
+            else:
+                data = gather_export(self._db, self._project_id, opts)
+            written = write_export(data, fmt, path)
+        except (OSError, ValueError, PermissionError) as exc:
+            QMessageBox.warning(self, "Export failed", str(exc))
+            return
+        except Exception as exc:  # serialization / unexpected errors
+            QMessageBox.warning(
+                self, "Export failed", f"Could not export data:\n{exc}",
+            )
+            return
+
+        if len(written) == 1:
+            msg = f"Exported to {written[0]}"
+        else:
+            msg = f"Exported {len(written)} files to {written[0].rsplit('/', 1)[0]}"
+        QMessageBox.information(self, "Export", msg)
+
     # -- Menu bar ------------------------------------------------------------
 
     def _build_menu_bar(self) -> None:
@@ -1345,9 +1421,23 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
-        export_action = QAction("Export...", self)
-        export_action.triggered.connect(self._on_export)
-        file_menu.addAction(export_action)
+        export_menu = file_menu.addMenu("Export")
+
+        export_manuscript_action = QAction("Manuscript...", self)
+        export_manuscript_action.triggered.connect(self._on_export)
+        export_menu.addAction(export_manuscript_action)
+
+        export_story_action = QAction("Story Elements...", self)
+        export_story_action.triggered.connect(self._on_export_story_elements)
+        export_menu.addAction(export_story_action)
+
+        export_psyke_action = QAction("PSYKE Data...", self)
+        export_psyke_action.triggered.connect(self._on_export_psyke_data)
+        export_menu.addAction(export_psyke_action)
+
+        export_full_action = QAction("Full Project Data...", self)
+        export_full_action.triggered.connect(self._on_export_full_project)
+        export_menu.addAction(export_full_action)
 
         import_action = QAction("Import...", self)
         import_action.triggered.connect(self._on_import)
