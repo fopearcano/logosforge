@@ -125,6 +125,84 @@ class GraphicNovelPagesView(QWidget):
         """Canvas box clicked → drive the shared selection."""
         self.select_panel(panel_id)
 
+    # -- AI prompt export (one-way: structure + PSYKE -> prompt packet) ------
+
+    def build_panel_prompt_package(self):
+        """Prompt package for the selected panel (None if none / non-GN)."""
+        if not self._graphic_novel_mode or self._current_panel_id is None:
+            return None
+        from storyplanner.graphic_novel_ai_export import (
+            build_gn_panel_prompt_package,
+        )
+        return build_gn_panel_prompt_package(
+            self._db, self._project_id, self._current_panel_id,
+        )
+
+    def build_page_prompt_packages(self):
+        if not self._graphic_novel_mode or self._current_page_id is None:
+            return []
+        from storyplanner.graphic_novel_ai_export import (
+            build_gn_page_prompt_packages,
+        )
+        return build_gn_page_prompt_packages(
+            self._db, self._project_id, self._current_page_id,
+        )
+
+    def _copy(self, text: str) -> None:
+        from PySide6.QtWidgets import QApplication
+        QApplication.clipboard().setText(text or "")
+
+    def copy_panel_prompt(self) -> None:
+        pkg = self.build_panel_prompt_package()
+        if pkg is not None:
+            self._copy(pkg.prompt)
+
+    def copy_panel_negative_prompt(self) -> None:
+        pkg = self.build_panel_prompt_package()
+        if pkg is not None:
+            self._copy(pkg.negative_prompt)
+
+    def copy_page_prompts(self) -> None:
+        from storyplanner.graphic_novel_ai_export import package_to_markdown
+        pkgs = self.build_page_prompt_packages()
+        if pkgs:
+            self._copy(package_to_markdown(pkgs))
+
+    def export_panel_prompt(self, fmt: str = "json") -> str | None:
+        pkg = self.build_panel_prompt_package()
+        if pkg is None:
+            return None
+        return self._save_export(pkg, fmt, f"panel_{self._current_panel_id}")
+
+    def export_page_prompts(self, fmt: str = "json") -> str | None:
+        pkgs = self.build_page_prompt_packages()
+        if not pkgs:
+            return None
+        return self._save_export(pkgs, fmt, f"page_{self._current_page_id}")
+
+    def _save_export(self, package, fmt: str, stem: str) -> str | None:
+        from storyplanner.graphic_novel_ai_export import (
+            package_to_json,
+            package_to_markdown,
+        )
+        if fmt == "markdown":
+            content, ext, filt = (
+                package_to_markdown(package), "md", "Markdown (*.md)",
+            )
+        else:
+            content, ext, filt = (
+                package_to_json(package), "json", "JSON (*.json)",
+            )
+        from PySide6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Prompt", f"{stem}_prompt.{ext}", filt,
+        )
+        if not path:
+            return None
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(content)
+        return path
+
     # -- Manuscript draft generation (one-way: structure -> prose) -----------
 
     def generate_manuscript_draft(
@@ -322,6 +400,28 @@ class GraphicNovelPagesView(QWidget):
                   self._panel_down_btn, self._del_panel_btn):
             bar.addWidget(w)
         bar.addStretch()
+
+        # AI prompt export (one-way: structured panel/page -> prompt packet).
+        self._prompt_btn = QPushButton("Prompt ▾")
+        self._prompt_btn.setToolTip(
+            "Build an image-generation prompt package from this panel/page "
+            "and PSYKE visual memory."
+        )
+        pmenu = QMenu(self._prompt_btn)
+        pmenu.addAction("Copy Panel Prompt", self.copy_panel_prompt)
+        pmenu.addAction("Copy Negative Prompt", self.copy_panel_negative_prompt)
+        pmenu.addAction("Export Panel Prompt (JSON)",
+                        lambda: self.export_panel_prompt("json"))
+        pmenu.addAction("Export Panel Prompt (Markdown)",
+                        lambda: self.export_panel_prompt("markdown"))
+        pmenu.addSeparator()
+        pmenu.addAction("Copy All Panel Prompts", self.copy_page_prompts)
+        pmenu.addAction("Export Page Prompt Pack (JSON)",
+                        lambda: self.export_page_prompts("json"))
+        pmenu.addAction("Export Page Prompt Pack (Markdown)",
+                        lambda: self.export_page_prompts("markdown"))
+        self._prompt_btn.setMenu(pmenu)
+        bar.addWidget(self._prompt_btn)
         col.addLayout(bar)
 
         self._panel_list = QListWidget()
