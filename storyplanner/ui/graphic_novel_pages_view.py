@@ -337,7 +337,7 @@ class GraphicNovelPagesView(QWidget):
 
         # Generate Manuscript Draft — one-way projection: GN structure ->
         # editable manuscript text. Does not alter pages/panels.
-        self._gen_draft_btn = QPushButton("Generate Draft ▾")
+        self._gen_draft_btn = QPushButton("Generate Draft")
         self._gen_draft_btn.setToolTip(
             "Insert an editable manuscript scaffold built from the page/panel "
             "structure. Pages and panels are not modified."
@@ -402,7 +402,7 @@ class GraphicNovelPagesView(QWidget):
         bar.addStretch()
 
         # AI prompt export (one-way: structured panel/page -> prompt packet).
-        self._prompt_btn = QPushButton("Prompt ▾")
+        self._prompt_btn = QPushButton("Prompt")
         self._prompt_btn.setToolTip(
             "Build an image-generation prompt package from this panel/page "
             "and PSYKE visual memory."

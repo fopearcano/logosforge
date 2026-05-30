@@ -2337,7 +2337,10 @@ class WritingCoreView(QWidget):
 
     def _ensure_command_palette(self) -> CommandPalette:
         if self._command_palette is None:
-            self._command_palette = CommandPalette()
+            # Parent the popup to this view so it is transient-for the main
+            # window — correct stacking, auto-dismiss, and screen placement
+            # (a parentless Qt.Popup can render as a stray top-level window).
+            self._command_palette = CommandPalette(self)
             self._command_palette.command_selected.connect(self._on_command)
         return self._command_palette
 
