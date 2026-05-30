@@ -12,6 +12,7 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
+    QComboBox,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -27,6 +28,7 @@ from PySide6.QtWidgets import (
 from storyplanner.db import Database
 from storyplanner.quantum_outliner.state import OutlineMode, get_outline_mode
 from storyplanner.ui import theme
+from storyplanner.ui.outline_ai import OutlineGenWorker, build_provider, outline_messages
 
 
 _UNTITLED_ACT = "Untitled Act"
@@ -263,12 +265,27 @@ class PlanView(QWidget):
         self._project_id = project_id
         self._on_data_changed = on_data_changed
         self._on_open_scene = on_open_scene
+        self._gen_worker: OutlineGenWorker | None = None
+        self._pending_gen: tuple[str, str, str] = ("full", "", "")
+
+        # The Outline section must stay usable when the Assistant panel is open
+        # — keep a sensible minimum so the act cards never collapse to a sliver.
+        self.setMinimumWidth(420)
+
+        # Narrative engine drives the structural vocabulary used for AI prompts.
+        try:
+            from storyplanner.project_compat import get_project_narrative_engine
+            project = self._db.get_project_by_id(self._project_id)
+            self._engine = get_project_narrative_engine(project) or "novel"
+        except Exception:
+            self._engine = "novel"
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 12, 16, 12)
         root.setSpacing(8)
 
         header_row = QHBoxLayout()
+        header_row.setSpacing(6)
         title = QLabel("Outline")
         title.setStyleSheet(
             f"font-size: 18px; font-weight: bold; color: {theme.TEXT_PRIMARY};"
@@ -278,14 +295,53 @@ class PlanView(QWidget):
         self._mode_badge = QLabel("")
         self._mode_badge.setObjectName("planModeBadge")
         header_row.addWidget(self._mode_badge)
-        self._refresh_mode_badge()
 
         header_row.addStretch()
+
+        # -- Template selector --------------------------------------------------
+        self._template_combo = QComboBox()
+        self._template_combo.setToolTip(
+            "Structural template used when generating the outline",
+        )
+        self._template_combo.addItem("No template", userData="")
+        from storyplanner.outline_templates import list_templates
+        for key, name, desc in list_templates():
+            self._template_combo.addItem(name, userData=key)
+            self._template_combo.setItemData(
+                self._template_combo.count() - 1, desc,
+                Qt.ItemDataRole.ToolTipRole,
+            )
+        self._restore_selected_template()
+        self._template_combo.currentIndexChanged.connect(self._on_template_changed)
+        header_row.addWidget(QLabel("Template:"))
+        header_row.addWidget(self._template_combo)
+
+        # -- Generate / AI controls --------------------------------------------
+        gen_btn = QPushButton("✨ Generate Outline")
+        gen_btn.setToolTip("Generate a full outline using the selected template")
+        gen_btn.clicked.connect(lambda: self._run_ai("full"))
+        header_row.addWidget(gen_btn)
+
+        ai_btn = QPushButton("✨ AI Generate ▾")
+        ai_menu = QMenu(ai_btn)
+        ai_menu.addAction("Full Outline", lambda: self._run_ai("full"))
+        ai_menu.addAction("Act", lambda: self._run_ai("act"))
+        ai_menu.addAction("Chapter", lambda: self._run_ai("chapter"))
+        ai_menu.addAction("Scene", lambda: self._run_ai("scene"))
+        ai_btn.setMenu(ai_menu)
+        header_row.addWidget(ai_btn)
+
+        self._ai_status = QLabel("")
+        self._ai_status.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: 11px;"
+        )
+        header_row.addWidget(self._ai_status)
 
         add_act_btn = QPushButton("+ Add Act")
         add_act_btn.clicked.connect(self._add_act)
         header_row.addWidget(add_act_btn)
         root.addLayout(header_row)
+        self._refresh_mode_badge()
 
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
@@ -307,9 +363,18 @@ class PlanView(QWidget):
         self._refresh_list()
 
     def _refresh_mode_badge(self) -> None:
+        """Show the outline *structure mode* and the selected template.
+
+        "Classical" / "λ Lambda" is the structure mode (stable linear vs
+        quantum superposition) from :func:`get_outline_mode`. The template name
+        is appended so the badge is never ambiguous — picking "Save the Cat"
+        shows "Classical · Save the Cat", not just "Classical".
+        """
         mode = get_outline_mode(self._project_id)
+        template_name = self._selected_template_name()
         if mode is OutlineMode.LAMBDA:
-            self._mode_badge.setText("λ Lambda")
+            label = "λ Lambda"
+            tip = "Outline structure mode: Lambda (quantum superposition)."
             self._mode_badge.setStyleSheet(
                 f"color: {theme.ACCENT}; font-size: 10px;"
                 f" font-weight: bold; background: transparent;"
@@ -317,13 +382,51 @@ class PlanView(QWidget):
                 " padding: 2px 6px; margin-left: 8px;"
             )
         else:
-            self._mode_badge.setText("Classical")
+            label = "Classical"
+            tip = "Outline structure mode: Classical (stable, linear)."
             self._mode_badge.setStyleSheet(
                 f"color: {theme.TEXT_MUTED}; font-size: 10px;"
                 f" background: transparent;"
                 f" border: 1px solid {theme.BORDER}; border-radius: 3px;"
                 " padding: 2px 6px; margin-left: 8px;"
             )
+        if template_name:
+            label = f"{label} · {template_name}"
+            tip += f"  Template: {template_name}."
+        else:
+            tip += "  No template selected."
+        self._mode_badge.setText(label)
+        self._mode_badge.setToolTip(tip)
+
+    # -- Template selection ---------------------------------------------------
+
+    def _selected_template_name(self) -> str:
+        if not hasattr(self, "_template_combo"):
+            return ""
+        key = self._template_combo.currentData()
+        if not key:
+            return ""
+        from storyplanner.outline_templates import get_template
+        tmpl = get_template(key)
+        return tmpl.name if tmpl else ""
+
+    def _restore_selected_template(self) -> None:
+        settings = self._db.get_project_settings(self._project_id)
+        key = settings.get("outline_template", "")
+        if not key:
+            return
+        idx = self._template_combo.findData(key)
+        if idx >= 0:
+            self._template_combo.blockSignals(True)
+            self._template_combo.setCurrentIndex(idx)
+            self._template_combo.blockSignals(False)
+
+    def _on_template_changed(self) -> None:
+        key = self._template_combo.currentData() or ""
+        settings = self._db.get_project_settings(self._project_id)
+        settings["outline_template"] = key
+        self._db.save_project_settings(self._project_id, settings)
+        self._refresh_mode_badge()
 
     def _refresh_list(self) -> None:
         while self._content_layout.count():
@@ -459,7 +562,7 @@ class PlanView(QWidget):
         more.setFixedWidth(28)
         more.setToolTip("Edit Chapter")
         more.clicked.connect(
-            lambda: self._show_chapter_menu(more, chapter_name)
+            lambda: self._show_chapter_menu(more, act_name, chapter_name)
         )
         head_row.addWidget(more)
 
@@ -573,6 +676,14 @@ class PlanView(QWidget):
 
     def _show_act_menu(self, anchor: QWidget, act_name: str) -> None:
         menu = QMenu(anchor)
+
+        ai_gen = QAction("✨ AI Generate Chapters & Scenes", menu)
+        ai_gen.triggered.connect(
+            lambda: self._run_ai("chapter", act=_act_key(act_name)),
+        )
+        menu.addAction(ai_gen)
+        menu.addSeparator()
+
         rename_act = QAction("Rename Act", menu)
         rename_act.triggered.connect(lambda: self._rename_act_dialog(act_name))
         menu.addAction(rename_act)
@@ -586,8 +697,21 @@ class PlanView(QWidget):
 
         menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
 
-    def _show_chapter_menu(self, anchor: QWidget, chapter_name: str) -> None:
+    def _show_chapter_menu(
+        self, anchor: QWidget, act_name: str, chapter_name: str,
+    ) -> None:
         menu = QMenu(anchor)
+
+        ai_gen = QAction("✨ AI Generate Scenes", menu)
+        ai_gen.triggered.connect(
+            lambda: self._run_ai(
+                "scene", act=_act_key(act_name),
+                chapter=_chapter_key(chapter_name),
+            ),
+        )
+        menu.addAction(ai_gen)
+        menu.addSeparator()
+
         rename = QAction("Rename Chapter", menu)
         rename.triggered.connect(
             lambda: self._rename_chapter_dialog(chapter_name)
@@ -606,6 +730,11 @@ class PlanView(QWidget):
     def _show_scene_menu(self, anchor: QWidget, scene_id: int) -> None:
         menu = QMenu(anchor)
 
+        ai_expand = QAction("✨ AI Expand (add beats/scenes)", menu)
+        ai_expand.triggered.connect(lambda: self._ai_expand_scene(scene_id))
+        menu.addAction(ai_expand)
+        menu.addSeparator()
+
         if self._on_open_scene is not None:
             open_act = QAction("Open in Manuscript", menu)
             open_act.triggered.connect(
@@ -622,6 +751,12 @@ class PlanView(QWidget):
         menu.addAction(delete)
 
         menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
+
+    def _ai_expand_scene(self, scene_id: int) -> None:
+        scene = self._db.get_scene_by_id(scene_id)
+        if scene is None:
+            return
+        self._run_ai("scene", act=scene.act or "", chapter=scene.chapter or "")
 
     def _rename_act_dialog(self, act_name: str) -> None:
         new, ok = QInputDialog.getText(
@@ -734,3 +869,108 @@ class PlanView(QWidget):
     def _notify(self) -> None:
         if self._on_data_changed is not None:
             self._on_data_changed()
+
+    # -- AI outline generation ------------------------------------------------
+
+    def _set_ai_busy(self, busy: bool) -> None:
+        self._ai_status.setText("Generating…" if busy else "")
+
+    def _build_outline_prompt(self, scope: str, act: str, chapter: str) -> str:
+        from storyplanner.outline_actions import build_outline_generation_prompt
+        from storyplanner.outline_templates import get_template
+
+        key = self._template_combo.currentData() if hasattr(self, "_template_combo") else ""
+        tmpl = get_template(key) if key else None
+        template_name = tmpl.name if tmpl else ""
+        beats = [b.title for b in tmpl.beats] if tmpl else []
+        try:
+            from storyplanner.context_builder import gather_psyke_context
+            psyke = gather_psyke_context(self._db, self._project_id)
+        except Exception:
+            psyke = ""
+        target_title = chapter or act or ""
+        return build_outline_generation_prompt(
+            scope, engine=self._engine, template_name=template_name,
+            template_beats=beats, psyke_context=psyke,
+            target_title=target_title,
+        )
+
+    def _run_ai(self, scope: str = "full", act: str = "", chapter: str = "") -> bool:
+        """Start an AI outline generation for *scope* (optionally scoped under
+        an existing act/chapter). Returns False if busy or no provider."""
+        if self._gen_worker is not None:
+            return False
+        provider = build_provider()
+        if provider is None:
+            QMessageBox.information(
+                self, "AI Generate Outline",
+                "No AI provider is configured. Set one in Settings first.",
+            )
+            return False
+        self._pending_gen = (scope, act, chapter)
+        prompt = self._build_outline_prompt(scope, act, chapter)
+        self._set_ai_busy(True)
+        self._gen_worker = OutlineGenWorker(outline_messages(prompt), provider)
+        self._gen_worker.completed.connect(self._on_ai_done)
+        self._gen_worker.failed.connect(self._on_ai_failed)
+        self._gen_worker.start()
+        return True
+
+    def _on_ai_failed(self, error: str) -> None:
+        self._gen_worker = None
+        self._set_ai_busy(False)
+        QMessageBox.warning(
+            self, "AI Generate Outline", f"Generation failed:\n\n{error}",
+        )
+
+    def _on_ai_done(self, text: str) -> None:
+        self._gen_worker = None
+        self._set_ai_busy(False)
+        scope, act, chapter = self._pending_gen
+        self._apply_ai_outline(text, scope, act, chapter)
+
+    def _apply_ai_outline(
+        self, text: str, scope: str = "full", act: str = "", chapter: str = "",
+        *, confirm: bool = True,
+    ) -> list[int]:
+        """Parse generated outline text, confirm, then apply it as Scenes.
+
+        For act/chapter/scene scope the new scenes are nested under the given
+        *act*/*chapter* so contextual generation lands in the right place.
+        """
+        from storyplanner.outline_actions import (
+            apply_outline_as_scenes,
+            count_ops,
+            format_outline_preview,
+            parse_outline_response,
+        )
+        ops = parse_outline_response(text or "")
+        if not ops:
+            QMessageBox.information(
+                self, "AI Generate Outline",
+                "The AI response did not contain a usable outline structure.",
+            )
+            return []
+        if confirm:
+            from storyplanner.ui.outline_confirm_dialog import OutlineConfirmDialog
+            if not OutlineConfirmDialog.confirm(
+                format_outline_preview(ops), count_ops(ops),
+                title="Apply generated outline", parent=self,
+            ):
+                return []
+        base_act = act if scope in ("chapter", "scene") else ""
+        base_chapter = chapter if scope == "scene" else ""
+        created = apply_outline_as_scenes(
+            self._db, self._project_id, ops,
+            base_act=base_act, base_chapter=base_chapter,
+        )
+        if created:
+            from storyplanner.project_events import get_event_bus
+            bus = get_event_bus()
+            bus.scenes_changed.emit()
+            bus.outline_changed.emit()
+            bus.plot_changed.emit()
+            bus.project_data_changed.emit()
+            self._notify()
+            self.refresh()
+        return created

@@ -297,6 +297,91 @@ def build_outline_generation_prompt(
     return "\n\n".join(parts)
 
 
+# ---------------------------------------------------------------------------
+# Scene-based application (the model the Outline / Plot / Timeline UI reads)
+# ---------------------------------------------------------------------------
+#
+# The visible Outline section (PlanView) — and Plot, Timeline and the
+# Dashboard — are all derived from ``Scene`` rows grouped by ``Scene.act`` /
+# ``Scene.chapter``.  Applying a generated outline therefore has to create
+# *scenes* carrying act/chapter/beat labels, not the parallel ``OutlineNode``
+# table.  ``outline_scene_rows`` flattens the proposed op tree into scene rows;
+# ``apply_outline_as_scenes`` writes them through the normal scene service.
+
+
+def _effective_kind(op: "OutlineOp") -> str:
+    """The act/chapter/scene/beat role of an op (explicit kind wins)."""
+    if op.kind:
+        return op.kind
+    return {0: "act", 1: "chapter", 2: "scene"}.get(
+        op.level, "beat" if op.level >= 3 else "scene",
+    )
+
+
+def outline_scene_rows(
+    ops: list[OutlineOp], act: str = "", chapter: str = "",
+) -> list[dict]:
+    """Flatten a proposed outline tree into scene rows.
+
+    Each row is ``{"act", "chapter", "title", "summary", "beat"}``.  Acts and
+    chapters propagate down to their descendant scenes; an act/chapter with no
+    scene descendants becomes a single placeholder scene so it stays visible in
+    the (scene-derived) Outline.
+    """
+    rows: list[dict] = []
+    for op in ops:
+        kind = _effective_kind(op)
+        if kind in ("act", "part"):
+            sub = outline_scene_rows(op.children, act=op.title, chapter="")
+            rows.extend(sub if sub else [
+                {"act": op.title, "chapter": "", "title": op.title,
+                 "summary": op.description, "beat": ""},
+            ])
+        elif kind in ("chapter", "sequence"):
+            sub = outline_scene_rows(op.children, act=act, chapter=op.title)
+            rows.extend(sub if sub else [
+                {"act": act, "chapter": op.title, "title": op.title,
+                 "summary": op.description, "beat": ""},
+            ])
+        else:  # scene / beat / section
+            beat = op.title if kind == "beat" else ""
+            rows.append({
+                "act": act, "chapter": chapter, "title": op.title,
+                "summary": op.description, "beat": beat,
+            })
+            # Anything nested under a scene becomes further scenes in context.
+            rows.extend(outline_scene_rows(op.children, act=act, chapter=chapter))
+    return rows
+
+
+def apply_outline_as_scenes(
+    db, project_id: int, ops: list[OutlineOp], *,
+    base_act: str = "", base_chapter: str = "",
+) -> list[int]:
+    """Apply a proposed outline as Scenes (act/chapter/scene/beat) additively.
+
+    Scenes are appended (``create_scene`` auto-assigns the next sort order) so
+    nothing is overwritten.  *base_act* / *base_chapter* scope the result under
+    an existing act/chapter (used by the per-item "AI Generate" actions).
+    Returns the created scene ids in creation order.
+    """
+    rows = outline_scene_rows(ops, act=base_act, chapter=base_chapter)
+    created: list[int] = []
+    for row in rows:
+        act = base_act or row["act"]
+        chapter = base_chapter or row["chapter"]
+        scene = db.create_scene(
+            project_id,
+            title=row["title"] or "(untitled)",
+            summary=row["summary"],
+            act=act,
+            chapter=chapter,
+            beat=row["beat"],
+        )
+        created.append(scene.id)
+    return created
+
+
 def apply_outline_ops(
     db, project_id: int, ops: list[OutlineOp], parent_id: int | None = None,
 ) -> list[int]:

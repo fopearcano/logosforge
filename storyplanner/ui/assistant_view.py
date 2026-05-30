@@ -298,7 +298,9 @@ class AssistantPanel(QWidget):
         self._overlay_btn = QPushButton("\u29c9")
         self._overlay_btn.setFixedSize(24, 24)
         self._overlay_btn.setFlat(True)
-        self._overlay_btn.setToolTip("Toggle overlay mode")
+        self._overlay_btn.setToolTip(
+            "Undock / dock the assistant (floating overlay panel)",
+        )
         self._overlay_btn.setStyleSheet(
             f"QPushButton {{ color: {theme.TEXT_MUTED}; border: none; }}"
             f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
@@ -1864,13 +1866,20 @@ class AssistantPanel(QWidget):
         return (ops, count_ops(ops)) if ops else (None, 0)
 
     def apply_outline_ops(self, ops, parent_id: int | None = None) -> list[int]:
-        """Apply parsed ops additively to the Outline + refresh the view."""
-        from storyplanner.outline_actions import apply_outline_ops
-        created = apply_outline_ops(self._db, self._project_id, ops, parent_id)
+        """Apply parsed ops to the Outline as Scenes (act/chapter/scene/beat).
+
+        The visible Outline / Plot / Timeline are all scene-derived, so the
+        structure is written as scenes through the normal scene service — not
+        the orphaned OutlineNode table — then the section is refreshed.
+        """
+        from storyplanner.outline_actions import apply_outline_as_scenes
+        created = apply_outline_as_scenes(self._db, self._project_id, ops)
         if created:
             from storyplanner.project_events import get_event_bus
             bus = get_event_bus()
+            bus.scenes_changed.emit()
             bus.outline_changed.emit()
+            bus.plot_changed.emit()
             bus.project_data_changed.emit()
             if self._on_data_changed:
                 self._on_data_changed()
@@ -1883,16 +1892,11 @@ class AssistantPanel(QWidget):
             return []
         if confirm:
             from storyplanner.outline_actions import format_outline_preview
-            preview = format_outline_preview(ops)
-            answer = QMessageBox.question(
-                self, "Apply to Outline",
-                f"Add {n} outline node(s) to the Outline?\n\n"
-                "Existing nodes are kept; the new structure is appended.\n\n"
-                + preview,
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if answer != QMessageBox.StandardButton.Yes:
+            from storyplanner.ui.outline_confirm_dialog import OutlineConfirmDialog
+            if not OutlineConfirmDialog.confirm(
+                format_outline_preview(ops), n,
+                title="Apply to Outline", parent=self,
+            ):
                 return []
         return self.apply_outline_ops(ops)
 

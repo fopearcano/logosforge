@@ -274,8 +274,13 @@ def test_panel_apply_updates_outline_and_emits_events():
     panel.set_active_section_name("Outline")
     panel._response_output.setPlainText("# Act 1\n## Chapter 1\n- Scene: Opening")
     created = panel._apply_to_outline(confirm=False)
-    assert len(created) == 3
-    assert len(db.get_outline_nodes(p.id)) == 3
+    # Apply now writes Scenes (the model the Outline section actually shows),
+    # not the orphaned OutlineNode table. One nested scene -> one scene row.
+    assert len(created) == 1
+    scenes = db.get_all_scenes(p.id)
+    assert len(scenes) == 1
+    assert scenes[0].act == "Act 1" and scenes[0].chapter == "Chapter 1"
+    assert scenes[0].title == "Opening"
     assert seen["outline"] >= 1          # active outline view refreshes
     assert seen["data"] >= 1
     assert fired                         # legacy callback fired too
@@ -289,4 +294,4 @@ def test_panel_apply_no_response_is_noop():
     panel.set_active_section_name("Outline")
     panel._response_output.setPlainText("")
     assert panel._apply_to_outline(confirm=False) == []
-    assert db.get_outline_nodes(p.id) == []
+    assert db.get_all_scenes(p.id) == []
