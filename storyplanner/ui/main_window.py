@@ -547,6 +547,7 @@ class MainWindow(QMainWindow):
         self._logos_controller = LogosController(self._db)
         self._logos_toolbar = LogosToolbar(
             self._logos_controller, self._build_logos_context,
+            on_request_apply=self._logos_request_apply,
         )
         self._logos_toolbar.setVisible(False)
         outer_layout.addWidget(self._logos_toolbar, stretch=0)
@@ -1271,6 +1272,53 @@ class MainWindow(QMainWindow):
             outline_template=outline_template,
         )
         self._logos_toolbar.run_action_with_context(ctx, action_name)
+
+    def _logos_request_apply(self, result, context) -> None:
+        """Open the preview dialog for a Logos result and apply on confirm.
+
+        Non-destructive until the user confirms: the dialog only returns a
+        finalized operation; this method validates and applies it through the
+        existing write paths, then marks dirty / autosave / versioning and
+        refreshes the active view.
+        """
+        from storyplanner.logos import operations as logos_ops
+        from storyplanner.ui.logos.logos_apply_preview import LogosApplyPreview
+
+        op = LogosApplyPreview.get_operation(result, context, parent=self)
+        if op is None:
+            return  # Cancel — no mutation.
+
+        editor = None
+        if op.get("target") == logos_ops.TARGET_MANUSCRIPT:
+            editor = self._detect_active_editor()
+
+        outcome = logos_ops.apply_logos_operation(
+            self._db, self._project_id, op, editor=editor,
+        )
+        if not outcome.get("ok"):
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Logos apply", outcome.get("detail", "Could not apply."))
+            self._logos_toolbar.set_status("Apply failed")
+            return
+
+        # Emit the bus events the operation reported.
+        from storyplanner.project_events import get_event_bus
+        bus = get_event_bus()
+        scene_id = outcome.get("scene_id")
+        for name in outcome.get("events", []):
+            sig = getattr(bus, name, None)
+            if sig is None:
+                continue
+            try:
+                if name == "scene_changed" and scene_id is not None:
+                    sig.emit(scene_id)
+                else:
+                    sig.emit()
+            except TypeError:
+                pass  # signal signature mismatch — skip safely
+        # Mark dirty + autosave + versioning + refresh active view.
+        self._on_data_changed()
+        self._logos_toolbar.set_status("Applied")
 
     def _open_scene_in_editor(self, scene_id: int) -> None:
         self._set_active_section("Scenes")

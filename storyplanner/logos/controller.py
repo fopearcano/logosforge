@@ -108,13 +108,22 @@ class LogosController:
         except Exception as exc:
             return LogosResult.failure(action_name, f"Assistant request failed: {exc}")
 
+        reply = reply or ""
+        # Phase 2: derive the *available* (preview-only) operations. They carry
+        # suggested payloads; nothing is applied until the user confirms.
+        try:
+            from storyplanner.logos.operations import build_proposed_operations
+            proposed = build_proposed_operations(self._db, context, action, reply)
+        except Exception:
+            proposed = []
+
         return LogosResult(
             ok=True,
             action=action_name,
             title=action.label,
-            message=reply or "",
-            suggestions=_parse_suggestions(reply or ""),
-            proposed_operations=[],  # Phase 0: preview-only, no mutation
+            message=reply,
+            suggestions=_parse_suggestions(reply),
+            proposed_operations=proposed,
         )
 
     # -- Internals -----------------------------------------------------------

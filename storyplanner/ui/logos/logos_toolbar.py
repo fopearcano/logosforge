@@ -62,14 +62,18 @@ class LogosToolbar(QWidget):
         controller: LogosController,
         context_provider: Callable[[], object],
         parent: QWidget | None = None,
+        on_request_apply: Callable[[object, object], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self._controller = controller
         # Pulls a fresh LogosContext on demand (so selection/section are live).
         self._context_provider = context_provider
+        # Called when the user clicks "Apply…": (result, context) -> None.
+        self._on_request_apply = on_request_apply
         self._section = ""
         self._worker: _LogosWorker | None = None
         self._last_result: LogosResult | None = None
+        self._last_context: object | None = None
 
         self.setObjectName("logosToolbar")
         # Don't grab focus when shown — Logos must never steal the caret.
@@ -96,8 +100,11 @@ class LogosToolbar(QWidget):
 
         self._copy_btn = self._tool_button("Copy", self._copy_result)
         self._dismiss_btn = self._tool_button("Dismiss", self.clear_result)
+        self._apply_btn = self._tool_button("Apply…", self._request_apply)
+        self._apply_btn.setEnabled(False)
         self._copy_btn.setEnabled(False)
         self._dismiss_btn.setEnabled(False)
+        self._row.addWidget(self._apply_btn)
         self._row.addWidget(self._copy_btn)
         self._row.addWidget(self._dismiss_btn)
         outer.addLayout(self._row)
@@ -179,6 +186,7 @@ class LogosToolbar(QWidget):
         """Run an action against an explicit context (e.g. an outline node)."""
         if self._worker is not None:
             return  # one at a time
+        self._last_context = context
         self._set_busy(True)
         worker = _LogosWorker(self._controller, context, action_name)
         worker.done.connect(lambda res, n=action_name: self._on_done(n, res))
@@ -215,6 +223,24 @@ class LogosToolbar(QWidget):
         has_text = bool(text)
         self._copy_btn.setEnabled(has_text)
         self._dismiss_btn.setEnabled(has_text)
+        # "Apply…" only when the result carries confirmable operations and a
+        # handler is wired.
+        can_apply = bool(
+            result.ok and result.proposed_operations and self._on_request_apply
+        )
+        self._apply_btn.setEnabled(can_apply)
+
+    def _request_apply(self) -> None:
+        if (
+            self._on_request_apply is None
+            or self._last_result is None
+            or not self._last_result.proposed_operations
+        ):
+            return
+        self._on_request_apply(self._last_result, self._last_context)
+
+    def set_status(self, text: str) -> None:
+        self._status.setText(text)
 
     def result_text(self) -> str:
         return self._result.toPlainText()
@@ -224,6 +250,7 @@ class LogosToolbar(QWidget):
         self._last_result = None
         self._copy_btn.setEnabled(False)
         self._dismiss_btn.setEnabled(False)
+        self._apply_btn.setEnabled(False)
 
     def _copy_result(self) -> None:
         text = self._result.toPlainText()
