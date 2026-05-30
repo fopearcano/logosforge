@@ -614,6 +614,9 @@ class ChatView(QWidget):
         if cmd == "/series" or cmd.startswith("/series "):
             self._handle_series_command(text)
             return True
+        if cmd == "/gn" or cmd.startswith("/gn "):
+            self._handle_gn_command(text)
+            return True
         if cmd == "/context":
             ctx = build_chat_context(
                 self._db, self._project_id,
@@ -668,6 +671,24 @@ class ChatView(QWidget):
         else:
             from storyplanner.series_review import format_series_command
             out = format_series_command(self._db, self._project_id, sub)
+        self._db.add_chat_message(self._project_id, "system", out)
+        self._add_message_bubble("system", out)
+
+    def _handle_gn_command(self, text: str) -> None:
+        """Render a /gn … response (only meaningful for Graphic Novel projects)."""
+        sub = text.strip()[len("/gn"):].strip()
+        self._add_message_bubble("user", text)
+        try:
+            from storyplanner.narrative_engines import engine_for_project
+            project = self._db.get_project_by_id(self._project_id)
+            is_gn = engine_for_project(project).name == "graphic_novel"
+        except Exception:
+            is_gn = False
+        if not is_gn:
+            out = "/gn commands are only available for Graphic Novel projects."
+        else:
+            from storyplanner.graphic_novel_review import format_gn_command
+            out = format_gn_command(self._db, self._project_id, sub)
         self._db.add_chat_message(self._project_id, "system", out)
         self._add_message_bubble("system", out)
 
