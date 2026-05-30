@@ -690,11 +690,22 @@ class AssistantPanel(QWidget):
         self._append_btn.clicked.connect(self._apply_append)
         apply_row.addWidget(self._append_btn)
 
+        # Outline-only: turn a generated outline into structured nodes.
+        self._apply_outline_btn = QPushButton("Apply to Outline")
+        self._apply_outline_btn.setToolTip(
+            "Parse the generated outline into acts/chapters/scenes/beats and "
+            "add them to the Outline (additive — nothing is overwritten)."
+        )
+        self._apply_outline_btn.clicked.connect(self._apply_to_outline)
+        self._apply_outline_btn.setVisible(False)
+        apply_row.addWidget(self._apply_outline_btn)
+
         self._apply_buttons = [
             self._copy_btn,
             self._replace_content_btn,
             self._insert_cursor_btn,
             self._append_btn,
+            self._apply_outline_btn,
         ]
         self._layout.addLayout(apply_row)
 
@@ -927,7 +938,16 @@ class AssistantPanel(QWidget):
         )
         if self._panel_mode == "assistant":
             self._prompt_input.setPlaceholderText(placeholder)
+        self._update_outline_action_visibility()
         self.refresh_scenes()
+
+    def _is_outline_mode(self) -> bool:
+        """Outline Mode = the Assistant is targeting the Outline section."""
+        return self._active_section in ("Outline", "Plan")
+
+    def _update_outline_action_visibility(self) -> None:
+        if hasattr(self, "_apply_outline_btn"):
+            self._apply_outline_btn.setVisible(self._is_outline_mode())
 
     def run_action(self, action_key: str, selected_text: str = "") -> bool:
         """Trigger a preset AI action programmatically. Returns False if busy."""
@@ -1758,6 +1778,57 @@ class AssistantPanel(QWidget):
                 return
 
         QApplication.clipboard().setText(text)
+
+    # -- Apply generated outline as structured nodes ---------------------------
+
+    def propose_outline_ops(self):
+        """Parse the current response into proposed outline operations.
+
+        Returns (ops, count) or (None, 0) if there is no usable response.
+        Pure — does not write anything.
+        """
+        text = self._get_response_text()
+        if text is None:
+            return None, 0
+        from storyplanner.outline_actions import (
+            count_ops,
+            parse_outline_response,
+        )
+        ops = parse_outline_response(text)
+        return (ops, count_ops(ops)) if ops else (None, 0)
+
+    def apply_outline_ops(self, ops, parent_id: int | None = None) -> list[int]:
+        """Apply parsed ops additively to the Outline + refresh the view."""
+        from storyplanner.outline_actions import apply_outline_ops
+        created = apply_outline_ops(self._db, self._project_id, ops, parent_id)
+        if created:
+            from storyplanner.project_events import get_event_bus
+            bus = get_event_bus()
+            bus.outline_changed.emit()
+            bus.project_data_changed.emit()
+            if self._on_data_changed:
+                self._on_data_changed()
+        return created
+
+    def _apply_to_outline(self, *, confirm: bool = True) -> list[int]:
+        """Outline Mode: propose the structure, confirm, then apply additively."""
+        ops, n = self.propose_outline_ops()
+        if not ops:
+            return []
+        if confirm:
+            from storyplanner.outline_actions import format_outline_preview
+            preview = format_outline_preview(ops)
+            answer = QMessageBox.question(
+                self, "Apply to Outline",
+                f"Add {n} outline node(s) to the Outline?\n\n"
+                "Existing nodes are kept; the new structure is appended.\n\n"
+                + preview,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return []
+        return self.apply_outline_ops(ops)
 
     # -- Overlay mode ----------------------------------------------------------
 
