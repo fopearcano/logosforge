@@ -144,6 +144,45 @@ def _sequence_block(db: Any, seq: Any, pages: list) -> dict:
     }
 
 
+def _page_characters(db: Any, page_id: int) -> list[str]:
+    chars: list[str] = []
+    for panel in db.get_gn_panels_for_page(page_id):
+        for c in db.csv_split(panel.characters_present):
+            if c not in chars:
+                chars.append(c)
+    return chars
+
+
+def _page_is_text_heavy(db: Any, page_id: int) -> bool:
+    # Lazy import avoids a graphic_novel_review <-> graphic_novel_plot cycle.
+    try:
+        from storyplanner.graphic_novel_review import detect_text_heavy_page
+        return detect_text_heavy_page(db, page_id)
+    except Exception:
+        return False
+
+
+def page_rhythm_indicators(db: Any, page: Any) -> list[str]:
+    """Compact rhythm tags for a page (§7): quiet / dense / action / reveal /
+    splash / dialogue-heavy. Derived from density, reveal, splash, panels."""
+    out: list[str] = []
+    density = (page.density_level or "").lower()
+    if density in ("silent", "light"):
+        out.append("quiet")
+    elif density in ("dense", "explosive"):
+        out.append("dense")
+    panels = db.get_gn_panels_for_page(page.id)
+    if any((p.action or "").strip() for p in panels):
+        out.append("action")
+    if (page.reveal_type or "").strip() and page.reveal_type != "none":
+        out.append("reveal")
+    if page.splash_page:
+        out.append("splash")
+    if _page_is_text_heavy(db, page.id):
+        out.append("dialogue-heavy")
+    return out
+
+
 def _page_block(db: Any, page: Any) -> dict:
     return {
         "type": "page",
@@ -151,13 +190,104 @@ def _page_block(db: Any, page: Any) -> dict:
         "title": f"Page {page.page_number}",
         "page_number": page.page_number,
         "sequence_id": page.sequence_id,
+        "issue_id": getattr(page, "issue_id", None),
+        "summary": page.summary or "",
         "density": page.density_level or "",
         "reveal_marker": (page.reveal_type or "").strip(),
         "emotional_beat": page.emotional_beat or "",
         "motif_markers": _page_motifs(db, page.id),
+        "characters": _page_characters(db, page.id),
         "splash_page": bool(page.splash_page),
+        "panel_count": len(db.get_gn_panels_for_page(page.id)),
         "pacing": classify_page_pacing(db, page),
+        "rhythm": page_rhythm_indicators(db, page),
+        "text_heavy": _page_is_text_heavy(db, page.id),
     }
+
+
+# ---------------------------------------------------------------------------
+# Plot grid — pages grouped by Issue (fallback Sequence, then flat) (§1, §2)
+# ---------------------------------------------------------------------------
+
+def _page_group(db: Any, group_id, title: str, kind: str, pages: list) -> dict:
+    return {
+        "group_id": group_id,
+        "group_title": title,
+        "group_kind": kind,   # "issue" | "sequence" | "none"
+        "pages": [_page_block(db, p) for p in pages],
+    }
+
+
+def get_gn_plot_pages_grouped(
+    db: Any, project_id: int, filter_name: str = "all",
+) -> list[dict]:
+    """Page blocks grouped for the Plot grid.
+
+    Grouped by Issue when issues exist, else by Sequence, else a single flat
+    group. *filter_name* narrows the pages (see filter_gn_plot_pages); empty
+    groups are dropped.
+    """
+    pages = db.get_gn_pages(project_id)
+
+    issues = db.get_gn_issues(project_id)
+    if issues:
+        groups = [
+            _page_group(db, i.id, i.title or f"Issue {i.issue_number}",
+                        "issue", [p for p in pages if p.issue_id == i.id])
+            for i in issues
+        ]
+        unassigned = [p for p in pages if p.issue_id is None]
+        if unassigned:
+            groups.append(_page_group(db, None, "(unassigned)", "issue",
+                                      unassigned))
+    else:
+        sequences = db.get_gn_sequences(project_id)
+        if sequences:
+            groups = [
+                _page_group(db, s.id, s.title or f"Sequence {s.id}",
+                            "sequence", db.get_gn_pages_for_sequence(s.id))
+                for s in sequences
+            ]
+            orphan = [p for p in pages if p.sequence_id is None]
+            if orphan:
+                groups.append(_page_group(db, None, "(unassigned)",
+                                          "sequence", orphan))
+        else:
+            groups = [_page_group(db, None, "", "none", pages)]
+
+    if filter_name and filter_name != "all":
+        out = []
+        for g in groups:
+            kept = filter_gn_plot_pages(g["pages"], filter_name)
+            if kept:
+                out.append({**g, "pages": kept})
+        return out
+    return groups
+
+
+GN_PLOT_FILTERS = ("all", "splash", "reveal", "dense", "motifs",
+                   "missing_summary")
+
+
+def filter_gn_plot_pages(blocks: list[dict], filter_name: str) -> list[dict]:
+    """Filter a flat list of page blocks (§8)."""
+    if filter_name in ("", "all"):
+        return list(blocks)
+
+    def keep(b: dict) -> bool:
+        if filter_name == "splash":
+            return bool(b.get("splash_page"))
+        if filter_name == "reveal":
+            return bool(b.get("reveal_marker"))
+        if filter_name == "dense":
+            return (b.get("density") or "") in ("dense", "explosive")
+        if filter_name == "motifs":
+            return bool(b.get("motif_markers"))
+        if filter_name == "missing_summary":
+            return not (b.get("summary") or "").strip()
+        return True
+
+    return [b for b in blocks if keep(b)]
 
 
 def _aggregate_density(pages: list) -> str:

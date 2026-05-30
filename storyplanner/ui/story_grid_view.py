@@ -395,6 +395,167 @@ _GridColumn = _ActSection
 
 
 # ---------------------------------------------------------------------------
+# Graphic Novel page planning cards
+# ---------------------------------------------------------------------------
+
+_GN_DENSITY_OPTS = ("", "silent", "light", "medium", "dense", "explosive")
+_GN_REVEAL_OPTS = ("", "none", "page_turn", "cliffhanger", "splash_reveal")
+
+
+class _GnIssueSection(QFrame):
+    """A titled column holding a run of page cards (grouped by Issue)."""
+
+    def __init__(self, title: str) -> None:
+        super().__init__()
+        self.setObjectName("gnIssueSection")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(8, 8, 8, 8)
+        outer.setSpacing(6)
+        header = QLabel(title)
+        header.setObjectName("gnIssueHeader")
+        header.setStyleSheet("font-weight: bold;")
+        outer.addWidget(header)
+        self._body = QVBoxLayout()
+        self._body.setSpacing(6)
+        outer.addLayout(self._body)
+        self._cards: list[QWidget] = []
+
+    def add_card(self, card: QWidget) -> None:
+        self._cards.append(card)
+        self._body.addWidget(card)
+
+    def card_count(self) -> int:
+        return len(self._cards)
+
+
+class _GnPageCard(QFrame):
+    """Compact page planning card — page number, badges, summary, chips (§3)."""
+
+    def __init__(
+        self, block: dict,
+        on_move: Callable[[int, int], None] | None = None,
+        on_edit: Callable[[int, str], None] | None = None,
+        on_open_pages: Callable[[int], None] | None = None,
+    ) -> None:
+        super().__init__()
+        self._block = block
+        self._page_id = block["id"]
+        self._on_move = on_move
+        self._on_edit = on_edit
+        self._on_open_pages = on_open_pages
+        self.setObjectName("gnPageCard")
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self._build()
+
+    def _build(self) -> None:
+        b = self._block
+        col = QVBoxLayout(self)
+        col.setContentsMargins(8, 6, 8, 6)
+        col.setSpacing(3)
+
+        # Top row: page number (prominent) + badges + menu.
+        top = QHBoxLayout()
+        num = QLabel(f"Page {b['page_number']}")
+        num.setObjectName("gnPageNumber")
+        num.setStyleSheet("font-weight: bold; font-size: 13px;")
+        top.addWidget(num)
+        for tag in self._badges():
+            chip = QLabel(tag)
+            chip.setObjectName("gnBadge")
+            chip.setStyleSheet(
+                "background: rgba(255,255,255,0.08); border-radius: 6px;"
+                " padding: 0 5px; font-size: 9px;"
+            )
+            top.addWidget(chip)
+        top.addStretch()
+
+        self._up_btn = QPushButton("↑")
+        self._up_btn.setFixedWidth(22)
+        self._up_btn.clicked.connect(lambda: self._move(-1))
+        self._down_btn = QPushButton("↓")
+        self._down_btn.setFixedWidth(22)
+        self._down_btn.clicked.connect(lambda: self._move(1))
+        self._menu_btn = QPushButton("⋯")
+        self._menu_btn.setFixedWidth(22)
+        self._menu_btn.clicked.connect(self._open_menu)
+        top.addWidget(self._up_btn)
+        top.addWidget(self._down_btn)
+        top.addWidget(self._menu_btn)
+        col.addLayout(top)
+
+        # Meta line: panels + density/reveal.
+        meta_bits = [f"{b['panel_count']} panels"]
+        if b["density"]:
+            meta_bits.append(b["density"])
+        if b["reveal_marker"]:
+            meta_bits.append(f"reveal: {b['reveal_marker']}")
+        meta = QLabel("  ·  ".join(meta_bits))
+        meta.setObjectName("gnPageMeta")
+        meta.setStyleSheet("color: #8a93a3; font-size: 10px;")
+        col.addWidget(meta)
+
+        if (b.get("emotional_beat") or "").strip():
+            beat = QLabel("beat: " + b["emotional_beat"])
+            beat.setStyleSheet("color: #a0aec0; font-size: 10px;")
+            beat.setWordWrap(True)
+            col.addWidget(beat)
+
+        summary = (b.get("summary") or "").strip() or "(no summary)"
+        s = QLabel(summary)
+        s.setWordWrap(True)
+        s.setStyleSheet("font-size: 11px;")
+        col.addWidget(s)
+
+        chips = list(b.get("motif_markers") or []) + [
+            f"@{c}" for c in (b.get("characters") or [])
+        ]
+        if chips:
+            chip_lbl = QLabel(" ".join(f"·{c}" for c in chips[:8]))
+            chip_lbl.setObjectName("gnChips")
+            chip_lbl.setStyleSheet("color: #06b6d4; font-size: 9px;")
+            chip_lbl.setWordWrap(True)
+            col.addWidget(chip_lbl)
+
+        if b.get("text_heavy"):
+            warn = QLabel("⚠ text-heavy")
+            warn.setObjectName("gnTextHeavy")
+            warn.setStyleSheet("color: #eab308; font-size: 9px;")
+            col.addWidget(warn)
+
+    def _badges(self) -> list[str]:
+        out = list(self._block.get("rhythm") or [])
+        return out[:5]
+
+    def _move(self, delta: int) -> None:
+        if self._on_move:
+            self._on_move(self._page_id, delta)
+
+    def _open_menu(self) -> None:
+        menu = QMenu(self)
+        menu.addAction("Edit summary",
+                       lambda: self._edit("summary"))
+        menu.addAction("Edit emotional beat",
+                       lambda: self._edit("emotional_beat"))
+        dens = menu.addMenu("Density")
+        for opt in _GN_DENSITY_OPTS[1:]:
+            dens.addAction(opt, lambda o=opt: self._edit(f"density:{o}"))
+        rev = menu.addMenu("Reveal")
+        for opt in _GN_REVEAL_OPTS[1:]:
+            rev.addAction(opt, lambda o=opt: self._edit(f"reveal:{o}"))
+        menu.addAction("Toggle splash page",
+                       lambda: self._edit("splash_page"))
+        if self._on_open_pages is not None:
+            menu.addSeparator()
+            menu.addAction("Open in Pages view",
+                           lambda: self._on_open_pages(self._page_id))
+        menu.exec(self._menu_btn.mapToGlobal(self._menu_btn.rect().bottomLeft()))
+
+    def _edit(self, field: str) -> None:
+        if self._on_edit:
+            self._on_edit(self._page_id, field)
+
+
+# ---------------------------------------------------------------------------
 # Main grid view
 # ---------------------------------------------------------------------------
 
@@ -434,6 +595,7 @@ class StoryGridView(QWidget):
         self._graphic_novel_mode = engine == "graphic_novel"
         self._stage_script_mode = engine == "stage_script"
         self._series_mode = engine == "series"
+        self._gn_filter = "all"   # Plot page filter (§8)
         # Story grid still keys most branches off the writing format, but
         # falls back to "screenplay" when the engine is screenplay so the
         # scene-grid affordances appear even if the format was overridden.
@@ -519,6 +681,61 @@ class StoryGridView(QWidget):
         return get_gn_plot_blocks(
             self._db, self._project_id, unit=unit or "sequence",
         )
+
+    def get_gn_plot_pages_grouped(self, filter_name: str | None = None) -> list[dict]:
+        """Page blocks grouped by Issue/Sequence for the Plot grid (§1, §2).
+
+        [] for non-graphic-novel projects."""
+        if not self._graphic_novel_mode:
+            return []
+        from storyplanner.graphic_novel_plot import get_gn_plot_pages_grouped
+        return get_gn_plot_pages_grouped(
+            self._db, self._project_id, filter_name or self._gn_filter,
+        )
+
+    def set_gn_plot_filter(self, filter_name: str) -> None:
+        """Set the active page filter (§8) and re-render."""
+        self._gn_filter = filter_name or "all"
+        if self._graphic_novel_mode:
+            self.refresh()
+
+    def gn_update_page(self, page_id: int, **fields) -> None:
+        """Persist a page edit from Plot via the shared GN service (§4, §10).
+
+        Same data source as Pages View / Canvas / Timeline — no duplicate
+        data. Refreshes and announces a plot/project change."""
+        if not self._graphic_novel_mode:
+            return
+        self._db.update_gn_page(page_id, **fields)
+        self.refresh()
+        self._emit_gn_changed()
+
+    def gn_move_page(self, page_id: int, delta: int) -> None:
+        """Reorder a page from Plot (↑/↓) via reorder_gn_pages (§5)."""
+        if not self._graphic_novel_mode:
+            return
+        ids = [p.id for p in self._db.get_gn_pages(self._project_id)]
+        if page_id not in ids:
+            return
+        idx = ids.index(page_id)
+        new_idx = idx + delta
+        if new_idx < 0 or new_idx >= len(ids):
+            return
+        ids[idx], ids[new_idx] = ids[new_idx], ids[idx]
+        self._db.reorder_gn_pages(self._project_id, ids)
+        self.refresh()
+        self._emit_gn_changed()
+
+    def _emit_gn_changed(self) -> None:
+        try:
+            from storyplanner.project_events import get_event_bus
+            bus = get_event_bus()
+            bus.plot_changed.emit()
+            bus.project_data_changed.emit()
+        except Exception:
+            pass
+        if self._on_data_changed:
+            self._on_data_changed()
 
     def _block_number_label(self, index: int) -> str:
         if self._block_unit == "sequence":
@@ -609,6 +826,9 @@ class StoryGridView(QWidget):
     # -- Data loading --------------------------------------------------------
 
     def refresh(self) -> None:
+        if self._graphic_novel_mode:
+            self._refresh_gn()
+            return
         self._clear_grid()
         scenes = self._db.get_all_scenes(self._project_id)
 
@@ -697,6 +917,63 @@ class StoryGridView(QWidget):
             w = item.widget()
             if w:
                 w.deleteLater()
+
+    # -- Graphic Novel page grid (§2, §3) -----------------------------------
+
+    def _refresh_gn(self) -> None:
+        """Render pages as compact planning cards, grouped by Issue/Sequence."""
+        self._clear_grid()
+        groups = self.get_gn_plot_pages_grouped()
+        if not groups or not any(g["pages"] for g in groups):
+            empty = QLabel(
+                "No graphic-novel pages yet.\n"
+                "Add pages in the Pages view to plan them here."
+            )
+            empty.setObjectName("gridEmptyLabel")
+            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._grid_layout.addWidget(empty)
+            return
+
+        for group in groups:
+            if not group["pages"]:
+                continue
+            section = _GnIssueSection(group["group_title"] or "Pages")
+            for block in group["pages"]:
+                card = _GnPageCard(
+                    block,
+                    on_move=self.gn_move_page,
+                    on_edit=self._gn_edit_page,
+                    on_open_pages=self._on_open_gn_page,
+                )
+                section.add_card(card)
+            self._columns.append(section)
+            self._grid_layout.addWidget(section)
+        self._grid_layout.addStretch()
+
+    def _gn_edit_page(self, page_id: int, field: str) -> None:
+        """Edit-menu handler from a page card (§4). Persists via gn_update_page."""
+        page = self._db.get_gn_page_by_id(page_id)
+        if page is None:
+            return
+        if field in ("summary", "emotional_beat"):
+            current = getattr(page, field, "") or ""
+            text, ok = QInputDialog.getMultiLineText(
+                self, "Edit Page", field.replace("_", " ").title(), current,
+            )
+            if ok:
+                self.gn_update_page(page_id, **{field: text.strip()})
+        elif field == "splash_page":
+            self.gn_update_page(page_id, splash_page=not page.splash_page)
+        elif field.startswith("density:"):
+            self.gn_update_page(page_id, density_level=field.split(":", 1)[1])
+        elif field.startswith("reveal:"):
+            self.gn_update_page(page_id, reveal_type=field.split(":", 1)[1])
+
+    def _on_open_gn_page(self, page_id: int) -> None:
+        """Open a page in the Pages view (deferred — needs host wiring)."""
+        cb = getattr(self, "_on_open_gn_page_cb", None)
+        if cb is not None:
+            cb(page_id)
 
     def _add_empty_grid_state(self) -> None:
         empty = QWidget()
