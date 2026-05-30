@@ -1,19 +1,28 @@
 """Logos action registry.
 
 Mirrors the lightweight declarative style of ``connector_registry`` but for the
-inline Logos layer. Phase 0 registers only **diagnostic / read-only** actions;
-destructive actions are listed in :data:`FUTURE_ACTIONS` as TODO names and are
-intentionally NOT registered, so the controller can never run them yet.
+inline Logos layer. Phase 1 registers real, non-destructive Manuscript and
+Outline actions (analysis, critique, and *preview* generation — alternatives are
+returned for the author to consider, never auto-applied).
+
+Destructive / auto-applying actions are listed in :data:`FUTURE_ACTIONS` as TODO
+names and are intentionally NOT registered, so the controller can never run them
+yet. Every registered action has ``destructive=False``.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
-# Section identifiers Phase 0 integrates with.
+# Section identifiers Phase 1 integrates with.
 SECTION_MANUSCRIPT = "Manuscript"
 SECTION_OUTLINE = "Outline"
+
+# Categories are descriptive tags only; the binding safety invariant is
+# ``destructive=False`` for everything registered in this phase.
+CATEGORY_DIAGNOSTIC = "diagnostic"   # explain / identify / critique / check
+CATEGORY_GENERATIVE = "generative"   # produce suggestions / alternatives (preview)
 
 
 @dataclass(frozen=True)
@@ -21,7 +30,7 @@ class LogosAction:
     name: str
     label: str
     description: str
-    category: str               # "diagnostic" (Phase 0) | "destructive" (future)
+    category: str
     sections: tuple[str, ...]   # sections this action is offered in
     prompt: str                 # instruction sent to the shared chat backend
     needs_selection: bool = False
@@ -67,78 +76,175 @@ def describe_all_actions() -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# Phase 0 diagnostic actions (read-only, non-destructive)
+# Manuscript actions (selection-aware, non-destructive)
 # ---------------------------------------------------------------------------
 
-_LOGOS_INSTRUCTION = (
-    "You are Logos, an inline writing companion embedded next to the author's "
-    "work. Give concise, concrete, non-destructive feedback. Do NOT rewrite or "
-    "replace the text. When helpful, end with a short bullet list (lines "
-    "starting with '- ') of specific, optional suggestions."
-)
-
 register(LogosAction(
-    name="explain_selection",
-    label="Explain Selection",
+    name="explain_selection", label="Explain Selection",
     description="Explain what the selected passage is doing and how it reads.",
-    category="diagnostic",
-    sections=(SECTION_MANUSCRIPT,),
-    prompt=(
-        "Explain the selected passage: its intent, tone, and how it reads. "
-        "Point out anything notable. Do not rewrite it."
-    ),
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
     needs_selection=True,
+    prompt=(
+        "Explain the selected passage: its intent, tone, technique, and how it "
+        "reads. Note anything notable. Do not rewrite it."
+    ),
 ))
 
 register(LogosAction(
-    name="suggest_revision",
-    label="Suggest Revision",
-    description="Suggest revision directions for the selection (no rewrite).",
-    category="diagnostic",
-    sections=(SECTION_MANUSCRIPT,),
+    name="suggest_revision", label="Suggest Revision",
+    description="Suggest concrete revision directions (no rewrite).",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+    needs_selection=True,
     prompt=(
         "Suggest concrete revision directions for the selected passage "
-        "(clarity, rhythm, imagery, tension). Describe the options as "
-        "suggestions only — do NOT produce a rewritten version."
+        "(clarity, rhythm, imagery, tension). Present them as a short bullet "
+        "list of options. Do NOT produce a finished rewrite."
     ),
-    needs_selection=True,
 ))
 
 register(LogosAction(
-    name="identify_scene_problem",
-    label="Identify Problem",
-    description="Diagnose possible problems in the current scene/selection.",
-    category="diagnostic",
-    sections=(SECTION_MANUSCRIPT,),
+    name="rewrite_options", label="Rewrite Options",
+    description="Offer 2–3 labelled alternate versions (preview only).",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+    needs_selection=True,
     prompt=(
-        "Identify likely craft problems in this scene/selection (goal, "
-        "conflict, stakes, pacing, POV, continuity). List them as concise "
+        "Provide 2 to 3 distinct alternate versions of the selected passage, "
+        "each preserving its meaning but varying voice/rhythm/emphasis. Label "
+        "them clearly as 'Option 1:', 'Option 2:', 'Option 3:'. These are "
+        "options for the author to consider — do not pick one or apply changes."
+    ),
+))
+
+register(LogosAction(
+    name="expand", label="Expand",
+    description="Show a richer, expanded version of the selection (preview).",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+    needs_selection=True,
+    prompt=(
+        "Show an expanded version of the selected passage — add sensory detail, "
+        "beats, or interiority where it serves the scene. Present it as a "
+        "labelled 'Expanded version:' preview. Do not replace the original."
+    ),
+))
+
+register(LogosAction(
+    name="compress", label="Compress",
+    description="Show a tighter, compressed version of the selection (preview).",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+    needs_selection=True,
+    prompt=(
+        "Show a tighter, compressed version of the selected passage that keeps "
+        "its essential meaning and impact. Present it as a labelled 'Compressed "
+        "version:' preview. Do not replace the original."
+    ),
+))
+
+register(LogosAction(
+    name="improve_dialogue", label="Improve Dialogue",
+    description="Diagnose and suggest stronger dialogue (preview).",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+    needs_selection=True,
+    prompt=(
+        "Focus on the dialogue in the selection. Note what works and what is "
+        "flat or on-the-nose, then offer a few sharper line options. Keep them "
+        "as suggestions — do not rewrite the whole passage."
+    ),
+))
+
+register(LogosAction(
+    name="improve_subtext", label="Improve Subtext",
+    description="Suggest ways to deepen subtext (preview).",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+    needs_selection=True,
+    prompt=(
+        "Analyse the subtext of the selection — what is left unsaid, the gap "
+        "between surface and intent — and suggest concrete ways to deepen it. "
+        "Offer suggestions, not a finished rewrite."
+    ),
+))
+
+register(LogosAction(
+    name="identify_weakness", label="Identify Weakness",
+    description="Diagnose craft weaknesses in the selection/scene.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt=(
+        "Identify the most likely craft weaknesses here (goal, conflict, "
+        "stakes, pacing, POV, clarity, continuity). List them as concise "
         "diagnostics. Do not rewrite anything."
     ),
 ))
 
+# ---------------------------------------------------------------------------
+# Outline actions (node-aware, non-destructive)
+# ---------------------------------------------------------------------------
+
 register(LogosAction(
-    name="identify_structure_problem",
-    label="Identify Structure Problem",
-    description="Diagnose structural problems in the current outline context.",
-    category="diagnostic",
-    sections=(SECTION_OUTLINE,),
+    name="summarize_node", label="Summarize Node",
+    description="Summarize the selected outline node in context.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_OUTLINE,),
     prompt=(
-        "Using the outline context, identify likely structural problems "
-        "(missing turning points, pacing, act balance, cause/effect gaps). "
-        "List them as diagnostics. Do not generate new outline nodes."
+        "Summarize the selected outline node (what it is about and the work it "
+        "does in the story) in a few sentences, using the surrounding outline."
     ),
 ))
 
 register(LogosAction(
-    name="summarize_context",
-    label="Summarize Context",
-    description="Summarize the current working context for orientation.",
-    category="diagnostic",
+    name="identify_structure_problem", label="Identify Structure Problem",
+    description="Diagnose structural problems around the selected node.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_OUTLINE,),
+    prompt=(
+        "Using the outline context, identify likely structural problems around "
+        "the selected node (missing turning points, pacing, act balance, "
+        "cause/effect gaps). List them as diagnostics. Do not generate nodes."
+    ),
+))
+
+register(LogosAction(
+    name="suggest_next_beat", label="Suggest Next Beat",
+    description="Suggest candidate next beats (suggestions only).",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_OUTLINE,),
+    prompt=(
+        "Suggest 2 to 3 candidate next beats that could follow the selected "
+        "node, each with a one-line rationale. These are suggestions only — do "
+        "NOT create outline nodes."
+    ),
+))
+
+register(LogosAction(
+    name="strengthen_conflict", label="Strengthen Conflict",
+    description="Suggest ways to raise conflict/stakes for the node.",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_OUTLINE,),
+    prompt=(
+        "Suggest concrete ways to strengthen the conflict and stakes of the "
+        "selected node and its surrounding beats. Offer suggestions only."
+    ),
+))
+
+register(LogosAction(
+    name="check_template_fit", label="Check Template Fit",
+    description="Assess how the outline fits the selected template.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_OUTLINE,),
+    prompt=(
+        "Assess how well the current outline fits the selected structural "
+        "template. Point out which template beats are present, missing, or "
+        "out of place. Do not modify the outline."
+    ),
+))
+
+# ---------------------------------------------------------------------------
+# Cross-section
+# ---------------------------------------------------------------------------
+
+register(LogosAction(
+    name="counterpart_critique", label="Counterpart Critique",
+    description="A sharp, skeptical critique from an opposing viewpoint.",
+    category=CATEGORY_DIAGNOSTIC,
     sections=(SECTION_MANUSCRIPT, SECTION_OUTLINE),
     prompt=(
-        "Summarize the current working context (what this scene/section is "
-        "about and where it sits in the story) in a few sentences."
+        "Act as a sharp, skeptical counterpart critic. Challenge this "
+        "selection/node: name its weakest assumptions, where it underdelivers, "
+        "and what a demanding reader would object to. Be specific and honest, "
+        "but constructive. Do not rewrite anything."
     ),
 ))
 
@@ -149,9 +255,9 @@ register(LogosAction(
 # ---------------------------------------------------------------------------
 
 FUTURE_ACTIONS: tuple[str, ...] = (
-    "rewrite_selection",
-    "replace_selection",
-    "expand_selection",
-    "generate_scene",
-    "generate_outline_node",
+    "rewrite_selection",       # apply a rewrite to the manuscript
+    "replace_selection",       # replace the selected text
+    "expand_selection",        # apply an expansion in place
+    "generate_scene",          # create a scene
+    "generate_outline_node",   # create an outline node
 )

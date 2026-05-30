@@ -259,12 +259,15 @@ class PlanView(QWidget):
         project_id: int,
         on_data_changed: Callable[[], None] | None = None,
         on_open_scene: Callable[[int], None] | None = None,
+        on_logos_action: Callable[[dict, str], None] | None = None,
     ) -> None:
         super().__init__()
         self._db = db
         self._project_id = project_id
         self._on_data_changed = on_data_changed
         self._on_open_scene = on_open_scene
+        # Optional inline-Logos hook: (node_descriptor, action_name) -> None.
+        self._on_logos_action = on_logos_action
         self._gen_worker: OutlineGenWorker | None = None
         self._pending_gen: tuple[str, str, str] = ("full", "", "")
 
@@ -674,8 +677,28 @@ class PlanView(QWidget):
 
     # -- Edit menus -----------------------------------------------------------
 
+    def _add_logos_submenu(self, menu: QMenu, descriptor: dict) -> None:
+        """Add a compact, non-destructive 'Logos ▸' submenu for an outline node."""
+        if self._on_logos_action is None:
+            return
+        from storyplanner.logos.actions import list_actions_for_section
+        actions = list_actions_for_section("Outline")
+        if not actions:
+            return
+        sub = menu.addMenu("Logos")
+        for action in actions:
+            act = QAction(action.label, sub)
+            act.setToolTip(action.description)
+            act.triggered.connect(
+                lambda _=False, d=descriptor, n=action.name: self._on_logos_action(d, n)
+            )
+            sub.addAction(act)
+        menu.addSeparator()
+
     def _show_act_menu(self, anchor: QWidget, act_name: str) -> None:
         menu = QMenu(anchor)
+
+        self._add_logos_submenu(menu, {"kind": "act", "label": act_name})
 
         ai_gen = QAction("✨ AI Generate Chapters & Scenes", menu)
         ai_gen.triggered.connect(
@@ -701,6 +724,10 @@ class PlanView(QWidget):
         self, anchor: QWidget, act_name: str, chapter_name: str,
     ) -> None:
         menu = QMenu(anchor)
+
+        self._add_logos_submenu(
+            menu, {"kind": "chapter", "label": chapter_name, "act": act_name},
+        )
 
         ai_gen = QAction("✨ AI Generate Scenes", menu)
         ai_gen.triggered.connect(
@@ -729,6 +756,14 @@ class PlanView(QWidget):
 
     def _show_scene_menu(self, anchor: QWidget, scene_id: int) -> None:
         menu = QMenu(anchor)
+
+        scene = self._db.get_scene_by_id(scene_id)
+        self._add_logos_submenu(menu, {
+            "kind": "scene", "scene_id": scene_id,
+            "label": scene.title if scene else "",
+            "act": scene.act if scene else "",
+            "chapter": scene.chapter if scene else "",
+        })
 
         ai_expand = QAction("✨ AI Expand (add beats/scenes)", menu)
         ai_expand.triggered.connect(lambda: self._ai_expand_scene(scene_id))

@@ -1,9 +1,13 @@
-"""LogosToolbar — a compact, non-intrusive inline Logos entry point (Phase 0).
+"""LogosToolbar — a compact, non-intrusive inline Logos entry point.
 
-A slim horizontal bar that sits below the section content. It shows the Logos
-actions available for the current section and renders the structured
+A slim bar that sits below the section content. It shows the Logos actions
+available for the current section and renders the structured
 :class:`LogosResult` in a small read-only area. It is hidden by default, never
 pops up on its own, and never steals focus.
+
+Phase 1: actions call the real (shared) Assistant backend off the UI thread so
+the bar shows a visible loading state and stays responsive; the result can be
+copied or dismissed; errors render in-place.
 
 It is deliberately separate from AssistantPanel/AssistantDock: it does not touch
 them, owns no provider settings, and only calls the shared LogosController.
@@ -13,8 +17,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
+    QApplication,
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
@@ -24,13 +29,32 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.logos.controller import LogosController
+from storyplanner.logos.result import LogosResult
 from storyplanner.ui import theme
+
+
+class _LogosWorker(QThread):
+    """Runs a Logos action off the UI thread so the bar never freezes."""
+
+    done = Signal(object)  # LogosResult
+
+    def __init__(self, controller: LogosController, context, action_name: str) -> None:
+        super().__init__()
+        self._controller = controller
+        self._context = context
+        self._action_name = action_name
+
+    def run(self) -> None:
+        try:
+            result = self._controller.run(self._context, self._action_name)
+        except Exception as exc:  # pragma: no cover - defensive
+            result = LogosResult.failure(self._action_name, f"Logos error: {exc}")
+        self.done.emit(result)
 
 
 class LogosToolbar(QWidget):
     """Inline Logos action bar + result preview for one section at a time."""
 
-    # Emitted after an action runs (mostly for tests / diagnostics).
     action_completed = Signal(str, bool)  # (action_name, ok)
 
     def __init__(
@@ -44,7 +68,8 @@ class LogosToolbar(QWidget):
         # Pulls a fresh LogosContext on demand (so selection/section are live).
         self._context_provider = context_provider
         self._section = ""
-        self._busy = False
+        self._worker: _LogosWorker | None = None
+        self._last_result: LogosResult | None = None
 
         self.setObjectName("logosToolbar")
         # Don't grab focus when shown — Logos must never steal the caret.
@@ -68,18 +93,40 @@ class LogosToolbar(QWidget):
         self._status = QLabel("")
         self._status.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 10px;")
         self._row.addWidget(self._status)
+
+        self._copy_btn = self._tool_button("Copy", self._copy_result)
+        self._dismiss_btn = self._tool_button("Dismiss", self.clear_result)
+        self._copy_btn.setEnabled(False)
+        self._dismiss_btn.setEnabled(False)
+        self._row.addWidget(self._copy_btn)
+        self._row.addWidget(self._dismiss_btn)
         outer.addLayout(self._row)
 
         self._result = QPlainTextEdit()
         self._result.setReadOnly(True)
-        self._result.setMaximumHeight(96)
+        self._result.setMaximumHeight(120)
         self._result.setPlaceholderText(
-            "Select text (Manuscript) or open a scene, then run a Logos action.",
+            "Select text (Manuscript) or open an outline node, then run a Logos "
+            "action.",
         )
         self._result.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         outer.addWidget(self._result)
 
         self._action_buttons: list[QPushButton] = []
+
+    # -- Small helpers -------------------------------------------------------
+
+    def _tool_button(self, label: str, slot: Callable[[], None]) -> QPushButton:
+        btn = QPushButton(label)
+        btn.setFlat(True)
+        btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        btn.setStyleSheet(
+            f"QPushButton {{ color: {theme.TEXT_MUTED}; border: none; "
+            f"font-size: 10px; padding: 1px 6px; }}"
+            f"QPushButton:hover:enabled {{ color: {theme.TEXT_PRIMARY}; }}"
+        )
+        btn.clicked.connect(slot)
+        return btn
 
     # -- Section wiring ------------------------------------------------------
 
@@ -90,7 +137,6 @@ class LogosToolbar(QWidget):
         self.refresh_actions()
 
     def refresh_actions(self) -> None:
-        # Clear existing buttons.
         for btn in self._action_buttons:
             self._buttons_host.removeWidget(btn)
             btn.deleteLater()
@@ -120,37 +166,67 @@ class LogosToolbar(QWidget):
     # -- Run -----------------------------------------------------------------
 
     def run_action(self, action_name: str) -> None:
-        if self._busy:
-            return
+        """Pull a fresh context from the host, then run the action."""
         try:
             context = self._context_provider()
         except Exception as exc:  # never crash the host on context capture
-            self._show_error(action_name, f"Could not read context: {exc}")
+            self._render(LogosResult.failure(action_name, f"Could not read context: {exc}"))
+            self.action_completed.emit(action_name, False)
             return
+        self.run_action_with_context(context, action_name)
 
-        self._busy = True
-        self._status.setText("Logos thinking…")
-        try:
-            result = self._controller.run(context, action_name)
-        finally:
-            self._busy = False
-        self._status.setText("")
+    def run_action_with_context(self, context, action_name: str) -> None:
+        """Run an action against an explicit context (e.g. an outline node)."""
+        if self._worker is not None:
+            return  # one at a time
+        self._set_busy(True)
+        worker = _LogosWorker(self._controller, context, action_name)
+        worker.done.connect(lambda res, n=action_name: self._on_done(n, res))
+        self._worker = worker
+        worker.start()
+
+    def _on_done(self, action_name: str, result: LogosResult) -> None:
+        self._worker = None
+        self._set_busy(False)
         self._render(result)
-        self.action_completed.emit(action_name, result.ok)
+        self.action_completed.emit(action_name, bool(result.ok))
 
-    def _render(self, result) -> None:
+    def _set_busy(self, busy: bool) -> None:
+        self._status.setText("Logos thinking…" if busy else "")
+        for btn in self._action_buttons:
+            btn.setEnabled(not busy)
+
+    # -- Result display ------------------------------------------------------
+
+    def _render(self, result: LogosResult) -> None:
+        self._last_result = result
         lines: list[str] = []
         if result.title:
             lines.append(f"▸ {result.title}")
         if not result.ok and result.error:
-            lines.append(result.error)
+            lines.append(f"⚠ {result.error}")
         if result.message:
             lines.append(result.message)
         if result.suggestions:
             lines.append("")
             lines.extend(f"• {s}" for s in result.suggestions)
-        self._result.setPlainText("\n".join(lines).strip())
+        text = "\n".join(lines).strip()
+        self._result.setPlainText(text)
+        has_text = bool(text)
+        self._copy_btn.setEnabled(has_text)
+        self._dismiss_btn.setEnabled(has_text)
 
-    def _show_error(self, action_name: str, msg: str) -> None:
-        self._result.setPlainText(msg)
-        self.action_completed.emit(action_name, False)
+    def result_text(self) -> str:
+        return self._result.toPlainText()
+
+    def clear_result(self) -> None:
+        self._result.clear()
+        self._last_result = None
+        self._copy_btn.setEnabled(False)
+        self._dismiss_btn.setEnabled(False)
+
+    def _copy_result(self) -> None:
+        text = self._result.toPlainText()
+        if text:
+            QApplication.clipboard().setText(text)
+            self._status.setText("Copied")

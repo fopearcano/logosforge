@@ -19,14 +19,8 @@ from collections.abc import Callable
 
 from storyplanner.logos import actions as logos_actions
 from storyplanner.logos.context import LogosContext
+from storyplanner.logos.prompt_builder import build_logos_messages
 from storyplanner.logos.result import LogosResult
-
-# Default system framing for the inline companion.
-_SYSTEM_PROMPT = (
-    "You are Logos, an inline, contextual writing companion. You observe the "
-    "author's current selection and section context and respond with concise, "
-    "non-destructive guidance. You never silently rewrite or replace text."
-)
 
 
 def _default_provider_resolver():
@@ -83,8 +77,7 @@ class LogosController:
             )
 
         try:
-            ctx_strings = self._gather_context(context)
-            messages = self._build_messages(action, context, ctx_strings)
+            messages = build_logos_messages(self._db, context, action)
         except Exception as exc:  # context build must never crash the UI
             return LogosResult.failure(action_name, f"Could not build context: {exc}")
 
@@ -126,50 +119,6 @@ class LogosController:
 
     # -- Internals -----------------------------------------------------------
 
-    def _gather_context(self, ctx: LogosContext) -> dict[str, str]:
-        """Reuse the shared context builders (read-only) — no re-querying."""
-        from storyplanner import context_builder as cb
-
-        out = {
-            "scene_context": "",
-            "outline_context": "",
-            "psyke_context": "",
-            "notes_context": "",
-        }
-        pid = ctx.project_id
-        query = ctx.selected_text or ctx.cursor_text_excerpt
-        if ctx.current_scene_id is not None:
-            out["scene_context"] = _safe(cb.gather_scene_context, self._db, pid, ctx.current_scene_id)
-        out["outline_context"] = _safe(cb.gather_outline_context, self._db, pid)
-        out["psyke_context"] = _safe(
-            cb.gather_psyke_context, self._db, pid, ctx.current_scene_id, query,
-        )
-        out["notes_context"] = _safe(
-            cb.gather_notes_context, self._db, pid, ctx.current_scene_id, query,
-        )
-        return out
-
-    def _build_messages(self, action, ctx: LogosContext, ctx_strings: dict) -> list[dict]:
-        from storyplanner.assistant import build_messages
-
-        prompt_parts = [action.prompt]
-        if ctx.selected_text.strip():
-            prompt_parts.append(f"Selected text:\n\"\"\"\n{ctx.selected_text.strip()}\n\"\"\"")
-        elif ctx.cursor_text_excerpt.strip():
-            prompt_parts.append(f"Nearby text:\n\"\"\"\n{ctx.cursor_text_excerpt.strip()}\n\"\"\"")
-        if ctx.narrative_engine:
-            prompt_parts.append(f"(Narrative engine: {ctx.narrative_engine})")
-        action_prompt = "\n\n".join(prompt_parts)
-
-        return build_messages(
-            action_prompt=action_prompt,
-            scene_context=ctx_strings.get("scene_context", ""),
-            outline_context=ctx_strings.get("outline_context", ""),
-            psyke_context=ctx_strings.get("psyke_context", ""),
-            notes_context=ctx_strings.get("notes_context", ""),
-            system_prompt=_SYSTEM_PROMPT,
-        )
-
     def _local_preview(self, action, ctx: LogosContext) -> list[str]:
         bits = [f"Action: {action.label}", f"Section: {ctx.section_name or '—'}"]
         if ctx.current_scene_id is not None:
@@ -177,13 +126,6 @@ class LogosController:
         if ctx.has_selection():
             bits.append(f"Selection length: {len(ctx.selected_text.strip())} chars")
         return bits
-
-
-def _safe(fn: Callable, *args) -> str:
-    try:
-        return fn(*args) or ""
-    except Exception:
-        return ""
 
 
 def _parse_suggestions(text: str) -> list[str]:

@@ -703,6 +703,7 @@ class MainWindow(QMainWindow):
                 self._project_id,
                 on_data_changed=self._on_data_changed,
                 on_open_scene=self._open_scene_in_editor,
+                on_logos_action=self._run_logos_outline,
             )
         )
 
@@ -1237,6 +1238,39 @@ class MainWindow(QMainWindow):
             self._logos_toolbar.set_section(self._current_section or "")
             self._logos_toolbar.refresh_actions()
         self._logos_toolbar.setVisible(self._logos_visible)
+
+    def _run_logos_outline(self, descriptor: dict, action_name: str) -> None:
+        """Run a Logos action for a selected Outline node (from PlanView menus).
+
+        Builds a node-scoped LogosContext and runs it through the shared Logos
+        toolbar — non-destructive (no outline mutation).
+        """
+        from storyplanner.logos.context import build_logos_context
+
+        if not self._logos_visible:
+            self._logos_visible = True
+            self._logos_toolbar.set_section("Outline")
+            self._logos_toolbar.refresh_actions()
+            self._logos_toolbar.setVisible(True)
+
+        outline_template = ""
+        try:
+            from storyplanner.ui.plan_view import PlanView
+            if isinstance(self.content_area, PlanView):
+                outline_template = self.content_area._template_combo.currentData() or ""
+        except Exception:
+            outline_template = ""
+
+        ctx = build_logos_context(
+            self._db, self._project_id,
+            section_name="Outline",
+            current_scene_id=descriptor.get("scene_id"),
+            outline_node_label=descriptor.get("label", ""),
+            outline_node_kind=descriptor.get("kind", ""),
+            active_block_type="outline_node",
+            outline_template=outline_template,
+        )
+        self._logos_toolbar.run_action_with_context(ctx, action_name)
 
     def _open_scene_in_editor(self, scene_id: int) -> None:
         self._set_active_section("Scenes")

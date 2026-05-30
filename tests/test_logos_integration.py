@@ -14,9 +14,19 @@ from PySide6.QtWidgets import QApplication
 
 warnings.filterwarnings("ignore")
 
+from PySide6.QtCore import QEventLoop, QTimer
+
 from storyplanner.db import Database
 from storyplanner.ui.logos.logos_toolbar import LogosToolbar
 from storyplanner.ui.main_window import MainWindow
+
+
+def _wait(signal, timeout_ms: int = 4000) -> None:
+    """Spin the event loop until *signal* fires (the toolbar runs async)."""
+    loop = QEventLoop()
+    signal.connect(lambda *a: loop.quit())
+    QTimer.singleShot(timeout_ms, loop.quit)
+    loop.exec()
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -70,7 +80,8 @@ def test_toggle_logos_shows_manuscript_actions():
     assert win._logos_visible is True
     labels = [b.text() for b in win._logos_toolbar._action_buttons]
     assert "Explain Selection" in labels
-    assert "Identify Problem" in labels
+    assert "Rewrite Options" in labels
+    assert "Counterpart Critique" in labels
 
 
 def test_toolbar_actions_update_on_section_switch():
@@ -105,17 +116,38 @@ def test_outline_context_has_template_field():
 
 
 def test_toolbar_run_action_renders_result_with_injected_chat():
-    win, _, _ = _window()
+    win, _, sid = _window()
     win._show_manuscript(); win._set_active_section("Manuscript")
     win._toggle_logos()
     win._logos_controller._provider_resolver = lambda: object()
-    win._logos_controller._chat_fn = lambda m, p: "Context summary.\n- point A"
+    win._logos_controller._chat_fn = lambda m, p: "A weakness.\n- point A"
+    # identify_weakness does not require a selection.
+    win._detect_active_scene_id = lambda: sid
     done = []
     win._logos_toolbar.action_completed.connect(lambda n, ok: done.append((n, ok)))
-    win._logos_toolbar.run_action("summarize_context")
-    QApplication.instance().processEvents()
-    assert done == [("summarize_context", True)]
-    assert "Context summary." in win._logos_toolbar._result.toPlainText()
+    win._logos_toolbar.run_action("identify_weakness")
+    _wait(win._logos_toolbar.action_completed)
+    assert done == [("identify_weakness", True)]
+    assert "A weakness." in win._logos_toolbar.result_text()
+    # Result is copyable and dismissible.
+    assert win._logos_toolbar._copy_btn.isEnabled()
+    win._logos_toolbar.clear_result()
+    assert win._logos_toolbar.result_text() == ""
+
+
+def test_outline_node_run_via_descriptor():
+    win, _, sid = _window()
+    win._show_plan(); win._set_active_section("Outline")
+    win._logos_controller._provider_resolver = lambda: object()
+    win._logos_controller._chat_fn = lambda m, p: "Node summary."
+    done = []
+    win._logos_toolbar.action_completed.connect(lambda n, ok: done.append((n, ok)))
+    win._run_logos_outline(
+        {"kind": "scene", "scene_id": sid, "label": "Opening"}, "summarize_node",
+    )
+    _wait(win._logos_toolbar.action_completed)
+    assert done == [("summarize_node", True)]
+    assert "Node summary." in win._logos_toolbar.result_text()
 
 
 def test_toolbar_does_not_grab_focus():
@@ -129,7 +161,7 @@ def test_logos_toggle_does_not_mutate_db():
     before = len(db.get_all_scenes(pid))
     win._show_manuscript(); win._set_active_section("Manuscript")
     win._toggle_logos()
-    win._logos_controller._provider_resolver = lambda: None
-    win._logos_toolbar.run_action("summarize_context")
-    QApplication.instance().processEvents()
+    win._logos_controller._provider_resolver = lambda: None  # offline preview
+    win._logos_toolbar.run_action("identify_weakness")
+    _wait(win._logos_toolbar.action_completed)
     assert len(db.get_all_scenes(pid)) == before

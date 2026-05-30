@@ -34,6 +34,10 @@ class LogosContext:
     narrative_engine: str = ""
     writing_format: str = ""
     outline_template: str = ""
+    # The outline item the user acted on (PlanView is scene-derived, so these
+    # describe an Act / Chapter / Scene "node" rather than an OutlineNode row).
+    outline_node_label: str = ""
+    outline_node_kind: str = ""
     relevant_psyke_entry_ids: list[int] = field(default_factory=list)
     relevant_note_ids: list[int] = field(default_factory=list)
 
@@ -53,6 +57,8 @@ class LogosContext:
             "narrative_engine": self.narrative_engine,
             "writing_format": self.writing_format,
             "outline_template": self.outline_template,
+            "outline_node_label": self.outline_node_label,
+            "outline_node_kind": self.outline_node_kind,
             "relevant_psyke_entry_ids": list(self.relevant_psyke_entry_ids),
             "relevant_note_ids": list(self.relevant_note_ids),
         }
@@ -80,6 +86,8 @@ def build_logos_context(
     cursor_text_excerpt: str = "",
     active_block_type: str = "",
     outline_template: str = "",
+    outline_node_label: str = "",
+    outline_node_kind: str = "",
 ) -> LogosContext:
     """Build a :class:`LogosContext`, resolving engine/format from the project.
 
@@ -110,4 +118,6 @@ def build_logos_context(
         narrative_engine=engine,
         writing_format=writing_format,
         outline_template=outline_template,
+        outline_node_label=outline_node_label,
+        outline_node_kind=outline_node_kind,
     )

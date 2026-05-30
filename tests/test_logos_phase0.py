@@ -93,14 +93,22 @@ def test_context_debug_summary_truncates_selection():
 # -- Action registry ---------------------------------------------------------
 
 
-def test_registry_lists_diagnostic_actions():
+def test_registry_lists_phase1_actions():
     names = {a.name for a in list_actions()}
     assert {
-        "explain_selection", "suggest_revision", "identify_scene_problem",
-        "identify_structure_problem", "summarize_context",
+        # Manuscript
+        "explain_selection", "suggest_revision", "rewrite_options",
+        "expand", "compress", "improve_dialogue", "improve_subtext",
+        "identify_weakness",
+        # Outline
+        "summarize_node", "identify_structure_problem", "suggest_next_beat",
+        "strengthen_conflict", "check_template_fit",
+        # Cross-section
+        "counterpart_critique",
     } <= names
-    # All Phase 0 actions are diagnostic / non-destructive.
-    assert all(a.category == "diagnostic" and not a.destructive for a in list_actions())
+    # The binding Phase 1 invariant: everything registered is non-destructive.
+    assert all(not a.destructive for a in list_actions())
+    assert all(a.category in ("diagnostic", "generative") for a in list_actions())
 
 
 def test_future_destructive_actions_are_not_registered():
@@ -114,7 +122,9 @@ def test_actions_are_section_scoped():
     out = {a.name for a in list_actions_for_section("Outline")}
     assert "explain_selection" in man and "explain_selection" not in out
     assert "identify_structure_problem" in out and "identify_structure_problem" not in man
-    assert "summarize_context" in man and "summarize_context" in out
+    assert "summarize_node" in out and "summarize_node" not in man
+    # Counterpart Critique is offered in both sections.
+    assert "counterpart_critique" in man and "counterpart_critique" in out
 
 
 def test_describe_all_actions_shape():
@@ -217,10 +227,10 @@ def test_phase0_does_not_mutate_database():
         chat_fn=lambda m, p: "diagnostics\n- one\n- two",
     )
     for section, action in (
-        ("Manuscript", "summarize_context"),
-        ("Manuscript", "identify_scene_problem"),
+        ("Manuscript", "identify_weakness"),
+        ("Manuscript", "counterpart_critique"),
         ("Outline", "identify_structure_problem"),
-        ("Outline", "summarize_context"),
+        ("Outline", "summarize_node"),
     ):
         ctx = build_logos_context(db, pid, section_name=section, current_scene_id=sid)
         ctrl.run(ctx, action)
