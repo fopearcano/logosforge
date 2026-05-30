@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from PySide6.QtWidgets import QMenu
+from PySide6.QtWidgets import QInputDialog, QMenu
 
 from storyplanner.db import Database
 from storyplanner.ui import theme
@@ -75,6 +75,141 @@ def _truncate(text: str, limit: int) -> str:
     return text[: limit - 1].rstrip() + "\u2026"
 
 
+_GN_DENSITY_OPTS = ("silent", "light", "medium", "dense", "explosive")
+_GN_REVEAL_OPTS = ("none", "page_turn", "cliffhanger", "splash_reveal")
+
+
+class _GnTimelineMarker(QFrame):
+    """A compact page marker in the GN reading-flow strip (\u00a73, \u00a75, \u00a76)."""
+
+    def __init__(
+        self, marker: dict, *, expanded: bool,
+        on_toggle: Callable[[int], None],
+        on_edit: Callable[[int, str], None],
+    ) -> None:
+        super().__init__()
+        self._marker = marker
+        self._page_id = marker["id"]
+        self._on_toggle = on_toggle
+        self._on_edit = on_edit
+        self.setObjectName("gnTimelineMarker")
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self._build(expanded)
+
+    def _build(self, expanded: bool) -> None:
+        m = self._marker
+        col = QVBoxLayout(self)
+        col.setContentsMargins(8, 5, 8, 5)
+        col.setSpacing(2)
+
+        top = QHBoxLayout()
+        self._expand_btn = QPushButton("\u25be" if expanded else "\u25b8")
+        self._expand_btn.setFixedWidth(22)
+        self._expand_btn.clicked.connect(lambda: self._on_toggle(self._page_id))
+        top.addWidget(self._expand_btn)
+
+        num = QLabel(f"Page {m['page_number']}")
+        num.setStyleSheet("font-weight: bold;")
+        top.addWidget(num)
+
+        for tag in (m.get("rhythm") or [])[:5]:
+            chip = QLabel(tag)
+            chip.setStyleSheet(
+                "background: rgba(255,255,255,0.08); border-radius: 6px;"
+                " padding: 0 5px; font-size: 9px;"
+            )
+            top.addWidget(chip)
+        if m.get("is_page_turn"):
+            pt = QLabel("\u27f3 page turn")
+            pt.setStyleSheet("color: #eab308; font-size: 9px;")
+            top.addWidget(pt)
+        top.addStretch()
+
+        menu_btn = QPushButton("\u22ef")
+        menu_btn.setFixedWidth(22)
+        menu_btn.clicked.connect(lambda: self._open_menu(menu_btn))
+        top.addWidget(menu_btn)
+        col.addLayout(top)
+
+        meta_bits = [f"{m['panel_count']} panels"]
+        if m["density"]:
+            meta_bits.append(m["density"])
+        if m["reveal_marker"]:
+            meta_bits.append(f"reveal: {m['reveal_marker']}")
+        meta = QLabel("  \u00b7  ".join(meta_bits))
+        meta.setStyleSheet("color: #8a93a3; font-size: 10px;")
+        col.addWidget(meta)
+
+        summary = (m.get("summary") or "").strip()
+        if summary:
+            s = QLabel(_truncate(summary, 80))
+            s.setStyleSheet("font-size: 11px;")
+            s.setWordWrap(True)
+            col.addWidget(s)
+
+        chips = list(m.get("motif_markers") or []) + [
+            f"@{c}" for c in (m.get("characters") or [])
+        ]
+        if chips:
+            chip_lbl = QLabel(" ".join(f"\u00b7{c}" for c in chips[:8]))
+            chip_lbl.setStyleSheet("color: #06b6d4; font-size: 9px;")
+            chip_lbl.setWordWrap(True)
+            col.addWidget(chip_lbl)
+
+    def _open_menu(self, anchor) -> None:
+        menu = QMenu(self)
+        menu.addAction("Edit summary", lambda: self._on_edit(self._page_id, "summary"))
+        menu.addAction("Edit emotional beat",
+                       lambda: self._on_edit(self._page_id, "emotional_beat"))
+        dens = menu.addMenu("Density")
+        for opt in _GN_DENSITY_OPTS:
+            dens.addAction(opt, lambda o=opt: self._on_edit(self._page_id, f"density:{o}"))
+        rev = menu.addMenu("Reveal")
+        for opt in _GN_REVEAL_OPTS:
+            rev.addAction(opt, lambda o=opt: self._on_edit(self._page_id, f"reveal:{o}"))
+        menu.addAction("Toggle splash page",
+                       lambda: self._on_edit(self._page_id, "splash_page"))
+        menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
+
+
+class _GnPanelMarker(QFrame):
+    """A panel row shown under an expanded page marker (\u00a74)."""
+
+    def __init__(self, panel: dict) -> None:
+        super().__init__()
+        self.setObjectName("gnPanelMarker")
+        row = QHBoxLayout(self)
+        row.setContentsMargins(34, 2, 8, 2)
+        row.setSpacing(6)
+        num = QLabel(f"P{panel['panel_number']}")
+        num.setStyleSheet("color: #94a3b8; font-size: 10px;")
+        row.addWidget(num)
+        meta = " \u00b7 ".join(
+            x for x in (panel.get("shot_type"), panel.get("camera_angle"),
+                        panel.get("transition_type")) if x
+        )
+        if meta:
+            lbl = QLabel(meta)
+            lbl.setStyleSheet("color: #8a93a3; font-size: 9px;")
+            row.addWidget(lbl)
+        if panel.get("excerpt"):
+            ex = QLabel(panel["excerpt"])
+            ex.setStyleSheet("font-size: 10px;")
+            row.addWidget(ex)
+        badges = []
+        if panel.get("has_dialogue"):
+            badges.append("D")
+        if panel.get("has_motifs"):
+            badges.append("M")
+        if panel.get("reading_priority"):
+            badges.append(f"p{panel['reading_priority']}")
+        if badges:
+            b = QLabel(" ".join(badges))
+            b.setStyleSheet("color: #8a93a3; font-size: 9px;")
+            row.addWidget(b)
+        row.addStretch()
+
+
 class TimelineView(QWidget):
     def __init__(
         self,
@@ -99,6 +234,7 @@ class TimelineView(QWidget):
         self._graphic_novel_mode = _engine == "graphic_novel"
         self._stage_script_mode = _engine == "stage_script"
         self._series_mode = _engine == "series"
+        self._gn_expanded: set[int] = set()   # page ids expanded to panels
 
         # Scene data: (row, col) → (scene_id, title, plotline)
         self._cell_data: dict[tuple[int, int], tuple[int, str, str]] = {}
@@ -185,10 +321,30 @@ class TimelineView(QWidget):
         actions_row.addStretch()
         layout.addLayout(actions_row)
 
+        # Graphic Novel projects get a page/panel reading-flow strip instead
+        # of the scene table.
+        if self._graphic_novel_mode:
+            self._build_gn_ui(layout)
+
         self._focus_char_id: int | None = None
         self._refresh_focus_characters()
         self._refresh_filter()
         self._reload()
+
+    def _build_gn_ui(self, layout) -> None:
+        from PySide6.QtWidgets import QScrollArea
+        # Hide the scene-table affordances for GN projects.
+        self._table.setVisible(False)
+        self._status_label.setVisible(False)
+        self._gn_scroll = QScrollArea()
+        self._gn_scroll.setWidgetResizable(True)
+        self._gn_scroll.setFrameShape(self._gn_scroll.Shape.NoFrame)
+        self._gn_inner = QWidget()
+        self._gn_layout = QVBoxLayout(self._gn_inner)
+        self._gn_layout.setContentsMargins(8, 8, 8, 8)
+        self._gn_layout.setSpacing(6)
+        self._gn_scroll.setWidget(self._gn_inner)
+        layout.addWidget(self._gn_scroll, stretch=1)
 
     # -- Graphic Novel timeline (page/panel-aware) --------------------------
 
@@ -214,6 +370,51 @@ class TimelineView(QWidget):
             return []
         from storyplanner.graphic_novel_plot import get_page_turn_map
         return get_page_turn_map(self._db, self._project_id)
+
+    def get_gn_timeline_pages(self) -> list[dict]:
+        """Rich page markers (reading order) for the GN timeline; [] otherwise."""
+        if not self._graphic_novel_mode:
+            return []
+        from storyplanner.graphic_novel_plot import get_gn_timeline_pages
+        return get_gn_timeline_pages(self._db, self._project_id)
+
+    def get_gn_panel_markers(self, page_id: int) -> list[dict]:
+        """Panel markers for one page (lazy expansion); [] otherwise."""
+        if not self._graphic_novel_mode:
+            return []
+        from storyplanner.graphic_novel_plot import get_gn_panel_markers
+        return get_gn_panel_markers(self._db, page_id)
+
+    def is_page_expanded(self, page_id: int) -> bool:
+        return page_id in self._gn_expanded
+
+    def toggle_page_expand(self, page_id: int) -> None:
+        if page_id in self._gn_expanded:
+            self._gn_expanded.discard(page_id)
+        else:
+            self._gn_expanded.add(page_id)
+        if self._graphic_novel_mode:
+            self._refresh_gn()
+
+    def gn_update_page(self, page_id: int, **fields) -> None:
+        """Persist a page edit from the Timeline via the shared GN service
+        (§9, §10). Same data source as Pages View / Canvas / Plot."""
+        if not self._graphic_novel_mode:
+            return
+        self._db.update_gn_page(page_id, **fields)
+        self._refresh_gn()
+        self._emit_gn_changed()
+
+    def _emit_gn_changed(self) -> None:
+        try:
+            from storyplanner.project_events import get_event_bus
+            bus = get_event_bus()
+            bus.plot_changed.emit()
+            bus.project_data_changed.emit()
+        except Exception:
+            pass
+        if self._on_data_changed:
+            self._on_data_changed()
 
     # -- Stage Script timeline (theatre-aware) ------------------------------
 
@@ -335,9 +536,70 @@ class TimelineView(QWidget):
         self._reload()
 
     def _reload(self) -> None:
+        if self._graphic_novel_mode:
+            self._refresh_gn()
+            return
         self._selected_card = None
         self._load_table()
         self._reselect()
+
+    # -- Graphic Novel reading-flow strip -----------------------------------
+
+    def _refresh_gn(self) -> None:
+        while self._gn_layout.count():
+            item = self._gn_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+        markers = self.get_gn_timeline_pages()
+        if not markers:
+            empty = QLabel(
+                "No graphic-novel pages yet.\n"
+                "Add pages in the Pages view to see the reading flow here."
+            )
+            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._gn_layout.addWidget(empty)
+            return
+
+        last_issue = object()
+        for marker in markers:
+            issue = marker.get("issue_title") or ""
+            if issue != last_issue:
+                last_issue = issue
+                if issue:
+                    hdr = QLabel(issue)
+                    hdr.setStyleSheet("font-weight: bold; margin-top: 4px;")
+                    self._gn_layout.addWidget(hdr)
+            card = _GnTimelineMarker(
+                marker,
+                expanded=marker["id"] in self._gn_expanded,
+                on_toggle=self.toggle_page_expand,
+                on_edit=self._gn_edit_page,
+            )
+            self._gn_layout.addWidget(card)
+            if marker["id"] in self._gn_expanded:
+                for pm in self.get_gn_panel_markers(marker["id"]):
+                    self._gn_layout.addWidget(_GnPanelMarker(pm))
+        self._gn_layout.addStretch()
+
+    def _gn_edit_page(self, page_id: int, field: str) -> None:
+        page = self._db.get_gn_page_by_id(page_id)
+        if page is None:
+            return
+        if field in ("summary", "emotional_beat"):
+            current = getattr(page, field, "") or ""
+            text, ok = QInputDialog.getMultiLineText(
+                self, "Edit Page", field.replace("_", " ").title(), current,
+            )
+            if ok:
+                self.gn_update_page(page_id, **{field: text.strip()})
+        elif field == "splash_page":
+            self.gn_update_page(page_id, splash_page=not page.splash_page)
+        elif field.startswith("density:"):
+            self.gn_update_page(page_id, density_level=field.split(":", 1)[1])
+        elif field.startswith("reveal:"):
+            self.gn_update_page(page_id, reveal_type=field.split(":", 1)[1])
 
     def _load_table(self) -> None:
         scenes = self._db.get_all_scenes(

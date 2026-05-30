@@ -376,6 +376,57 @@ def get_page_turn_map(db: Any, project_id: int) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Rich page/panel timeline markers (reading order) (§2, §3, §4)
+# ---------------------------------------------------------------------------
+
+def get_gn_timeline_pages(db: Any, project_id: int) -> list[dict]:
+    """Rich page markers in reading order for the GN timeline.
+
+    Each marker carries the page-block fields (summary, beat, density,
+    reveal, splash, panel_count, motifs, characters, rhythm, text_heavy)
+    plus issue label and page-turn flags. Page-level by default; callers
+    expand panels lazily via get_gn_panel_markers.
+    """
+    pages = db.get_gn_pages(project_id)
+    setup_ids = {t["setup_page_id"] for t in get_page_turn_map(db, project_id)}
+    issue_title = {
+        i.id: (i.title or f"Issue {i.issue_number}")
+        for i in db.get_gn_issues(project_id)
+    }
+    markers: list[dict] = []
+    for page in pages:
+        block = _page_block(db, page)
+        block["issue_id"] = getattr(page, "issue_id", None)
+        block["issue_title"] = issue_title.get(getattr(page, "issue_id", None), "")
+        block["is_page_turn"] = page.id in setup_ids
+        block["reveal_pressure"] = bool(block["reveal_marker"])
+        markers.append(block)
+    return markers
+
+
+def get_gn_panel_markers(db: Any, page_id: int) -> list[dict]:
+    """Panel markers for a page (lazy panel-level expansion) (§4)."""
+    markers: list[dict] = []
+    for panel in db.get_gn_panels_for_page(page_id):
+        excerpt = (panel.description or panel.action or "").strip()
+        if len(excerpt) > 50:
+            excerpt = excerpt[:47] + "…"
+        markers.append({
+            "panel_id": panel.id,
+            "panel_number": panel.panel_number,
+            "excerpt": excerpt,
+            "shot_type": panel.shot_type or "",
+            "camera_angle": panel.camera_angle or "",
+            "transition_type": panel.transition_type or "",
+            "reading_priority": panel.reading_priority or 0,
+            "has_dialogue": bool(db.csv_split(panel.dialogue_refs)),
+            "has_motifs": bool(db.csv_split(panel.visual_motifs)),
+            "characters": db.csv_split(panel.characters_present),
+        })
+    return markers
+
+
+# ---------------------------------------------------------------------------
 # Assistant context (§3):  page rhythm / visual motifs / density / continuity
 # ---------------------------------------------------------------------------
 
