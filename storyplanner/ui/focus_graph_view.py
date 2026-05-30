@@ -1001,9 +1001,12 @@ def gn_filter_node_ids(data: GraphData, filter_name: str) -> set[str]:
     kinds_by_filter = {
         "motifs": {NODE_KIND_MOTIF},
         "pages": {NODE_KIND_PAGE},
+        "panels": {NODE_KIND_PANEL},
         "panel_continuity": {NODE_KIND_PAGE, NODE_KIND_PANEL},
         "symbolic_echoes": {NODE_KIND_MOTIF, NODE_KIND_PAGE},
         "objects": {NODE_KIND_GN_OBJECT, NODE_KIND_PAGE},
+        "characters": {NODE_KIND_CHARACTER},
+        "character_appearances": {NODE_KIND_CHARACTER, NODE_KIND_PAGE},
     }
     kinds = kinds_by_filter.get(filter_name, set())
     return {nid for nid, node in data.nodes.items() if node_kind(node) in kinds}
@@ -1676,6 +1679,15 @@ class FocusGraphView(QWidget):
             # Default to the Season Arc view (current season + active arcs),
             # not a full-series hairball.
             self._on_mode_changed(MODE_SR_SEASON_ARC, user=False)
+        if self._graphic_novel_mode:
+            # Default to a focused GN mode (motifs, else page rhythm) so the
+            # graph never opens as a full all-node hairball.
+            try:
+                self._on_mode_changed(
+                    gn_default_mode(self._db, self._project_id), user=False,
+                )
+            except Exception:
+                pass
         self.refresh()
 
     # -- Persistence --------------------------------------------------------
@@ -1906,6 +1918,7 @@ class FocusGraphView(QWidget):
                 MODE_GN_SYMBOL_RECURRENCE: "Symbols",
                 MODE_GN_PAGE_RHYTHM: "Page Rhythm",
                 MODE_GN_OBJECT_CONTINUITY: "Objects",
+                MODE_GN_CHARACTER: "Characters",
             }
             for _m in GRAPHIC_NOVEL_MODE_ORDER:
                 btn = QPushButton(_gn_labels[_m])
@@ -2366,6 +2379,7 @@ class FocusGraphView(QWidget):
             enrich_screenplay_edges(self._db, self._project_id, self._graph_data)
         if self._graphic_novel_mode:
             enrich_graphic_novel_graph(self._db, self._project_id, self._graph_data)
+            enrich_graphic_novel_characters(self._db, self._project_id, self._graph_data)
         if self._stage_script_mode:
             enrich_stage_script_graph(self._db, self._project_id, self._graph_data)
         if self._series_mode:
