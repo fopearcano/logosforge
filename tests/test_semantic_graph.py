@@ -207,7 +207,8 @@ def test_layer_kinds_complete():
 def test_view_constructs_layer_panel():
     db, proj, *_ = _make_project_with_psyke_types()
     view = FocusGraphView(db, proj.id)
-    assert hasattr(view, "_layers_panel")
+    # Layer toggles now live inside the compact Filters dropdown menu rather
+    # than a permanent side panel, but the per-kind checkboxes still exist.
     assert hasattr(view, "_layer_checks")
     for kind in LAYER_KINDS:
         assert kind in view._layer_checks
@@ -284,6 +285,8 @@ def test_zoom_culling_hides_labels_when_zoomed_out():
 def test_zoom_culling_shows_labels_when_zoomed_in():
     db, proj, *_ = _make_project_with_psyke_types()
     view = FocusGraphView(db, proj.id)
+    # Density mode gates which labels show; set "all" to isolate zoom culling.
+    view._set_label_mode("all")
     view._on_zoom(1.0)
     assert all(lbl.isVisible() for lbl in view._label_items.values())
 

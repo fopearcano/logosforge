@@ -139,11 +139,11 @@ def test_view_constructs_mode_buttons():
         assert mode in view._mode_buttons
 
 
-def test_view_default_mode_is_all():
+def test_view_default_mode_is_structure():
     db, proj, *_ = _make_full_project()
     view = FocusGraphView(db, proj.id)
-    assert view.get_mode() == MODE_ALL
-    assert view._mode_buttons[MODE_ALL].isChecked()
+    assert view.get_mode() == MODE_STRUCTURE
+    assert view._mode_buttons[MODE_STRUCTURE].isChecked()
 
 
 # -- Mode switching changes visible nodes ------------------------------------

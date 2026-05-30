@@ -20,6 +20,7 @@ from storyplanner.ui.focus_graph_view import (
     EDGE_MENTION,
     EDGE_PARTICIPATION,
     EDGE_PSYKE_RELATION,
+    MODE_ALL,
     FocusGraphView,
     _ZoomGraphicsView,
 )
@@ -81,6 +82,7 @@ def test_mention_edges_hidden_by_default():
 def test_mention_toggle_brings_them_back():
     db, proj, *_ = _project_with_mentions()
     view = FocusGraphView(db, proj.id)
+    view.set_mode(MODE_ALL)  # default Structure hides character/mention edges
     view._on_mentions_toggled(True)
     mention_items = [
         item for item in view._edge_items
@@ -92,6 +94,7 @@ def test_mention_toggle_brings_them_back():
 def test_structural_edges_still_visible_by_default():
     db, proj, *_ = _project_with_mentions()
     view = FocusGraphView(db, proj.id)
+    view.set_mode(MODE_ALL)  # show character participation edges
     # Participation and containment are not noisy — should be visible.
     types_seen = {item.data(0) for item in view._edge_items}
     assert EDGE_PARTICIPATION in types_seen

@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QBrush, QColor, QFont, QPen
+from PySide6.QtGui import QActionGroup, QBrush, QColor, QFont, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -28,9 +28,11 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPushButton,
     QVBoxLayout,
     QWidget,
+    QWidgetAction,
 )
 from PySide6.QtGui import QPolygonF
 from PySide6.QtCore import QPointF
@@ -1674,12 +1676,17 @@ class FocusGraphView(QWidget):
         self._label_items: dict[str, QGraphicsSimpleTextItem] = {}
         self._edge_items: list[QGraphicsLineItem] = []
 
+        # Graph readability controls (Slice: structural viz + compact menus).
+        self._label_mode = "important"      # none | focus | important | all
+        self._layout_override = ""          # "" = use the mode's layout
+        self._hide_isolated = False
+
         self._build_ui()
         if self._series_mode:
             # Default to the Season Arc view (current season + active arcs),
             # not a full-series hairball.
             self._on_mode_changed(MODE_SR_SEASON_ARC, user=False)
-        if self._graphic_novel_mode:
+        elif self._graphic_novel_mode:
             # Default to a focused GN mode (motifs, else page rhythm) so the
             # graph never opens as a full all-node hairball.
             try:
@@ -1688,6 +1695,9 @@ class FocusGraphView(QWidget):
                 )
             except Exception:
                 pass
+        else:
+            # Default to Structure (Acts → Scenes), not a full hairball.
+            self._on_mode_changed(MODE_STRUCTURE, user=False)
         self.refresh()
 
     # -- Persistence --------------------------------------------------------
@@ -1861,146 +1871,16 @@ class FocusGraphView(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # -- Mode selector (segmented buttons) -------------------------------
-        mode_bar = QWidget()
-        mode_bar.setObjectName("graphModeBar")
-        mb = QHBoxLayout(mode_bar)
-        mb.setContentsMargins(10, 4, 10, 4)
-        mb.setSpacing(2)
-        mb.addWidget(QLabel("Mode:"))
-        labels = {
-            MODE_ALL: "All",
-            MODE_RELATIONSHIP: "Relationship",
-            MODE_THEME: "Theme",
-            MODE_STRUCTURE: "Structure",
-            MODE_QUANTUM: "Quantum",
-            MODE_PSYKE: "PSYKE",
-            MODE_MEANING: "Meaning",
-        }
-        for mode in MODE_ORDER:
-            btn = QPushButton(labels[mode])
-            btn.setCheckable(True)
-            btn.setFlat(True)
-            btn.setToolTip(MODE_PROFILES[mode].description)
-            btn.clicked.connect(lambda _=False, m=mode: self._on_mode_changed(m))
-            mb.addWidget(btn)
-            self._mode_buttons[mode] = btn
-        self._mode_buttons[MODE_ALL].setChecked(True)
-        if self._screenplay_mode:
-            _sep = QLabel("|")
-            _sep.setStyleSheet(f"color: {theme.TEXT_MUTED}; padding: 0 4px;")
-            mb.addWidget(_sep)
-            _sp_labels = {
-                MODE_CAUSALITY: "Causality",
-                MODE_SETUP_PAYOFF: "Setup/Payoff",
-                MODE_KNOWLEDGE: "Knowledge",
-                MODE_SUBTEXT: "Subtext",
-                MODE_VISUAL_MOTIFS: "Motifs",
-                MODE_CONTINUITY_GRAPH: "Continuity",
-            }
-            for _m in SCREENPLAY_MODE_ORDER:
-                btn = QPushButton(_sp_labels[_m])
-                btn.setCheckable(True)
-                btn.setFlat(True)
-                btn.setToolTip(MODE_PROFILES[_m].description)
-                btn.clicked.connect(
-                    lambda _=False, m=_m: self._on_mode_changed(m),
-                )
-                mb.addWidget(btn)
-                self._mode_buttons[_m] = btn
-        if self._graphic_novel_mode:
-            _sep2 = QLabel("|")
-            _sep2.setStyleSheet(f"color: {theme.TEXT_MUTED}; padding: 0 4px;")
-            mb.addWidget(_sep2)
-            _gn_labels = {
-                MODE_GN_MOTIF: "Motifs",
-                MODE_GN_PANEL_CAUSALITY: "Panel Flow",
-                MODE_GN_SYMBOL_RECURRENCE: "Symbols",
-                MODE_GN_PAGE_RHYTHM: "Page Rhythm",
-                MODE_GN_OBJECT_CONTINUITY: "Objects",
-                MODE_GN_CHARACTER: "Characters",
-            }
-            for _m in GRAPHIC_NOVEL_MODE_ORDER:
-                btn = QPushButton(_gn_labels[_m])
-                btn.setCheckable(True)
-                btn.setFlat(True)
-                btn.setToolTip(MODE_PROFILES[_m].description)
-                btn.clicked.connect(
-                    lambda _=False, m=_m: self._on_mode_changed(m),
-                )
-                mb.addWidget(btn)
-                self._mode_buttons[_m] = btn
-        if self._stage_script_mode:
-            _sep3 = QLabel("|")
-            _sep3.setStyleSheet(f"color: {theme.TEXT_MUTED}; padding: 0 4px;")
-            mb.addWidget(_sep3)
-            _ss_labels = {
-                MODE_SS_PRESSURE: "Pressure",
-                MODE_SS_ENTRANCE_EXIT: "Entrances",
-                MODE_SS_PROP: "Props",
-                MODE_SS_BLOCKING: "Blocking",
-                MODE_SS_SUBTEXT: "Subtext",
-                MODE_SS_OFFSTAGE: "Offstage",
-            }
-            for _m in STAGE_SCRIPT_MODE_ORDER:
-                btn = QPushButton(_ss_labels[_m])
-                btn.setCheckable(True)
-                btn.setFlat(True)
-                btn.setToolTip(MODE_PROFILES[_m].description)
-                btn.clicked.connect(
-                    lambda _=False, m=_m: self._on_mode_changed(m),
-                )
-                mb.addWidget(btn)
-                self._mode_buttons[_m] = btn
-        if self._series_mode:
-            _sep4 = QLabel("|")
-            _sep4.setStyleSheet(f"color: {theme.TEXT_MUTED}; padding: 0 4px;")
-            mb.addWidget(_sep4)
-            _sr_labels = {
-                MODE_SR_SEASON_ARC: "Season Arc",
-                MODE_SR_EPISODE_DEP: "Episodes",
-                MODE_SR_ABC_PLOT: "A/B/C",
-                MODE_SR_MYSTERY: "Mystery/Payoff",
-                MODE_SR_CHARACTER: "Progression",
-                MODE_SR_RELATIONSHIP: "Relationships",
-                MODE_SR_CONTINUITY: "Continuity",
-            }
-            for _m in SERIES_MODE_ORDER:
-                btn = QPushButton(_sr_labels[_m])
-                btn.setCheckable(True)
-                btn.setFlat(True)
-                btn.setToolTip(MODE_PROFILES[_m].description)
-                btn.clicked.connect(
-                    lambda _=False, m=_m: self._on_mode_changed(m),
-                )
-                mb.addWidget(btn)
-                self._mode_buttons[_m] = btn
-        mb.addStretch()
-
-        mb.addWidget(QLabel("Preset:"))
-        self._preset_combo = QComboBox()
-        self._preset_combo.setMinimumWidth(110)
-        self._preset_combo.currentTextChanged.connect(self._on_preset_picked)
-        mb.addWidget(self._preset_combo)
-        self._save_preset_btn = QPushButton("Save…")
-        self._save_preset_btn.setFlat(True)
-        self._save_preset_btn.setToolTip("Save the current filter & layout as a preset")
-        self._save_preset_btn.clicked.connect(self._on_save_preset_clicked)
-        mb.addWidget(self._save_preset_btn)
-        self._refresh_preset_combo()
-
-        outer.addWidget(mode_bar)
-
-        # -- Toolbar ---------------------------------------------------------
-        toolbar = QWidget()
-        toolbar.setObjectName("graphToolbar")
-        tb = QHBoxLayout(toolbar)
+        # -- Compact top bar: Search + grouped dropdown menus ----------------
+        topbar = QWidget()
+        topbar.setObjectName("graphTopBar")
+        tb = QHBoxLayout(topbar)
         tb.setContentsMargins(10, 6, 10, 6)
-        tb.setSpacing(8)
+        tb.setSpacing(6)
 
         self._search_input = QLineEdit()
-        self._search_input.setPlaceholderText("Search node...")
-        self._search_input.setMaximumWidth(160)
+        self._search_input.setPlaceholderText("Search node…")
+        self._search_input.setMaximumWidth(200)
         self._search_input.returnPressed.connect(self._on_search)
         tb.addWidget(self._search_input)
 
@@ -2009,106 +1889,26 @@ class FocusGraphView(QWidget):
         self._clear_btn.clicked.connect(self.clear_focus)
         tb.addWidget(self._clear_btn)
 
-        tb.addSpacing(12)
-
-        self._hops_check = QCheckBox("2-hop")
-        self._hops_check.setToolTip("Expand to 2-hop neighbors")
-        self._hops_check.toggled.connect(self._on_hops_toggled)
-        tb.addWidget(self._hops_check)
-
-        tb.addSpacing(12)
-
-        # Type combo kept for back-compat with the old single-type filter.
-        # Hidden by default — superseded by the Layers panel below.
-        self._type_combo = QComboBox()
-        self._type_combo.addItems(["All", "Character", "Place", "Scene", "Note", "PSYKE"])
-        self._type_combo.currentTextChanged.connect(self._on_type_changed)
-        self._type_combo.setVisible(False)
-        tb.addWidget(self._type_combo)
-
-        self._skeleton_btn = QPushButton("Skeleton")
-        self._skeleton_btn.setCheckable(True)
-        self._skeleton_btn.setToolTip(
-            "Narrative skeleton — Characters + Themes + Acts only"
-        )
-        self._skeleton_btn.toggled.connect(self._on_skeleton_toggled)
-        tb.addWidget(self._skeleton_btn)
-
-        tb.addSpacing(12)
-
-        self._temporal_check = QCheckBox("Temporal")
-        self._temporal_check.setToolTip("Filter by story progression")
-        self._temporal_check.toggled.connect(self._on_temporal_toggled)
-        tb.addWidget(self._temporal_check)
-
-        self._future_check = QCheckBox("Show future")
-        self._future_check.setToolTip("Dim future nodes instead of hiding")
-        self._future_check.toggled.connect(self._on_future_toggled)
-        self._future_check.setEnabled(False)
-        tb.addWidget(self._future_check)
-
-        tb.addSpacing(12)
-
-        self._meaning_check = QCheckBox("Meaning")
-        self._meaning_check.setToolTip("Show narrative insight: state, importance, arcs")
-        self._meaning_check.toggled.connect(self._on_meaning_toggled)
-        tb.addWidget(self._meaning_check)
-
-        tb.addSpacing(8)
-
-        self._gravity_check = QCheckBox("Gravity")
-        self._gravity_check.setChecked(True)
-        self._gravity_check.setToolTip(
-            "Story Gravity: protagonists, themes and climaxes pull the graph."
-        )
-        self._gravity_check.toggled.connect(self._on_gravity_toggled)
-        tb.addWidget(self._gravity_check)
-
-        tb.addSpacing(8)
-
-        self._flow_check = QCheckBox("Flow")
-        self._flow_check.setToolTip(
-            "Temporal narrative flow — draws the story's order as a path"
-            " through the scenes."
-        )
-        self._flow_check.toggled.connect(self._on_flow_toggled)
-        tb.addWidget(self._flow_check)
-
-        self._flow_combo = QComboBox()
-        self._flow_combo.addItem("Timeline", userData=FLOW_TIMELINE)
-        self._flow_combo.addItem("Acts", userData=FLOW_ACTS)
-        self._flow_combo.addItem("Arc", userData=FLOW_ARC)
-        self._flow_combo.addItem("Causal", userData=FLOW_CAUSAL)
-        self._flow_combo.setEnabled(False)
-        self._flow_combo.currentIndexChanged.connect(self._on_flow_type_changed)
-        tb.addWidget(self._flow_combo)
-
-        tb.addSpacing(12)
-
-        self._suggest_check = QCheckBox("Suggestions")
-        self._suggest_check.setToolTip("Show graph-driven narrative suggestions")
-        self._suggest_check.toggled.connect(self._on_suggestions_toggled)
-        tb.addWidget(self._suggest_check)
-
-        self._analysis_check = QCheckBox("Analysis")
-        self._analysis_check.setToolTip(
-            "Show per-node analysis and global graph insights "
-            "(disconnected nodes, missing relations, weak thematic clusters)."
-        )
-        self._analysis_check.toggled.connect(self._on_analysis_toggled)
-        tb.addWidget(self._analysis_check)
-
         tb.addStretch()
-        outer.addWidget(toolbar)
 
-        # -- Main area: layers panel + graph + suggestion panel --------------
+        self._mode_menu_btn = self._build_mode_menu_button()
+        self._filters_menu_btn = self._build_filters_menu_button()
+        self._layout_menu_btn = self._build_layout_menu_button()
+        self._labels_menu_btn = self._build_labels_menu_button()
+        self._actions_menu_btn = self._build_actions_menu_button()
+        for _btn in (
+            self._mode_menu_btn, self._filters_menu_btn, self._layout_menu_btn,
+            self._labels_menu_btn, self._actions_menu_btn,
+        ):
+            tb.addWidget(_btn)
+
+        outer.addWidget(topbar)
+
+        # -- Main area: graph + suggestion / analysis panels -----------------
         content_area = QWidget()
         content_layout = QHBoxLayout(content_area)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
-
-        self._layers_panel = self._build_layers_panel()
-        content_layout.addWidget(self._layers_panel)
 
         self._gscene = QGraphicsScene()
         self._gview = _ZoomGraphicsView(self._gscene, on_zoom=self._on_zoom)
@@ -2138,63 +1938,236 @@ class FocusGraphView(QWidget):
 
         outer.addWidget(content_area)
 
-    # -- Layers panel --------------------------------------------------------
+    # -- Compact dropdown menus ----------------------------------------------
 
-    def _build_layers_panel(self) -> QFrame:
-        """Vertical column of layer toggles — one checkbox per semantic kind."""
-        panel = QFrame()
-        panel.setObjectName("graphLayersPanel")
-        panel.setFixedWidth(132)
-        lay = QVBoxLayout(panel)
-        lay.setContentsMargins(8, 8, 8, 8)
-        lay.setSpacing(4)
+    @staticmethod
+    def _menu_button(text: str) -> tuple[QPushButton, QMenu]:
+        btn = QPushButton(text)          # Qt draws its own menu-indicator arrow
+        btn.setFlat(True)
+        menu = QMenu(btn)
+        btn.setMenu(menu)
+        return btn, menu
 
-        header = QLabel("Layers")
-        header.setStyleSheet(
-            f"color: {theme.TEXT_SECONDARY}; font-size: 11px; font-weight: bold;"
-        )
-        lay.addWidget(header)
+    @staticmethod
+    def _add_widget(menu: QMenu, widget: QWidget) -> None:
+        act = QWidgetAction(menu)
+        act.setDefaultWidget(widget)
+        menu.addAction(act)
 
+    def _build_mode_menu_button(self) -> QPushButton:
+        btn, menu = self._menu_button("Mode")
+        base_labels = {
+            MODE_ALL: "All", MODE_RELATIONSHIP: "Relationships",
+            MODE_THEME: "Themes", MODE_STRUCTURE: "Structure",
+            MODE_QUANTUM: "Quantum", MODE_PSYKE: "PSYKE",
+            MODE_MEANING: "Meaning",
+        }
+
+        def add_modes(order, labels, header=None):
+            if header:
+                menu.addSeparator()
+            for m in order:
+                b = QPushButton(labels[m])
+                b.setCheckable(True)
+                b.setFlat(True)
+                b.setToolTip(MODE_PROFILES[m].description)
+                b.clicked.connect(lambda _=False, mm=m: self._on_mode_changed(mm))
+                self._add_widget(menu, b)
+                self._mode_buttons[m] = b
+
+        add_modes(MODE_ORDER, base_labels)
+        self._mode_buttons[MODE_STRUCTURE].setChecked(True)
+        if self._screenplay_mode:
+            add_modes(SCREENPLAY_MODE_ORDER, {
+                MODE_CAUSALITY: "Causality", MODE_SETUP_PAYOFF: "Setup/Payoff",
+                MODE_KNOWLEDGE: "Knowledge", MODE_SUBTEXT: "Subtext",
+                MODE_VISUAL_MOTIFS: "Motifs", MODE_CONTINUITY_GRAPH: "Continuity",
+            }, header=True)
+        if self._graphic_novel_mode:
+            add_modes(GRAPHIC_NOVEL_MODE_ORDER, {
+                MODE_GN_MOTIF: "Motifs", MODE_GN_PANEL_CAUSALITY: "Panel Flow",
+                MODE_GN_SYMBOL_RECURRENCE: "Symbols",
+                MODE_GN_PAGE_RHYTHM: "Page Rhythm",
+                MODE_GN_OBJECT_CONTINUITY: "Objects", MODE_GN_CHARACTER: "Characters",
+            }, header=True)
+        if self._stage_script_mode:
+            add_modes(STAGE_SCRIPT_MODE_ORDER, {
+                MODE_SS_PRESSURE: "Pressure", MODE_SS_ENTRANCE_EXIT: "Entrances",
+                MODE_SS_PROP: "Props", MODE_SS_BLOCKING: "Blocking",
+                MODE_SS_SUBTEXT: "Subtext", MODE_SS_OFFSTAGE: "Offstage",
+            }, header=True)
+        if self._series_mode:
+            add_modes(SERIES_MODE_ORDER, {
+                MODE_SR_SEASON_ARC: "Season Arc", MODE_SR_EPISODE_DEP: "Episodes",
+                MODE_SR_ABC_PLOT: "A/B/C", MODE_SR_MYSTERY: "Mystery/Payoff",
+                MODE_SR_CHARACTER: "Progression", MODE_SR_RELATIONSHIP: "Relationships",
+                MODE_SR_CONTINUITY: "Continuity",
+            }, header=True)
+        return btn
+
+    def _build_filters_menu_button(self) -> QPushButton:
+        btn, menu = self._menu_button("Filters")
         labels = {
-            NODE_KIND_CHARACTER: "Characters",
-            NODE_KIND_PLACE: "Places",
-            NODE_KIND_OBJECT: "Objects",
-            NODE_KIND_THEME: "Themes",
-            NODE_KIND_LORE: "Lore",
-            NODE_KIND_SCENE: "Scenes",
-            NODE_KIND_ACT: "Acts",
-            NODE_KIND_NOTE: "Notes",
+            NODE_KIND_CHARACTER: "Characters", NODE_KIND_PLACE: "Places",
+            NODE_KIND_OBJECT: "Objects", NODE_KIND_THEME: "Themes",
+            NODE_KIND_LORE: "Lore", NODE_KIND_SCENE: "Scenes",
+            NODE_KIND_ACT: "Acts", NODE_KIND_NOTE: "Notes",
             NODE_KIND_OTHER: "Other",
         }
         for kind in LAYER_KINDS:
             cb = QCheckBox(labels[kind])
             cb.setChecked(True)
-            cb.setStyleSheet(
-                f"QCheckBox {{ color: {theme.TEXT_PRIMARY}; font-size: 11px; }}"
-            )
-            cb.toggled.connect(lambda checked, k=kind: self._on_layer_toggled(k, checked))
-            lay.addWidget(cb)
+            cb.toggled.connect(lambda c, k=kind: self._on_layer_toggled(k, c))
+            self._add_widget(menu, cb)
             self._layer_checks[kind] = cb
 
-        # Edges sub-section — minor toggle for the noisy Mentions edges
-        # (off by default; turn back on if you really want them).
-        edge_header = QLabel("Edges")
-        edge_header.setStyleSheet(
-            f"color: {theme.TEXT_SECONDARY}; font-size: 11px; font-weight: bold;"
-            f" padding-top: 8px;"
-        )
-        lay.addWidget(edge_header)
+        menu.addSeparator()
+        self._hops_check = QCheckBox("Show 2-hop")
+        self._hops_check.setToolTip("Expand to 2-hop neighbours")
+        self._hops_check.toggled.connect(self._on_hops_toggled)
+        self._add_widget(menu, self._hops_check)
 
-        self._mention_check = QCheckBox("Mentions")
+        self._hide_isolated_check = QCheckBox("Hide isolated")
+        self._hide_isolated_check.toggled.connect(self._on_hide_isolated_toggled)
+        self._add_widget(menu, self._hide_isolated_check)
+
+        self._temporal_check = QCheckBox("Temporal")
+        self._temporal_check.setToolTip("Filter by story progression")
+        self._temporal_check.toggled.connect(self._on_temporal_toggled)
+        self._add_widget(menu, self._temporal_check)
+
+        self._future_check = QCheckBox("Show future")
+        self._future_check.setToolTip("Dim future nodes instead of hiding")
+        self._future_check.setEnabled(False)
+        self._future_check.toggled.connect(self._on_future_toggled)
+        self._add_widget(menu, self._future_check)
+
+        self._skeleton_btn = QPushButton("Skeleton only")
+        self._skeleton_btn.setCheckable(True)
+        self._skeleton_btn.setFlat(True)
+        self._skeleton_btn.setToolTip("Narrative skeleton — Characters + Themes + Acts")
+        self._skeleton_btn.toggled.connect(self._on_skeleton_toggled)
+        self._add_widget(menu, self._skeleton_btn)
+
+        self._mention_check = QCheckBox("Mention edges")
         self._mention_check.setChecked(self._edge_visibility.get(EDGE_MENTION, False))
-        self._mention_check.setStyleSheet(
-            f"QCheckBox {{ color: {theme.TEXT_PRIMARY}; font-size: 11px; }}"
-        )
         self._mention_check.toggled.connect(self._on_mentions_toggled)
-        lay.addWidget(self._mention_check)
+        self._add_widget(menu, self._mention_check)
 
-        lay.addStretch()
-        return panel
+        # Kept for back-compat with the old single-type filter API.
+        self._type_combo = QComboBox()
+        self._type_combo.addItems(["All", "Character", "Place", "Scene", "Note", "PSYKE"])
+        self._type_combo.currentTextChanged.connect(self._on_type_changed)
+        self._type_combo.setVisible(False)
+        return btn
+
+    def _build_layout_menu_button(self) -> QPushButton:
+        btn, menu = self._menu_button("Layout")
+        self._layout_group = QActionGroup(menu)
+        self._layout_group.setExclusive(True)
+        options = [
+            ("Auto", ""), ("Hierarchical", "hierarchical"),
+            ("Act clusters", "act_clusters"), ("Timeline flow", "timeline"),
+            ("Radial", "radial"), ("Force", "force"),
+        ]
+        for label, key in options:
+            act = menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(key == self._layout_override)
+            self._layout_group.addAction(act)
+            act.triggered.connect(lambda _=False, k=key: self._set_layout_override(k))
+
+        menu.addSeparator()
+        self._flow_check = QCheckBox("Flow overlay")
+        self._flow_check.setToolTip("Draw the story's order as a path through scenes")
+        self._flow_check.toggled.connect(self._on_flow_toggled)
+        self._add_widget(menu, self._flow_check)
+        self._flow_combo = QComboBox()
+        self._flow_combo.addItem("Timeline", userData=FLOW_TIMELINE)
+        self._flow_combo.addItem("Acts", userData=FLOW_ACTS)
+        self._flow_combo.addItem("Arc", userData=FLOW_ARC)
+        self._flow_combo.addItem("Causal", userData=FLOW_CAUSAL)
+        self._flow_combo.setEnabled(False)
+        self._flow_combo.currentIndexChanged.connect(self._on_flow_type_changed)
+        self._add_widget(menu, self._flow_combo)
+        return btn
+
+    def _build_labels_menu_button(self) -> QPushButton:
+        btn, menu = self._menu_button("Labels")
+        self._label_group = QActionGroup(menu)
+        self._label_group.setExclusive(True)
+        for label, key in [("None", "none"), ("Focus only", "focus"),
+                           ("Important only", "important"), ("All", "all")]:
+            act = menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(key == self._label_mode)
+            self._label_group.addAction(act)
+            act.triggered.connect(lambda _=False, k=key: self._set_label_mode(k))
+
+        menu.addSeparator()
+        self._meaning_check = QCheckBox("Meaning overlay")
+        self._meaning_check.setToolTip("State colours, importance, arcs")
+        self._meaning_check.toggled.connect(self._on_meaning_toggled)
+        self._add_widget(menu, self._meaning_check)
+        return btn
+
+    def _build_actions_menu_button(self) -> QPushButton:
+        btn, menu = self._menu_button("Actions")
+        menu.addAction("Fit view", self._fit_view)
+        menu.addAction("Reset layout", self._reset_layout)
+        menu.addAction("Refresh graph", self.refresh)
+        menu.addSeparator()
+        self._gravity_check = QCheckBox("Story gravity")
+        self._gravity_check.setChecked(True)
+        self._gravity_check.setToolTip("Protagonists, themes and climaxes pull the graph")
+        self._gravity_check.toggled.connect(self._on_gravity_toggled)
+        self._add_widget(menu, self._gravity_check)
+        self._suggest_check = QCheckBox("Suggestions panel")
+        self._suggest_check.toggled.connect(self._on_suggestions_toggled)
+        self._add_widget(menu, self._suggest_check)
+        self._analysis_check = QCheckBox("Analysis panel")
+        self._analysis_check.toggled.connect(self._on_analysis_toggled)
+        self._add_widget(menu, self._analysis_check)
+        menu.addSeparator()
+        prow = QWidget(); pl = QHBoxLayout(prow)
+        pl.setContentsMargins(6, 2, 6, 2); pl.setSpacing(4)
+        pl.addWidget(QLabel("Preset:"))
+        self._preset_combo = QComboBox()
+        self._preset_combo.setMinimumWidth(110)
+        self._preset_combo.currentTextChanged.connect(self._on_preset_picked)
+        pl.addWidget(self._preset_combo)
+        self._save_preset_btn = QPushButton("Save…")
+        self._save_preset_btn.setFlat(True)
+        self._save_preset_btn.clicked.connect(self._on_save_preset_clicked)
+        pl.addWidget(self._save_preset_btn)
+        self._add_widget(menu, prow)
+        self._refresh_preset_combo()
+        return btn
+
+    # -- Layout / label / filter handlers ------------------------------------
+
+    def _set_layout_override(self, key: str) -> None:
+        self._layout_override = key
+        self._rebuild_view()
+
+    def _set_label_mode(self, mode: str) -> None:
+        self._label_mode = mode
+        self._apply_label_visibility()
+
+    def _on_hide_isolated_toggled(self, checked: bool) -> None:
+        self._hide_isolated = checked
+        self._rebuild_view()
+
+    def _fit_view(self) -> None:
+        rect = self._gscene.itemsBoundingRect()
+        if not rect.isNull():
+            self._gview.fitInView(rect, Qt.AspectRatioMode.KeepAspectRatio)
+
+    def _reset_layout(self) -> None:
+        self._focus_node = None
+        self._gview.reset_zoom()
+        self._rebuild_view()
+
 
     def _on_mentions_toggled(self, checked: bool) -> None:
         self._edge_visibility[EDGE_MENTION] = checked
@@ -2358,9 +2331,7 @@ class FocusGraphView(QWidget):
 
     def _apply_zoom_culling(self) -> None:
         """Hide labels and weak edges progressively as the user zooms out."""
-        show_labels = self._zoom >= _ZOOM_HIDE_LABELS
-        for label in self._label_items.values():
-            label.setVisible(show_labels)
+        self._apply_label_visibility()
 
         for edge_item in self._edge_items:
             etype = edge_item.data(0)
@@ -2370,6 +2341,64 @@ class FocusGraphView(QWidget):
                 edge_item.setVisible(etype != EDGE_MENTION)
             else:
                 edge_item.setVisible(True)
+
+    # -- Label density -------------------------------------------------------
+
+    _STRUCTURAL_KINDS = frozenset({
+        NODE_KIND_ACT, NODE_KIND_SEASON, NODE_KIND_EPISODE,
+        NODE_KIND_ARC, NODE_KIND_MYSTERY,
+    })
+
+    def _node_kind_for(self, nid: str) -> str:
+        active = self._active_graph_data()
+        node = active.nodes.get(nid) if active else None
+        return node_kind(node) if node else NODE_KIND_OTHER
+
+    def _is_structural_node(self, nid: str) -> bool:
+        return self._node_kind_for(nid) in self._STRUCTURAL_KINDS
+
+    def _label_should_show(self, nid: str) -> bool:
+        """Decide whether a node's label is drawn under the current
+        Labels-density mode (none / focus / important / all)."""
+        mode = self._label_mode
+        if mode == "none":
+            return False
+        if mode == "all":
+            return True
+
+        # Focus neighbourhood is always labelled when a node is selected.
+        if self._focus_node:
+            if nid == self._focus_node:
+                return True
+            active = self._active_graph_data()
+            if active and nid in active.adjacency.get(self._focus_node, set()):
+                return True
+            if mode == "focus":
+                return False
+        elif mode == "focus":
+            # No selection yet — keep only the structural anchors labelled so
+            # the canvas reads as a skeleton rather than going blank.
+            return self._is_structural_node(nid)
+
+        # "important": structural anchors + high-gravity + high-importance nodes.
+        if self._is_structural_node(nid):
+            return True
+        g = self._gravity_map.get(nid)
+        if g is not None and g.total >= GRAVITY_GLOW_THRESHOLD:
+            return True
+        if self._meaning_data:
+            m = self._meaning_data.node_meanings.get(nid)
+            if m is not None and m.importance >= 0.6:
+                return True
+        return False
+
+    def _apply_label_visibility(self) -> None:
+        """Apply both the zoom threshold and the Labels-density mode to every
+        node label.  A label shows only when the zoom is high enough *and* the
+        density mode admits it."""
+        zoom_ok = self._zoom >= _ZOOM_HIDE_LABELS
+        for nid, label in self._label_items.items():
+            label.setVisible(zoom_ok and self._label_should_show(nid))
 
     # -- Data loading --------------------------------------------------------
 
@@ -2497,6 +2526,9 @@ class FocusGraphView(QWidget):
         if self._flow_enabled and self._mode != MODE_QUANTUM:
             self._draw_flow_overlay(positions, visible)
 
+        # Honour the Labels-density mode for the freshly drawn nodes.
+        self._apply_label_visibility()
+
     def _draw_flow_overlay(
         self,
         positions: dict[str, tuple[float, float]],
@@ -2567,15 +2599,18 @@ class FocusGraphView(QWidget):
 
         visible = set(active.nodes.keys())
 
-        if self._focus_node and self._focus_node in active.nodes:
+        focused = bool(self._focus_node and self._focus_node in active.nodes)
+        if focused:
             visible = get_neighborhood(active, self._focus_node, self._hops)
 
         if self._type_filter != "All":
             type_nodes = filter_by_type(active, {self._type_filter})
             visible = visible & type_nodes
 
-        # Layer mask — restrict to enabled semantic kinds.
-        if self._active_layers != set(LAYER_KINDS):
+        # Layer mask — restrict to enabled semantic kinds.  A focus selection
+        # bypasses the mask so the neighbourhood is revealed in full even from
+        # a structure/theme mode that would otherwise hide those kinds.
+        if not focused and self._active_layers != set(LAYER_KINDS):
             layer_nodes = filter_by_layers(active, self._active_layers)
             visible = visible & layer_nodes
 
@@ -2594,6 +2629,15 @@ class FocusGraphView(QWidget):
             )
             visible = visible & temporal_active
 
+        # Drop nodes that have no visible neighbour (optional declutter).
+        if self._hide_isolated and not self._focus_node:
+            connected = {
+                nid for nid in visible
+                if active.adjacency.get(nid, set()) & visible
+            }
+            if connected:
+                visible = connected
+
         return visible
 
     def _layout_nodes(
@@ -2603,14 +2647,31 @@ class FocusGraphView(QWidget):
             data = self._active_graph_data()
         if not visible or data is None:
             return {}
-        layout = MODE_PROFILES[self._mode].layout
+        layout = self._effective_layout()
         if layout == "linear_timeline":
             return self._layout_linear_timeline(visible, data)
         if layout == "theme_centered":
             return self._layout_theme_centered(visible, data)
         if layout == "quantum_tree":
             return self._layout_quantum_tree(visible, data)
+        if layout == "radial":
+            return self._layout_radial(visible, data)
         return self._layout_circular(visible)
+
+    def _effective_layout(self) -> str:
+        """Resolve the layout to use — the user override wins over the mode's
+        default profile layout.  ``""`` means "follow the mode"."""
+        override = self._layout_override
+        if not override:
+            return MODE_PROFILES[self._mode].layout
+        # Map the friendly menu keys onto the concrete layout engines.
+        return {
+            "hierarchical": "linear_timeline",
+            "act_clusters": "linear_timeline",
+            "timeline": "linear_timeline",
+            "radial": "radial",
+            "force": "circular",
+        }.get(override, MODE_PROFILES[self._mode].layout)
 
     def _layout_circular(
         self, visible: set[str],
@@ -2801,6 +2862,49 @@ class FocusGraphView(QWidget):
                     radius * math.cos(angle),
                     radius * math.sin(angle) + 100,
                 )
+        return positions
+
+    def _layout_radial(
+        self, visible: set[str], data: GraphData,
+    ) -> dict[str, tuple[float, float]]:
+        """Concentric rings by structural depth — anchors (acts/seasons) in the
+        inner ring, scenes/episodes in the middle, entities on the outside.
+
+        Keeps the project skeleton legible at the centre while pushing the
+        long tail of characters/places/objects to the rim instead of mixing
+        everything into one undifferentiated circle."""
+        # Rank kinds into concentric tiers.  Lower tier = closer to centre.
+        tier_for_kind = {
+            NODE_KIND_ACT: 0, NODE_KIND_SEASON: 0, NODE_KIND_ARC: 0,
+            NODE_KIND_EPISODE: 1, NODE_KIND_SCENE: 1, NODE_KIND_PAGE: 1,
+            NODE_KIND_PANEL: 1, NODE_KIND_MYSTERY: 1, NODE_KIND_PLOTLINE: 1,
+            NODE_KIND_THEME: 2, NODE_KIND_CHARACTER: 2,
+        }
+        rings: dict[int, list[str]] = {0: [], 1: [], 2: [], 3: []}
+        for nid in visible:
+            node = data.nodes.get(nid)
+            kind = node_kind(node) if node else NODE_KIND_OTHER
+            tier = tier_for_kind.get(kind, 3)
+            rings[tier].append(nid)
+
+        positions: dict[str, tuple[float, float]] = {}
+        ring_radius = {0: 0.0, 1: _GRAPH_RADIUS * 0.55,
+                       2: _GRAPH_RADIUS * 1.1, 3: _GRAPH_RADIUS * 1.7}
+        for tier, members in rings.items():
+            members.sort()
+            count = len(members)
+            if count == 0:
+                continue
+            radius = ring_radius[tier]
+            if tier == 0 and count == 1:
+                positions[members[0]] = (0.0, 0.0)
+                continue
+            # Spread the innermost ring a little even if it has few members.
+            radius = max(radius, count * 16)
+            for i, nid in enumerate(members):
+                angle = 2 * math.pi * i / count - math.pi / 2
+                positions[nid] = (radius * math.cos(angle),
+                                  radius * math.sin(angle))
         return positions
 
     # -- Drawing -------------------------------------------------------------
