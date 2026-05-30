@@ -2,9 +2,10 @@
 
 Logosforge keeps your working data in a local SQLite database, and lets you move
 whole projects in and out as **JSON** plus export finished manuscripts to a range
-of craft formats. Export is **engine-aware**: a screenplay exports with sluglines
-and dialogue blocks, a graphic novel as a panel script, a stage script in
-playwriting layout, and so on.
+of craft formats. Export is **format-aware**: the manuscript exporters dispatch on
+the project's format into one of four renderers — prose, screenplay, stage script,
+or graphic novel — so a screenplay exports with sluglines and dialogue blocks, a
+graphic novel as a panel script, a stage script in playwriting layout, and so on.
 
 > Source: `storyplanner/export.py` and `storyplanner/import_data.py`. The export
 > menu is wired in `ui/main_window.py`.
@@ -16,11 +17,23 @@ playwriting layout, and so on.
 A project is **saved** by serializing it to a JSON file and **opened** by importing
 that file. The on-disk project format is therefore plain, human-readable JSON.
 
-- `export.export_json(db, project_id)` produces the full project document —
-  project metadata, characters, places, notes, scenes, PSYKE entries (with
-  relations and progressions), outline, continuity, and quantum state.
+- `export.export_json(db, project_id)` serializes the full project document
+  (`_gather_project_data`) with these top-level keys:
+  - `project` — `title`, `description`, and all three format fields:
+    `format_mode` (legacy), `narrative_engine`, `default_writing_format`;
+  - `characters`, `places` — name + description;
+  - `notes` — title, content, tags, pinned, plus `psyke_links` / `scene_links`
+    stored **by name/title** (so they round-trip);
+  - `scenes` — full scene records including planning fields and the
+    screenplay/stage metadata and per-scene character states;
+  - `psyke_entries` — name, type, aliases, notes, `is_global`, structured
+    `details`, `related_entries`, `typed_relations`, and `progressions`;
+  - `outline` — the recursive node tree (title / description / children);
+  - `continuity` — extracted continuity items;
+  - `quantum_state` — included only when present.
 - `import_data.import_json(db, data)` validates the document
-  (`validate_import_data`) and recreates the project, resolving links by name/title.
+  (`validate_import_data`) and recreates the project, re-resolving the name/title
+  links.
 
 In the UI, **Save / Save As / Open** use the `JSON (*.json)` filter and append
 `.json` automatically. The last opened project path is remembered and re-loaded on
@@ -47,11 +60,52 @@ From **Export**, the manuscript can be written to:
 | CSV (scenes) | `CSV – Scenes (*.csv)` | `export_csv_scenes` |
 | JSON (full project) | `JSON (*.json)` | `export_json` |
 
-The PDF, DOCX, and HTML exporters each have per-engine renderers (novel /
-screenplay / stage script / graphic novel) so the typography and block structure
-match the form. Additional helpers exist for outline-only Markdown
-(`export_outline_markdown`) and plain formatted text (`export_formatted_text`,
-`export_manuscript`).
+### How the format is chosen
+
+The DOCX, PDF, HTML, and plain-text exporters resolve the project's format with
+`_get_fmt()` (the project's `format_mode`) and route to one of **four manuscript
+renderers**:
+
+| Project format | Renderer | Notes |
+|----------------|----------|-------|
+| novel (prose) | novel | Chapter headings, italic scene titles, prose body. |
+| screenplay | screenplay | Sluglines (`INT. PLACE — TITLE`), action, character/dialogue blocks. |
+| **series** | **screenplay** | Series **reuses the screenplay renderer**. |
+| stage_script | stage script | Act/scene headings, centred character names, dialogue, stage directions. |
+| graphic_novel | graphic novel | Page / panel / description / caption layout. |
+
+The screenplay, series, stage-script, and graphic-novel formats are treated as
+**script formats** (`_is_script_format`), which selects a **monospace** typeface;
+prose uses a serif one:
+
+| Output | Prose font | Script font |
+|--------|-----------|-------------|
+| DOCX | Times New Roman | Courier New |
+| PDF | Times-Roman | Courier |
+| HTML | `Times New Roman, Georgia, serif` | `Courier New, Courier, monospace` |
+
+### Per-format detail
+
+- **JSON** — the full project document described above (`export_json`).
+- **Markdown** — `export_markdown` writes a complete project dump: title and
+  description, then Characters, Places, Notes, and Scenes (each scene with its
+  metadata, character states, and content body). `export_outline_markdown` writes
+  an outline-only variant, scenes grouped by chapter, without the prose body.
+- **CSV** — `export_csv_scenes` emits one row per scene with the columns
+  `order_index, title, summary, synopsis, goal, conflict, outcome, beat, tags, act,
+  chapter, plotline, characters, places`.
+- **Fountain** — `export_fountain` produces standard Fountain screenplay markup
+  with a title page, for any screenwriting tool that reads `.fountain`.
+- **Final Draft (FDX)** — `export_fdx` produces Final Draft XML
+  (`<FinalDraft DocumentType="Script">…`).
+- **DOCX / PDF / HTML** — `export_docx_manuscript`, `export_pdf`, and `export_html`
+  each render through the four format-specific renderers above
+  (`_docx_*` / `_pdf_*` / `_html_*`), so typography and block structure match the
+  form.
+
+Two plain-text helpers also exist and are used internally / by tests:
+`export_manuscript` (force the prose renderer), `export_screenplay` (force the
+screenplay renderer), and `export_formatted_text` (use the project's own format).
 
 ---
 
