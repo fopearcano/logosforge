@@ -817,19 +817,29 @@ class AssistantPanel(QWidget):
 
     def _restore_provider_settings(self) -> None:
         mgr = get_settings()
-        saved_provider = str(mgr.get("ai_provider"))
-        idx = self._provider_widget._provider_combo.findText(saved_provider)
+        pw = self._provider_widget
+        saved_provider = str(mgr.get("ai_provider") or "")
+
+        # Seed the widget's per-provider memory from saved settings, folding in
+        # the last-saved flat keys for the active provider (covers first run /
+        # upgrades where no per-provider memory exists yet).
+        raw_memory = mgr.get("ai_provider_memory")
+        memory = dict(raw_memory) if isinstance(raw_memory, dict) else {}
+        if saved_provider:
+            entry = dict(memory.get(saved_provider) or {})
+            entry.setdefault("model", str(mgr.get("ai_model") or ""))
+            entry.setdefault("base_url", str(mgr.get("ai_base_url") or ""))
+            entry.setdefault("api_key", str(mgr.get("ai_api_key") or ""))
+            memory[saved_provider] = entry
+        pw.set_provider_memory(memory)
+
+        idx = pw._provider_combo.findText(saved_provider)
         if idx >= 0:
-            self._provider_widget._provider_combo.setCurrentIndex(idx)
-        saved_model = str(mgr.get("ai_model"))
-        if saved_model:
-            self._provider_widget._model_combo.setCurrentText(saved_model)
-        saved_key = str(mgr.get("ai_api_key"))
-        if saved_key:
-            self._provider_widget._key_input.setText(saved_key)
-        saved_url = str(mgr.get("ai_base_url"))
-        if saved_url:
-            self._provider_widget._url_input.setText(saved_url)
+            pw._provider_combo.setCurrentIndex(idx)
+        # Re-apply the active provider's remembered values even if the combo
+        # index did not change (setCurrentIndex is a no-op then, so it would
+        # not reload the fields on its own).
+        pw.reload_current_provider()
 
     def _restore_panel_settings(self) -> None:
         mgr = get_settings()
@@ -866,6 +876,7 @@ class AssistantPanel(QWidget):
         mgr.set("ai_model", pw._model_combo.currentText())
         mgr.set("ai_api_key", pw._key_input.text())
         mgr.set("ai_base_url", pw._url_input.text())
+        mgr.set("ai_provider_memory", pw.provider_memory())
         mgr.set("assistant_api_timeout", self._timeout_spin.value())
 
     def save_settings(self) -> None:
@@ -875,6 +886,7 @@ class AssistantPanel(QWidget):
         mgr.set("ai_model", pw._model_combo.currentText())
         mgr.set("ai_api_key", pw._key_input.text())
         mgr.set("ai_base_url", pw._url_input.text())
+        mgr.set("ai_provider_memory", pw.provider_memory())
         mgr.set("assistant_panel_mode", self._panel_mode)
         mgr.set("assistant_include_outline", self._outline_check.isChecked())
         mgr.set("assistant_include_memory", self._story_memory_check.isChecked())

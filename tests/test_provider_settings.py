@@ -280,3 +280,120 @@ def test_construction_does_not_overwrite_saved_settings():
 
     assert get_manager().get("ai_provider") == "Anthropic"
     assert get_manager().get("ai_model") == "claude-sonnet-4-6"
+
+
+# =========================================================================
+# 7. No empty/blank window when switching to a key-requiring provider
+# =========================================================================
+
+def _visible_top_level_labels():
+    from PySide6.QtWidgets import QApplication, QLabel
+    return [
+        w for w in QApplication.instance().topLevelWidgets()
+        if isinstance(w, QLabel) and w.isVisible()
+    ]
+
+
+def test_key_label_is_parented_not_a_window():
+    """The compact key label must live in the layout, never as a top-level
+    window (a parentless QLabel shown for key providers = the empty window)."""
+    w = ProviderSettingsWidget(compact=True)
+    assert w._key_label.parent() is not None
+    assert not w._key_label.isWindow()
+
+
+def test_switch_to_anthropic_opens_no_window():
+    from PySide6.QtWidgets import QApplication
+    w = ProviderSettingsWidget(compact=True)
+    w.show()
+    QApplication.instance().processEvents()
+    before = len(_visible_top_level_labels())
+    for prov in ("OpenAI", "Anthropic", "LM Studio", "Anthropic", "OpenRouter"):
+        w._provider_combo.setCurrentText(prov)
+        QApplication.instance().processEvents()
+        assert len(_visible_top_level_labels()) <= before, (
+            f"a stray empty window appeared after switching to {prov}"
+        )
+
+
+def test_key_field_visibility_tracks_provider():
+    w = ProviderSettingsWidget(compact=True)
+    w._provider_combo.setCurrentText("Anthropic")
+    assert w._key_input.isVisibleTo(w) and w._key_label.isVisibleTo(w)
+    w._provider_combo.setCurrentText("LM Studio")
+    assert not w._key_input.isVisibleTo(w)
+    assert not w._key_label.isVisibleTo(w)
+
+
+# =========================================================================
+# 8. Per-provider memory: switch away and back restores that provider
+# =========================================================================
+
+def test_switch_back_restores_provider_values():
+    w = ProviderSettingsWidget(compact=True)
+    w._provider_combo.setCurrentText("Anthropic")
+    w._key_input.setText("sk-ant-test")
+    w._model_combo.setCurrentText("claude-sonnet-4-6")
+    w._provider_combo.setCurrentText("LM Studio")
+    # Default LM Studio URL is shown, not Anthropic's values.
+    assert w._url_input.text() == "http://localhost:1234/v1"
+    w._provider_combo.setCurrentText("Anthropic")
+    assert w._key_input.text() == "sk-ant-test"
+    assert w._model_combo.currentText() == "claude-sonnet-4-6"
+
+
+def test_custom_base_url_remembered_per_provider():
+    w = ProviderSettingsWidget(compact=True)
+    w._provider_combo.setCurrentText("LM Studio")
+    w._url_input.setText("http://192.168.1.50:1234/v1")
+    w._provider_combo.setCurrentText("Anthropic")
+    w._provider_combo.setCurrentText("LM Studio")
+    assert w._url_input.text() == "http://192.168.1.50:1234/v1"
+
+
+def test_provider_memory_roundtrip_accessors():
+    w = ProviderSettingsWidget(compact=True)
+    w._provider_combo.setCurrentText("Anthropic")
+    w._key_input.setText("k")
+    mem = w.provider_memory()
+    assert mem["Anthropic"]["api_key"] == "k"
+
+    w2 = ProviderSettingsWidget(compact=True)
+    w2.set_provider_memory(mem)
+    w2._provider_combo.setCurrentText("Anthropic")
+    w2.reload_current_provider()
+    assert w2._key_input.text() == "k"
+
+
+def test_per_provider_memory_persists_across_restart():
+    """Anthropic key/model and LM Studio IP both survive a simulated restart
+    via the panel, with the active provider's flat keys kept in sync."""
+    import storyplanner.settings as settings
+    db = Database()
+    pid = db.create_project("P").id
+
+    panel = AssistantPanel(db, pid)
+    pw = panel._provider_widget
+    pw._provider_combo.setCurrentText("Anthropic")
+    pw._key_input.setText("sk-ant-xyz")
+    pw._key_input.editingFinished.emit()
+    pw._model_combo.setCurrentText("claude-opus-4-8")
+    pw._provider_combo.setCurrentText("LM Studio")
+    pw._url_input.setText("http://10.0.0.9:1234/v1")
+    pw._url_input.editingFinished.emit()
+    panel.save_settings()
+
+    # Active provider flat keys reflect LM Studio.
+    from storyplanner.settings import get_manager
+    assert get_manager().get("ai_provider") == "LM Studio"
+    assert get_manager().get("ai_base_url") == "http://10.0.0.9:1234/v1"
+
+    # Simulate restart: reload settings from disk into a fresh panel.
+    settings._instance = None
+    panel2 = AssistantPanel(db, pid)
+    pw2 = panel2._provider_widget
+    assert pw2._provider_combo.currentText() == "LM Studio"
+    assert pw2._url_input.text() == "http://10.0.0.9:1234/v1"
+    pw2._provider_combo.setCurrentText("Anthropic")
+    assert pw2._key_input.text() == "sk-ant-xyz"
+    assert pw2._model_combo.currentText() == "claude-opus-4-8"

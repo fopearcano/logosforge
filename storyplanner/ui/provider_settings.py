@@ -46,6 +46,11 @@ class ProviderSettingsWidget(QWidget):
     def __init__(self, compact: bool = False) -> None:
         super().__init__()
         self._test_worker: _TestWorker | None = None
+        # Per-provider memory of the last-used base URL / model / API key so
+        # switching away and back restores that provider's values instead of
+        # resetting to defaults. Hosts can seed/read it to persist across runs.
+        self._provider_memory: dict[str, dict[str, str]] = {}
+        self._current_provider: str | None = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -79,8 +84,15 @@ class ProviderSettingsWidget(QWidget):
         self._url_input.setPlaceholderText("Base URL")
         layout.addWidget(self._url_input)
 
-        self._key_label = QLabel()
+        # NOTE: this label MUST be added to the layout — a parentless QLabel
+        # that gets setVisible(True) on a key-requiring provider would render
+        # as a stray empty top-level window.
+        self._key_label = QLabel("API key")
+        self._key_label.setStyleSheet(
+            f"color: {theme.TEXT_SECONDARY}; font-size: 11px;"
+        )
         self._key_label.setVisible(False)
+        layout.addWidget(self._key_label)
         self._key_input = QLineEdit()
         self._key_input.setEchoMode(QLineEdit.EchoMode.Password)
         self._key_input.setPlaceholderText("API key")
@@ -177,11 +189,28 @@ class ProviderSettingsWidget(QWidget):
         self._url_input.editingFinished.connect(self.settings_changed.emit)
         self._key_input.editingFinished.connect(self.settings_changed.emit)
 
+    def _capture_current(self, name: str) -> None:
+        """Remember the current field values for provider *name*."""
+        if not name:
+            return
+        self._provider_memory[name] = {
+            "base_url": self._url_input.text().strip(),
+            "model": self._model_combo.currentText().strip(),
+            "api_key": self._key_input.text().strip(),
+        }
+
     def _on_provider_changed(self, name: str) -> None:
         caps = PROVIDER_CAPABILITIES.get(name)
         if caps is None:
             return
-        self._url_input.setText(caps.default_base_url)
+
+        # Capture the outgoing provider so a later switch-back restores it.
+        if self._current_provider and self._current_provider != name:
+            self._capture_current(self._current_provider)
+        self._current_provider = name
+        remembered = self._provider_memory.get(name) or {}
+
+        self._url_input.setText(remembered.get("base_url") or caps.default_base_url)
 
         # Rebuild the model list with signals blocked so the editable
         # combo doesn't emit spurious change events (or surface its popup)
@@ -190,7 +219,10 @@ class ProviderSettingsWidget(QWidget):
         self._model_combo.clear()
         for m in caps.default_models:
             self._model_combo.addItem(m)
-        if caps.default_models:
+        remembered_model = remembered.get("model") or ""
+        if remembered_model:
+            self._model_combo.setCurrentText(remembered_model)
+        elif caps.default_models:
             self._model_combo.setCurrentText(caps.default_models[0])
         else:
             self._model_combo.setCurrentText("")
@@ -202,17 +234,39 @@ class ProviderSettingsWidget(QWidget):
         self._key_label.setVisible(caps.requires_api_key)
         self._key_input.setVisible(caps.requires_api_key)
         if caps.requires_api_key:
+            # Restore the remembered key (without re-emitting change events).
+            self._key_input.blockSignals(True)
+            self._key_input.setText(remembered.get("api_key") or "")
+            self._key_input.blockSignals(False)
             env_val = os.environ.get(caps.env_key_name, "") if caps.env_key_name else ""
             if env_val:
                 self._key_input.setPlaceholderText(f"from ${caps.env_key_name}")
             else:
                 self._key_input.setPlaceholderText("required")
         else:
-            self._key_input.setPlaceholderText("not required")
-        if not caps.requires_api_key:
             self._key_input.clear()
+            self._key_input.setPlaceholderText("not required")
         self._status_label.setText("")
         self.settings_changed.emit()
+
+    # -- Per-provider memory (so hosts can persist across restarts) ----------
+
+    def provider_memory(self) -> dict[str, dict[str, str]]:
+        """Return per-provider remembered values (current provider captured)."""
+        if self._current_provider:
+            self._capture_current(self._current_provider)
+        return {k: dict(v) for k, v in self._provider_memory.items()}
+
+    def set_provider_memory(self, memory: dict) -> None:
+        """Seed per-provider memory (e.g. from saved settings)."""
+        if isinstance(memory, dict):
+            self._provider_memory = {
+                k: dict(v) for k, v in memory.items() if isinstance(v, dict)
+            }
+
+    def reload_current_provider(self) -> None:
+        """Re-apply the active provider's remembered values to the fields."""
+        self._on_provider_changed(self._provider_combo.currentText())
 
     def _load_defaults(self) -> None:
         name = self._provider_combo.currentText()

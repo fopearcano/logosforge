@@ -191,19 +191,23 @@ class SettingsDialog(QDialog):
 
     def _restore_ai_settings(self) -> None:
         mgr = get_settings()
-        saved_provider = str(mgr.get("ai_provider"))
-        idx = self._provider_widget._provider_combo.findText(saved_provider)
+        pw = self._provider_widget
+        saved_provider = str(mgr.get("ai_provider") or "")
+
+        raw_memory = mgr.get("ai_provider_memory")
+        memory = dict(raw_memory) if isinstance(raw_memory, dict) else {}
+        if saved_provider:
+            entry = dict(memory.get(saved_provider) or {})
+            entry.setdefault("model", str(mgr.get("ai_model") or ""))
+            entry.setdefault("base_url", str(mgr.get("ai_base_url") or ""))
+            entry.setdefault("api_key", str(mgr.get("ai_api_key") or ""))
+            memory[saved_provider] = entry
+        pw.set_provider_memory(memory)
+
+        idx = pw._provider_combo.findText(saved_provider)
         if idx >= 0:
-            self._provider_widget._provider_combo.setCurrentIndex(idx)
-        saved_model = str(mgr.get("ai_model"))
-        if saved_model:
-            self._provider_widget._model_combo.setCurrentText(saved_model)
-        saved_key = str(mgr.get("ai_api_key"))
-        if saved_key:
-            self._provider_widget._key_input.setText(saved_key)
-        saved_url = str(mgr.get("ai_base_url"))
-        if saved_url:
-            self._provider_widget._url_input.setText(saved_url)
+            pw._provider_combo.setCurrentIndex(idx)
+        pw.reload_current_provider()
 
     def accept(self) -> None:
         config = self._provider_widget.get_provider_config()
@@ -212,6 +216,7 @@ class SettingsDialog(QDialog):
         mgr.set("ai_model", config.model)
         mgr.set("ai_api_key", self._provider_widget._key_input.text().strip())
         mgr.set("ai_base_url", config.base_url)
+        mgr.set("ai_provider_memory", self._provider_widget.provider_memory())
 
         mgr.set("connector_enabled", self._conn_enabled.isChecked())
         mgr.set("connector_allow_writes", self._conn_writes.isChecked())
