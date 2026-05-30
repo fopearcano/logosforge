@@ -2,3 +2,8 @@ PySide6>=6.6,<6.9
 sqlmodel>=0.0.16,<1.0
 certifi
 pyobjc-framework-Cocoa; sys_platform == "darwin"
+
+# -- HTTP API (storyplanner.api) — needed for the shared React UI / Electron /
+# Web-PWA backend.  The desktop PyQt app runs without these.
+fastapi>=0.110
+uvicorn>=0.27

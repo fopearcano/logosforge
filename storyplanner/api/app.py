@@ -1,0 +1,73 @@
+"""FastAPI application factory for the Logosforge HTTP API.
+
+The Python core is the authoritative backend; this app exposes it as stable
+DTOs/actions for a shared React UI used by both Electron (desktop, localhost)
+and the Web/PWA (LAN/remote).  It does not contain product logic — every route
+delegates to the existing core services.
+"""
+
+from __future__ import annotations
+
+from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from storyplanner.api.config import ApiConfig
+from storyplanner.api.deps import require_auth
+from storyplanner.api.errors import install_error_handlers
+from storyplanner.api.events import ApiEventBroker
+from storyplanner.api.routes import ALL_ROUTERS
+from storyplanner.db import Database
+
+API_PREFIX = "/api"
+
+
+def create_api(
+    db: Database | None = None,
+    config: ApiConfig | None = None,
+) -> FastAPI:
+    """Build the FastAPI app.
+
+    *db* — an existing :class:`Database` to serve (tests pass an in-memory one).
+    If ``None``, one is opened from ``config.db_path`` (or the default file).
+    *config* — resolved :class:`ApiConfig`; defaults to :meth:`ApiConfig.from_env`.
+    """
+    config = config or ApiConfig.from_env()
+    if db is None:
+        db = Database(config.db_path or "storyplanner.db")
+
+    app = FastAPI(
+        title="Logosforge API",
+        version="1.0.0",
+        description="Authoritative Python core for the shared React UI.",
+    )
+    app.state.db = db
+    app.state.config = config
+    app.state.broker = ApiEventBroker()
+
+    # -- CORS --------------------------------------------------------------
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=config.cors_origins,
+        allow_origin_regex=config.allow_origin_regex,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    install_error_handlers(app)
+
+    @app.get("/api/health", tags=["health"])
+    def health():
+        return {
+            "status": "ok",
+            "service": "logosforge-api",
+            "mode": config.mode,
+            "version": app.version,
+        }
+
+    # Every project/data router sits behind the auth hook (a no-op until a
+    # token is configured) under the /api prefix.
+    for router in ALL_ROUTERS:
+        app.include_router(router, prefix=API_PREFIX, dependencies=[Depends(require_auth)])
+
+    return app

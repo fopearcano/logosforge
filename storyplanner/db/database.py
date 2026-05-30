@@ -82,13 +82,28 @@ CONTINUITY_MEMORY_TYPES = (
 
 class Database:
     def __init__(self, path: Optional[str] = None) -> None:
+        # ``check_same_thread=False`` lets the same engine be used safely from
+        # multiple threads (the connection pool serialises access).  This is
+        # required when the HTTP API serves requests from a threadpool and is
+        # harmless for the single-threaded desktop app.
+        from sqlalchemy.pool import StaticPool
+
         if path:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
             url = f"sqlite:///{path}"
+            self._engine = create_engine(
+                url, echo=False, connect_args={"check_same_thread": False},
+            )
         else:
-            url = "sqlite://"  # in-memory
-
-        self._engine = create_engine(url, echo=False)
+            # An in-memory DB lives inside a single connection, so a StaticPool
+            # (one shared connection) is required for it to be visible across
+            # threads — otherwise each thread sees an empty database.
+            url = "sqlite://"
+            self._engine = create_engine(
+                url, echo=False,
+                connect_args={"check_same_thread": False},
+                poolclass=StaticPool,
+            )
         SQLModel.metadata.create_all(self._engine)
         self._migrate()
 
@@ -283,6 +298,23 @@ class Database:
             session.commit()
             session.refresh(project)
             return project
+
+    def update_project(
+        self,
+        project_id: int,
+        title: str | None = None,
+        description: str | None = None,
+    ) -> None:
+        """Update a project's title and/or description (None = leave unchanged)."""
+        with Session(self._engine) as session:
+            project = session.get(Project, project_id)
+            if project is None:
+                return
+            if title is not None:
+                project.title = title
+            if description is not None:
+                project.description = description
+            session.commit()
 
     def update_project_format(self, project_id: int, format_mode: str) -> None:
         """Legacy: change the writing format and keep new fields in sync."""
