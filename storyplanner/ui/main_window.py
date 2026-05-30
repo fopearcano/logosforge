@@ -313,6 +313,7 @@ class MainWindow(QMainWindow):
         self._sidebar_anim: QPropertyAnimation | None = None
         self._assistant_user_visible = False
         self._assistant_overlay = False
+        self._logos_visible = False
         self._layout_tier: str | None = None
         self._sidebar_icons = {
             "Projects": "\U0001F4C1",
@@ -537,6 +538,18 @@ class MainWindow(QMainWindow):
         root_layout.addWidget(self._assistant_dock, stretch=1)
 
         outer_layout.addWidget(main_row, stretch=1)
+
+        # -- Logos inline assistant (Phase 0) --------------------------------
+        # A separate, non-intrusive inline layer that reuses the shared
+        # Assistant backend. It does NOT touch AssistantPanel/AssistantDock.
+        from storyplanner.logos.controller import LogosController
+        from storyplanner.ui.logos.logos_toolbar import LogosToolbar
+        self._logos_controller = LogosController(self._db)
+        self._logos_toolbar = LogosToolbar(
+            self._logos_controller, self._build_logos_context,
+        )
+        self._logos_toolbar.setVisible(False)
+        outer_layout.addWidget(self._logos_toolbar, stretch=0)
 
         # -- PSYKE Console (global bottom bar) --------------------------------
         console_row = QWidget()
@@ -911,6 +924,10 @@ class MainWindow(QMainWindow):
             self.sidebar_buttons[label].setChecked(label == name)
         self._ensure_active_visible(name)
         self._assistant_panel.set_active_section_name(name)
+        # Keep the (optional) Logos inline toolbar in sync with the section.
+        logos = getattr(self, "_logos_toolbar", None)
+        if logos is not None and self._logos_visible:
+            logos.set_section(name)
 
     def _ensure_active_visible(self, name: str) -> None:
         """Expand the parent group if the active section is collapsed inside it."""
@@ -1175,6 +1192,51 @@ class MainWindow(QMainWindow):
         if editor:
             return editor.textCursor().selectedText().replace(" ", "\n")
         return ""
+
+    # -- Logos inline assistant (Phase 0) ------------------------------------
+
+    def _build_logos_context(self):
+        """Capture a lightweight LogosContext from the current UI state.
+
+        Reuses the existing detection helpers and reads only safe, primitive
+        values — no ORM rows, no widgets, no secrets.
+        """
+        from storyplanner.logos.context import build_logos_context
+
+        section = self._current_section or ""
+        scene_id = self._detect_active_scene_id()
+        selected = self._detect_selected_text()
+        excerpt = ""
+        editor = self._detect_active_editor()
+        if editor is not None:
+            try:
+                excerpt = editor.toPlainText()[:600]
+            except Exception:
+                excerpt = ""
+        outline_template = ""
+        block_type = "prose" if section == "Manuscript" else ""
+        try:
+            from storyplanner.ui.plan_view import PlanView
+            if isinstance(self.content_area, PlanView):
+                block_type = "outline_node"
+                outline_template = (
+                    self.content_area._template_combo.currentData() or ""
+                )
+        except Exception:
+            pass
+        return build_logos_context(
+            self._db, self._project_id,
+            section_name=section, current_scene_id=scene_id,
+            selected_text=selected, cursor_text_excerpt=excerpt,
+            active_block_type=block_type, outline_template=outline_template,
+        )
+
+    def _toggle_logos(self) -> None:
+        self._logos_visible = not self._logos_visible
+        if self._logos_visible:
+            self._logos_toolbar.set_section(self._current_section or "")
+            self._logos_toolbar.refresh_actions()
+        self._logos_toolbar.setVisible(self._logos_visible)
 
     def _open_scene_in_editor(self, scene_id: int) -> None:
         self._set_active_section("Scenes")
@@ -1544,6 +1606,11 @@ class MainWindow(QMainWindow):
         toggle_assistant_action.setShortcut(QKeySequence("Ctrl+\\"))
         toggle_assistant_action.triggered.connect(self._toggle_assistant)
         view_menu.addAction(toggle_assistant_action)
+
+        toggle_logos_action = QAction("Toggle Logos (inline)", self)
+        toggle_logos_action.setShortcut(QKeySequence("Ctrl+L"))
+        toggle_logos_action.triggered.connect(self._toggle_logos)
+        view_menu.addAction(toggle_logos_action)
 
         focus_action = QAction("Focus Mode", self)
         focus_action.setShortcut(QKeySequence("Ctrl+Shift+F"))
