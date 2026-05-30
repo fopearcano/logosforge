@@ -61,6 +61,16 @@ python run.py
 python -m pytest tests/
 ```
 
+## Documentation
+
+Full documentation lives in [`docs/`](docs/README.md). Useful starting points:
+
+- [Getting Started](docs/getting-started.md) · [User Guide](docs/user-guide.md)
+- [Architecture](docs/architecture.md) · [Narrative Engines](docs/narrative-engines.md) · [Writing Formats](docs/writing-formats.md)
+- [PSYKE Story Bible](docs/psyke.md) · [AI Assistant](docs/ai-assistant.md) · [QUANTUM Outliner](docs/quantum-outliner.md)
+- [Structure & Plotting](docs/structure-and-plot.md) · [Graph](docs/graph.md) · [Writing Analysis](docs/writing-analysis.md)
+- [Data Model](docs/data-model.md) · [Export & Import](docs/export-import.md) · [Configuration](docs/configuration.md) · [Plugins](docs/plugins.md)
+
 ## Tech Stack
 
 | Component | Technology |
