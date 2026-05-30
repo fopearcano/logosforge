@@ -421,10 +421,43 @@ OUTLINE_TEMPLATES: dict[str, OutlineTemplate] = {
 }
 
 
+# Runtime-registered templates (e.g. contributed by a PSYKE Outline Templates
+# plugin). Kept separate from the built-ins so plugins can extend the catalog
+# without editing this module — the UI lists whatever is registered, never a
+# hardcoded subset.
+_PLUGIN_TEMPLATES: dict[str, OutlineTemplate] = {}
+
+
+def register_outline_template(key: str, template: OutlineTemplate) -> None:
+    """Register (or replace) a runtime outline template under *key*.
+
+    Used by plugins to contribute templates. Built-ins are never overwritten:
+    a key that collides with a built-in is ignored.
+    """
+    if not key or key in OUTLINE_TEMPLATES:
+        return
+    _PLUGIN_TEMPLATES[key] = template
+
+
+def unregister_outline_template(key: str) -> None:
+    _PLUGIN_TEMPLATES.pop(key, None)
+
+
+def all_templates() -> dict[str, OutlineTemplate]:
+    """Built-in templates plus any registered at runtime."""
+    merged = dict(OUTLINE_TEMPLATES)
+    merged.update(_PLUGIN_TEMPLATES)
+    return merged
+
+
 def get_template(key: str) -> OutlineTemplate | None:
-    return OUTLINE_TEMPLATES.get(key)
+    return all_templates().get(key)
 
 
 def list_templates() -> list[tuple[str, str, str]]:
-    """Return (key, display_name, description) for all templates."""
-    return [(k, t.name, t.description) for k, t in OUTLINE_TEMPLATES.items()]
+    """Return (key, display_name, description) for all templates.
+
+    Includes built-ins and any plugin-registered templates — never a
+    hardcoded subset, so unavailable templates are simply not listed.
+    """
+    return [(k, t.name, t.description) for k, t in all_templates().items()]

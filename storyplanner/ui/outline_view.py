@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
-from storyplanner.outline_templates import OUTLINE_TEMPLATES, list_templates
+from storyplanner.outline_templates import get_template, list_templates
 from storyplanner.ui import theme
 
 _NODE_ID_ROLE = Qt.ItemDataRole.UserRole
@@ -504,7 +504,7 @@ class OutlineView(QWidget):
         key = self._template_combo.currentData()
         if not key:
             return
-        template = OUTLINE_TEMPLATES.get(key)
+        template = get_template(key)
         if not template:
             return
 
@@ -625,7 +625,7 @@ class OutlineView(QWidget):
         # Selected template, if any.
         template_name, beats = "", []
         key = self._template_combo.currentData() if hasattr(self, "_template_combo") else ""
-        tmpl = OUTLINE_TEMPLATES.get(key) if key else None
+        tmpl = get_template(key) if key else None
         if tmpl is not None:
             template_name = tmpl.name
             beats = [b.title for b in tmpl.beats]

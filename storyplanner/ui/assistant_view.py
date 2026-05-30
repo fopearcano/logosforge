@@ -534,6 +534,19 @@ class AssistantPanel(QWidget):
         self._quantum_timeline.setVisible(False)
         self._layout.addWidget(self._quantum_timeline)
 
+        # Outline-only: template selector (from the PSYKE Outline Templates
+        # plugin catalog). Shown only in Outline Mode; affects generation.
+        self._outline_template_row = QWidget()
+        _tpl_row = QHBoxLayout(self._outline_template_row)
+        _tpl_row.setContentsMargins(0, 0, 0, 0)
+        _tpl_row.setSpacing(4)
+        _tpl_row.addWidget(QLabel("Template:"))
+        self._outline_template_combo = QComboBox()
+        self._reload_outline_templates()
+        _tpl_row.addWidget(self._outline_template_combo, stretch=1)
+        self._outline_template_row.setVisible(False)
+        self._layout.addWidget(self._outline_template_row)
+
         # Custom prompt
         self._prompt_input = QPlainTextEdit()
         self._prompt_input.setPlaceholderText(
@@ -946,8 +959,57 @@ class AssistantPanel(QWidget):
         return self._active_section in ("Outline", "Plan")
 
     def _update_outline_action_visibility(self) -> None:
+        outline = self._is_outline_mode()
         if hasattr(self, "_apply_outline_btn"):
-            self._apply_outline_btn.setVisible(self._is_outline_mode())
+            self._apply_outline_btn.setVisible(outline)
+        if hasattr(self, "_outline_template_row"):
+            self._reload_outline_templates()
+            self._outline_template_row.setVisible(outline)
+
+    def _reload_outline_templates(self) -> None:
+        """Populate the Outline template selector from the plugin catalog."""
+        from storyplanner.outline_templates import list_templates
+        combo = self._outline_template_combo
+        current = combo.currentData() if combo.count() else ""
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("No template", userData="")
+        for key, name, desc in list_templates():
+            combo.addItem(name, userData=key)
+            combo.setItemData(combo.count() - 1, desc, Qt.ItemDataRole.ToolTipRole)
+        idx = combo.findData(current)
+        combo.setCurrentIndex(idx if idx >= 0 else 0)
+        combo.blockSignals(False)
+
+    def selected_outline_template(self) -> str:
+        """Key of the currently selected Outline template ('' = none)."""
+        if hasattr(self, "_outline_template_combo"):
+            return self._outline_template_combo.currentData() or ""
+        return ""
+
+    def _outline_template_prompt(self, base_prompt: str) -> str:
+        """Prepend template + engine guidance to the user prompt in Outline
+        Mode so the generated outline follows the selected template."""
+        if not self._is_outline_mode():
+            return base_prompt
+        key = self.selected_outline_template()
+        if not key:
+            return base_prompt
+        from storyplanner.outline_actions import build_outline_generation_prompt
+        from storyplanner.outline_templates import get_template
+        from storyplanner.project_compat import get_project_narrative_engine
+        tmpl = get_template(key)
+        if tmpl is None:
+            return base_prompt
+        engine = get_project_narrative_engine(
+            self._db.get_project_by_id(self._project_id)
+        )
+        guidance = build_outline_generation_prompt(
+            "full", engine=engine, template_name=tmpl.name,
+            template_beats=[b.title for b in tmpl.beats],
+            instructions=base_prompt,
+        )
+        return guidance
 
     def run_action(self, action_key: str, selected_text: str = "") -> bool:
         """Trigger a preset AI action programmatically. Returns False if busy."""
@@ -1261,6 +1323,10 @@ class AssistantPanel(QWidget):
         scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, orch_debug, notes_ctx, graph_ctx, mode_ctx, struct_ctx, irr_ctx, idea_ctx = (
             self._build_context()
         )
+
+        # Outline Mode: fold in the selected template + engine structure so the
+        # generated outline follows it.
+        prompt = self._outline_template_prompt(prompt)
 
         messages = build_messages(
             prompt, scene_ctx,
