@@ -176,7 +176,7 @@ def test_template_prompt_engine_aware():
     idx = panel._outline_template_combo.findData("three_act")
     panel._outline_template_combo.setCurrentIndex(idx)
     folded = panel._outline_template_prompt("a thriller")
-    assert "Sequences" in folded                       # screenplay vocabulary
+    assert "Sequence" in folded                       # screenplay vocabulary
 
 
 # =========================================================================

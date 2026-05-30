@@ -216,15 +216,30 @@ def format_outline_preview(ops: list[OutlineOp]) -> str:
 # AI generation prompt builder (scope-aware, engine-aware, PSYKE-aware)
 # ---------------------------------------------------------------------------
 
-# Per-narrative-engine outline vocabulary so the prompt fits the medium.
-_ENGINE_OUTLINE_GUIDE = {
-    "novel": "Structure as Acts → Chapters → Scenes/Beats.",
-    "screenplay": "Structure as Acts → Sequences → Scenes/Beats.",
-    "stage_script": "Structure as Acts → Scenes → Beats.",
-    "graphic_novel": "Structure as Issues/Acts → Sequences/Chapters → "
-                     "Pages/Scenes → Beats.",
-    "series": "Structure as Seasons/Acts → Episodes/Chapters → Scenes/Beats.",
+# Render a raw structural-unit token as a human label.
+_UNIT_LABELS = {
+    "entrance_exit": "Entrance/Exit",
+    "plotline": "A/B/C Plot",
+    "cue": "Cue",
 }
+
+# Internal scope keys map to a tier (depth) in the engine's structural units.
+_SCOPE_TIER = {"act": 0, "chapter": 1, "scene": 2}
+
+
+def _unit_label(unit: str) -> str:
+    return _UNIT_LABELS.get(unit, unit.replace("_", " ").title())
+
+
+def engine_structural_units(engine: str) -> tuple[str, ...]:
+    """The current NarrativeEngine's structural units (Novel fallback)."""
+    from storyplanner.narrative_engines import get_engine
+    return get_engine(engine).get_structural_units()
+
+
+def _structure_guide(units: tuple[str, ...]) -> str:
+    labels = [_unit_label(u) for u in units]
+    return "Structure as " + " → ".join(labels) + "."
 
 
 def build_outline_generation_prompt(
@@ -234,33 +249,40 @@ def build_outline_generation_prompt(
 ) -> str:
     """Build the user prompt for an AI outline generation request.
 
-    scope: "full" | "act" | "chapter" | "scene". *engine* tailors the
-    structural vocabulary; *template_*/psyke_context/target_title are folded
-    in when present. Pure text — the caller sends it to the model.
+    The structural vocabulary is asked from the current NarrativeEngine
+    (``engine``) — Novel: Part/Chapter/Scene; Screenplay: Act/Sequence/
+    Scene/Beat; Graphic Novel: Issue/Chapter/Page/Panel; etc. *scope*
+    selects a tier (full / act=tier0 / chapter=tier1 / scene=tier2);
+    template_*/psyke_context/target_title are folded in when present. Pure
+    text — the caller sends it to the model.
     """
-    guide = _ENGINE_OUTLINE_GUIDE.get(engine, _ENGINE_OUTLINE_GUIDE["novel"])
+    units = engine_structural_units(engine)
+    labels = [_unit_label(u) for u in units]
     parts: list[str] = []
 
-    if scope == "act":
-        parts.append("Generate ONE act for the story outline, with its "
-                     "chapters and key scenes/beats.")
-    elif scope == "chapter":
-        parts.append("Generate ONE chapter for the story outline, with its "
-                     "scenes/beats.")
-    elif scope == "scene":
-        parts.append("Generate the scenes/beats for this part of the outline.")
-    else:
+    tier = _SCOPE_TIER.get(scope)
+    if scope == "full" or tier is None:
         parts.append("Generate a complete story outline.")
+    else:
+        unit = labels[tier] if tier < len(labels) else labels[-1]
+        children = labels[tier + 1:tier + 3]
+        if children:
+            parts.append(
+                f"Generate ONE {unit} for the story outline, with its "
+                + " and ".join(children) + "."
+            )
+        else:
+            parts.append(f"Generate the {unit}-level structure here.")
 
     if target_title:
         parts.append(f"This continues under: {target_title}.")
 
-    parts.append(guide)
+    parts.append(_structure_guide(units))
     parts.append(
         "Format as a Markdown outline using '#'/'##'/'###' headers and/or "
-        "'- ' bullets. Prefix items with Act/Chapter/Scene/Beat where "
-        "appropriate. Give each node a short title and a one-line "
-        "description. Do not write prose."
+        "'- ' bullets. Prefix items with the structural unit ("
+        + ", ".join(labels) + ") where appropriate. Give each node a short "
+        "title and a one-line description. Do not write prose."
     )
 
     if template_name:

@@ -72,6 +72,12 @@ class OutlineView(QWidget):
         self._engine = get_project_narrative_engine(
             db.get_project_by_id(project_id)
         )
+        from storyplanner.outline_actions import (
+            _unit_label,
+            engine_structural_units,
+        )
+        self._units = engine_structural_units(self._engine)
+        self._unit_label = _unit_label
 
         self._save_timer = QTimer()
         self._save_timer.setSingleShot(True)
@@ -139,13 +145,20 @@ class OutlineView(QWidget):
 
         tb.addSpacing(16)
 
-        add_section_btn = QPushButton("+ Section")
-        add_section_btn.setToolTip("Add a top-level section (act / part)")
+        # Labels adapt to the project's narrative engine (units[0] is the
+        # top structural unit: Part / Act / Issue / Season; the deepest is the
+        # leaf: Scene / Beat / Panel).
+        top_unit = self._unit_label(self._units[0]) if self._units else "Section"
+        leaf_unit = self._unit_label(self._units[-1]) if self._units else "Beat"
+        add_section_btn = QPushButton(f"+ {top_unit}")
+        add_section_btn.setToolTip(f"Add a top-level {top_unit.lower()}")
         add_section_btn.clicked.connect(self._add_section)
         tb.addWidget(add_section_btn)
 
-        add_beat_btn = QPushButton("+ Beat")
-        add_beat_btn.setToolTip("Add a beat under the selected section")
+        add_beat_btn = QPushButton(f"+ {leaf_unit}")
+        add_beat_btn.setToolTip(
+            f"Add a {leaf_unit.lower()} under the selected node"
+        )
         add_beat_btn.clicked.connect(self._add_beat)
         tb.addWidget(add_beat_btn)
 
@@ -347,8 +360,7 @@ class OutlineView(QWidget):
         self._set_editor_enabled(True)
         self._title_input.setText(node.title)
         self._desc_input.setPlainText(node.description)
-        is_section = current.parent() is None
-        self._editor_label.setText("Section" if is_section else "Beat")
+        self._editor_label.setText(self._unit_for_depth(self._node_depth(current)))
         self._suppress = False
         self._update_ai_node_button(current)
 
@@ -360,6 +372,13 @@ class OutlineView(QWidget):
             p = p.parent()
         return depth
 
+    def _unit_for_depth(self, depth: int) -> str:
+        """The engine's structural-unit label for a tree depth."""
+        if not self._units:
+            return "Section" if depth == 0 else "Beat"
+        idx = min(depth, len(self._units) - 1)
+        return self._unit_label(self._units[idx])
+
     def _update_ai_node_button(self, item: QTreeWidgetItem | None) -> None:
         """Relabel the contextual AI button to match the selection's level."""
         if not hasattr(self, "_ai_node_btn"):
@@ -369,14 +388,10 @@ class OutlineView(QWidget):
             self._ai_node_btn.setText("✨ AI Generate")
             return
         depth = self._node_depth(item)
-        label, scope = (
-            ("✨ AI Generate Act", "act") if depth == 0 else
-            ("✨ AI Generate Chapter", "chapter") if depth == 1 else
-            ("✨ AI Generate", "scene")
-        )
-        self._ai_node_btn.setText(label)
+        unit = self._unit_for_depth(depth)
+        self._ai_node_btn.setText(f"✨ AI Generate {unit}")
         self._ai_node_btn.setToolTip(
-            f"Generate {scope}-level structure under the selected node."
+            f"Generate {unit.lower()}-level structure under the selected node."
         )
         self._ai_node_btn.setEnabled(True)
 

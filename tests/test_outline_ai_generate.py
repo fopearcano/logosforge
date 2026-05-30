@@ -28,19 +28,21 @@ def _view(db, project_id):
 def test_prompt_full_scope():
     p = build_outline_generation_prompt("full", engine="novel")
     assert "complete story outline" in p.lower()
-    assert "Acts" in p
+    # Engine-derived vocabulary (Novel: Part/Chapter/Scene).
+    assert "Part" in p and "Chapter" in p and "Scene" in p
 
 
 def test_prompt_scope_variants():
-    assert "ONE act" in build_outline_generation_prompt("act")
-    assert "ONE chapter" in build_outline_generation_prompt("chapter")
-    assert "scenes/beats" in build_outline_generation_prompt("scene").lower()
+    # Default engine is novel -> tiers are Part / Chapter / Scene.
+    assert "ONE Part" in build_outline_generation_prompt("act")
+    assert "ONE Chapter" in build_outline_generation_prompt("chapter")
+    assert "Scene" in build_outline_generation_prompt("scene")
 
 
 def test_prompt_engine_specific_vocabulary():
-    assert "Sequences" in build_outline_generation_prompt("full", engine="screenplay")
-    assert "Episodes" in build_outline_generation_prompt("full", engine="series")
-    assert "Pages" in build_outline_generation_prompt("full", engine="graphic_novel")
+    assert "Sequence" in build_outline_generation_prompt("full", engine="screenplay")
+    assert "Episode" in build_outline_generation_prompt("full", engine="series")
+    assert "Page" in build_outline_generation_prompt("full", engine="graphic_novel")
 
 
 def test_prompt_includes_template_and_psyke():
@@ -99,7 +101,8 @@ def test_contextual_button_labels_act_and_chapter():
     view = _view(db, p.id)
     view._load_outline()
     view._select_node(act.id)
-    assert view._ai_node_btn.text() == "✨ AI Generate Act"
+    # Novel engine units: Part / Chapter / Scene.
+    assert view._ai_node_btn.text() == "✨ AI Generate Part"
     assert view._ai_node_btn.isEnabled() is True
     view._select_node(ch.id)
     assert view._ai_node_btn.text() == "✨ AI Generate Chapter"
@@ -114,7 +117,8 @@ def test_contextual_button_scene_level_for_deep_node():
     view = _view(db, p.id)
     view._load_outline()
     view._select_node(sc.id)
-    assert view._ai_node_btn.text() == "✨ AI Generate"
+    # Deepest novel unit is Scene.
+    assert view._ai_node_btn.text() == "✨ AI Generate Scene"
 
 
 # =========================================================================
@@ -131,7 +135,7 @@ def test_view_prompt_uses_engine_and_template():
     # Select the first real template (index 0 is the placeholder).
     view._template_combo.setCurrentIndex(1)
     prompt = view.build_generation_prompt("full", None)
-    assert "Sequences" in prompt           # screenplay engine guide
+    assert "Sequence" in prompt           # screenplay engine guide
     assert len(prompt) > 50
 
 
