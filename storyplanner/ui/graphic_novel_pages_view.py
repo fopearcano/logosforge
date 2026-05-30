@@ -27,6 +27,8 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMenu,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QSpinBox,
@@ -123,6 +125,117 @@ class GraphicNovelPagesView(QWidget):
         """Canvas box clicked → drive the shared selection."""
         self.select_panel(panel_id)
 
+    # -- Manuscript draft generation (one-way: structure -> prose) -----------
+
+    def generate_manuscript_draft(
+        self, scope: str = "all", *, confirm: bool = True,
+    ) -> str | None:
+        """Generate a manuscript scaffold from GN structure and append it to
+        the manuscript as ordinary editable text.
+
+        One-way and additive: reads pages/panels, writes Scene.content only.
+        Never parses prose back, never mutates pages/panels, never overwrites
+        existing scene text (it appends). Returns the generated text, or None
+        if nothing was generated / the user declined.
+        """
+        if not self._graphic_novel_mode:
+            return None
+        text = self._build_draft_text(scope)
+        if not text or not text.strip():
+            return None
+
+        target = self._draft_target_scene()
+        if target is None:
+            # No manuscript scene exists — create one only with confirmation
+            # (silent scene creation is avoided).
+            if confirm and not self._confirm(
+                "No manuscript scene exists. Create one for the Graphic "
+                "Novel draft?"
+            ):
+                return None
+            scene = self._db.create_scene(
+                self._project_id, title="Graphic Novel Draft", content=text,
+            )
+            self._notify_scene_list_changed(scene.id)
+            return text
+
+        existing = (target.content or "")
+        if existing.strip() and confirm and not self._confirm(
+            "Append generated Graphic Novel draft to current manuscript scene?"
+        ):
+            return None
+
+        # Single, additive update — never overwrites existing prose.
+        new_content = (existing.rstrip() + "\n\n" + text) if existing.strip() else text
+        self._db.update_scene_content(target.id, new_content)
+        self._notify_scene_changed(target.id)
+        return text
+
+    def _build_draft_text(self, scope: str) -> str:
+        from storyplanner.graphic_novel_manuscript import generate_draft
+        issue_id = None
+        if scope == "issue":
+            page = (
+                self._db.get_gn_page_by_id(self._current_page_id)
+                if self._current_page_id else None
+            )
+            issue_id = page.issue_id if page else None
+            if issue_id is None:
+                return ""
+        return generate_draft(
+            self._db, self._project_id, scope=scope,
+            page_id=self._current_page_id, issue_id=issue_id,
+        )
+
+    def _draft_target_scene(self):
+        """Append target = the last manuscript scene (end of the script)."""
+        scenes = self._db.get_all_scenes(self._project_id)
+        return scenes[-1] if scenes else None
+
+    def _confirm(self, message: str) -> bool:
+        ans = QMessageBox.question(
+            self, "Generate Manuscript Draft", message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        return ans == QMessageBox.StandardButton.Yes
+
+    def _notify_scene_changed(self, scene_id: int) -> None:
+        """Manuscript prose changed — refresh project, NOT GN page/panel."""
+        try:
+            from storyplanner.project_events import emit_scene_changed
+            emit_scene_changed(scene_id)
+        except Exception:
+            pass
+        if self._on_data_changed:
+            self._on_data_changed()
+
+    def _notify_scene_list_changed(self, scene_id: int) -> None:
+        try:
+            from storyplanner.project_events import get_event_bus
+            bus = get_event_bus()
+            bus.scenes_changed.emit()
+            bus.project_data_changed.emit()
+        except Exception:
+            pass
+        if self._on_data_changed:
+            self._on_data_changed()
+
+    @staticmethod
+    def insert_text_as_single_undo(editor, text: str) -> None:
+        """Insert *text* at the editor's cursor as ONE undoable operation.
+
+        Helper for the live-editor insertion path (begin/end edit block).
+        The Pages-view action uses the Scene.content path above; this exists
+        so insertion into a live QTextEdit/QPlainTextEdit is a single undo
+        step where an editor is available.
+        """
+        cursor = editor.textCursor()
+        cursor.beginEditBlock()
+        try:
+            cursor.insertText(text)
+        finally:
+            cursor.endEditBlock()
+
     def _build_page_pane(self) -> QWidget:
         pane = QWidget()
         col = QVBoxLayout(pane)
@@ -143,6 +256,26 @@ class GraphicNovelPagesView(QWidget):
                   self._page_down_btn, self._del_page_btn):
             bar.addWidget(w)
         bar.addStretch()
+
+        # Generate Manuscript Draft — one-way projection: GN structure ->
+        # editable manuscript text. Does not alter pages/panels.
+        self._gen_draft_btn = QPushButton("Generate Draft ▾")
+        self._gen_draft_btn.setToolTip(
+            "Insert an editable manuscript scaffold built from the page/panel "
+            "structure. Pages and panels are not modified."
+        )
+        gen_menu = QMenu(self._gen_draft_btn)
+        gen_menu.addAction(
+            "Selected Page", lambda: self.generate_manuscript_draft("page"),
+        )
+        gen_menu.addAction(
+            "All Pages", lambda: self.generate_manuscript_draft("all"),
+        )
+        gen_menu.addAction(
+            "Current Issue", lambda: self.generate_manuscript_draft("issue"),
+        )
+        self._gen_draft_btn.setMenu(gen_menu)
+        bar.addWidget(self._gen_draft_btn)
         col.addLayout(bar)
 
         self._page_list = QListWidget()
