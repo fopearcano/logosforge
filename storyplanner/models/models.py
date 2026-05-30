@@ -350,6 +350,27 @@ GN_CONTINUITY_ITEM_TYPES = (
 GN_CONTINUITY_STATUSES = (
     "consistent", "changed", "unknown", "potential_conflict",
 )
+GN_ISSUE_STATUSES = (
+    "planned", "outlined", "drafting", "complete", "published",
+)
+
+
+class GraphicNovelIssue(SQLModel, table=True):
+    """A published installment (Issue) grouping a run of pages.
+
+    Optional top-of-hierarchy unit: Issue → Page → Panel. Pages may stay
+    unassigned (issue_id is None) — treated as the default / loose pages.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id")
+    issue_number: int = 0
+    title: str = ""
+    summary: str = ""
+    status: str = ""              # GN_ISSUE_STATUSES (free-text; "" = unset)
+    notes: str = ""
+    sort_order: int = 0
+    created_at: datetime = Field(default_factory=_now)
 
 
 class GraphicNovelSequence(SQLModel, table=True):
@@ -375,6 +396,11 @@ class GraphicNovelPage(SQLModel, table=True):
     project_id: int = Field(foreign_key="project.id")
     sequence_id: Optional[int] = Field(
         default=None, foreign_key="graphicnovelsequence.id",
+    )
+    # Optional Issue grouping. None = unassigned / default issue. Added
+    # after the page table shipped, so old DBs gain it via _migrate().
+    issue_id: Optional[int] = Field(
+        default=None, foreign_key="graphicnovelissue.id",
     )
     page_number: int = 0
     summary: str = ""

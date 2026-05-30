@@ -19,6 +19,7 @@ from storyplanner.models import (
     Character,
     GraphicNovelContinuityAppearance,
     GraphicNovelContinuityItem,
+    GraphicNovelIssue,
     GraphicNovelPage,
     GraphicNovelPanel,
     GraphicNovelSequence,
@@ -213,6 +214,19 @@ class Database:
                 conn.execute(text(
                     "ALTER TABLE psykerelation ADD COLUMN"
                     " relation_type TEXT DEFAULT ''"
+                ))
+                conn.commit()
+
+            # GraphicNovelPage.issue_id — the page table shipped before
+            # Issues existed, so old DB files need the nullable column added.
+            # (New DBs already get it from create_all(), skipping this.)
+            page_rows = conn.execute(
+                text("PRAGMA table_info(graphicnovelpage)"),
+            ).fetchall()
+            page_columns = {row[1] for row in page_rows}
+            if page_rows and "issue_id" not in page_columns:
+                conn.execute(text(
+                    "ALTER TABLE graphicnovelpage ADD COLUMN issue_id INTEGER"
                 ))
                 conn.commit()
 
@@ -1394,6 +1408,102 @@ class Database:
     def csv_split(value: str) -> list[str]:
         return [v.strip() for v in (value or "").split(",") if v.strip()]
 
+    # Issues ----------------------------------------------------------------
+
+    def create_gn_issue(
+        self, project_id: int, *, issue_number: int | None = None,
+        title: str = "", summary: str = "", status: str = "",
+        notes: str = "", sort_order: int | None = None,
+    ) -> GraphicNovelIssue:
+        with Session(self._engine) as session:
+            siblings = session.exec(
+                select(GraphicNovelIssue).where(
+                    GraphicNovelIssue.project_id == project_id,
+                )
+            ).all()
+            if issue_number is None:
+                issue_number = len(siblings) + 1
+            if sort_order is None:
+                sort_order = len(siblings)
+            issue = GraphicNovelIssue(
+                project_id=project_id, issue_number=issue_number,
+                title=title, summary=summary, status=status, notes=notes,
+                sort_order=sort_order,
+            )
+            session.add(issue)
+            session.commit()
+            session.refresh(issue)
+            return issue
+
+    def get_gn_issues(self, project_id: int) -> list[GraphicNovelIssue]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(GraphicNovelIssue)
+                .where(GraphicNovelIssue.project_id == project_id)
+                .order_by(GraphicNovelIssue.sort_order, GraphicNovelIssue.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def get_gn_issue_by_id(self, issue_id: int) -> GraphicNovelIssue | None:
+        with Session(self._engine) as session:
+            return session.get(GraphicNovelIssue, issue_id)
+
+    def update_gn_issue(self, issue_id: int, **fields) -> None:
+        self._patch_row(GraphicNovelIssue, issue_id, fields)
+
+    def reorder_gn_issues(
+        self, project_id: int, ordered_issue_ids: list[int],
+    ) -> None:
+        """Renumber project issues to match *ordered_issue_ids* (issue_number
+        + sort_order both follow the given order, 1-based numbers)."""
+        with Session(self._engine) as session:
+            for idx, iid in enumerate(ordered_issue_ids):
+                issue = session.get(GraphicNovelIssue, iid)
+                if issue and issue.project_id == project_id:
+                    issue.issue_number = idx + 1
+                    issue.sort_order = idx
+            session.commit()
+
+    def delete_gn_issue(self, issue_id: int, *, force: bool = False) -> bool:
+        """Delete an Issue. Safe by default: refuses to delete an Issue that
+        still owns pages (returns False) so pages are never silently lost.
+
+        Pass force=True to detach — pages are moved to unassigned
+        (issue_id = None), never deleted — then the Issue is removed.
+        Returns True if the Issue was deleted, False if it was kept.
+        """
+        with Session(self._engine) as session:
+            issue = session.get(GraphicNovelIssue, issue_id)
+            if issue is None:
+                return False
+            pages = session.exec(
+                select(GraphicNovelPage).where(
+                    GraphicNovelPage.issue_id == issue_id,
+                )
+            ).all()
+            if pages and not force:
+                return False
+            for page in pages:
+                page.issue_id = None      # detach, never delete pages
+            session.delete(issue)
+            session.commit()
+            return True
+
+    def get_gn_pages_for_issue(self, issue_id: int) -> list[GraphicNovelPage]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(GraphicNovelPage)
+                .where(GraphicNovelPage.issue_id == issue_id)
+                .order_by(GraphicNovelPage.page_number, GraphicNovelPage.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def assign_gn_page_to_issue(
+        self, page_id: int, issue_id: int | None,
+    ) -> None:
+        """Assign a page to an Issue (or None to unassign)."""
+        self._patch_row(GraphicNovelPage, page_id, {"issue_id": issue_id})
+
     # Sequences -------------------------------------------------------------
 
     def create_gn_sequence(
@@ -1441,6 +1551,7 @@ class Database:
 
     def create_gn_page(
         self, project_id: int, *, sequence_id: int | None = None,
+        issue_id: int | None = None,
         page_number: int | None = None, summary: str = "",
         emotional_beat: str = "", density_level: str = "",
         reveal_type: str = "", splash_page: bool = False, notes: str = "",
@@ -1458,6 +1569,7 @@ class Database:
                 sort_order = len(siblings)
             page = GraphicNovelPage(
                 project_id=project_id, sequence_id=sequence_id,
+                issue_id=issue_id,
                 page_number=page_number, summary=summary,
                 emotional_beat=emotional_beat, density_level=density_level,
                 reveal_type=reveal_type, splash_page=splash_page,
