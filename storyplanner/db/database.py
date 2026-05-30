@@ -1330,6 +1330,15 @@ class Database:
             scene.summary = summary
             session.commit()
 
+    def update_scene_title(self, scene_id: int, title: str) -> None:
+        """Targeted title update that preserves links (unlike full update_scene)."""
+        with Session(self._engine) as session:
+            scene = session.get(Scene, scene_id)
+            if scene is None:
+                return
+            scene.title = title
+            session.commit()
+
     def reorder_scene(self, scene_id: int, new_index: int) -> None:
         """Move a scene to a new position (0-based) among all project scenes."""
         with Session(self._engine) as session:
