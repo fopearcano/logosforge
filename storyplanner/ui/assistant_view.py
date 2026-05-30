@@ -1160,10 +1160,10 @@ class AssistantPanel(QWidget):
             )
         mode_ctx = mode_context_block(mode_result) if mode_result else ""
 
-        # Narrative-engine context — derived from project.format_mode (today's
-        # engine selector).  Prepended to structural_ctx so the Assistant has
-        # the engine's priorities + structural terminology + review checks
-        # when it reasons about the next move.
+        # Narrative-engine context — resolved via engine_for_project (reads
+        # project.narrative_engine, with legacy format_mode fallback).
+        # Prepended to structural_ctx so the Assistant has the engine's
+        # priorities + structural terminology + review checks when it reasons.
         try:
             from storyplanner.narrative_engines import engine_for_project
             project = self._db.get_project_by_id(self._project_id)

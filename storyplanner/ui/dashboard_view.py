@@ -207,6 +207,29 @@ class DashboardView(QWidget):
             )
             box.addWidget(subtitle)
 
+        # Narrative engine + writing format — read from the centralized
+        # accessors so the Dashboard reflects the project's mode (and updates
+        # when the active view is rebuilt after a Project Settings change).
+        try:
+            from storyplanner.project_compat import (
+                ENGINE_LABELS,
+                FORMAT_LABELS,
+                get_project_narrative_engine,
+                get_project_writing_format,
+            )
+            engine = ENGINE_LABELS.get(
+                get_project_narrative_engine(project), "Novel")
+            fmt = FORMAT_LABELS.get(
+                get_project_writing_format(project), "Prose")
+            self._mode_label = QLabel(f"{engine}  ·  {fmt}")
+            self._mode_label.setObjectName("dashboardModeChip")
+            self._mode_label.setStyleSheet(
+                f"color: {theme.TEXT_SECONDARY}; font-size: 12px;"
+            )
+            box.addWidget(self._mode_label)
+        except Exception:
+            pass
+
         self._layout.addLayout(box)
 
     # -- Empty state ---------------------------------------------------------
