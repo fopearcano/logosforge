@@ -107,6 +107,11 @@ def update_scene(
         time_of_day=patch.get("time_of_day"),
         location=patch.get("location"),
         estimated_duration_minutes=patch.get("estimated_duration_minutes"),
+        # update_scene unconditionally replaces these associations, so pass the
+        # current values to preserve them across a partial PATCH.
+        character_ids=db.get_scene_character_ids(scene_id),
+        place_ids=db.get_scene_place_ids(scene_id),
+        character_states=db.get_scene_character_states(scene_id),
     )
     if patch.get("sort_order") is not None:
         db.reorder_scene(scene_id, patch["sort_order"])

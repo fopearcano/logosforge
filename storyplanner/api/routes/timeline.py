@@ -82,6 +82,10 @@ def update_event(
         time_of_day=patch.get("time_of_day"),
         location=patch.get("location"),
         estimated_duration_minutes=patch.get("duration_minutes"),
+        # Preserve associations update_scene would otherwise replace.
+        character_ids=db.get_scene_character_ids(event_id),
+        place_ids=db.get_scene_place_ids(event_id),
+        character_states=db.get_scene_character_states(event_id),
     )
     if patch.get("sort_order") is not None:
         db.reorder_scene(event_id, patch["sort_order"])

@@ -159,6 +159,7 @@ def delete_relation(
     except ValueError:
         raise bad_request("relation_id must be '<source_id>:<target_id>'")
     _entry_or_404(db, project.id, source_id)
+    _entry_or_404(db, project.id, target_id)
     db.remove_psyke_relation(source_id, target_id)
     broker.publish("psyke_changed", project_id=project.id, entry_id=source_id)
     return {"ok": True, "deleted": relation_id}

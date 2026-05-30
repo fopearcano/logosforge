@@ -132,6 +132,21 @@ def test_scene_unsaved_changes_visible_immediately(env):
     assert db.get_scene_by_id(sid).title == "Renamed"
 
 
+def test_scene_patch_preserves_associations(env):
+    """A partial PATCH must not wipe character/place links or states."""
+    client, db, pid = env
+    alice = db.create_character(pid, "Alice")
+    castle = db.create_place(pid, "Castle")
+    sid = client.post(
+        f"/api/projects/{pid}/scenes",
+        json={"title": "S", "character_ids": [alice.id], "place_ids": [castle.id]},
+    ).json()["id"]
+    client.patch(f"/api/projects/{pid}/scenes/{sid}", json={"beat": "inciting"})
+    scene = client.get(f"/api/projects/{pid}/scenes/{sid}").json()
+    assert scene["character_ids"] == [alice.id]
+    assert scene["place_ids"] == [castle.id]
+
+
 # -- Outline / Plot / Timeline -----------------------------------------------
 
 
@@ -208,6 +223,16 @@ def test_psyke_relations(env):
     assert len(rels) == 1
     assert client.delete(f"/api/projects/{pid}/psyke/relations/{rel['id']}").json()["ok"]
     assert client.get(f"/api/projects/{pid}/psyke/relations").json() == []
+
+
+def test_relation_delete_rejects_cross_project_target(env):
+    """Deleting a relation must validate both endpoints belong to the project."""
+    client, db, pid = env
+    a = client.post(f"/api/projects/{pid}/psyke/entries", json={"name": "Hero"}).json()
+    other_pid = db.create_project("Other").id
+    foreign = db.create_psyke_entry(other_pid, "Foreign", entry_type="theme")
+    r = client.delete(f"/api/projects/{pid}/psyke/relations/{a['id']}:{foreign.id}")
+    assert r.status_code == 404
 
 
 def test_psyke_progressions_and_search(env):
