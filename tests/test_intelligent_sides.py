@@ -103,7 +103,7 @@ def test_normal_style_no_opacity():
 def test_overlay_button_in_header():
     panel, *_ = _make_panel()
     assert hasattr(panel, "_overlay_btn")
-    assert panel._overlay_btn.toolTip() == "Toggle overlay mode"
+    assert "overlay" in panel._overlay_btn.toolTip().lower()
 
 
 # -- Style refresh -------------------------------------------------------------

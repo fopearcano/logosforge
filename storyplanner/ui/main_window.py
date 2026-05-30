@@ -508,6 +508,18 @@ class MainWindow(QMainWindow):
         self._assistant_panel.overlay_toggled.connect(self._on_overlay_toggled)
         self._assistant_panel.setVisible(False)
 
+        # Single reusable dock that owns content + assistant sizing/collapse/pin
+        # so every section behaves identically.
+        from storyplanner.ui.assistant_dock import AssistantDock
+        self._assistant_dock = AssistantDock(self._assistant_panel)
+        self._assistant_dock.set_content(self.content_area)
+        self._assistant_dock.collapsed_changed.connect(
+            lambda c: get_settings().set("assistant_collapsed", bool(c))
+        )
+        self._assistant_dock.pinned_changed.connect(
+            lambda p: get_settings().set("assistant_pinned", bool(p))
+        )
+
         # Subscribe to the project event bus so any write — Assistant
         # direct edits or Connector-mediated actions — refreshes the
         # active view without each path needing its own callback.
@@ -522,8 +534,7 @@ class MainWindow(QMainWindow):
         self._sidebar = sidebar
         self._root_layout = root_layout
         root_layout.addWidget(sidebar, stretch=0)
-        root_layout.addWidget(self.content_area, stretch=1)
-        root_layout.addWidget(self._assistant_panel, stretch=0)
+        root_layout.addWidget(self._assistant_dock, stretch=1)
 
         outer_layout.addWidget(main_row, stretch=1)
 
@@ -575,20 +586,23 @@ class MainWindow(QMainWindow):
         mgr = get_settings()
         if mgr.get("sidebar_collapsed"):
             self._set_sidebar_collapsed(True, animate=False)
+        # Restore pin/collapse before visibility so the first layout is right.
+        self._assistant_dock.set_pinned(bool(mgr.get("assistant_pinned")))
         if mgr.get("assistant_open"):
             self._assistant_user_visible = True
             self._assistant_panel.refresh_scenes()
-            self._assistant_panel.setVisible(True)
+            self._assistant_dock.set_panel_user_visible(True)
+            if mgr.get("assistant_collapsed"):
+                self._assistant_dock.set_collapsed(True)
 
     def _set_content(self, widget: QWidget) -> None:
-        """Replace the content area with a new widget."""
+        """Replace the content area inside the assistant dock with a new view."""
         self._psyke_console.clear_previous_focus()
-        self._root_layout.replaceWidget(self.content_area, widget)
-        old = self.content_area
-        if old is self._cached_scenes_view:
-            old.hide()
-        else:
+        old = self._assistant_dock.set_content(widget)
+        if old is not None and old is not self._cached_scenes_view:
             old.deleteLater()
+        elif old is self._cached_scenes_view:
+            old.hide()
         self.content_area = widget
         widget.show()
 
@@ -744,10 +758,12 @@ class MainWindow(QMainWindow):
             self._assistant_panel._prompt_input.setPlainText(combined)
         except Exception:
             return
-        if not self._assistant_panel.isVisible():
+        if not self._assistant_dock.is_panel_user_visible():
             self._assistant_user_visible = True
             self._assistant_panel.refresh_scenes()
-            self._assistant_panel.setVisible(True)
+            self._assistant_dock.set_panel_user_visible(True)
+            if self._assistant_overlay:
+                self._assistant_panel.setVisible(True)
 
     def _show_arcs(self) -> None:
         self._set_content(
@@ -758,25 +774,29 @@ class MainWindow(QMainWindow):
         )
 
     def _toggle_assistant(self) -> None:
-        self._assistant_user_visible = not self._assistant_panel.isVisible()
+        self._assistant_user_visible = not self._assistant_dock.is_panel_user_visible()
         if self._assistant_user_visible:
             self._assistant_panel.refresh_scenes()
             if self._assistant_overlay:
                 self._position_overlay_assistant()
-        self._assistant_panel.setVisible(self._assistant_user_visible)
+        self._assistant_dock.set_panel_user_visible(self._assistant_user_visible)
+        if self._assistant_overlay:
+            self._assistant_panel.setVisible(self._assistant_user_visible)
         get_settings().set("assistant_open", self._assistant_user_visible)
 
     def _hide_assistant(self) -> None:
         self._assistant_user_visible = False
-        self._assistant_panel.setVisible(False)
+        self._assistant_dock.set_panel_user_visible(False)
+        if self._assistant_overlay:
+            self._assistant_panel.setVisible(False)
         get_settings().set("assistant_open", False)
 
     def _on_overlay_toggled(self, overlay: bool) -> None:
         self._assistant_overlay = overlay
-        layout = self._root_layout
+        # Hand the panel to / back from the dock so the content reflows.
+        self._assistant_dock.set_floating(overlay)
 
         if overlay:
-            layout.removeWidget(self._assistant_panel)
             self._assistant_panel.setParent(self.centralWidget())
             self._assistant_panel.setMaximumWidth(360)
             shadow = QGraphicsDropShadowEffect(self._assistant_panel)
@@ -789,8 +809,9 @@ class MainWindow(QMainWindow):
             self._assistant_panel.show()
         else:
             self._assistant_panel.setGraphicsEffect(None)
-            self._assistant_panel.setMaximumWidth(340)
-            layout.addWidget(self._assistant_panel, stretch=0)
+            # set_floating(False) re-added the panel to the dock; let the dock
+            # re-apply its responsive width.
+            self._assistant_dock.apply_responsive()
             self._assistant_panel.show()
         self._assistant_panel.refresh_style()
 
@@ -919,33 +940,12 @@ class MainWindow(QMainWindow):
         self._psyke_console.reposition()
 
     def _apply_layout_for_width(self, w: int) -> None:
-        if w >= 1400:
-            tier = "wide"
-        elif w >= 1060:
-            tier = "medium"
-        elif w >= 820:
-            tier = "narrow"
-        else:
-            tier = "minimal"
-
-        if tier == self._layout_tier:
+        # Responsive sizing + minimum content-width protection is centralised in
+        # the AssistantDock, which uses its own (content-area) width rather than
+        # the whole-window width. Overlay mode is handled separately.
+        if self._assistant_overlay:
             return
-        self._layout_tier = tier
-
-        if tier == "wide":
-            self._assistant_panel.setMaximumWidth(340)
-            if self._assistant_user_visible:
-                self._assistant_panel.setVisible(True)
-        elif tier == "medium":
-            self._assistant_panel.setMaximumWidth(320)
-            if self._assistant_user_visible:
-                self._assistant_panel.setVisible(True)
-        elif tier == "narrow":
-            self._assistant_panel.setMaximumWidth(300)
-            if self._assistant_user_visible and not self._assistant_overlay:
-                self._assistant_panel.setVisible(False)
-        else:
-            self._assistant_panel.setVisible(False)
+        self._assistant_dock.apply_responsive()
 
     def _setup_system_commands(self) -> None:
         self._command_registry = CommandRegistry()
@@ -1744,10 +1744,12 @@ class MainWindow(QMainWindow):
             self._switch_project(dlg.restored_project_id)
 
     def _menu_ai_preset(self, preset: str) -> None:
-        if not self._assistant_panel.isVisible():
+        if not self._assistant_dock.is_panel_user_visible():
             self._assistant_user_visible = True
             self._assistant_panel.refresh_scenes()
-            self._assistant_panel.setVisible(True)
+            self._assistant_dock.set_panel_user_visible(True)
+            if self._assistant_overlay:
+                self._assistant_panel.setVisible(True)
         self._assistant_panel._send_preset(preset)
 
     def _menu_generate(self) -> None:

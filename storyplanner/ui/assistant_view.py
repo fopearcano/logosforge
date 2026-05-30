@@ -222,6 +222,8 @@ class AssistantPanel(QWidget):
     """Compact AI writing assistant — docks as a right-side panel."""
 
     panel_closed = Signal()
+    collapse_requested = Signal()
+    pin_toggled = Signal(bool)
 
     def __init__(
         self,
@@ -294,6 +296,35 @@ class AssistantPanel(QWidget):
         title.setStyleSheet(f"color: {theme.TEXT_PRIMARY};")
         header.addWidget(title)
         header.addStretch()
+
+        # Pin: when pinned the dock keeps the panel docked even when space is
+        # tight (content scrolls); unpinned lets it auto-hide to protect the
+        # working area.
+        self._pin_btn = QPushButton("\U0001F4CC")
+        self._pin_btn.setCheckable(True)
+        self._pin_btn.setFixedSize(24, 24)
+        self._pin_btn.setFlat(True)
+        self._pin_btn.setToolTip("Pin the assistant (keep docked when space is tight)")
+        self._pin_btn.setStyleSheet(
+            f"QPushButton {{ color: {theme.TEXT_MUTED}; border: none; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
+            f"QPushButton:checked {{ color: {theme.ACCENT}; }}"
+        )
+        self._pin_btn.toggled.connect(self.pin_toggled.emit)
+        header.addWidget(self._pin_btn)
+
+        # Collapse to a thin strip (keeps the assistant reachable without
+        # taking working width).
+        self._collapse_btn = QPushButton("\u2013")
+        self._collapse_btn.setFixedSize(24, 24)
+        self._collapse_btn.setFlat(True)
+        self._collapse_btn.setToolTip("Collapse the assistant panel")
+        self._collapse_btn.setStyleSheet(
+            f"QPushButton {{ color: {theme.TEXT_MUTED}; border: none; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
+        )
+        self._collapse_btn.clicked.connect(self.collapse_requested.emit)
+        header.addWidget(self._collapse_btn)
 
         self._overlay_btn = QPushButton("\u29c9")
         self._overlay_btn.setFixedSize(24, 24)
@@ -1923,6 +1954,13 @@ class AssistantPanel(QWidget):
 
     def is_overlay(self) -> bool:
         return self._overlay_mode
+
+    def set_pinned_state(self, pinned: bool) -> None:
+        """Reflect the dock's pin state on the header button (no re-emit)."""
+        if self._pin_btn.isChecked() != pinned:
+            self._pin_btn.blockSignals(True)
+            self._pin_btn.setChecked(pinned)
+            self._pin_btn.blockSignals(False)
 
     # -- Contextual dimming ----------------------------------------------------
 

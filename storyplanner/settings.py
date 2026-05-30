@@ -17,6 +17,8 @@ DEFAULTS: dict[str, object] = {
     "sidebar_collapsed": False,
     "sidebar_groups_expanded": {},
     "assistant_open": False,
+    "assistant_pinned": False,
+    "assistant_collapsed": False,
     "assistant_panel_mode": "assistant",
     "assistant_include_outline": False,
     "assistant_include_memory": False,
