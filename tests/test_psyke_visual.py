@@ -50,7 +50,16 @@ def test_motif_kinds():
 def test_visual_fields_for_type():
     assert visual_fields_for_type("character") == CHARACTER_VISUAL_FIELDS
     assert visual_fields_for_type("place") == LOCATION_VISUAL_FIELDS
-    assert visual_fields_for_type("theme") == ()
+    # Slice 4 added object/theme/lore visual field sets.
+    from storyplanner.psyke_visual import (
+        LORE_VISUAL_FIELDS,
+        OBJECT_VISUAL_FIELDS,
+        THEME_VISUAL_FIELDS,
+    )
+    assert visual_fields_for_type("object") == OBJECT_VISUAL_FIELDS
+    assert visual_fields_for_type("theme") == THEME_VISUAL_FIELDS
+    assert visual_fields_for_type("lore") == LORE_VISUAL_FIELDS
+    assert visual_fields_for_type("other") == ()
 
 
 # =========================================================================

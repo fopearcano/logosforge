@@ -21,7 +21,11 @@ from PySide6.QtWidgets import (
 
 from storyplanner.context_builder import find_psyke_scene_references
 from storyplanner.db import Database
-from storyplanner.models.psyke_details import FieldSpec, get_detail_schema
+from storyplanner.models.psyke_details import (
+    FieldSpec,
+    get_detail_schema,
+    get_visual_schema,
+)
 
 USER_ROLE = Qt.ItemDataRole.UserRole
 
@@ -42,6 +46,16 @@ class PsykeView(QWidget):
         self._on_data_changed = on_data_changed
         self._on_open_scene = on_open_scene
         self._selected_id: int | None = None
+
+        # Graphic Novel projects also edit PSYKE visual memory (a "Visual
+        # Memory" group stored under details_json["visual"]).
+        try:
+            from storyplanner.project_compat import get_project_narrative_engine
+            project = db.get_project_by_id(project_id)
+            self._gn_mode = get_project_narrative_engine(project) == "graphic_novel"
+        except Exception:
+            self._gn_mode = False
+        self._visual_widgets: dict[str, object] = {}
 
         root = QHBoxLayout(self)
 
@@ -268,6 +282,8 @@ class PsykeView(QWidget):
         self._rebuild_detail_fields(entry.entry_type)
         details = self._db.get_psyke_entry_details(entry.id)
         self._load_details(details)
+        if self._gn_mode:
+            self._load_visual(self._db.get_psyke_visual_memory(entry.id))
 
         self._related_section.setVisible(True)
         self._prog_section.setVisible(True)
@@ -304,6 +320,12 @@ class PsykeView(QWidget):
             self._prog_section.setVisible(True)
             self._refresh_related()
             self._refresh_progressions()
+
+        # Visual memory persists nested under details_json["visual"].
+        if self._gn_mode and self._selected_id is not None:
+            self._db.set_psyke_visual_memory(
+                self._selected_id, self._collect_visual(),
+            )
 
         self._refresh_list()
         self._reselect_current()
@@ -504,6 +526,7 @@ class PsykeView(QWidget):
 
     def _rebuild_detail_fields(self, entry_type: str) -> None:
         self._detail_widgets.clear()
+        self._visual_widgets.clear()
 
         layout = self._details_layout
         while layout.count() > 1:
@@ -514,9 +537,14 @@ class PsykeView(QWidget):
                 w.deleteLater()
 
         schema = get_detail_schema(entry_type)
-        if not schema:
+        visual_schema = get_visual_schema(entry_type) if self._gn_mode else []
+        if not schema and not visual_schema:
             self._details_section.setVisible(False)
             return
+        # The full field list = flat detail fields, then the Visual Memory
+        # group (rendered into a separate widget dict so it persists nested).
+        schema = list(schema) + list(visual_schema)
+        visual_keys = {s.key for s in visual_schema}
 
         current_section = None
         for spec in schema:
@@ -549,7 +577,10 @@ class PsykeView(QWidget):
                     lambda w=widget, m=spec.max_chars: self._enforce_max(w, m)
                 )
                 layout.addWidget(widget)
-            self._detail_widgets[spec.key] = widget
+            if spec.key in visual_keys:
+                self._visual_widgets[spec.key] = widget
+            else:
+                self._detail_widgets[spec.key] = widget
 
         self._details_section.setVisible(True)
 
@@ -579,6 +610,33 @@ class PsykeView(QWidget):
     def _load_details(self, details: dict) -> None:
         for key, widget in self._detail_widgets.items():
             val = details.get(key, "")
+            if isinstance(widget, QComboBox):
+                idx = widget.findData(val)
+                widget.setCurrentIndex(max(0, idx))
+            elif isinstance(widget, QLineEdit):
+                widget.setText(val)
+            else:
+                widget.setPlainText(val)
+
+    def _collect_visual(self) -> dict:
+        """Visual Memory field values (stored nested under ['visual'])."""
+        result: dict[str, str] = {}
+        for key, widget in self._visual_widgets.items():
+            if isinstance(widget, QComboBox):
+                val = widget.currentData() or ""
+            elif isinstance(widget, QLineEdit):
+                val = widget.text().strip()
+            else:
+                val = widget.toPlainText().strip()
+            # Always include keys so cleared fields clear nested values.
+            result[key] = val
+        return result
+
+    def _load_visual(self, visual: dict) -> None:
+        if not isinstance(visual, dict):
+            visual = {}
+        for key, widget in self._visual_widgets.items():
+            val = visual.get(key, "")
             if isinstance(widget, QComboBox):
                 idx = widget.findData(val)
                 widget.setCurrentIndex(max(0, idx))

@@ -163,3 +163,62 @@ _SCHEMAS: dict[str, list[FieldSpec]] = {
 
 def get_detail_schema(entry_type: str) -> list[FieldSpec]:
     return _SCHEMAS.get(entry_type, [])
+
+
+# Graphic Novel visual-memory fields, shown as a "Visual Memory" group when
+# the project's narrative engine is graphic_novel. These are persisted in the
+# nested details_json["visual"] section (NOT as flat detail keys), so they are
+# read/written via db.get/set_psyke_visual_memory — keeping them distinct from
+# the standard flat detail fields above.
+_VISUAL_LABELS: dict[str, str] = {
+    # character
+    "silhouette": "Silhouette",
+    "shape_language": "Shape Language",
+    "color_identity": "Color Identity",
+    "costume_state": "Costume State",
+    "pose_language": "Pose Language",
+    "gesture_vocabulary": "Gesture Vocabulary",
+    "facial_expression_range": "Facial Expression Range",
+    "visual_symbolism": "Visual Symbolism",
+    # place
+    "architecture": "Architecture",
+    "lighting_mood": "Lighting / Mood",
+    "color_palette": "Color Palette",
+    "environmental_motifs": "Environmental Motifs",
+    "recurring_camera_angles": "Recurring Camera Angles",
+    "spatial_continuity_notes": "Spatial Continuity Notes",
+    "recurring_objects": "Recurring Objects",
+    # object
+    "appearance": "Appearance",
+    "scale": "Scale",
+    "owner": "Owner",
+    "continuity_state": "Continuity State",
+    "symbolic_meaning": "Symbolic Meaning",
+    "first_appearance": "First Appearance",
+    "recurring_use": "Recurring Use",
+    # theme
+    "visual_manifestations": "Visual Manifestations",
+    "symbolic_colors": "Symbolic Colors",
+    "recurring_shapes": "Recurring Shapes",
+    "motif_family": "Motif Family",
+    # lore
+    "visual_rules": "Visual Rules",
+    "design_constraints": "Design Constraints",
+    "world_style_notes": "World Style Notes",
+}
+
+
+def get_visual_schema(entry_type: str) -> list[FieldSpec]:
+    """Visual Memory FieldSpecs for *entry_type* (empty when none apply).
+
+    Keys mirror storyplanner.psyke_visual.visual_fields_for_type and are
+    stored under details_json["visual"].
+    """
+    from storyplanner.psyke_visual import visual_fields_for_type
+    return [
+        FieldSpec(
+            key, _VISUAL_LABELS.get(key, key.replace("_", " ").title()),
+            "multiline", 300, section="Visual Memory",
+        )
+        for key in visual_fields_for_type(entry_type)
+    ]
