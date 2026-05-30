@@ -201,6 +201,8 @@ EDGE_GN_PANEL_CAUSALITY = "gn_panel_causality"  # panel → next panel
 EDGE_GN_MOTIF = "gn_motif"                   # motif ↔ page it appears on
 EDGE_GN_SYMBOL_ECHO = "gn_symbol_echo"       # page ↔ page sharing a motif
 EDGE_GN_OBJECT_CONTINUITY = "gn_object_continuity"  # object ↔ page it appears on
+EDGE_GN_CHARACTER_PRESENT = "gn_character_present"   # character ↔ page (appears_in)
+EDGE_GN_PSYKE_MOTIF = "gn_psyke_motif"               # motif ↔ PSYKE theme/object entry
 
 # -- Stage Script-specific edge kinds ----------------------------------------
 EDGE_SS_PRESSURE = "ss_pressure"           # pressures/confronts/dominates...
@@ -241,6 +243,8 @@ EDGE_STYLE: dict[str, dict] = {
     EDGE_GN_MOTIF:      {"color": "#06b6d4", "width": 1.4, "dash": "dash"},
     EDGE_GN_SYMBOL_ECHO: {"color": "#22d3ee", "width": 1.6, "dash": "dot"},
     EDGE_GN_OBJECT_CONTINUITY: {"color": "#f59e0b", "width": 1.4, "dash": "solid"},
+    EDGE_GN_CHARACTER_PRESENT: {"color": "#42a5f5", "width": 1.4, "dash": "solid"},
+    EDGE_GN_PSYKE_MOTIF: {"color": "#c084fc", "width": 1.3, "dash": "dot"},
     EDGE_SS_PRESSURE:   {"color": "#ef4444", "width": 1.8, "dash": "solid"},
     EDGE_SS_SUBTEXT:    {"color": "#ec4899", "width": 1.4, "dash": "dot"},
     EDGE_SS_ENTRANCE_EXIT: {"color": "#4ade80", "width": 1.5, "dash": "solid"},
@@ -287,6 +291,7 @@ MODE_GN_PANEL_CAUSALITY = "gn_panel_causality"
 MODE_GN_SYMBOL_RECURRENCE = "gn_symbol_recurrence"
 MODE_GN_PAGE_RHYTHM = "gn_page_rhythm"
 MODE_GN_OBJECT_CONTINUITY = "gn_object_continuity"
+MODE_GN_CHARACTER = "gn_character_appearance"
 
 # Stage-script-specific graph modes (only shown for stage_script projects).
 MODE_SS_PRESSURE = "ss_character_pressure"
@@ -484,6 +489,14 @@ MODE_PROFILES: dict[str, ModeProfile] = {
         prominence={NODE_KIND_GN_OBJECT: 1.3},
         description="Object continuity — where tracked objects reappear.",
     ),
+    MODE_GN_CHARACTER: ModeProfile(
+        name=MODE_GN_CHARACTER,
+        visible_kinds=frozenset({NODE_KIND_CHARACTER, NODE_KIND_PAGE}),
+        visible_edge_types=frozenset({EDGE_GN_CHARACTER_PRESENT}),
+        layout="theme_centered",
+        prominence={NODE_KIND_CHARACTER: 1.4},
+        description="Character appearances — who appears on which pages.",
+    ),
     # -- Stage Script modes --------------------------------------------------
     MODE_SS_PRESSURE: ModeProfile(
         name=MODE_SS_PRESSURE,
@@ -623,7 +636,7 @@ SCREENPLAY_MODE_ORDER: tuple[str, ...] = (
 
 GRAPHIC_NOVEL_MODE_ORDER: tuple[str, ...] = (
     MODE_GN_MOTIF, MODE_GN_PANEL_CAUSALITY, MODE_GN_SYMBOL_RECURRENCE,
-    MODE_GN_PAGE_RHYTHM, MODE_GN_OBJECT_CONTINUITY,
+    MODE_GN_PAGE_RHYTHM, MODE_GN_OBJECT_CONTINUITY, MODE_GN_CHARACTER,
 )
 
 STAGE_SCRIPT_MODE_ORDER: tuple[str, ...] = (
@@ -1634,6 +1647,8 @@ class FocusGraphView(QWidget):
             EDGE_GN_MOTIF: True,
             EDGE_GN_SYMBOL_ECHO: True,
             EDGE_GN_OBJECT_CONTINUITY: True,
+            EDGE_GN_CHARACTER_PRESENT: True,
+            EDGE_GN_PSYKE_MOTIF: True,
             EDGE_SS_PRESSURE: True,
             EDGE_SS_SUBTEXT: True,
             EDGE_SS_ENTRANCE_EXIT: True,
@@ -3396,3 +3411,90 @@ class FocusGraphView(QWidget):
 
     def get_trace_highlight(self) -> list[str]:
         return list(self._trace_highlight)
+
+
+# ---------------------------------------------------------------------------
+# Graphic Novel — character appearances + PSYKE motif linkage (Slice 8)
+# ---------------------------------------------------------------------------
+
+def _gn_name_index(db, project_id):
+    """Map lowercased PSYKE name/alias -> (psyke_node_id, entry_type)."""
+    index = {}
+    for entry in db.get_all_psyke_entries(project_id):
+        nid = f"PSYKE:{entry.id}"
+        names = [entry.name] + db.csv_split(getattr(entry, "aliases", "") or "")
+        for nm in names:
+            key = (nm or "").strip().lower()
+            if key:
+                index.setdefault(key, (nid, (entry.entry_type or "").lower()))
+    return index
+
+
+def enrich_graphic_novel_characters(db, project_id, data):
+    """Add character-appearance edges + PSYKE motif links to a GN graph.
+
+    Runs AFTER enrich_graphic_novel_graph (which created GNPage / GNMotif
+    nodes). Characters come from panel.characters_present, matched to a PSYKE
+    character entry by name/alias when possible (else a standalone
+    GNCharacter node). Motif nodes are linked to PSYKE theme/object entries
+    by name. No hard foreign keys required.
+    """
+    pages = db.get_gn_pages(project_id)
+    if not pages:
+        return
+    name_index = _gn_name_index(db, project_id)
+
+    def _node(node_id, etype, eid, name, kind):
+        if node_id not in data.nodes:
+            data.nodes[node_id] = GraphNode(node_id, etype, eid, name, subtype=kind)
+            data.adjacency.setdefault(node_id, set())
+
+    def _edge(src, tgt, etype):
+        if src not in data.nodes or tgt not in data.nodes:
+            return
+        data.edges.append(GraphEdge(src, tgt, edge_type=etype))
+        data.adjacency.setdefault(src, set()).add(tgt)
+        data.adjacency.setdefault(tgt, set()).add(src)
+
+    seen_char = set()
+    motifs = set()
+    for page in pages:
+        page_node = f"GNPage:{page.id}"
+        if page_node not in data.nodes:
+            continue
+        for panel in db.get_gn_panels_for_page(page.id):
+            for raw in db.csv_split(panel.characters_present):
+                name = raw.strip()
+                if not name:
+                    continue
+                match = name_index.get(name.lower())
+                if match and match[1] == "character":
+                    cnode = match[0]
+                else:
+                    cnode = f"GNCharacter:{name}"
+                    _node(cnode, "GNCharacter", 0, name, NODE_KIND_CHARACTER)
+                pair = (cnode, page_node)
+                if pair not in seen_char:
+                    seen_char.add(pair)
+                    _edge(cnode, page_node, EDGE_GN_CHARACTER_PRESENT)
+            for motif in db.csv_split(panel.visual_motifs):
+                motifs.add(motif)
+
+    # Link motif nodes to PSYKE theme/object entries by name.
+    for motif in motifs:
+        motif_node = f"GNMotif:{motif}"
+        if motif_node not in data.nodes:
+            continue
+        match = name_index.get(motif.strip().lower())
+        if match and match[1] in ("theme", "object"):
+            _edge(motif_node, match[0], EDGE_GN_PSYKE_MOTIF)
+
+
+def gn_default_mode(db, project_id):
+    """Non-hairball default mode for a GN project: Visual Motif graph when
+    motifs exist, otherwise Page Rhythm."""
+    for page in db.get_gn_pages(project_id):
+        for panel in db.get_gn_panels_for_page(page.id):
+            if db.csv_split(panel.visual_motifs):
+                return MODE_GN_MOTIF
+    return MODE_GN_PAGE_RHYTHM
