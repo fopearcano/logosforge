@@ -605,10 +605,38 @@ def screenplay_health_metrics(db, project_id: int) -> list:
                            if "dialogue block" in w or "parenthetical" in w),
                           "Dialogue formatting looks consistent.")))
 
-    # Cinematic Continuity stays deferred (needs semantics / Phase 10G).
+    # -- Fountain readiness (Phase 10G — format health, capped at WATCH) --
+    try:
+        from storyplanner.export import export_screenplay_fountain_result
+        from storyplanner.screenplay_fountain import validate_fountain_export
+        res = export_screenplay_fountain_result(db, project_id)
+        fval = validate_fountain_export(res.text)
+    except Exception:
+        res, fval = None, None
+    if n == 0 or fval is None:
+        for cat in (M.CAT_FOUNTAIN_READINESS, M.CAT_UNSUPPORTED_ELEMENTS):
+            metrics.append(M.NarrativeHealthMetric(
+                category=cat, status=M.STATUS_UNKNOWN,
+                evidence="No screenplay scenes to assess."))
+    else:
+        f_status = M.STATUS_STABLE if (fval.is_valid and not fval.warnings) else M.STATUS_WATCH
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_FOUNTAIN_READINESS, status=f_status, confidence=0.5,
+            evidence=fval.summary))
+        # Forcing syntax indicates an element that didn't map cleanly; omitted
+        # notes are an intentional pref, not an unsupported element.
+        unsupported = [w for w in (res.warnings if res else [])
+                       if "forced" in w.lower()]
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_UNSUPPORTED_ELEMENTS,
+            status=M.STATUS_WATCH if unsupported else M.STATUS_STABLE, confidence=0.45,
+            evidence=(unsupported[0] if unsupported
+                      else "All elements map cleanly to Fountain.")))
+
+    # Cinematic Continuity stays deferred (needs semantics / Phase 10H).
     metrics.append(M.NarrativeHealthMetric(
         category=M.CAT_CINEMATIC_CONTINUITY, status=M.STATUS_UNKNOWN,
-        evidence="Deferred — not deterministically assessable yet (Phase 10G)."))
+        evidence="Deferred — not deterministically assessable yet (Phase 10H)."))
     return metrics
 
 

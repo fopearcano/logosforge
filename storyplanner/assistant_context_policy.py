@@ -244,15 +244,22 @@ def _screenplay_links_block(db, project_id: int, scene_id: int | None) -> str:
 
 
 def _screenplay_export_block(db, project_id: int, scene_id: int | None) -> str:
-    """Capped ``[Screenplay Export Readiness]`` — target, top issues, title, length."""
+    """Export readiness for the active target.
+
+    Phase 10G — when the target is ``fountain`` (the canonical default) this emits
+    a Fountain-specific ``[Fountain Export Readiness]`` block; otherwise it emits
+    the generic ``[Screenplay Export Readiness]`` block. Exactly one shows.
+    """
     if scene_id is None or not _is_screenplay(db, project_id):
         return ""
     try:
         from storyplanner.screenplay_render import get_export_prefs, get_title_page
+        prefs = get_export_prefs(db, project_id)
+        if prefs.get("export_target", "fountain") == "fountain":
+            return _fountain_export_block(db, project_id)
         from storyplanner.screenplay_export_validation import (
             validate_screenplay_export,
         )
-        prefs = get_export_prefs(db, project_id)
         rep = validate_screenplay_export(
             db, project_id, target_format=prefs.get("export_target", "fountain"),
             prefs=prefs)
@@ -266,6 +273,29 @@ def _screenplay_export_block(db, project_id: int, scene_id: int | None) -> str:
             lines.append("Warnings: " + "; ".join(rep.warnings[:3]))
         if len(lines) == 3 and rep.is_export_safe:
             lines.append("No blocking issues.")
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _fountain_export_block(db, project_id: int) -> str:
+    """Capped ``[Fountain Export Readiness]`` — target .fountain + top issues."""
+    try:
+        from storyplanner.export import export_screenplay_fountain_result
+        from storyplanner.screenplay_fountain import validate_fountain_export
+        from storyplanner.screenplay_render import get_title_page, get_export_prefs
+        res = export_screenplay_fountain_result(db, project_id)
+        rep = validate_fountain_export(res.text)
+        title = (get_title_page(db, project_id).get("title") or "").strip()
+        notes_on = bool(get_export_prefs(db, project_id).get("show_notes_in_export"))
+        lines = ["[Fountain Export Readiness]",
+                 "Export target: .fountain",
+                 f"Title page: {'set' if title else 'missing'}",
+                 f"Notes: {'included' if notes_on else 'excluded'}"]
+        if rep.blocking_errors:
+            lines.append("Blocking: " + "; ".join(rep.blocking_errors[:3]))
+        if rep.warnings:
+            lines.append("Warnings: " + "; ".join(rep.warnings[:3]))
         return "\n".join(lines)
     except Exception:
         return ""

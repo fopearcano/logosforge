@@ -15,7 +15,9 @@ headings are uppercased and parentheticals normalized — **text-preserving**.
 | Function | Output |
 |---|---|
 | `export_screenplay` | screenplay plain text (slug + classified body) with a `Writing Mode` header |
-| `export_fountain` | Fountain text: **title page** (from project settings) + headings/action/character/dialogue/parentheticals/transitions; notes as `[[ ]]` |
+| `export_screenplay_fountain` / `export_screenplay_fountain_result` | **canonical** `.fountain` (Phase 10G) via `screenplay_fountain.serialize_screenplay_to_fountain` — title page, forced elements, grouped dialogue, option-gated notes; result carries `.fountain` filename + warnings |
+| `export_fountain` | screenplay projects now delegate to the canonical serializer; other modes keep the legacy multi-mode Fountain text path |
+| `export_fountain_validation_json` | Fountain validation report (schema_version / writing_mode / exported_at / filename) |
 | `export_screenplay_preview_html` | conservative screenplay **preview HTML** (not page-accurate) |
 | `export_screenplay_export_validation_json` | export-readiness report (`schema_version`, `writing_mode`, `exported_at`) |
 | `export_screenplay_diagnostics_json` / `export_screenplay_graph_json` / `export_story_links_json` / `export_setup_payoff_report_json` / `export_subtext_report_json` | structured screenplay reports |
@@ -58,7 +60,17 @@ capped `[Screenplay Export Readiness]` block.
 Page/minute counts are **approximate** (~1 page/minute, ~55 lines/page) and
 labelled as such — never professional page-accurate pagination.
 
-## Deferred to Phase 10G
+## Fountain vs Markdown (Phase 10G)
+
+**Fountain (`.fountain`) is the canonical screenplay interchange format** — it is
+screenplay-specific markup, *not* generic Markdown. The generic `export_markdown`
+remains for documents/outline/notes and is a **separate serializer**; screenplay
+export never uses it. `screenplay_fountain` also provides a Fountain **parser**
+(`parse_fountain_to_screenplay_blocks`) and roundtrip (blocks → `.fountain` →
+blocks preserves standard elements + title page); the parser is exposed as a
+service (import UI is deferred to 10H).
+
+## Deferred to Phase 10H
 
 - True page-accurate PDF pagination + production-grade FDX.
 - Title-page / export-preferences **editor UI** (storage + service API exist;

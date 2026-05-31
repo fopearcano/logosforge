@@ -351,3 +351,111 @@ register("sp_find_orphan_dialogue", lambda db, c: _find_orphans(db, c, want="dia
 register("sp_find_orphan_parenthetical",
          lambda db, c: _find_orphans(db, c, want="parenthetical"))
 register("sp_check_production_polish", _check_production_polish)
+
+
+def _fountain_text(db, project_id: int) -> str:
+    from storyplanner.export import export_screenplay_fountain
+    return export_screenplay_fountain(db, project_id)
+
+
+def _fountain_validate(db, context: LogosContext) -> LogosResult:
+    action = "sp_validate_fountain_export"
+    try:
+        from storyplanner.screenplay_fountain import validate_fountain_export
+        rep = validate_fountain_export(_fountain_text(db, context.project_id))
+    except Exception as exc:
+        return LogosResult.failure(action, f"Fountain validation failed: {exc}")
+    lines = [rep.summary]
+    if rep.blocking_errors:
+        lines += ["", "Blocking:"] + [f"- {e}" for e in rep.blocking_errors]
+    if rep.warnings:
+        lines += ["", "Warnings:"] + [f"- {w}" for w in rep.warnings]
+    return LogosResult(ok=True, action=action, title="Validate Fountain Export",
+                       message="\n".join(lines), suggestions=list(rep.warnings[:5]),
+                       proposed_operations=[])
+
+
+def _fountain_preview(db, context: LogosContext) -> LogosResult:
+    action = "sp_preview_fountain"
+    try:
+        text = _fountain_text(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Fountain export failed: {exc}")
+    head = "\n".join(text.splitlines()[:24])
+    more = "" if text.count("\n") <= 24 else "\n…(truncated preview)"
+    return LogosResult(ok=True, action=action, title="Preview Fountain Output",
+                       message=head + more, suggestions=[], proposed_operations=[])
+
+
+def _fountain_compat(db, context: LogosContext) -> LogosResult:
+    action = "sp_check_fountain_compatibility"
+    try:
+        from storyplanner.export import export_screenplay_fountain_result
+        res = export_screenplay_fountain_result(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Fountain export failed: {exc}")
+    if not res.warnings:
+        msg = "Screenplay maps cleanly to Fountain — no compatibility warnings."
+    else:
+        msg = "Fountain compatibility notes:\n" + "\n".join(
+            f"- {w}" for w in res.warnings[:10])
+    return LogosResult(ok=True, action=action, title="Check Fountain Compatibility",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _fountain_ambiguous(db, context: LogosContext) -> LogosResult:
+    action = "sp_find_ambiguous_fountain"
+    try:
+        from storyplanner.export import export_screenplay_fountain_result
+        res = export_screenplay_fountain_result(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Fountain export failed: {exc}")
+    amb = [w for w in res.warnings if "ambiguous" in w.lower() or "forced" in w.lower()]
+    msg = ("\n".join(f"- {w}" for w in amb) if amb
+           else "No ambiguous Fountain elements detected.")
+    return LogosResult(ok=True, action=action, title="Find Ambiguous Fountain Elements",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _fountain_explain_warning(db, context: LogosContext) -> LogosResult:
+    action = "sp_explain_fountain_warning"
+    try:
+        from storyplanner.screenplay_fountain import validate_fountain_export
+        rep = validate_fountain_export(_fountain_text(db, context.project_id))
+    except Exception as exc:
+        return LogosResult.failure(action, f"Fountain validation failed: {exc}")
+    if not rep.warnings:
+        msg = "No Fountain warnings to explain."
+    else:
+        msg = ("Fountain warnings (deterministic):\n"
+               + "\n".join(f"- {w}" for w in rep.warnings))
+    return LogosResult(ok=True, action=action, title="Explain Fountain Warning",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _fountain_prepare(db, context: LogosContext) -> LogosResult:
+    action = "sp_prepare_for_fountain"
+    try:
+        from storyplanner.screenplay_fountain import validate_fountain_export
+        from storyplanner.screenplay_render import get_title_page
+        rep = validate_fountain_export(_fountain_text(db, context.project_id))
+        title = (get_title_page(db, context.project_id).get("title") or "").strip()
+    except Exception as exc:
+        return LogosResult.failure(action, f"Preparation failed: {exc}")
+    steps = []
+    if not title:
+        steps.append("Set a title page (Title/Author).")
+    for w in rep.warnings:
+        steps.append(f"Review: {w}")
+    msg = ("Ready to export as .fountain." if not steps
+           else "Before exporting as .fountain:\n" + "\n".join(f"- {s}" for s in steps))
+    return LogosResult(ok=True, action=action, title="Prepare Screenplay for Fountain Export",
+                       message=msg, suggestions=steps[:5], proposed_operations=[])
+
+
+register("sp_validate_fountain_export", _fountain_validate)
+register("sp_preview_fountain", _fountain_preview)
+register("sp_check_fountain_compatibility", _fountain_compat)
+register("sp_find_ambiguous_fountain", _fountain_ambiguous)
+register("sp_explain_fountain_warning", _fountain_explain_warning)
+register("sp_prepare_for_fountain", _fountain_prepare)

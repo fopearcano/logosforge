@@ -378,8 +378,10 @@ def test_assistant_export_readiness_block():
     pid = _film(db)
     sid = db.get_all_scenes(pid)[0].id
     ctx = gather_injected_context(db, pid, section_name="Manuscript", scene_id=sid)
-    assert "[Screenplay Export Readiness]" in ctx
-    assert "Target:" in ctx
+    # Phase 10G: the default export target is .fountain, so the export-readiness
+    # block is the Fountain variant (the generic one shows for other targets).
+    assert "[Fountain Export Readiness]" in ctx
+    assert "Export target: .fountain" in ctx
 
 
 def test_assistant_export_block_disableable_and_novel_absent():

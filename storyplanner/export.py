@@ -956,8 +956,87 @@ def _add_content_paragraphs(doc, text: str, font_name: str) -> None:
 
 # -- Fountain export ----------------------------------------------------------
 
+def build_screenplay_blocks(db: Database, project_id: int):
+    """Flatten a screenplay project into one ordered ScreenplayBlock list.
+
+    Injects a scene-heading block from the scene slug when the scene content does
+    not already open with one (avoids duplicate headings on export). Read-only.
+    """
+    from storyplanner.screenplay_blocks import ScreenplayBlock, parse_screenplay_text
+
+    data = _gather_project_data(db, project_id)
+    blocks = []
+    order = 0
+    for scene in data["scenes"]:
+        raw = _scene_body(scene)
+        parsed = parse_screenplay_text(raw, scene_id=None) if raw.strip() else []
+        if not (parsed and parsed[0].element_type == "scene_heading"):
+            blocks.append(ScreenplayBlock(
+                element_type="scene_heading", text=_slug_line(scene),
+                order_index=order))
+            order += 1
+        for b in parsed:
+            blocks.append(ScreenplayBlock(
+                element_type=b.element_type, text=b.text, order_index=order,
+                metadata=dict(b.metadata)))
+            order += 1
+    return blocks
+
+
+def export_screenplay_fountain_result(db: Database, project_id: int, *, options=None):
+    """Canonical .fountain export -> FountainExportResult (Phase 10G)."""
+    from storyplanner.screenplay_fountain import (
+        FountainExportOptions, serialize_screenplay_to_fountain,
+    )
+    from storyplanner.screenplay_render import get_title_page, get_export_prefs
+
+    project = db.get_project_by_id(project_id)
+    title = project.title if project else "Untitled"
+    if options is None:
+        prefs = get_export_prefs(db, project_id)
+        options = FountainExportOptions(
+            include_notes=bool(prefs.get("show_notes_in_export", False)),
+            include_title_page=bool(prefs.get("include_title_page", True)),
+            uppercase_scene_headings=bool(prefs.get("uppercase_scene_headings", True)),
+            uppercase_character_cues=bool(prefs.get("uppercase_character_cues", True)),
+        )
+    return serialize_screenplay_to_fountain(
+        build_screenplay_blocks(db, project_id),
+        title_page=get_title_page(db, project_id), options=options,
+        project_title=title)
+
+
+def export_screenplay_fountain(db: Database, project_id: int, *, options=None) -> str:
+    """Canonical .fountain export text (Phase 10G)."""
+    return export_screenplay_fountain_result(db, project_id, options=options).text
+
+
+def export_fountain_validation_json(db: Database, project_id: int) -> str:
+    """Phase 10G — Fountain export validation report as JSON (read-only)."""
+    import datetime as _dt
+    from storyplanner.screenplay_fountain import validate_fountain_export
+    from storyplanner.writing_modes import get_project_writing_mode
+
+    project = db.get_project_by_id(project_id)
+    res = export_screenplay_fountain_result(db, project_id)
+    rep = validate_fountain_export(res.text)
+    payload = rep.to_dict()
+    payload["schema_version"] = 1
+    payload["writing_mode"] = get_project_writing_mode(project)
+    payload["exported_at"] = _dt.datetime.now().isoformat(timespec="seconds")
+    payload["project_title"] = project.title if project else "Untitled"
+    payload["export_warnings"] = list(res.warnings)
+    payload["filename"] = res.filename
+    return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
 def export_fountain(db: Database, project_id: int) -> str:
     data = _gather_project_data(db, project_id)
+    # Phase 10G — screenplay projects use the dedicated, canonical Fountain
+    # serializer. Other modes keep the legacy multi-mode text path below.
+    if _get_fmt(data) == "screenplay":
+        return export_screenplay_fountain(db, project_id)
+
     lines: list[str] = []
 
     # Phase 10F — title page from project settings (falls back to project title).

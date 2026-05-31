@@ -579,6 +579,27 @@ for _name, _label, _desc in [
         category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
         prompt="", modes=_SP, deterministic=True,
     ))
+# Manuscript + Screenplay — Phase 10G (Fountain export, read-only/deterministic).
+for _name, _label, _desc in [
+    ("sp_validate_fountain_export", "Validate Fountain Export",
+     "Validate the .fountain output (deterministic)."),
+    ("sp_preview_fountain", "Preview Fountain Output",
+     "Preview the first lines of the .fountain export."),
+    ("sp_check_fountain_compatibility", "Check Fountain Compatibility",
+     "Report blocks that don't map cleanly to Fountain."),
+    ("sp_find_ambiguous_fountain", "Find Ambiguous Fountain Elements",
+     "List elements that needed forcing syntax."),
+    ("sp_explain_fountain_warning", "Explain Fountain Warning",
+     "Explain Fountain export warnings from deterministic evidence."),
+    ("sp_prepare_for_fountain", "Prepare Screenplay for Fountain Export",
+     "Checklist of steps before exporting as .fountain."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc,
+        category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+        prompt="", modes=_SP, deterministic=True,
+    ))
+
 # Manuscript + Screenplay — Phase 10F (export polish, read-only/deterministic).
 for _name, _label, _desc in [
     ("sp_validate_export", "Validate Screenplay Export",

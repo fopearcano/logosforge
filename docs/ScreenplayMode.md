@@ -262,7 +262,56 @@ copies of scene/PSYKE text (the graph is **not** a source of truth). See
 See **docs/Export.md** for the full export surface, what is approximate vs
 professional, and why PDF/FDX remain basic.
 
-## Intentionally deferred to Phase 10G
+## Phase 10G — Fountain-first export + import pipeline
+
+**Fountain** (not generic Markdown) is the canonical plain-text screenplay
+interchange format. `storyplanner/screenplay_fountain.py` is the dedicated
+serializer / parser / validator.
+
+- **Serializer** (`serialize_screenplay_to_fountain`): maps blocks → `.fountain`
+  with conservative forcing — `.` forced scene headings, `@` mixed-case cues,
+  `!` ambiguous ALL-CAPS action, `> ` non-standard transitions; dialogue groups
+  stay together; title page on top; notes `[[ ]]` (option-gated). Returns
+  `FountainExportResult` (text, `.fountain` filename, warnings, schema_version).
+- **Parser** (`parse_fountain_to_screenplay_blocks`): real Fountain syntax —
+  forced elements, title page, notes, **boneyard `/* */`** (stripped + warned),
+  **sections `#`/`##`** and **synopses `=`** (preserved as notes + warned),
+  centered/lyrics/page-break (degraded + warned); ambiguous → action; no text
+  loss. Returns `FountainParseResult` (blocks, title_page, warnings, ambiguous).
+- **Validator** (`validate_fountain_export`): blocking errors vs warnings;
+  blocks only when truly unsafe.
+- **Roundtrip**: blocks → `.fountain` → blocks preserves standard element types
+  (scene heading / action / character / parenthetical / dialogue / transition /
+  note) and the title page.
+- **Export**: `export.export_screenplay_fountain[_result]` is canonical;
+  `export_fountain` now routes screenplay projects through it (other modes
+  unchanged); `export_fountain_validation_json`. Generic `export_markdown` stays
+  **separate** — screenplay never relies on the Markdown serializer.
+- **Logos** (deterministic, no LLM): Validate Fountain Export, Preview Fountain
+  Output, Check Fountain Compatibility, Find Ambiguous Fountain Elements, Explain
+  Fountain Warning, Prepare Screenplay for Fountain Export.
+- **Assistant**: `[Fountain Export Readiness]` block (shown for the default
+  `.fountain` target; the generic export block shows for other targets — exactly
+  one appears).
+- **Health**: Fountain Export Readiness + Unsupported Screenplay Elements
+  (format health, capped at *Needs Attention*).
+
+Editor architecture: the internal source of truth remains **structured
+screenplay blocks** (derived from flat scene text); Fountain is an
+interchange/export/import language. Raw-Fountain editing in Manuscript is not the
+internal format and is deferred.
+
+## Intentionally deferred to Phase 10H
+
+- Fountain **import UI** (parser + roundtrip exist as a service; project-import
+  UI / destructive merge with preview-confirm is deferred).
+- Export **menu / options dialog** wiring (functions + options + Logos exist).
+- Section/synopsis **export** from outline (import handles them; export off by
+  default).
+- Rich-text emphasis (`*`/`_`) mapping (no rich-text source yet); page-accurate
+  PDF + production FDX; Cinematic Continuity detector.
+
+## (Earlier) Intentionally deferred to Phase 10G
 
 - Page-accurate PDF pagination + production-grade FDX.
 - Title-page / export-preferences **editor UI** (storage + service API exist).

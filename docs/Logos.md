@@ -62,7 +62,9 @@ notes) — it does not invent a second context system.
   confirmed-link persistence (`StoryLink`) is explicit/user-invoked via the
   service API, and the mutating Logos actions + graph widget are Phase 10F. Phase 10F adds deterministic export-polish
   actions (Validate Screenplay Export, Export Readiness Report, Preview Render,
-  Find Orphan Dialogue/Parentheticals, Check Production Polish) — read-only.
+  Find Orphan Dialogue/Parentheticals, Check Production Polish) — read-only. Phase 10G adds deterministic Fountain actions
+  (Validate Fountain Export, Preview Fountain Output, Check Fountain Compatibility,
+  Find Ambiguous Fountain Elements, Explain Fountain Warning, Prepare for Fountain).
 - **operations** — controlled, validated apply ops (manuscript replace/insert,
   outline scene create/update, PSYKE notes/progression/relation). Every mutation
   is previewed and confirmed; nothing auto-applies.
