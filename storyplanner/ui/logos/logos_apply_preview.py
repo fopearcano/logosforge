@@ -59,6 +59,8 @@ class LogosApplyPreview(QDialog):
             self._build_manuscript(layout)
         elif self._target == ops.TARGET_OUTLINE:
             self._build_outline(layout)
+        elif self._target == ops.TARGET_PSYKE:
+            self._build_psyke(layout)
         else:
             layout.addWidget(QLabel("Nothing to apply."))
 
@@ -105,6 +107,24 @@ class LogosApplyPreview(QDialog):
         self._summary_field.setPlainText(self._result.message or "")
         layout.addWidget(self._summary_field, stretch=1)
 
+    # -- PSYKE ---------------------------------------------------------------
+
+    def _build_psyke(self, layout: QVBoxLayout) -> None:
+        prog_op = self._find_op(ops.OP_CREATE_PSYKE_PROGRESSION)
+        notes_op = self._find_op(ops.OP_APPEND_PSYKE_NOTES)
+        self._psyke_op = prog_op or notes_op
+        payload = (self._psyke_op or {}).get("payload", {})
+        self._psyke_entry_id = payload.get("entry_id")
+        self._psyke_scene_id = payload.get("scene_id")
+
+        kind = "progression" if prog_op else "note"
+        layout.addWidget(self._small_label(
+            f"This will be added as a PSYKE {kind} (editable):"
+        ))
+        self._psyke_text = QPlainTextEdit()
+        self._psyke_text.setPlainText(self._result.message or "")
+        layout.addWidget(self._psyke_text, stretch=1)
+
     # -- Buttons -------------------------------------------------------------
 
     def _build_buttons(self) -> QHBoxLayout:
@@ -139,6 +159,16 @@ class LogosApplyPreview(QDialog):
             create_btn.setDefault(True)
             create_btn.clicked.connect(self._confirm_create)
             row.addWidget(create_btn)
+        elif self._target == ops.TARGET_PSYKE:
+            op_name = (self._psyke_op or {}).get("operation")
+            if op_name == ops.OP_CREATE_PSYKE_PROGRESSION:
+                btn = QPushButton("Add Progression")
+                btn.clicked.connect(self._confirm_psyke_progression)
+            else:
+                btn = QPushButton("Append to Notes")
+                btn.clicked.connect(self._confirm_psyke_notes)
+            btn.setDefault(True)
+            row.addWidget(btn)
         return row
 
     # -- Confirm handlers (build finalized op, validate, accept) -------------
@@ -176,6 +206,21 @@ class LogosApplyPreview(QDialog):
         self._finish({
             "operation": ops.OP_UPDATE_OUTLINE_TITLE, "target": ops.TARGET_OUTLINE,
             "payload": {"scene_id": self._scene_id, "title": self._title_field.text()},
+        })
+
+    def _confirm_psyke_notes(self) -> None:
+        self._finish({
+            "operation": ops.OP_APPEND_PSYKE_NOTES, "target": ops.TARGET_PSYKE,
+            "payload": {"entry_id": self._psyke_entry_id,
+                        "note": self._psyke_text.toPlainText()},
+        })
+
+    def _confirm_psyke_progression(self) -> None:
+        self._finish({
+            "operation": ops.OP_CREATE_PSYKE_PROGRESSION, "target": ops.TARGET_PSYKE,
+            "payload": {"entry_id": self._psyke_entry_id,
+                        "text": self._psyke_text.toPlainText(),
+                        "scene_id": self._psyke_scene_id},
         })
 
     def _finish(self, op: dict) -> None:

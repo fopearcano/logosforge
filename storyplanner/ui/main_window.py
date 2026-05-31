@@ -1217,21 +1217,71 @@ class MainWindow(QMainWindow):
                 excerpt = ""
         outline_template = ""
         block_type = "prose" if section == "Manuscript" else ""
+        # Phase 3 section-specific selection, read non-invasively from the
+        # live view (existing attributes only — no new view callbacks).
+        extra: dict = {}
+        view = self.content_area
         try:
             from storyplanner.ui.plan_view import PlanView
-            if isinstance(self.content_area, PlanView):
+            if isinstance(view, PlanView):
                 block_type = "outline_node"
-                outline_template = (
-                    self.content_area._template_combo.currentData() or ""
-                )
+                outline_template = view._template_combo.currentData() or ""
+            elif section == "PSYKE":
+                entry_id = getattr(view, "_selected_id", None)
+                if entry_id is not None:
+                    extra["selected_psyke_entry_id"] = entry_id
+                    extra["current_psyke_entry_id"] = entry_id
+                    block_type = "psyke_entry"
+            elif section == "Timeline":
+                tid = getattr(view, "_selected_scene_id", None)
+                if tid is not None:
+                    extra["current_timeline_event_id"] = tid
+                    scene_id = scene_id or tid
+                block_type = "timeline_event"
+            elif section == "Plot":
+                block_type = "plot_block"
+                filters = getattr(view, "_filters", None)
+                pl = getattr(filters, "plotline", "") if filters else ""
+                if pl:
+                    extra["current_plot_block_id"] = pl
+            elif section == "Graph":
+                block_type = "graph_node"
+                extra.update(self._graph_logos_extra(view))
         except Exception:
             pass
+
         return build_logos_context(
             self._db, self._project_id,
             section_name=section, current_scene_id=scene_id,
             selected_text=selected, cursor_text_excerpt=excerpt,
             active_block_type=block_type, outline_template=outline_template,
+            **extra,
         )
+
+    def _graph_logos_extra(self, view) -> dict:
+        """Capture the focused graph node + neighbours into context kwargs.
+
+        Graph node ids look like ``"Character:5"``; PSYKE/scene entities are
+        carried as linked ids so an apply can route to the source of truth.
+        """
+        node_id = getattr(view, "_focus_node", None)
+        if not node_id:
+            return {}
+        out: dict = {"current_graph_node_id": node_id}
+        data = getattr(view, "_graph_data", None)
+        node = data.nodes.get(node_id) if data else None
+        if node is not None:
+            out["current_graph_node_type"] = node.etype
+            if node.etype == "PSYKE":
+                out["linked_psyke_entry_ids"] = [node.entity_id]
+                out["current_psyke_entry_id"] = node.entity_id
+            elif node.etype == "Scene":
+                out["linked_scene_ids"] = [node.entity_id]
+                out["current_scene_id"] = node.entity_id
+        if data is not None:
+            neighbors = sorted(data.adjacency.get(node_id, set()))
+            out["current_graph_neighbors"] = neighbors[:20]
+        return out
 
     def _toggle_logos(self) -> None:
         self._logos_visible = not self._logos_visible
@@ -1305,6 +1355,7 @@ class MainWindow(QMainWindow):
         from storyplanner.project_events import get_event_bus
         bus = get_event_bus()
         scene_id = outcome.get("scene_id")
+        entry_id = outcome.get("entry_id")
         for name in outcome.get("events", []):
             sig = getattr(bus, name, None)
             if sig is None:
@@ -1312,6 +1363,8 @@ class MainWindow(QMainWindow):
             try:
                 if name == "scene_changed" and scene_id is not None:
                     sig.emit(scene_id)
+                elif name == "psyke_changed" and entry_id is not None:
+                    sig.emit(entry_id)
                 else:
                     sig.emit()
             except TypeError:

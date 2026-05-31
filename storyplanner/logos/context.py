@@ -38,6 +38,15 @@ class LogosContext:
     # describe an Act / Chapter / Scene "node" rather than an OutlineNode row).
     outline_node_label: str = ""
     outline_node_kind: str = ""
+    # Phase 3 — section-specific selection (all lightweight ids/strings).
+    current_plot_block_id: str = ""          # plotline name (Plot is scene-derived)
+    current_timeline_event_id: int | None = None
+    current_graph_node_id: str = ""          # "Type:id" e.g. "Character:5"
+    current_graph_node_type: str = ""        # e.g. "Character", "PSYKE", "Scene"
+    current_graph_neighbors: list[str] = field(default_factory=list)
+    selected_psyke_entry_id: int | None = None
+    linked_scene_ids: list[int] = field(default_factory=list)
+    linked_psyke_entry_ids: list[int] = field(default_factory=list)
     relevant_psyke_entry_ids: list[int] = field(default_factory=list)
     relevant_note_ids: list[int] = field(default_factory=list)
 
@@ -59,6 +68,14 @@ class LogosContext:
             "outline_template": self.outline_template,
             "outline_node_label": self.outline_node_label,
             "outline_node_kind": self.outline_node_kind,
+            "current_plot_block_id": self.current_plot_block_id,
+            "current_timeline_event_id": self.current_timeline_event_id,
+            "current_graph_node_id": self.current_graph_node_id,
+            "current_graph_node_type": self.current_graph_node_type,
+            "current_graph_neighbors": list(self.current_graph_neighbors),
+            "selected_psyke_entry_id": self.selected_psyke_entry_id,
+            "linked_scene_ids": list(self.linked_scene_ids),
+            "linked_psyke_entry_ids": list(self.linked_psyke_entry_ids),
             "relevant_psyke_entry_ids": list(self.relevant_psyke_entry_ids),
             "relevant_note_ids": list(self.relevant_note_ids),
         }
@@ -88,6 +105,14 @@ def build_logos_context(
     outline_template: str = "",
     outline_node_label: str = "",
     outline_node_kind: str = "",
+    current_plot_block_id: str = "",
+    current_timeline_event_id: int | None = None,
+    current_graph_node_id: str = "",
+    current_graph_node_type: str = "",
+    current_graph_neighbors: list[str] | None = None,
+    selected_psyke_entry_id: int | None = None,
+    linked_scene_ids: list[int] | None = None,
+    linked_psyke_entry_ids: list[int] | None = None,
 ) -> LogosContext:
     """Build a :class:`LogosContext`, resolving engine/format from the project.
 
@@ -120,4 +145,12 @@ def build_logos_context(
         outline_template=outline_template,
         outline_node_label=outline_node_label,
         outline_node_kind=outline_node_kind,
+        current_plot_block_id=current_plot_block_id,
+        current_timeline_event_id=current_timeline_event_id,
+        current_graph_node_id=current_graph_node_id,
+        current_graph_node_type=current_graph_node_type,
+        current_graph_neighbors=list(current_graph_neighbors or []),
+        selected_psyke_entry_id=selected_psyke_entry_id,
+        linked_scene_ids=list(linked_scene_ids or []),
+        linked_psyke_entry_ids=list(linked_psyke_entry_ids or []),
     )

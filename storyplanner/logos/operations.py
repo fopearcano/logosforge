@@ -27,6 +27,7 @@ from typing import Any
 
 TARGET_MANUSCRIPT = "manuscript"
 TARGET_OUTLINE = "outline"
+TARGET_PSYKE = "psyke"
 
 # Manuscript operations
 OP_REPLACE_SELECTION = "replace_selection"
@@ -35,10 +36,15 @@ OP_INSERT_AFTER = "insert_after_selection"
 OP_CREATE_OUTLINE_NODE = "create_outline_node"
 OP_UPDATE_OUTLINE_SUMMARY = "update_outline_summary"
 OP_UPDATE_OUTLINE_TITLE = "update_outline_title"
+# PSYKE operations (Phase 3) — write through existing PSYKE APIs.
+OP_APPEND_PSYKE_NOTES = "append_psyke_notes"
+OP_CREATE_PSYKE_PROGRESSION = "create_psyke_progression"
+OP_CREATE_PSYKE_RELATION = "create_psyke_relation"
 
 _MANUSCRIPT_OPS = {OP_REPLACE_SELECTION, OP_INSERT_AFTER}
 _OUTLINE_OPS = {OP_CREATE_OUTLINE_NODE, OP_UPDATE_OUTLINE_SUMMARY, OP_UPDATE_OUTLINE_TITLE}
-KNOWN_OPERATIONS = _MANUSCRIPT_OPS | _OUTLINE_OPS
+_PSYKE_OPS = {OP_APPEND_PSYKE_NOTES, OP_CREATE_PSYKE_PROGRESSION, OP_CREATE_PSYKE_RELATION}
+KNOWN_OPERATIONS = _MANUSCRIPT_OPS | _OUTLINE_OPS | _PSYKE_OPS
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +64,8 @@ def validate_operation(op: dict) -> str | None:
         return "Manuscript operation must target 'manuscript'."
     if name in _OUTLINE_OPS and target != TARGET_OUTLINE:
         return "Outline operation must target 'outline'."
+    if name in _PSYKE_OPS and target != TARGET_PSYKE:
+        return "PSYKE operation must target 'psyke'."
     payload = op.get("payload")
     if not isinstance(payload, dict):
         return "Operation payload must be a mapping."
@@ -81,6 +89,21 @@ def validate_operation(op: dict) -> str | None:
             return "Update title requires a target node id."
         if not str(payload.get("title", "")).strip():
             return "Title is empty."
+    elif name == OP_APPEND_PSYKE_NOTES:
+        if payload.get("entry_id") is None:
+            return "A target PSYKE entry id is required."
+        if not str(payload.get("note", "")).strip():
+            return "Note text is empty."
+    elif name == OP_CREATE_PSYKE_PROGRESSION:
+        if payload.get("entry_id") is None:
+            return "A target PSYKE entry id is required."
+        if not str(payload.get("text", "")).strip():
+            return "Progression text is empty."
+    elif name == OP_CREATE_PSYKE_RELATION:
+        if payload.get("entry_id") is None or payload.get("related_entry_id") is None:
+            return "Both PSYKE entry ids are required for a relation."
+        if payload["entry_id"] == payload["related_entry_id"]:
+            return "A relation needs two different entries."
     return None
 
 
@@ -95,6 +118,15 @@ def validate_operation_against_db(db, project_id: int, op: dict) -> str | None:
         scene = db.get_scene_by_id(payload["scene_id"])
         if scene is None or scene.project_id != project_id:
             return f"Target outline node {payload['scene_id']} no longer exists."
+    elif name in (OP_APPEND_PSYKE_NOTES, OP_CREATE_PSYKE_PROGRESSION):
+        entry = db.get_psyke_entry_by_id(payload["entry_id"])
+        if entry is None or entry.project_id != project_id:
+            return f"PSYKE entry {payload['entry_id']} no longer exists."
+    elif name == OP_CREATE_PSYKE_RELATION:
+        for key in ("entry_id", "related_entry_id"):
+            entry = db.get_psyke_entry_by_id(payload[key])
+            if entry is None or entry.project_id != project_id:
+                return f"PSYKE entry {payload[key]} no longer exists."
     return None
 
 
@@ -147,6 +179,38 @@ def build_proposed_operations(db, context, action, reply: str) -> list[dict]:
             })
         return ops
 
+    if section == "PSYKE":
+        return _psyke_proposed_operations(context, action, reply)
+
+    # Plot / Timeline / Graph: Phase 3 keeps generated results suggestion-only.
+    # Their write paths (scene metadata, PSYKE relations) require a reliable
+    # target the model's prose does not provide, so nothing is auto-proposed —
+    # the result UI shows "Suggestion only" with no Apply button. PSYKE relation
+    # / scene-summary writes remain available through their own sections.
+    return []
+
+
+def _psyke_proposed_operations(context, action, reply: str) -> list[dict]:
+    """PSYKE is the one Phase 3 section with safe, entry-targeted writes."""
+    entry_id = (
+        getattr(context, "selected_psyke_entry_id", None)
+        or getattr(context, "current_psyke_entry_id", None)
+    )
+    if entry_id is None:
+        return []  # no concrete target -> suggestion only
+    name = getattr(action, "name", "")
+    if name == "suggest_progression":
+        return [{
+            "operation": OP_CREATE_PSYKE_PROGRESSION, "target": TARGET_PSYKE,
+            "payload": {"entry_id": entry_id, "text": reply,
+                        "scene_id": getattr(context, "current_scene_id", None)},
+        }]
+    # Generative entry actions that enrich the entry append to its notes.
+    if getattr(action, "category", "") == "generative":
+        return [{
+            "operation": OP_APPEND_PSYKE_NOTES, "target": TARGET_PSYKE,
+            "payload": {"entry_id": entry_id, "note": reply},
+        }]
     return []
 
 
@@ -230,6 +294,45 @@ def apply_logos_operation(db, project_id: int, op: dict, *, editor=None) -> dict
             "events": ["scene_changed", "outline_changed", "project_data_changed"],
             "detail": "Updated outline node title.",
             "scene_id": payload["scene_id"],
+        }
+
+    if name == OP_APPEND_PSYKE_NOTES:
+        entry = db.get_psyke_entry_by_id(payload["entry_id"])
+        existing = (entry.notes or "").rstrip()
+        addition = payload["note"].strip()
+        merged = f"{existing}\n\n{addition}" if existing else addition
+        db.update_psyke_entry(
+            entry.id, name=entry.name, entry_type=entry.entry_type,
+            aliases=entry.aliases, notes=merged, is_global=entry.is_global,
+            details=db.get_psyke_entry_details(entry.id),
+        )
+        return {
+            "ok": True,
+            "events": ["psyke_changed", "project_data_changed"],
+            "detail": "Appended to PSYKE entry notes.",
+            "entry_id": entry.id,
+        }
+    if name == OP_CREATE_PSYKE_PROGRESSION:
+        db.create_psyke_progression(
+            payload["entry_id"], payload["text"],
+            scene_id=payload.get("scene_id"),
+        )
+        return {
+            "ok": True,
+            "events": ["psyke_changed", "project_data_changed"],
+            "detail": "Added PSYKE progression.",
+            "entry_id": payload["entry_id"],
+        }
+    if name == OP_CREATE_PSYKE_RELATION:
+        db.add_psyke_relation(
+            payload["entry_id"], payload["related_entry_id"],
+            relation_type=payload.get("relation_type", ""),
+        )
+        return {
+            "ok": True,
+            "events": ["psyke_changed", "project_data_changed"],
+            "detail": "Created PSYKE relation.",
+            "entry_id": payload["entry_id"],
         }
 
     return {"ok": False, "events": [], "detail": f"Unknown operation: {name!r}"}

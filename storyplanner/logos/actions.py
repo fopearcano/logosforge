@@ -15,9 +15,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-# Section identifiers Phase 1 integrates with.
+# Section identifiers Logos integrates with.
 SECTION_MANUSCRIPT = "Manuscript"
 SECTION_OUTLINE = "Outline"
+# Phase 3 — section-aware coverage.
+SECTION_PSYKE = "PSYKE"
+SECTION_PLOT = "Plot"
+SECTION_TIMELINE = "Timeline"
+SECTION_GRAPH = "Graph"
 
 # Categories are descriptive tags only; the binding safety invariant is
 # ``destructive=False`` for everything registered in this phase.
@@ -239,14 +244,211 @@ register(LogosAction(
     name="counterpart_critique", label="Counterpart Critique",
     description="A sharp, skeptical critique from an opposing viewpoint.",
     category=CATEGORY_DIAGNOSTIC,
-    sections=(SECTION_MANUSCRIPT, SECTION_OUTLINE),
+    sections=(SECTION_MANUSCRIPT, SECTION_OUTLINE, SECTION_PSYKE,
+              SECTION_PLOT, SECTION_TIMELINE, SECTION_GRAPH),
     prompt=(
         "Act as a sharp, skeptical counterpart critic. Challenge this "
-        "selection/node: name its weakest assumptions, where it underdelivers, "
-        "and what a demanding reader would object to. Be specific and honest, "
-        "but constructive. Do not rewrite anything."
+        "selection/element: name its weakest assumptions, where it "
+        "underdelivers, and what a demanding reader would object to. Be "
+        "specific and honest, but constructive. Do not rewrite anything."
     ),
 ))
+
+
+# ---------------------------------------------------------------------------
+# PSYKE actions (entry-aware)
+# ---------------------------------------------------------------------------
+
+_PSYKE = (SECTION_PSYKE,)
+for _name, _label, _desc, _cat, _prompt in [
+    ("explain_entry_role", "Explain Entry Role",
+     "Explain this entry's narrative role.", CATEGORY_DIAGNOSTIC,
+     "Explain this PSYKE entry's role in the story — what it contributes and "
+     "how it connects to the rest. Do not modify it."),
+    ("find_missing_details", "Find Missing Details",
+     "Point out gaps in this entry's details.", CATEGORY_DIAGNOSTIC,
+     "Review this PSYKE entry and list the most important missing or thin "
+     "details that would strengthen it. List them as diagnostics."),
+    ("check_continuity", "Check Continuity",
+     "Check this entry for continuity issues.", CATEGORY_DIAGNOSTIC,
+     "Check this PSYKE entry for continuity issues against the scenes it "
+     "appears in and its progressions. List concerns. Do not modify anything."),
+    ("check_relationships", "Check Relationships",
+     "Assess this entry's relationships.", CATEGORY_DIAGNOSTIC,
+     "Assess this entry's relationships: which are strong, missing, or "
+     "underused. List observations. Do not modify anything."),
+    ("suggest_arc_development", "Suggest Arc Development",
+     "Suggest how this entry could develop.", CATEGORY_GENERATIVE,
+     "Suggest how this entry could develop across the story (an arc). Offer "
+     "concrete progression ideas as suggestions only."),
+    ("suggest_details", "Suggest Details",
+     "Suggest concrete details to add.", CATEGORY_GENERATIVE,
+     "Suggest concrete details (traits, history, specifics) that would enrich "
+     "this entry. Offer them as suggestions for the author to add."),
+    ("suggest_relations", "Suggest Relations",
+     "Suggest relationships to other entries.", CATEGORY_GENERATIVE,
+     "Suggest meaningful relationships between this entry and other story "
+     "elements, with a one-line rationale each. Suggestions only."),
+    ("suggest_progression", "Suggest Progression",
+     "Suggest a progression note for this entry.", CATEGORY_GENERATIVE,
+     "Suggest a single concrete progression note describing how this entry "
+     "changes at this point in the story."),
+    ("suggest_aliases", "Suggest Aliases",
+     "Suggest alternate names/aliases.", CATEGORY_GENERATIVE,
+     "Suggest a few fitting aliases or alternate names for this entry. "
+     "Suggestions only."),
+    ("suggest_notes", "Suggest Notes",
+     "Suggest a note worth recording.", CATEGORY_GENERATIVE,
+     "Suggest a useful note the author should record about this entry."),
+]:
+    register(LogosAction(name=_name, label=_label, description=_desc,
+                         category=_cat, sections=_PSYKE, prompt=_prompt))
+
+
+# ---------------------------------------------------------------------------
+# Plot actions (block / structural-unit aware; Plot is scene-derived)
+# ---------------------------------------------------------------------------
+
+_PLOT = (SECTION_PLOT,)
+for _name, _label, _desc, _cat, _prompt in [
+    ("explain_plot_function", "Explain Plot Function",
+     "Explain this block's plot function.", CATEGORY_DIAGNOSTIC,
+     "Explain the function of this plot block / structural unit in the story. "
+     "Do not modify anything."),
+    ("identify_weak_conflict", "Identify Weak Conflict",
+     "Diagnose weak conflict here.", CATEGORY_DIAGNOSTIC,
+     "Identify where the conflict in this plot block is weak or unclear. List "
+     "concrete diagnostics. Do not rewrite anything."),
+    ("check_escalation", "Check Escalation",
+     "Check whether tension escalates.", CATEGORY_DIAGNOSTIC,
+     "Assess whether tension and stakes escalate across this block and its "
+     "scenes. Note any plateaus or drops. Do not modify anything."),
+    ("check_cause_effect", "Check Cause/Effect",
+     "Check cause-and-effect logic.", CATEGORY_DIAGNOSTIC,
+     "Check the cause-and-effect logic linking the scenes in this block. Flag "
+     "gaps or coincidences. Do not modify anything."),
+    ("suggest_stronger_turn", "Suggest Stronger Turn",
+     "Suggest a stronger turning point.", CATEGORY_GENERATIVE,
+     "Suggest how to make the turning point of this block sharper and more "
+     "consequential. Suggestions only."),
+    ("suggest_plot_block_summary", "Suggest Plot Block Summary",
+     "Draft a summary for this block/scene.", CATEGORY_GENERATIVE,
+     "Draft a concise summary capturing the dramatic function of this plot "
+     "block or its selected scene."),
+    ("suggest_scene_purpose", "Suggest Scene Purpose",
+     "Clarify the scene's purpose.", CATEGORY_GENERATIVE,
+     "Articulate the dramatic purpose this scene should serve within its "
+     "plotline. Offer as a suggestion."),
+    ("suggest_conflict_upgrade", "Suggest Conflict Upgrade",
+     "Suggest ways to raise the conflict.", CATEGORY_GENERATIVE,
+     "Suggest concrete ways to upgrade the conflict and stakes here. "
+     "Suggestions only."),
+    ("suggest_setup_payoff_link", "Suggest Setup/Payoff Link",
+     "Suggest a setup/payoff connection.", CATEGORY_GENERATIVE,
+     "Suggest a setup/payoff link this block could plant or resolve, with a "
+     "rationale. Suggestion only — do not modify data."),
+]:
+    register(LogosAction(name=_name, label=_label, description=_desc,
+                         category=_cat, sections=_PLOT, prompt=_prompt))
+
+
+# ---------------------------------------------------------------------------
+# Timeline actions (event / scene aware; chronology is sort-order based)
+# ---------------------------------------------------------------------------
+
+_TIMELINE = (SECTION_TIMELINE,)
+for _name, _label, _desc, _cat, _prompt in [
+    ("explain_timeline_position", "Explain Timeline Position",
+     "Explain this event's place in time.", CATEGORY_DIAGNOSTIC,
+     "Explain this event's position in the story's chronology and what it "
+     "accomplishes there. Do not modify anything."),
+    ("check_chronology", "Check Chronology",
+     "Check chronology consistency.", CATEGORY_DIAGNOSTIC,
+     "Check the chronology around this event for inconsistencies or ordering "
+     "problems. List concerns. Do not reorder anything."),
+    ("check_pacing", "Check Pacing",
+     "Assess pacing around this event.", CATEGORY_DIAGNOSTIC,
+     "Assess the pacing around this event — is it rushed or slack relative to "
+     "its neighbours? Do not modify anything."),
+    ("check_gap", "Check Gap",
+     "Detect a gap before/after this event.", CATEGORY_DIAGNOSTIC,
+     "Detect whether there is a narrative or temporal gap before or after this "
+     "event that needs bridging. Do not modify anything."),
+    ("check_causality", "Check Causality",
+     "Check causal links to neighbours.", CATEGORY_DIAGNOSTIC,
+     "Check the causal links between this event and the ones around it. Flag "
+     "missing causation. Do not modify anything."),
+    ("suggest_next_event", "Suggest Next Event",
+     "Suggest what could come next.", CATEGORY_GENERATIVE,
+     "Suggest 2-3 candidate next events that could follow, each with a brief "
+     "rationale. Suggestions only — do not create events."),
+    ("suggest_timeline_note", "Suggest Timeline Note",
+     "Suggest a note for this point.", CATEGORY_GENERATIVE,
+     "Suggest a useful timeline note to record at this point in the story."),
+    ("suggest_event_summary", "Suggest Event Summary",
+     "Draft a summary for this event.", CATEGORY_GENERATIVE,
+     "Draft a concise summary of this timeline event / scene."),
+    ("suggest_causal_link", "Suggest Causal Link",
+     "Suggest a causal connection.", CATEGORY_GENERATIVE,
+     "Suggest a causal link between this event and a neighbouring one, with a "
+     "rationale. Suggestion only."),
+    ("suggest_bridge_scene", "Suggest Missing Bridge Scene",
+     "Suggest a bridge scene to fill a gap.", CATEGORY_GENERATIVE,
+     "Suggest a bridge scene that would smooth a gap around this event. "
+     "Describe it as a suggestion — do not create it."),
+]:
+    register(LogosAction(name=_name, label=_label, description=_desc,
+                         category=_cat, sections=_TIMELINE, prompt=_prompt))
+
+
+# ---------------------------------------------------------------------------
+# Graph actions (node / relationship aware; graph is a view, not a source)
+# ---------------------------------------------------------------------------
+
+_GRAPH = (SECTION_GRAPH,)
+for _name, _label, _desc, _cat, _prompt in [
+    ("explain_node", "Explain Node",
+     "Explain the selected node.", CATEGORY_DIAGNOSTIC,
+     "Explain the selected graph node: what it represents and its role in the "
+     "story network. Do not modify anything."),
+    ("explain_relationship_cluster", "Explain Relationship Cluster",
+     "Explain this node's cluster.", CATEGORY_DIAGNOSTIC,
+     "Explain the cluster of relationships around the selected node — who/what "
+     "it connects and why. Do not modify anything."),
+    ("identify_missing_links", "Identify Missing Links",
+     "Find likely missing connections.", CATEGORY_DIAGNOSTIC,
+     "Identify likely missing links for the selected node given its "
+     "neighbours. List them as diagnostics."),
+    ("identify_isolated_node", "Identify Isolated Node",
+     "Assess whether this node is isolated.", CATEGORY_DIAGNOSTIC,
+     "Assess whether the selected node is under-connected or isolated, and why "
+     "that might be a problem. Do not modify anything."),
+    ("check_thematic_cluster", "Check Thematic Cluster",
+     "Check thematic coherence of the cluster.", CATEGORY_DIAGNOSTIC,
+     "Check whether the thematic cluster around this node is coherent. Note "
+     "tensions or gaps. Do not modify anything."),
+    ("suggest_relationship", "Suggest Relationship",
+     "Suggest a relationship for this node.", CATEGORY_GENERATIVE,
+     "Suggest a meaningful relationship the selected node could have, with a "
+     "rationale. Suggestion only."),
+    ("suggest_psyke_relation", "Suggest PSYKE Relation",
+     "Suggest a PSYKE relation to add.", CATEGORY_GENERATIVE,
+     "Suggest a PSYKE relation involving the selected entity, with a rationale. "
+     "Suggestion only — applied via PSYKE if the author confirms."),
+    ("suggest_note_from_graph", "Suggest Note",
+     "Suggest a note about this node.", CATEGORY_GENERATIVE,
+     "Suggest a useful note to record about the selected node."),
+    ("suggest_setup_payoff_edge", "Suggest Setup/Payoff Edge",
+     "Suggest a setup/payoff edge.", CATEGORY_GENERATIVE,
+     "Suggest a setup/payoff connection involving this node, with a rationale. "
+     "Suggestion only."),
+    ("suggest_character_theme_link", "Suggest Character/Theme Link",
+     "Suggest a character↔theme link.", CATEGORY_GENERATIVE,
+     "Suggest a meaningful character-to-theme link involving this node, with a "
+     "rationale. Suggestion only."),
+]:
+    register(LogosAction(name=_name, label=_label, description=_desc,
+                         category=_cat, sections=_GRAPH, prompt=_prompt))
 
 
 # ---------------------------------------------------------------------------
