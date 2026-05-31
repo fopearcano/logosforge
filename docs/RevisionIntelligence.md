@@ -69,6 +69,12 @@ Interpreting an impact map with the Assistant/Counterpart is a **manual,
 user-triggered** action through the existing provider path (no new backend, no
 automatic call) — advisory only. Wiring is deferred to a future phase.
 
+## Controlled Apply (Phase 10M)
+
+Mutations that follow a revision/impact analysis pass through the
+Controlled Apply gate (preview + conflicts + confirmation). See
+**docs/ControlledApply.md**.
+
 ## Rewrite Sandbox integration (Phase 10L)
 
 The Adaptive Rewrite Sandbox can run a Change Impact Map on a candidate

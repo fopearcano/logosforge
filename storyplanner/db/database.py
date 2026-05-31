@@ -36,6 +36,8 @@ from storyplanner.models import (
     Scene,
     SceneCharacterLink,
     SceneCharacterState,
+    ControlledApplyConflict,
+    ControlledApplyOperation,
     ProductionDraft,
     ProductionSceneNumber,
     RevisionChange,
@@ -3445,6 +3447,64 @@ class Database:
             session.commit()
             session.refresh(r)
             return r
+
+    # -- Controlled apply (Phase 10M) ----------------------------------------
+
+    def create_apply_operation(self, project_id: int, *, conflicts=None,
+                               **fields) -> ControlledApplyOperation:
+        from storyplanner.models.models import _now
+        fields.pop("project_id", None)
+        op = ControlledApplyOperation(project_id=project_id, **fields)
+        op.updated_at = _now()
+        with Session(self._engine) as session:
+            session.add(op)
+            session.commit()
+            session.refresh(op)
+            for c in (conflicts or []):
+                c = dict(c)
+                c.pop("project_id", None)
+                c.pop("operation_id", None)
+                session.add(ControlledApplyConflict(
+                    project_id=project_id, operation_id=op.id, **c))
+            session.commit()
+            session.refresh(op)
+            return op
+
+    def get_apply_operation(self, operation_id: int) -> "ControlledApplyOperation | None":
+        with Session(self._engine) as session:
+            return session.get(ControlledApplyOperation, operation_id)
+
+    def get_apply_operations(self, project_id: int, *, status: str | None = None,
+                             ) -> list[ControlledApplyOperation]:
+        with Session(self._engine) as session:
+            stmt = select(ControlledApplyOperation).where(
+                ControlledApplyOperation.project_id == project_id)
+            if status is not None:
+                stmt = stmt.where(ControlledApplyOperation.status == status)
+            return list(session.exec(stmt.order_by(ControlledApplyOperation.id)).all())
+
+    def update_apply_operation(self, operation_id: int, **fields
+                               ) -> "ControlledApplyOperation | None":
+        from storyplanner.models.models import _now
+        with Session(self._engine) as session:
+            op = session.get(ControlledApplyOperation, operation_id)
+            if op is None:
+                return None
+            for k, v in fields.items():
+                if hasattr(op, k):
+                    setattr(op, k, v)
+            op.updated_at = _now()
+            session.add(op)
+            session.commit()
+            session.refresh(op)
+            return op
+
+    def get_apply_conflicts(self, operation_id: int) -> list[ControlledApplyConflict]:
+        with Session(self._engine) as session:
+            stmt = select(ControlledApplyConflict).where(
+                ControlledApplyConflict.operation_id == operation_id).order_by(
+                ControlledApplyConflict.id)
+            return list(session.exec(stmt).all())
 
     @staticmethod
     def _matches(query_lower: str, *fields: str) -> bool:

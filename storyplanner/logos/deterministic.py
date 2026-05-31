@@ -915,3 +915,55 @@ register("rw_sandbox_status", _rw_status)
 register("rw_explain_tradeoffs", _rw_explain_tradeoffs)
 register("rw_score_variants", _rw_score_variants)
 register("rw_check_psyke_preservation", _rw_check_psyke_preservation)
+
+
+# -- Phase 10M — controlled apply (read-only status/conflict explainers) -------
+
+
+def _ca_history(db, context: LogosContext) -> LogosResult:
+    action = "ca_apply_history"
+    try:
+        from storyplanner.controlled_apply.service import get_apply_history
+        ops = get_apply_history(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"History failed: {exc}")
+    if not ops:
+        msg = "No controlled-apply operations yet."
+    else:
+        lines = [f"- {o.source_type} → {o.target_type} ({o.status})"
+                 for o in ops[-8:]]
+        msg = "Recent apply operations:\n" + "\n".join(lines)
+    return LogosResult(ok=True, action=action, title="Apply History",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _ca_explain_conflicts(db, context: LogosContext) -> LogosResult:
+    action = "ca_explain_conflicts"
+    import json
+    try:
+        from storyplanner.controlled_apply.service import get_apply_history
+        ops = [o for o in get_apply_history(db, context.project_id)
+               if o.status in ("draft", "previewed")]
+    except Exception as exc:
+        return LogosResult.failure(action, f"Explain failed: {exc}")
+    if not ops:
+        msg = "No pending apply previews to explain."
+    else:
+        op = ops[-1]
+        try:
+            conflicts = json.loads(op.conflict_json or "[]")
+        except Exception:
+            conflicts = []
+        if not conflicts:
+            msg = f"Pending apply to {op.target_type}: no conflicts."
+        else:
+            lines = [f"- [{c['severity']}] {c['conflict_type']}: {c['message']}"
+                     for c in conflicts]
+            msg = (f"Pending apply to {op.target_type} — conflicts:\n"
+                   + "\n".join(lines))
+    return LogosResult(ok=True, action=action, title="Explain Apply Conflicts",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+register("ca_apply_history", _ca_history)
+register("ca_explain_conflicts", _ca_explain_conflicts)

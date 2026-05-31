@@ -217,20 +217,18 @@ def apply_rewrite_variant(db, project_id: int, variant_id: int, *,
         return {"ok": False, "error": "Source changed since the variant was "
                 "generated. Regenerate or re-apply with force=True.", "stale": True}
 
-    stage_id = None
-    if create_checkpoint and hasattr(db, "create_stage"):
-        try:
-            stage = db.create_stage(
-                project_id, f"Before rewrite apply (scene {sess.source_id})",
-                description="Auto checkpoint before applying a rewrite variant.")
-            stage_id = getattr(stage, "id", None)
-        except Exception:
-            stage_id = None
-
-    try:
-        db.update_scene_content(sess.source_id, v.variant_text)
-    except Exception as exc:
-        return {"ok": False, "error": f"Apply failed: {exc}"}
+    # Phase 10M — route the mutation through the Controlled Apply service (diff +
+    # conflict detection + checkpoint + event), preserving the 10L contract.
+    from storyplanner.controlled_apply.service import apply_operation
+    res = apply_operation(
+        db, project_id, target_type="scene", target_id=sess.source_id,
+        proposed_text=v.variant_text, apply_mode="replace", confirmed=True,
+        force=force, source_type="rewrite_variant", source_id=variant_id,
+        create_checkpoint=create_checkpoint)
+    if not res.get("ok"):
+        return {"ok": False, "error": res.get("error", "Apply failed."),
+                "stale": res.get("stale", False)}
+    stage_id = res.get("stage_id")
 
     db.create_rewrite_apply_record(
         project_id, sess.id, variant_id, source_type=sess.source_type,
@@ -240,11 +238,6 @@ def apply_rewrite_variant(db, project_id: int, variant_id: int, *,
     db.update_rewrite_variant(variant_id, status="applied")
     db.update_rewrite_session(sess.id, status="applied",
                               source_text_hash=v.variant_text_hash)
-    try:
-        from storyplanner.project_events import emit_project_data_changed
-        emit_project_data_changed()
-    except Exception:
-        pass
     return {"ok": True, "variant_id": variant_id, "scene_id": sess.source_id,
             "stage_id": stage_id}
 

@@ -22,6 +22,7 @@ _KEY_PROFESSIONAL_OUTPUT = "include_professional_output_in_assistant_context"
 _KEY_PRODUCTION_DRAFT = "include_production_draft_in_assistant_context"
 _KEY_REVISION_IMPACT = "include_revision_impact_in_assistant_context"
 _KEY_REWRITE_SANDBOX = "include_rewrite_sandbox_in_assistant_context"
+_KEY_CONTROLLED_APPLY = "include_controlled_apply_in_assistant_context"
 _KEY_STRATEGY = "include_strategy_in_assistant_context"
 _KEY_HEALTH = "include_health_in_assistant_context"
 _KEY_DIAGNOSTICS = "include_diagnostics_in_assistant_context"
@@ -38,6 +39,7 @@ _DEFAULTS = {
     _KEY_PRODUCTION_DRAFT: True,  # only emits when production mode is active
     _KEY_REVISION_IMPACT: True,  # only emits when a saved impact report exists
     _KEY_REWRITE_SANDBOX: True,  # only emits when an open rewrite session exists
+    _KEY_CONTROLLED_APPLY: True,  # only emits when a pending apply preview exists
     _KEY_STRATEGY: True,
     _KEY_HEALTH: False,        # off by default — health is expensive/broad
     _KEY_DIAGNOSTICS: True,
@@ -98,6 +100,8 @@ def gather_injected_context(
         blocks.append(_revision_impact_block(db, project_id))
     if _flag(_KEY_REWRITE_SANDBOX):
         blocks.append(_rewrite_sandbox_block(db, project_id))
+    if _flag(_KEY_CONTROLLED_APPLY):
+        blocks.append(_controlled_apply_block(db, project_id))
     if _flag(_KEY_STRATEGY):
         blocks.append(_strategy_block(db, project_id, section_name))
     if _flag(_KEY_HEALTH):
@@ -418,6 +422,37 @@ def _rewrite_sandbox_block(db, project_id: int) -> str:
                          f"{st['psyke_terms_removed']}")
         if st.get("warnings"):
             lines.append("Warnings: " + "; ".join(st["warnings"][:3]))
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _controlled_apply_block(db, project_id: int) -> str:
+    """Capped ``[Controlled Apply]`` — only when a pending apply preview exists.
+
+    Summarizes the latest draft/previewed operation + its conflicts. Cheap read;
+    never dumps proposed text; no LLM/DB during assembly; no cross-project leak.
+    """
+    import json
+    try:
+        ops = [o for o in db.get_apply_operations(project_id)
+               if o.status in ("draft", "previewed")]
+        if not ops:
+            return ""
+        op = ops[-1]
+        try:
+            conflicts = json.loads(op.conflict_json or "[]")
+        except Exception:
+            conflicts = []
+        blocking = [c for c in conflicts if c.get("severity") in ("blocking", "error")]
+        warns = [c for c in conflicts if c.get("severity") == "warning"]
+        lines = ["[Controlled Apply]",
+                 f"Pending: {op.source_type} → {op.target_type} ({op.apply_mode})",
+                 f"Apply blocked: {'yes' if blocking else 'no'}"]
+        if blocking:
+            lines.append("Blocking: " + "; ".join(c["conflict_type"] for c in blocking[:3]))
+        if warns:
+            lines.append("Warnings: " + "; ".join(c["message"] for c in warns[:3]))
         return "\n".join(lines)
     except Exception:
         return ""

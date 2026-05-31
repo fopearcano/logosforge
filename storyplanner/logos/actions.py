@@ -598,6 +598,19 @@ for _name, _label, _desc in [
         prompt="", deterministic=True,
     ))
 
+# Manuscript — Phase 10M (Controlled Apply; mode-agnostic, read-only status).
+for _name, _label, _desc in [
+    ("ca_apply_history", "Apply History",
+     "Recent controlled-apply operations (deterministic)."),
+    ("ca_explain_conflicts", "Explain Apply Conflicts",
+     "Explain conflicts on the latest pending apply preview."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc,
+        category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+        prompt="", deterministic=True,
+    ))
+
 register(LogosAction(
     name="rw_suggest_strategy", label="Suggest Rewrite Strategy",
     description="Suggest a rewrite strategy for the selection (advisory).",

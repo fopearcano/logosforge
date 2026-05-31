@@ -76,7 +76,10 @@ notes) — it does not invent a second context system.
   conversion are explicit, confirmed service calls. Phase 10L adds writing-mode-aware
   rewrite-sandbox status actions (Rewrite Sandbox status, Explain Rewrite
   Tradeoffs, Score Variants, Check PSYKE Preservation) + a generative Suggest
-  Rewrite Strategy; variant generation and confirmed apply use the engine API.
+  Rewrite Strategy; variant generation and confirmed apply use the engine API. Phase 10M adds deterministic Controlled Apply
+  status actions (Apply History, Explain Apply Conflicts); every canonical
+  mutation routes through the Controlled Apply service (preview + diff +
+  conflicts + confirmed apply + checkpoint). See docs/ControlledApply.md.
 - **operations** — controlled, validated apply ops (manuscript replace/insert,
   outline scene create/update, PSYKE notes/progression/relation). Every mutation
   is previewed and confirmed; nothing auto-applies.

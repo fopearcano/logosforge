@@ -384,6 +384,53 @@ class RewriteApplyRecord(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
 
 
+class ControlledApplyOperation(SQLModel, table=True):
+    """A previewed, confirmable apply operation (Phase 10M). Canonical content is
+    not changed until ``status`` becomes ``applied``. References only — no full
+    snapshots. Created idempotently by ``create_all``."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    source_type: str = "manual"      # rewrite_variant|assistant|logos|counterpart|manual
+    source_id: Optional[int] = None
+    target_type: str = "scene"       # scene|manuscript|screenplay_block|outline_node|psyke_entry|note|...
+    target_id: Optional[int] = None
+    apply_mode: str = "replace"      # replace|replace_selection|append|insert_before|insert_after|patch_lines|manual_copy
+    status: str = "draft"            # draft|previewed|applied|cancelled|failed
+    before_hash: str = ""
+    after_hash: str = ""
+    before_excerpt: str = ""
+    after_excerpt: str = ""
+    diff_json: str = ""
+    conflict_json: str = ""
+    created_stage_id: Optional[int] = None
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
+class ControlledApplyConflict(SQLModel, table=True):
+    """A conflict detected for a controlled-apply operation."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    operation_id: int = Field(foreign_key="controlledapplyoperation.id", index=True)
+    conflict_type: str = "unknown"   # stale_source|target_missing|hash_mismatch|...
+    severity: str = "warning"        # info | warning | error | blocking
+    message: str = ""
+    suggested_resolution: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+APPLY_SOURCE_TYPES = ("rewrite_variant", "assistant", "logos", "counterpart", "manual")
+APPLY_TARGET_TYPES = (
+    "manuscript", "scene", "screenplay_block", "outline_node", "psyke_entry",
+    "note", "plot_block", "timeline_event", "graph_node",
+)
+APPLY_MODES = ("replace", "replace_selection", "append", "insert_before",
+               "insert_after", "patch_lines", "manual_copy")
+APPLY_OPERATION_STATUSES = ("draft", "previewed", "applied", "cancelled", "failed")
+
+
 REWRITE_SOURCE_TYPES = (
     "manuscript", "scene", "outline", "screenplay_block", "psyke_entry", "note",
     "plot_block", "timeline_event",

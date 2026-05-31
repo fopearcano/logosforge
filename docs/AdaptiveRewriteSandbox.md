@@ -72,6 +72,14 @@ from **open sessions only**, capped at *Needs Attention*. Rejected/applied
 variants don't affect these; canonical story health is unaffected by open
 variants.
 
+## Controlled Apply integration (Phase 10M)
+
+Applying a variant routes through the Controlled Apply service
+(`apply_operation`): diff + conflict detection (stale source blocks) +
+STAGE checkpoint + `project_data_changed`, and records a
+`ControlledApplyOperation`. Generation stays isolated. See
+**docs/ControlledApply.md**.
+
 ## Deferred (future)
 
 - Sandbox **UI** (side/bottom panel, variant cards, compare/diff view, apply
