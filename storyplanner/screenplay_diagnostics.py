@@ -633,10 +633,35 @@ def screenplay_health_metrics(db, project_id: int) -> list:
             evidence=(unsupported[0] if unsupported
                       else "All elements map cleanly to Fountain.")))
 
-    # Cinematic Continuity stays deferred (needs semantics / Phase 10H).
+    # -- Professional output readiness (Phase 10H — format health, capped WATCH) --
+    try:
+        from storyplanner.screenplay_output_validation import (
+            validate_professional_output,
+        )
+        oval = validate_professional_output(db, project_id, target_format="docx")
+    except Exception:
+        oval = None
+    if n == 0 or oval is None:
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_PRO_OUTPUT_READINESS, status=M.STATUS_UNKNOWN,
+            evidence="No screenplay scenes to assess."))
+    else:
+        o_status = (M.STATUS_STABLE if (oval.is_export_safe and not oval.warnings)
+                    else M.STATUS_WATCH)
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_PRO_OUTPUT_READINESS, status=o_status, confidence=0.5,
+            evidence=(f"Formats: {', '.join(oval.available_formats)}. "
+                      + (oval.warnings[0] if oval.warnings else "DOCX export ready."))))
+    # FDX is always experimental/unverified -> a standing watch (never critical).
+    metrics.append(M.NarrativeHealthMetric(
+        category=M.CAT_FDX_COMPAT_RISK,
+        status=(M.STATUS_WATCH if n else M.STATUS_UNKNOWN), confidence=0.4,
+        evidence="FDX export is experimental and unverified — prefer .fountain."))
+
+    # Cinematic Continuity stays deferred (needs semantics / Phase 10I).
     metrics.append(M.NarrativeHealthMetric(
         category=M.CAT_CINEMATIC_CONTINUITY, status=M.STATUS_UNKNOWN,
-        evidence="Deferred — not deterministically assessable yet (Phase 10H)."))
+        evidence="Deferred — not deterministically assessable yet (Phase 10I)."))
     return metrics
 
 

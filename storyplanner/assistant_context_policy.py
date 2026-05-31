@@ -18,6 +18,7 @@ _KEY_SCREENPLAY_DIAG = "include_screenplay_diagnostics_in_assistant_context"
 _KEY_SCREENPLAY_TRACK = "include_screenplay_tracking_in_assistant_context"
 _KEY_SCREENPLAY_LINKS = "include_screenplay_links_in_assistant_context"
 _KEY_SCREENPLAY_EXPORT = "include_screenplay_export_in_assistant_context"
+_KEY_PROFESSIONAL_OUTPUT = "include_professional_output_in_assistant_context"
 _KEY_STRATEGY = "include_strategy_in_assistant_context"
 _KEY_HEALTH = "include_health_in_assistant_context"
 _KEY_DIAGNOSTICS = "include_diagnostics_in_assistant_context"
@@ -30,6 +31,7 @@ _DEFAULTS = {
     _KEY_SCREENPLAY_TRACK: True,  # screenplay-only; setup/payoff + subtext summaries
     _KEY_SCREENPLAY_LINKS: True,  # screenplay-only; confirmed + candidate story links
     _KEY_SCREENPLAY_EXPORT: True,  # screenplay-only; export readiness summary
+    _KEY_PROFESSIONAL_OUTPUT: False,  # opt-in; DOCX/PDF/FDX readiness
     _KEY_STRATEGY: True,
     _KEY_HEALTH: False,        # off by default — health is expensive/broad
     _KEY_DIAGNOSTICS: True,
@@ -82,6 +84,8 @@ def gather_injected_context(
         blocks.append(_screenplay_links_block(db, project_id, scene_id))
     if _flag(_KEY_SCREENPLAY_EXPORT):
         blocks.append(_screenplay_export_block(db, project_id, scene_id))
+    if _flag(_KEY_PROFESSIONAL_OUTPUT):
+        blocks.append(_professional_output_block(db, project_id, scene_id))
     if _flag(_KEY_STRATEGY):
         blocks.append(_strategy_block(db, project_id, section_name))
     if _flag(_KEY_HEALTH):
@@ -292,6 +296,30 @@ def _fountain_export_block(db, project_id: int) -> str:
                  "Export target: .fountain",
                  f"Title page: {'set' if title else 'missing'}",
                  f"Notes: {'included' if notes_on else 'excluded'}"]
+        if rep.blocking_errors:
+            lines.append("Blocking: " + "; ".join(rep.blocking_errors[:3]))
+        if rep.warnings:
+            lines.append("Warnings: " + "; ".join(rep.warnings[:3]))
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _professional_output_block(db, project_id: int, scene_id: int | None) -> str:
+    """Capped ``[Professional Output Readiness]`` — formats + compatibility + issues."""
+    if scene_id is None or not _is_screenplay(db, project_id):
+        return ""
+    try:
+        from storyplanner.screenplay_output_validation import (
+            validate_professional_output,
+        )
+        from storyplanner.screenplay_render import get_title_page
+        rep = validate_professional_output(db, project_id, target_format="docx")
+        title = (get_title_page(db, project_id).get("title") or "").strip()
+        lines = ["[Professional Output Readiness]",
+                 f"Available formats: {', '.join(rep.available_formats)}",
+                 f"Target: docx ({rep.compatibility_level})",
+                 f"Title page: {'set' if title else 'missing'}"]
         if rep.blocking_errors:
             lines.append("Blocking: " + "; ".join(rep.blocking_errors[:3]))
         if rep.warnings:

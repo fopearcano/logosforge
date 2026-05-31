@@ -47,6 +47,8 @@ DEFAULTS: dict[str, object] = {
     "include_screenplay_tracking_in_assistant_context": True,
     "include_screenplay_links_in_assistant_context": True,
     "include_screenplay_export_in_assistant_context": True,
+    # Professional output (DOCX/PDF/FDX) — opt-in to avoid prompt bloat.
+    "include_professional_output_in_assistant_context": False,
     "include_strategy_in_assistant_context": True,
     "include_health_in_assistant_context": False,
     "include_diagnostics_in_assistant_context": True,

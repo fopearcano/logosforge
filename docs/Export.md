@@ -70,7 +70,18 @@ export never uses it. `screenplay_fountain` also provides a Fountain **parser**
 blocks preserves standard elements + title page); the parser is exposed as a
 service (import UI is deferred to 10H).
 
-## Deferred to Phase 10H
+## Professional output (Phase 10H)
+
+Derived professional formats built on the render model (see
+**docs/ProfessionalScreenplayOutput.md**): `export_screenplay_docx` (**stable**),
+`export_screenplay_pdf` (reportlab, **approximate** pagination),
+`export_professional_preview_html` (print-to-PDF path),
+`export_screenplay_fdx_experimental` (**experimental**, gated by
+`experimental_export_acknowledged`), and `export_screenplay_output_validation_json`
+(compatibility levels stable/preview/experimental/deferred). Fountain stays the
+canonical interchange format.
+
+## Deferred to Phase 10I
 
 - True page-accurate PDF pagination + production-grade FDX.
 - Title-page / export-preferences **editor UI** (storage + service API exist;

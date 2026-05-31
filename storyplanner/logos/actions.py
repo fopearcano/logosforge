@@ -579,6 +579,29 @@ for _name, _label, _desc in [
         category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
         prompt="", modes=_SP, deterministic=True,
     ))
+# Manuscript + Screenplay — Phase 10H (professional output, read-only/deterministic).
+for _name, _label, _desc in [
+    ("sp_validate_professional_output", "Validate Professional Output",
+     "Validate DOCX/PDF/FDX output readiness (deterministic)."),
+    ("sp_output_readiness_report", "Generate Output Readiness Report",
+     "Summarize available formats, title page, and approximate length."),
+    ("sp_preview_output", "Preview Screenplay Output",
+     "Generate the professional HTML preview (print to PDF for fidelity)."),
+    ("sp_check_pdf_readiness", "Check PDF Readiness",
+     "Report PDF export status (pagination is approximate)."),
+    ("sp_check_fdx_feasibility", "Check FDX Feasibility",
+     "Report experimental Final Draft FDX status."),
+    ("sp_explain_export_warnings", "Explain Export Warnings",
+     "Explain professional-output warnings from deterministic evidence."),
+    ("sp_prepare_professional_export", "Prepare Screenplay for Professional Export",
+     "Checklist before DOCX/PDF/FDX export."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc,
+        category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+        prompt="", modes=_SP, deterministic=True,
+    ))
+
 # Manuscript + Screenplay — Phase 10G (Fountain export, read-only/deterministic).
 for _name, _label, _desc in [
     ("sp_validate_fountain_export", "Validate Fountain Export",

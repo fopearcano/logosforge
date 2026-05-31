@@ -1011,6 +1011,124 @@ def export_screenplay_fountain(db: Database, project_id: int, *, options=None) -
     return export_screenplay_fountain_result(db, project_id, options=options).text
 
 
+def _screenplay_render_doc(db: Database, project_id: int):
+    """Render document for the professional output layer.
+
+    Built with notes *included* so each output target decides note handling
+    itself (DOCX via style.include_notes; FDX always omits + warns) rather than
+    having them stripped upstream.
+    """
+    from storyplanner.screenplay_render import build_render_document, get_export_prefs
+    prefs = dict(get_export_prefs(db, project_id))
+    prefs["show_notes_in_export"] = True
+    return build_render_document(db, project_id, prefs=prefs)
+
+
+def export_screenplay_docx(db: Database, project_id: int, path: str, *,
+                           style=None, options=None):
+    """Professional DOCX screenplay export (Phase 10H) -> ScreenplayDocxExportResult."""
+    from storyplanner.screenplay_docx_export import export_screenplay_to_docx
+    from storyplanner.screenplay_output_styles import get_style
+    style = style or get_style()
+    return export_screenplay_to_docx(
+        _screenplay_render_doc(db, project_id), path, style=style, options=options)
+
+
+def export_screenplay_fdx_experimental(db: Database, project_id: int, *, options=None):
+    """Experimental FDX screenplay export (Phase 10H) -> ScreenplayFdxExportResult."""
+    from storyplanner.screenplay_fdx_export import export_screenplay_to_fdx
+    return export_screenplay_to_fdx(_screenplay_render_doc(db, project_id),
+                                    options=options)
+
+
+def export_professional_preview_html(db: Database, project_id: int, *,
+                                     dark: bool = False) -> str:
+    """Professional screenplay HTML print preview (Phase 10H)."""
+    from storyplanner.screenplay_html_preview import build_screenplay_preview_html
+    return build_screenplay_preview_html(_screenplay_render_doc(db, project_id),
+                                         dark=dark)
+
+
+def export_screenplay_pdf(db: Database, project_id: int, path: str, *, style=None) -> dict:
+    """Approximate screenplay PDF via reportlab from the render model (Phase 10H).
+
+    Pagination is approximate (not page-accurate). Returns a small status dict.
+    """
+    from storyplanner.screenplay_output_styles import get_style
+    style = style or get_style()
+    doc = _screenplay_render_doc(db, project_id)
+    warnings = ["PDF pagination is approximate (not page-accurate)."]
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.units import inch
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    except Exception as exc:
+        return {"ok": False, "warnings": [f"reportlab unavailable: {exc}"]}
+
+    def _esc(s: str) -> str:
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    base = getSampleStyleSheet()["Normal"]
+    base.fontName = "Courier"
+    base.fontSize = style.font_size
+    base.leading = style.font_size * 1.2
+
+    def mk(name, *, left=0.0, right=0.0, bold=False, align=0, upper=False):
+        return ParagraphStyle(name, parent=base, leftIndent=left * inch,
+                              rightIndent=right * inch, alignment=align,
+                              fontName="Courier-Bold" if bold else "Courier")
+
+    styles = {
+        "scene_heading": mk("sh", bold=True),
+        "action": mk("ac"),
+        "character": mk("ch", left=2.2),
+        "parenthetical": mk("pa", left=1.6, right=2.0),
+        "dialogue": mk("di", left=1.0, right=1.5),
+        "transition": mk("tr", align=2),
+        "shot": mk("st", bold=True),
+        "note": mk("no"),
+    }
+    flow = []
+    title = doc.title or (doc.title_page or {}).get("title", "")
+    if title:
+        flow.append(Paragraph(_esc(title.upper()), mk("title", align=1, bold=True)))
+        flow.append(Spacer(1, 24))
+    for b in doc.blocks:
+        text = (b.export_text or b.text or "").strip()
+        if not text:
+            continue
+        st = styles.get(b.element_type, styles["action"])
+        if b.element_type in ("scene_heading", "character", "transition", "shot"):
+            text = text.upper()
+        flow.append(Paragraph(_esc(text), st))
+    try:
+        SimpleDocTemplate(path, pagesize=letter,
+                          topMargin=inch, bottomMargin=inch,
+                          leftMargin=1.5 * inch, rightMargin=inch).build(flow)
+    except Exception as exc:
+        return {"ok": False, "warnings": [f"PDF build failed: {exc}"]}
+    return {"ok": True, "path": path, "warnings": warnings,
+            "estimated_pages": doc.estimated_pages}
+
+
+def export_screenplay_output_validation_json(db: Database, project_id: int, *,
+                                             target_format: str = "docx") -> str:
+    """Professional output readiness validation as JSON (Phase 10H)."""
+    import datetime as _dt
+    from storyplanner.screenplay_output_validation import validate_professional_output
+    from storyplanner.writing_modes import get_project_writing_mode
+
+    project = db.get_project_by_id(project_id)
+    rep = validate_professional_output(db, project_id, target_format=target_format)
+    payload = rep.to_dict()
+    payload["schema_version"] = 1
+    payload["writing_mode"] = get_project_writing_mode(project)
+    payload["exported_at"] = _dt.datetime.now().isoformat(timespec="seconds")
+    payload["project_title"] = project.title if project else "Untitled"
+    return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
 def export_fountain_validation_json(db: Database, project_id: int) -> str:
     """Phase 10G — Fountain export validation report as JSON (read-only)."""
     import datetime as _dt

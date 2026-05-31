@@ -459,3 +459,111 @@ register("sp_check_fountain_compatibility", _fountain_compat)
 register("sp_find_ambiguous_fountain", _fountain_ambiguous)
 register("sp_explain_fountain_warning", _fountain_explain_warning)
 register("sp_prepare_for_fountain", _fountain_prepare)
+
+
+# -- Phase 10H — professional output (DOCX / PDF / FDX) -----------------------
+
+
+def _output_report(db, project_id: int, target: str):
+    from storyplanner.screenplay_output_validation import validate_professional_output
+    return validate_professional_output(db, project_id, target_format=target)
+
+
+def _validate_professional_output(db, context: LogosContext) -> LogosResult:
+    action = "sp_validate_professional_output"
+    try:
+        rep = _output_report(db, context.project_id, "docx")
+    except Exception as exc:
+        return LogosResult.failure(action, f"Output validation failed: {exc}")
+    lines = [f"Available formats: {', '.join(rep.available_formats)}",
+             f"Target: {rep.target_format} ({rep.compatibility_level})",
+             f"Export-safe: {'yes' if rep.is_export_safe else 'NO'}"]
+    if rep.blocking_errors:
+        lines += ["Blocking:"] + [f"- {e}" for e in rep.blocking_errors]
+    if rep.warnings:
+        lines += ["Warnings:"] + [f"- {w}" for w in rep.warnings[:6]]
+    return LogosResult(ok=True, action=action, title="Validate Professional Output",
+                       message="\n".join(lines), suggestions=list(rep.suggestions[:5]),
+                       proposed_operations=[])
+
+
+def _output_readiness_report(db, context: LogosContext) -> LogosResult:
+    action = "sp_output_readiness_report"
+    try:
+        from storyplanner.screenplay_output_validation import available_output_formats
+        from storyplanner.screenplay_render import build_render_document, get_title_page
+        doc = build_render_document(db, context.project_id)
+        title = (get_title_page(db, context.project_id).get("title") or "").strip()
+    except Exception as exc:
+        return LogosResult.failure(action, f"Report failed: {exc}")
+    lines = [f"Formats: {', '.join(available_output_formats())}",
+             f"Title page: {title or '(none)'}",
+             f"Blocks: {len(doc.blocks)}"]
+    if doc.estimated_pages is not None:
+        lines.append(f"Approx. length: ~{doc.estimated_pages} pages (approximate)")
+    return LogosResult(ok=True, action=action, title="Output Readiness Report",
+                       message="\n".join(lines), suggestions=[], proposed_operations=[])
+
+
+def _preview_output(db, context: LogosContext) -> LogosResult:
+    action = "sp_preview_output"
+    try:
+        from storyplanner.export import export_professional_preview_html
+        html = export_professional_preview_html(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Preview failed: {exc}")
+    return LogosResult(ok=True, action=action, title="Preview Screenplay Output",
+                       message=f"Preview HTML generated ({len(html)} chars). "
+                               "Open it in a browser and print to PDF for best fidelity.",
+                       suggestions=[], proposed_operations=[])
+
+
+def _check_pdf_readiness(db, context: LogosContext) -> LogosResult:
+    action = "sp_check_pdf_readiness"
+    rep = _output_report(db, context.project_id, "pdf")
+    msg = (f"PDF target: {rep.compatibility_level}. "
+           + ("Export-safe. " if rep.is_export_safe else "NOT safe. ")
+           + " ".join(rep.warnings[:3]))
+    return LogosResult(ok=True, action=action, title="Check PDF Readiness",
+                       message=msg, suggestions=list(rep.suggestions[:3]),
+                       proposed_operations=[])
+
+
+def _check_fdx_feasibility(db, context: LogosContext) -> LogosResult:
+    action = "sp_check_fdx_feasibility"
+    rep = _output_report(db, context.project_id, "fdx")
+    msg = (f"FDX target: {rep.compatibility_level} (experimental, unverified). "
+           + " ".join(rep.warnings[:3]))
+    return LogosResult(ok=True, action=action, title="Check FDX Feasibility",
+                       message=msg, suggestions=["Prefer .fountain for Final Draft."],
+                       proposed_operations=[])
+
+
+def _explain_export_warnings(db, context: LogosContext) -> LogosResult:
+    action = "sp_explain_export_warnings"
+    rep = _output_report(db, context.project_id, "docx")
+    msg = ("No export warnings." if not rep.warnings
+           else "Export warnings (deterministic):\n"
+           + "\n".join(f"- {w}" for w in rep.warnings))
+    return LogosResult(ok=True, action=action, title="Explain Export Warnings",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _prepare_professional(db, context: LogosContext) -> LogosResult:
+    action = "sp_prepare_professional_export"
+    rep = _output_report(db, context.project_id, "docx")
+    steps = list(rep.blocking_errors) + list(rep.warnings)
+    msg = ("Ready for professional export (DOCX stable; PDF preview; FDX experimental)."
+           if not steps else "Before professional export:\n"
+           + "\n".join(f"- {s}" for s in steps[:8]))
+    return LogosResult(ok=True, action=action, title="Prepare Screenplay for Professional Export",
+                       message=msg, suggestions=steps[:5], proposed_operations=[])
+
+
+register("sp_validate_professional_output", _validate_professional_output)
+register("sp_output_readiness_report", _output_readiness_report)
+register("sp_preview_output", _preview_output)
+register("sp_check_pdf_readiness", _check_pdf_readiness)
+register("sp_check_fdx_feasibility", _check_fdx_feasibility)
+register("sp_explain_export_warnings", _explain_export_warnings)
+register("sp_prepare_professional_export", _prepare_professional)

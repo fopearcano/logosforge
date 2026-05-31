@@ -301,7 +301,16 @@ screenplay blocks** (derived from flat scene text); Fountain is an
 interchange/export/import language. Raw-Fountain editing in Manuscript is not the
 internal format and is deferred.
 
-## Intentionally deferred to Phase 10H
+## Phase 10H — professional output layer
+
+DOCX (stable), approximate PDF, HTML print preview, and **experimental** FDX
+(gated) derived from the render model; per-element style profiles with safe font
+fallback; output-readiness validation with compatibility levels; deterministic
+Logos output actions; opt-in `[Professional Output Readiness]` Assistant block;
+format-health categories (Professional Output Readiness, FDX Compatibility Risk).
+Fountain remains canonical. See **docs/ProfessionalScreenplayOutput.md**.
+
+## Intentionally deferred to Phase 10I
 
 - Fountain **import UI** (parser + roundtrip exist as a service; project-import
   UI / destructive merge with preview-confirm is deferred).

@@ -56,6 +56,9 @@ CAT_DIALOGUE_FORMAT = "dialogue_formatting_integrity"
 # Phase 10G additions (Fountain format health).
 CAT_FOUNTAIN_READINESS = "fountain_export_readiness"
 CAT_UNSUPPORTED_ELEMENTS = "unsupported_screenplay_elements"
+# Phase 10H additions (professional output health).
+CAT_PRO_OUTPUT_READINESS = "professional_output_readiness"
+CAT_FDX_COMPAT_RISK = "fdx_compatibility_risk"
 
 SCREENPLAY_CATEGORIES = (
     CAT_VISUAL_ACTION, CAT_SCENE_ECONOMY, CAT_DIALOGUE_ECONOMY, CAT_SCENE_TURN,
@@ -64,6 +67,7 @@ SCREENPLAY_CATEGORIES = (
     CAT_LINK_COVERAGE, CAT_CANDIDATE_DENSITY,
     CAT_EXPORT_READINESS, CAT_TITLE_PAGE, CAT_SCENE_HEADING_INTEGRITY,
     CAT_DIALOGUE_FORMAT, CAT_FOUNTAIN_READINESS, CAT_UNSUPPORTED_ELEMENTS,
+    CAT_PRO_OUTPUT_READINESS, CAT_FDX_COMPAT_RISK,
 )
 
 _CATEGORY_NAMES = {
@@ -98,6 +102,8 @@ _CATEGORY_NAMES = {
     CAT_DIALOGUE_FORMAT: "Dialogue Formatting Integrity",
     CAT_FOUNTAIN_READINESS: "Fountain Export Readiness",
     CAT_UNSUPPORTED_ELEMENTS: "Unsupported Screenplay Elements",
+    CAT_PRO_OUTPUT_READINESS: "Professional Output Readiness",
+    CAT_FDX_COMPAT_RISK: "FDX Compatibility Risk",
 }
 
 # -- Status ------------------------------------------------------------------
