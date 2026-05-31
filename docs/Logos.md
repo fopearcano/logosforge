@@ -67,7 +67,10 @@ notes) — it does not invent a second context system.
   Find Ambiguous Fountain Elements, Explain Fountain Warning, Prepare for Fountain). Phase 10H adds deterministic professional-output
   actions (Validate Professional Output, Output Readiness Report, Preview Output,
   Check PDF Readiness, Check FDX Feasibility, Explain Export Warnings, Prepare for
-  Professional Export) — read-only; DOCX/PDF/FDX file writes are export functions.
+  Professional Export) — read-only; DOCX/PDF/FDX file writes are export functions. Phase 10J adds deterministic production-draft status
+  actions (Explain/Validate Production Draft, Check Duplicate Scene Numbers,
+  Summarize Revision Set, Explain Page Locking, Prepare for Production Export);
+  production mutations are an explicit service API.
 - **operations** — controlled, validated apply ops (manuscript replace/insert,
   outline scene create/update, PSYKE notes/progression/relation). Every mutation
   is previewed and confirmed; nothing auto-applies.

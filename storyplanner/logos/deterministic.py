@@ -567,3 +567,133 @@ register("sp_check_pdf_readiness", _check_pdf_readiness)
 register("sp_check_fdx_feasibility", _check_fdx_feasibility)
 register("sp_explain_export_warnings", _explain_export_warnings)
 register("sp_prepare_professional_export", _prepare_professional)
+
+
+# -- Phase 10J — production draft (read-only status/validation; mutations are a
+#    separate, explicit service API) ------------------------------------------
+
+
+def _production_status(db, context: LogosContext) -> LogosResult:
+    action = "sp_production_status"
+    try:
+        from storyplanner.screenplay_production import production_status
+        st = production_status(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Status failed: {exc}")
+    if not st.get("active"):
+        msg = "Spec draft (production mode not enabled)."
+    else:
+        msg = "\n".join([
+            f"Mode: production — {st.get('draft_label', '')}",
+            f"Scene numbering: {'on' if st.get('scene_numbering_enabled') else 'off'}",
+            f"Numbered scenes: {st.get('numbered_scenes', 0)}; "
+            f"omitted: {st.get('omitted_scenes', 0)}",
+            f"Revision sets: {st.get('revision_sets', 0)}"
+            + (f" (latest: {st['active_revision_set']})" if st.get('active_revision_set') else ""),
+            f"Page locking: {st.get('page_locking_status', 'disabled')}",
+        ])
+        if st.get("warnings"):
+            msg += "\nWarnings:\n" + "\n".join(f"- {w}" for w in st["warnings"][:3])
+    return LogosResult(ok=True, action=action, title="Production Draft Status",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _validate_production(db, context: LogosContext) -> LogosResult:
+    action = "sp_validate_production"
+    try:
+        from storyplanner.screenplay_production import validate_production_draft
+        rep = validate_production_draft(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Validation failed: {exc}")
+    lines = [f"Readiness: {rep.readiness_level}"]
+    if rep.blocking_errors:
+        lines += ["Blocking:"] + [f"- {e}" for e in rep.blocking_errors]
+    if rep.warnings:
+        lines += ["Warnings:"] + [f"- {w}" for w in rep.warnings[:5]]
+    if rep.suggestions:
+        lines += ["Suggestions:"] + [f"- {s}" for s in rep.suggestions[:3]]
+    return LogosResult(ok=True, action=action, title="Validate Production Draft",
+                       message="\n".join(lines), suggestions=list(rep.suggestions[:3]),
+                       proposed_operations=[])
+
+
+def _check_duplicate_scene_numbers(db, context: LogosContext) -> LogosResult:
+    action = "sp_check_duplicate_scene_numbers"
+    try:
+        from storyplanner.screenplay_production import validate_scene_numbers
+        problems = validate_scene_numbers(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Check failed: {exc}")
+    dupes = [p for p in problems if "Duplicate" in p]
+    msg = ("No duplicate scene numbers." if not dupes
+           else "\n".join(f"- {d}" for d in dupes))
+    return LogosResult(ok=True, action=action, title="Check Duplicate Scene Numbers",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _summarize_revision_set(db, context: LogosContext) -> LogosResult:
+    action = "sp_summarize_revision_set"
+    try:
+        draft = db.get_active_production_draft(context.project_id)
+        revs = db.get_revision_sets(draft.id) if draft else []
+    except Exception as exc:
+        return LogosResult.failure(action, f"Summary failed: {exc}")
+    if not revs:
+        msg = "No revision sets."
+    else:
+        changes = db.get_revision_changes(draft.id)
+        latest = revs[-1]
+        n = sum(1 for c in changes if c.revision_set_id == latest.id)
+        msg = (f"Latest revision: {latest.label} ({latest.color_name}, "
+               f"{latest.status}) — {n} scene change(s). Total sets: {len(revs)}.")
+    return LogosResult(ok=True, action=action, title="Summarize Revision Set",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _explain_page_locking(db, context: LogosContext) -> LogosResult:
+    action = "sp_explain_page_locking"
+    msg = ("Page locking is APPROXIMATE: pagination is line-count based, not "
+           "page-accurate, so true page locking (stable page labels, 10A inserts) "
+           "is deferred. Use scene numbers + revision sets for production tracking.")
+    return LogosResult(ok=True, action=action, title="Explain Page Locking Status",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _check_fountain_production_export(db, context: LogosContext) -> LogosResult:
+    action = "sp_check_fountain_production_export"
+    try:
+        from storyplanner.export import export_production_fountain
+        text = export_production_fountain(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Export check failed: {exc}")
+    has_numbers = "#" in text
+    msg = ("Production Fountain export ready"
+           + (" (scene numbers present)." if has_numbers
+              else " (no scene numbers — assign them first)."))
+    return LogosResult(ok=True, action=action, title="Check Fountain Production Export",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _prepare_production_export(db, context: LogosContext) -> LogosResult:
+    action = "sp_prepare_production_export"
+    try:
+        from storyplanner.screenplay_production import validate_production_draft
+        rep = validate_production_draft(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Preparation failed: {exc}")
+    steps = list(rep.blocking_errors) + list(rep.warnings)
+    msg = (f"Readiness: {rep.readiness_level}. "
+           + ("Ready for production export." if not steps
+              else "Review:\n" + "\n".join(f"- {s}" for s in steps[:6])))
+    return LogosResult(ok=True, action=action,
+                       title="Prepare Screenplay for Production Export",
+                       message=msg, suggestions=steps[:5], proposed_operations=[])
+
+
+register("sp_production_status", _production_status)
+register("sp_validate_production", _validate_production)
+register("sp_check_duplicate_scene_numbers", _check_duplicate_scene_numbers)
+register("sp_summarize_revision_set", _summarize_revision_set)
+register("sp_explain_page_locking", _explain_page_locking)
+register("sp_check_fountain_production_export", _check_fountain_production_export)
+register("sp_prepare_production_export", _prepare_production_export)

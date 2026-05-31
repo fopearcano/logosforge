@@ -79,6 +79,10 @@ _PROFILES: dict[str, MediumProfile] = {
             # Phase 10A screenplay-specific actions surface first…
             "sp_diagnose_scene_economy", "sp_detect_setup_payoff",
             "sp_check_subtext", "sp_show_story_links", "sp_explain_link",
+            "sp_production_status", "sp_validate_production",
+            "sp_check_duplicate_scene_numbers", "sp_summarize_revision_set",
+            "sp_explain_page_locking", "sp_check_fountain_production_export",
+            "sp_prepare_production_export",
             "sp_validate_professional_output", "sp_output_readiness_report",
             "sp_preview_output", "sp_check_pdf_readiness", "sp_check_fdx_feasibility",
             "sp_explain_export_warnings", "sp_prepare_professional_export",

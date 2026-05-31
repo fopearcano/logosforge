@@ -310,6 +310,15 @@ Logos output actions; opt-in `[Professional Output Readiness]` Assistant block;
 format-health categories (Professional Output Readiness, FDX Compatibility Risk).
 Fountain remains canonical. See **docs/ProfessionalScreenplayOutput.md**.
 
+## Phase 10J — production draft layer
+
+Optional, screenplay-only production drafts: persistent scene numbering,
+omitted-scene tracking, dated/coloured revision sets, production-readiness
+validation, and `export_production_fountain` (`#N#` numbers + OMITTED).
+Page locking is approximate-awareness only (deferred). Deterministic Logos
+status actions, `[Production Draft Status]` Assistant block (active-only), and
+production health categories (capped). See **docs/ProductionDrafts.md**.
+
 ## Phase 10I — export integrity
 
 Audit/hardening pass: a no-text-loss harness across Fountain/DOCX/HTML/

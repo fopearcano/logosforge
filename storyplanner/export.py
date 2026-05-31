@@ -1129,6 +1129,58 @@ def export_screenplay_output_validation_json(db: Database, project_id: int, *,
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
 
+def export_production_fountain(db: Database, project_id: int, *,
+                               include_omitted: bool = True) -> str:
+    """Phase 10J — Fountain with production scene numbers (#N#) + OMITTED markers.
+
+    Opt-in; only meaningful when an active production draft with scene numbering
+    exists. Default Fountain export is unchanged. Read-only, deterministic.
+    """
+    from storyplanner.screenplay_blocks import parse_screenplay_text
+    from storyplanner.screenplay_fountain import (
+        FountainExportOptions, serialize_screenplay_to_fountain,
+    )
+    from storyplanner.screenplay_blocks import ScreenplayBlock
+    from storyplanner.screenplay_render import get_title_page
+    from storyplanner.screenplay_production import scene_number_map
+
+    numbers = scene_number_map(db, project_id)
+    data = _gather_project_data(db, project_id)
+    blocks: list = []
+    order = 0
+    scenes = db.get_all_scenes(project_id)
+    for scene in scenes:
+        info = numbers.get(scene.id, {})
+        num = info.get("number", "")
+        raw = scene.content or ""
+        parsed = parse_screenplay_text(raw) if raw.strip() else []
+        # Heading (from content or slug) with #N# suffix.
+        if parsed and parsed[0].element_type == "scene_heading":
+            head = parsed[0].text
+            rest = parsed[1:]
+        else:
+            head = (scene.slugline or scene.title or "").strip()
+            rest = parsed
+        if info.get("omitted"):
+            if include_omitted:
+                label = info.get("label") or "OMITTED"
+                blocks.append(ScreenplayBlock("scene_heading",
+                              f"{num} {label}".strip(), order_index=order))
+                order += 1
+            continue
+        if head:
+            head_text = f"{head} #{num}#" if num else head
+            blocks.append(ScreenplayBlock("scene_heading", head_text, order_index=order))
+            order += 1
+        for b in rest:
+            blocks.append(ScreenplayBlock(b.element_type, b.text, order_index=order))
+            order += 1
+    res = serialize_screenplay_to_fountain(
+        blocks, title_page=get_title_page(db, project_id),
+        options=FountainExportOptions(), project_title=data["project"]["title"])
+    return res.text
+
+
 def export_fountain_validation_json(db: Database, project_id: int) -> str:
     """Phase 10G — Fountain export validation report as JSON (read-only)."""
     import datetime as _dt

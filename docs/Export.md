@@ -81,6 +81,13 @@ Derived professional formats built on the render model (see
 (compatibility levels stable/preview/experimental/deferred). Fountain stays the
 canonical interchange format.
 
+## Production export (Phase 10J)
+
+`export_production_fountain(db, pid, include_omitted=True)` emits Fountain
+with persistent `#N#` scene numbers and `OMITTED` markers for an active
+production draft (opt-in; default Fountain unchanged; never Markdown). See
+**docs/ProductionDrafts.md**.
+
 ## Export integrity (Phase 10I)
 
 A no-text-loss harness (`tests/helpers/screenplay_export_fixtures.py`) verifies a
@@ -114,7 +121,8 @@ roundtrip), DOCX, HTML preview, FDX**; PDF is checked for a valid `%PDF-` file
 - Title-page / export-preferences **editor UI** (storage + service API exist).
 - Fountain **import UI** (parser round-trip exists; project import UI deferred).
 - PDF text-extraction integrity test (no extractor dependency available).
-- Locked production pages, revision colors, production drafts (out of scope).
+- Production UI controls + true page locking (production *data/export* layer
+  shipped in Phase 10J — see docs/ProductionDrafts.md); locked pages out of scope.
 
 ## Limitations
 

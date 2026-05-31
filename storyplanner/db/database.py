@@ -36,6 +36,10 @@ from storyplanner.models import (
     Scene,
     SceneCharacterLink,
     SceneCharacterState,
+    ProductionDraft,
+    ProductionSceneNumber,
+    RevisionChange,
+    RevisionSet,
     ScenePlaceLink,
     StoryLink,
     StageBusiness,
@@ -3172,6 +3176,124 @@ class Database:
             session.delete(link)
             session.commit()
             return True
+
+    # -- Production drafts (Phase 10J) ---------------------------------------
+
+    def create_production_draft(self, project_id: int, **fields) -> ProductionDraft:
+        from storyplanner.models.models import _now
+        fields.pop("project_id", None)
+        draft = ProductionDraft(project_id=project_id, **fields)
+        draft.updated_at = _now()
+        with Session(self._engine) as session:
+            session.add(draft)
+            session.commit()
+            session.refresh(draft)
+            return draft
+
+    def get_production_drafts(self, project_id: int) -> list[ProductionDraft]:
+        with Session(self._engine) as session:
+            stmt = select(ProductionDraft).where(
+                ProductionDraft.project_id == project_id)
+            return list(session.exec(stmt).all())
+
+    def get_active_production_draft(self, project_id: int) -> "ProductionDraft | None":
+        with Session(self._engine) as session:
+            stmt = select(ProductionDraft).where(
+                ProductionDraft.project_id == project_id,
+                ProductionDraft.is_active == True,  # noqa: E712
+            )
+            return session.exec(stmt).first()
+
+    def update_production_draft(self, draft_id: int, **fields) -> "ProductionDraft | None":
+        from storyplanner.models.models import _now
+        with Session(self._engine) as session:
+            draft = session.get(ProductionDraft, draft_id)
+            if draft is None:
+                return None
+            for k, v in fields.items():
+                if hasattr(draft, k):
+                    setattr(draft, k, v)
+            draft.updated_at = _now()
+            session.add(draft)
+            session.commit()
+            session.refresh(draft)
+            return draft
+
+    # Scene numbers.
+    def set_production_scene_number(self, project_id: int, draft_id: int,
+                                    scene_id: int, **fields) -> ProductionSceneNumber:
+        from storyplanner.models.models import _now
+        with Session(self._engine) as session:
+            stmt = select(ProductionSceneNumber).where(
+                ProductionSceneNumber.draft_id == draft_id,
+                ProductionSceneNumber.scene_id == scene_id)
+            row = session.exec(stmt).first()
+            if row is None:
+                row = ProductionSceneNumber(project_id=project_id, draft_id=draft_id,
+                                            scene_id=scene_id)
+            for k, v in fields.items():
+                if hasattr(row, k):
+                    setattr(row, k, v)
+            row.updated_at = _now()
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return row
+
+    def get_production_scene_numbers(self, draft_id: int) -> list[ProductionSceneNumber]:
+        with Session(self._engine) as session:
+            stmt = select(ProductionSceneNumber).where(
+                ProductionSceneNumber.draft_id == draft_id,
+            ).order_by(ProductionSceneNumber.sort_index)
+            return list(session.exec(stmt).all())
+
+    # Revision sets + changes.
+    def create_revision_set(self, project_id: int, draft_id: int, **fields) -> RevisionSet:
+        from storyplanner.models.models import _now
+        rs = RevisionSet(project_id=project_id, draft_id=draft_id, **fields)
+        rs.updated_at = _now()
+        with Session(self._engine) as session:
+            session.add(rs)
+            session.commit()
+            session.refresh(rs)
+            return rs
+
+    def get_revision_sets(self, draft_id: int) -> list[RevisionSet]:
+        with Session(self._engine) as session:
+            stmt = select(RevisionSet).where(
+                RevisionSet.draft_id == draft_id).order_by(RevisionSet.id)
+            return list(session.exec(stmt).all())
+
+    def update_revision_set(self, revision_set_id: int, **fields) -> "RevisionSet | None":
+        from storyplanner.models.models import _now
+        with Session(self._engine) as session:
+            rs = session.get(RevisionSet, revision_set_id)
+            if rs is None:
+                return None
+            for k, v in fields.items():
+                if hasattr(rs, k):
+                    setattr(rs, k, v)
+            rs.updated_at = _now()
+            session.add(rs)
+            session.commit()
+            session.refresh(rs)
+            return rs
+
+    def create_revision_change(self, project_id: int, draft_id: int,
+                               revision_set_id: int, **fields) -> RevisionChange:
+        rc = RevisionChange(project_id=project_id, draft_id=draft_id,
+                            revision_set_id=revision_set_id, **fields)
+        with Session(self._engine) as session:
+            session.add(rc)
+            session.commit()
+            session.refresh(rc)
+            return rc
+
+    def get_revision_changes(self, draft_id: int) -> list[RevisionChange]:
+        with Session(self._engine) as session:
+            stmt = select(RevisionChange).where(
+                RevisionChange.draft_id == draft_id).order_by(RevisionChange.id)
+            return list(session.exec(stmt).all())
 
     @staticmethod
     def _matches(query_lower: str, *fields: str) -> bool:

@@ -658,10 +658,43 @@ def screenplay_health_metrics(db, project_id: int) -> list:
         status=(M.STATUS_WATCH if n else M.STATUS_UNKNOWN), confidence=0.4,
         evidence="FDX export is experimental and unverified — prefer .fountain."))
 
-    # Cinematic Continuity stays deferred (needs semantics / Phase 10I).
+    # -- Production draft (Phase 10J — only when production mode is active) --
+    # Capped at WATCH so a production-format issue never flips narrative overall;
+    # the production validator surfaces the real blocking errors separately.
+    try:
+        draft = db.get_active_production_draft(project_id)
+    except Exception:
+        draft = None
+    if draft is not None:
+        from storyplanner.screenplay_production import (
+            validate_scene_numbers, validate_production_draft,
+        )
+        prep = validate_production_draft(db, project_id)
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_PRODUCTION_READINESS,
+            status=(M.STATUS_WATCH if prep.blocking_errors else M.STATUS_STABLE),
+            confidence=0.5, evidence=f"Readiness: {prep.readiness_level}."))
+        if draft.scene_numbering_enabled:
+            problems = validate_scene_numbers(db, project_id)
+            metrics.append(M.NarrativeHealthMetric(
+                category=M.CAT_SCENE_NUMBERING,
+                status=(M.STATUS_WATCH if problems else M.STATUS_STABLE),
+                confidence=0.5,
+                evidence=(problems[0] if problems else "Scene numbers consistent.")))
+        try:
+            revs = db.get_revision_sets(draft.id)
+        except Exception:
+            revs = []
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_REVISION_SET,
+            status=(M.STATUS_STABLE if revs else M.STATUS_UNKNOWN), confidence=0.4,
+            evidence=(f"{len(revs)} revision set(s)." if revs
+                      else "No revision sets yet.")))
+
+    # Cinematic Continuity stays deferred (needs semantics / future phase).
     metrics.append(M.NarrativeHealthMetric(
         category=M.CAT_CINEMATIC_CONTINUITY, status=M.STATUS_UNKNOWN,
-        evidence="Deferred — not deterministically assessable yet (Phase 10I)."))
+        evidence="Deferred — not deterministically assessable yet."))
     return metrics
 
 

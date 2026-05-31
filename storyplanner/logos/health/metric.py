@@ -59,6 +59,10 @@ CAT_UNSUPPORTED_ELEMENTS = "unsupported_screenplay_elements"
 # Phase 10H additions (professional output health).
 CAT_PRO_OUTPUT_READINESS = "professional_output_readiness"
 CAT_FDX_COMPAT_RISK = "fdx_compatibility_risk"
+# Phase 10J additions (production draft health — only when production active).
+CAT_PRODUCTION_READINESS = "production_draft_readiness"
+CAT_SCENE_NUMBERING = "scene_numbering_integrity"
+CAT_REVISION_SET = "revision_set_integrity"
 
 SCREENPLAY_CATEGORIES = (
     CAT_VISUAL_ACTION, CAT_SCENE_ECONOMY, CAT_DIALOGUE_ECONOMY, CAT_SCENE_TURN,
@@ -68,6 +72,7 @@ SCREENPLAY_CATEGORIES = (
     CAT_EXPORT_READINESS, CAT_TITLE_PAGE, CAT_SCENE_HEADING_INTEGRITY,
     CAT_DIALOGUE_FORMAT, CAT_FOUNTAIN_READINESS, CAT_UNSUPPORTED_ELEMENTS,
     CAT_PRO_OUTPUT_READINESS, CAT_FDX_COMPAT_RISK,
+    CAT_PRODUCTION_READINESS, CAT_SCENE_NUMBERING, CAT_REVISION_SET,
 )
 
 _CATEGORY_NAMES = {
@@ -104,6 +109,9 @@ _CATEGORY_NAMES = {
     CAT_UNSUPPORTED_ELEMENTS: "Unsupported Screenplay Elements",
     CAT_PRO_OUTPUT_READINESS: "Professional Output Readiness",
     CAT_FDX_COMPAT_RISK: "FDX Compatibility Risk",
+    CAT_PRODUCTION_READINESS: "Production Draft Readiness",
+    CAT_SCENE_NUMBERING: "Scene Numbering Integrity",
+    CAT_REVISION_SET: "Revision Set Integrity",
 }
 
 # -- Status ------------------------------------------------------------------

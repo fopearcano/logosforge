@@ -19,6 +19,7 @@ _KEY_SCREENPLAY_TRACK = "include_screenplay_tracking_in_assistant_context"
 _KEY_SCREENPLAY_LINKS = "include_screenplay_links_in_assistant_context"
 _KEY_SCREENPLAY_EXPORT = "include_screenplay_export_in_assistant_context"
 _KEY_PROFESSIONAL_OUTPUT = "include_professional_output_in_assistant_context"
+_KEY_PRODUCTION_DRAFT = "include_production_draft_in_assistant_context"
 _KEY_STRATEGY = "include_strategy_in_assistant_context"
 _KEY_HEALTH = "include_health_in_assistant_context"
 _KEY_DIAGNOSTICS = "include_diagnostics_in_assistant_context"
@@ -32,6 +33,7 @@ _DEFAULTS = {
     _KEY_SCREENPLAY_LINKS: True,  # screenplay-only; confirmed + candidate story links
     _KEY_SCREENPLAY_EXPORT: True,  # screenplay-only; export readiness summary
     _KEY_PROFESSIONAL_OUTPUT: False,  # opt-in; DOCX/PDF/FDX readiness
+    _KEY_PRODUCTION_DRAFT: True,  # only emits when production mode is active
     _KEY_STRATEGY: True,
     _KEY_HEALTH: False,        # off by default — health is expensive/broad
     _KEY_DIAGNOSTICS: True,
@@ -86,6 +88,8 @@ def gather_injected_context(
         blocks.append(_screenplay_export_block(db, project_id, scene_id))
     if _flag(_KEY_PROFESSIONAL_OUTPUT):
         blocks.append(_professional_output_block(db, project_id, scene_id))
+    if _flag(_KEY_PRODUCTION_DRAFT):
+        blocks.append(_production_draft_block(db, project_id))
     if _flag(_KEY_STRATEGY):
         blocks.append(_strategy_block(db, project_id, section_name))
     if _flag(_KEY_HEALTH):
@@ -324,6 +328,31 @@ def _professional_output_block(db, project_id: int, scene_id: int | None) -> str
             lines.append("Blocking: " + "; ".join(rep.blocking_errors[:3]))
         if rep.warnings:
             lines.append("Warnings: " + "; ".join(rep.warnings[:3]))
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _production_draft_block(db, project_id: int) -> str:
+    """Capped ``[Production Draft Status]`` — only when production mode is active."""
+    if not _is_screenplay(db, project_id):
+        return ""
+    try:
+        from storyplanner.screenplay_production import production_status
+        st = production_status(db, project_id)
+        if not st.get("active"):
+            return ""
+        lines = ["[Production Draft Status]",
+                 f"Mode: production — {st.get('draft_label', '')}".rstrip(" —"),
+                 f"Scene numbering: {'on' if st.get('scene_numbering_enabled') else 'off'} "
+                 f"({st.get('numbered_scenes', 0)} numbered, "
+                 f"{st.get('omitted_scenes', 0)} omitted)",
+                 f"Revision sets: {st.get('revision_sets', 0)}"
+                 + (f" (latest: {st['active_revision_set']})"
+                    if st.get('active_revision_set') else ""),
+                 f"Page locking: {st.get('page_locking_status', 'disabled')}"]
+        if st.get("warnings"):
+            lines.append("Warnings: " + "; ".join(st["warnings"][:3]))
         return "\n".join(lines)
     except Exception:
         return ""

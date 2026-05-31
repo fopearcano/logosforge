@@ -209,6 +209,84 @@ class StoryLink(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=_now)
 
 
+class ProductionDraft(SQLModel, table=True):
+    """A screenplay production-draft container (Phase 10J).
+
+    Optional, screenplay-only. Created idempotently by ``create_all`` (old DBs
+    gain it empty). Page locking is awareness-only — ``page_locking_status`` is
+    never "stable" because pagination is approximate.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    name: str = "Production Draft"
+    draft_label: str = ""
+    draft_date: str = ""
+    status: str = "production"        # spec | production | locked | revised
+    is_active: bool = True
+    scene_numbering_enabled: bool = False
+    page_locking_enabled: bool = False
+    page_locking_status: str = "approximate"  # disabled|approximate|stable|unsupported
+    notes: str = ""
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
+class ProductionSceneNumber(SQLModel, table=True):
+    """A persistent production scene number for one scene within a draft."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    draft_id: int = Field(foreign_key="productiondraft.id", index=True)
+    scene_id: Optional[int] = Field(default=None, foreign_key="scene.id")
+    scene_number: str = ""
+    original_scene_number: str = ""
+    is_omitted: bool = False
+    omitted_label: str = ""
+    sort_index: int = 0
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
+class RevisionSet(SQLModel, table=True):
+    """A dated/coloured revision set within a production draft."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    draft_id: int = Field(foreign_key="productiondraft.id", index=True)
+    label: str = ""
+    revision_date: str = ""
+    color_name: str = "White"
+    status: str = "draft"            # draft | issued | archived
+    description: str = ""
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
+class RevisionChange(SQLModel, table=True):
+    """A scene-level change recorded against a revision set (block-level deferred)."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    draft_id: int = Field(foreign_key="productiondraft.id", index=True)
+    revision_set_id: int = Field(foreign_key="revisionset.id", index=True)
+    scene_id: Optional[int] = Field(default=None, foreign_key="scene.id")
+    change_type: str = "modified"    # added | modified | deleted | omitted | renumbered
+    summary: str = ""
+    old_text_hash: str = ""
+    new_text_hash: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+# Standard production revision colour sequence (metadata only).
+REVISION_COLORS = (
+    "White", "Blue", "Pink", "Yellow", "Green", "Goldenrod", "Buff", "Salmon",
+    "Cherry", "Tan", "Ivory",
+)
+PRODUCTION_DRAFT_STATUSES = ("spec", "production", "locked", "revised")
+REVISION_SET_STATUSES = ("draft", "issued", "archived")
+
+
 SCREENPLAY_LINK_TYPES = (
     "setup_to_payoff", "motif_recurrence", "promise_to_consequence",
     "threat_to_consequence", "object_plant_to_use", "character_in_scene",

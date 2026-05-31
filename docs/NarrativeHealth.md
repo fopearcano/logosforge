@@ -69,8 +69,8 @@ engines. Phase 10E adds **Confirmed Setup/Payoff Coverage** (confirmed
 categories — Export Readiness, Title Page Completeness, Scene Heading Integrity,
 Dialogue Formatting Integrity — derived from the deterministic export validator.
 These are **capped at *Needs Attention*** so a formatting issue never flips the
-narrative overall status: format problems are kept distinct from craft problems. Phase 10G adds Fountain Export Readiness and Unsupported Screenplay Elements (also capped). Phase 10H adds Professional Output Readiness and FDX Compatibility Risk (FDX is a standing experimental watch).
-**Cinematic Continuity** remains deferred (*Not Enough Data* until Phase 10I).
+narrative overall status: format problems are kept distinct from craft problems. Phase 10G adds Fountain Export Readiness and Unsupported Screenplay Elements (also capped). Phase 10H adds Professional Output Readiness and FDX Compatibility Risk (FDX is a standing experimental watch). Phase 10J adds Production Draft Readiness, Scene Numbering Integrity, and Revision Set Integrity (only when production mode is active; capped — duplicate scene numbers block in the production validator, not in story health).
+**Cinematic Continuity** remains deferred (*Not Enough Data* — a future phase).
 No fake precision, no background LLM, no DB mutation. Novel/other modes are
 unaffected.
 

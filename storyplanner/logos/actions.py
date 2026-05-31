@@ -579,6 +579,29 @@ for _name, _label, _desc in [
         category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
         prompt="", modes=_SP, deterministic=True,
     ))
+# Manuscript + Screenplay — Phase 10J (production draft, read-only/deterministic).
+for _name, _label, _desc in [
+    ("sp_production_status", "Explain Production Draft Status",
+     "Summarize production draft mode, numbering, revisions, page-locking."),
+    ("sp_validate_production", "Validate Production Draft",
+     "Validate production readiness (deterministic)."),
+    ("sp_check_duplicate_scene_numbers", "Check Duplicate Scene Numbers",
+     "Detect duplicate/empty production scene numbers."),
+    ("sp_summarize_revision_set", "Summarize Revision Set",
+     "Summarize the latest revision set and its scene changes."),
+    ("sp_explain_page_locking", "Explain Page Locking Status",
+     "Explain why page locking is approximate/deferred."),
+    ("sp_check_fountain_production_export", "Check Fountain Production Export",
+     "Check the production Fountain export (scene numbers)."),
+    ("sp_prepare_production_export", "Prepare Screenplay for Production Export",
+     "Checklist before exporting a production draft."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc,
+        category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+        prompt="", modes=_SP, deterministic=True,
+    ))
+
 # Manuscript + Screenplay — Phase 10H (professional output, read-only/deterministic).
 for _name, _label, _desc in [
     ("sp_validate_professional_output", "Validate Professional Output",

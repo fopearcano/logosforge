@@ -49,6 +49,8 @@ DEFAULTS: dict[str, object] = {
     "include_screenplay_export_in_assistant_context": True,
     # Professional output (DOCX/PDF/FDX) — opt-in to avoid prompt bloat.
     "include_professional_output_in_assistant_context": False,
+    # Production draft status — shown only when production mode is active.
+    "include_production_draft_in_assistant_context": True,
     "include_strategy_in_assistant_context": True,
     "include_health_in_assistant_context": False,
     "include_diagnostics_in_assistant_context": True,
