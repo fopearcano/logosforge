@@ -16,6 +16,7 @@ from __future__ import annotations
 _KEY_PROJECT_MODE = "include_project_mode_in_assistant_context"
 _KEY_SCREENPLAY_DIAG = "include_screenplay_diagnostics_in_assistant_context"
 _KEY_SCREENPLAY_TRACK = "include_screenplay_tracking_in_assistant_context"
+_KEY_SCREENPLAY_LINKS = "include_screenplay_links_in_assistant_context"
 _KEY_STRATEGY = "include_strategy_in_assistant_context"
 _KEY_HEALTH = "include_health_in_assistant_context"
 _KEY_DIAGNOSTICS = "include_diagnostics_in_assistant_context"
@@ -26,6 +27,7 @@ _DEFAULTS = {
     _KEY_PROJECT_MODE: True,   # on by default — tiny, deterministic, always relevant
     _KEY_SCREENPLAY_DIAG: True,  # screenplay-only; concise top-issues summary
     _KEY_SCREENPLAY_TRACK: True,  # screenplay-only; setup/payoff + subtext summaries
+    _KEY_SCREENPLAY_LINKS: True,  # screenplay-only; confirmed + candidate story links
     _KEY_STRATEGY: True,
     _KEY_HEALTH: False,        # off by default — health is expensive/broad
     _KEY_DIAGNOSTICS: True,
@@ -74,6 +76,8 @@ def gather_injected_context(
     if _flag(_KEY_SCREENPLAY_TRACK):
         blocks.append(_screenplay_setup_payoff_block(db, project_id, scene_id))
         blocks.append(_screenplay_subtext_block(db, project_id, scene_id))
+    if _flag(_KEY_SCREENPLAY_LINKS):
+        blocks.append(_screenplay_links_block(db, project_id, scene_id))
     if _flag(_KEY_STRATEGY):
         blocks.append(_strategy_block(db, project_id, section_name))
     if _flag(_KEY_HEALTH):
@@ -204,6 +208,32 @@ def _screenplay_subtext_block(db, project_id: int, scene_id: int | None) -> str:
         lines = ["[Screenplay Subtext]", report.summary]
         for s in report.top_signals(3):
             lines.append(f"- {s.signal_type}: {s.evidence}")
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _screenplay_links_block(db, project_id: int, scene_id: int | None) -> str:
+    """Capped ``[Screenplay Story Links]`` — confirmed + candidate links."""
+    if scene_id is None or not _is_screenplay(db, project_id):
+        return ""
+    try:
+        from storyplanner.screenplay_graph import build_screenplay_graph
+        graph = build_screenplay_graph(db, project_id)
+        if not graph.edges:
+            return ""
+        confirmed = [e for e in graph.edges if e.status in ("confirmed", "resolved")]
+        setup_cand = [e for e in graph.edges
+                      if e.status == "candidate" and e.edge_type == "setup_to_payoff"]
+        motif = [e for e in graph.edges if e.edge_type == "motif_recurrence"]
+        if not (confirmed or setup_cand or motif):
+            return ""
+        lines = ["[Screenplay Story Links]"]
+        for label, items in (("Confirmed", confirmed),
+                             ("Candidate setup/payoff", setup_cand),
+                             ("Motif", motif)):
+            for e in items[:3]:
+                lines.append(f"- {label}: {e.label}")
         return "\n".join(lines)
     except Exception:
         return ""

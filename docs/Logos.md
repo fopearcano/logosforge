@@ -56,8 +56,11 @@ notes) — it does not invent a second context system.
   adds deterministic setup/payoff + subtext actions (`Detect Setup/Payoff
   Candidates`, `Track Unresolved Setups`, `Find Possible Payoffs`, `Check
   Dialogue Subtext`, `Find Exposition in Dialogue`) and generative subtext
-  rewrites — all screenplay-only and report-only (no PSYKE/Graph auto-mutation;
-  persistence is Phase 10E).
+  rewrites — all screenplay-only and report-only (no PSYKE/Graph auto-mutation).
+  Phase 10E adds deterministic story-link graph actions (`Show Story Link
+  Graph`, `Explain This Link`) over `screenplay_graph.build_screenplay_graph`;
+  confirmed-link persistence (`StoryLink`) is explicit/user-invoked via the
+  service API, and the mutating Logos actions + graph widget are Phase 10F.
 - **operations** — controlled, validated apply ops (manuscript replace/insert,
   outline scene create/update, PSYKE notes/progression/relation). Every mutation
   is previewed and confirmed; nothing auto-applies.

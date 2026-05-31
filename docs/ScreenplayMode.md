@@ -208,7 +208,35 @@ remains deferred (`Not Enough Data`).
 **Export:** `export_setup_payoff_report_json` and `export_subtext_report_json`
 (additive; existing exports untouched).
 
-## Intentionally deferred to Phase 10E
+## Phase 10E — story-link graph + confirmed links
+
+`storyplanner/screenplay_graph.py` assembles a node/edge **story-link graph** from
+the existing screenplay data plus user-confirmed links — references only, never
+copies of scene/PSYKE text (the graph is **not** a source of truth). See
+**docs/Graph.md** for node/edge types and the full surface.
+
+- **Candidates** (setup→payoff, motif, character-in-scene, psyke→scene,
+  subtext→character) are generated dynamically and never auto-persist.
+- **Confirmed links** persist in the new `StoryLink` table (created idempotently;
+  old DBs gain it empty). `confirm_candidate` / `dismiss_link` / `resolve_link`
+  are explicit, user-invoked — analysis code never mutates them.
+- **Logos** (deterministic, no LLM): `Show Story Link Graph`, `Explain This Link`.
+- **Assistant**: capped `[Screenplay Story Links]` block
+  (`include_screenplay_links_in_assistant_context`).
+- **Health**: `Confirmed Setup/Payoff Coverage` (confirmed links weigh more) +
+  `Unresolved Candidate Density` (cautious warning).
+- **Export**: `export_screenplay_graph_json` + `export_story_links_json`
+  (schema-versioned).
+
+## Intentionally deferred to Phase 10F
+
+- Interactive screenplay graph **widget** + filters + evidence panel.
+- UI confirmation buttons + mutating Logos actions (Confirm/Dismiss/Resolve, Add
+  to Graph, Create PSYKE from candidate) — persistence + service API exist; only
+  the preview/confirm UI wiring is deferred.
+- Strategy-explanation enrichment from live graph state; Cinematic Continuity.
+
+## (Earlier) Intentionally deferred to Phase 10E
 
 - Persistent confirmed setup↔payoff / motif links (`ScreenplayLink` table) with
   confirmed/dismissed/resolved state + idempotent migration.

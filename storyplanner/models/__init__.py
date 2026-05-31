@@ -51,6 +51,7 @@ from storyplanner.models.models import (
     Stage,
     StageBranch,
     StageSnapshot,
+    StoryLink,
     StoryMemoryEntry,
     VoiceProfile,
 )
@@ -69,6 +70,7 @@ __all__ = [
     "PsykeEntry",
     "PsykeRelation",
     "PsykeProgression",
+    "StoryLink",
     "StoryMemoryEntry",
     "OutlineNode",
     "QuantumStateRecord",

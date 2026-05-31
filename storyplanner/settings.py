@@ -45,6 +45,7 @@ DEFAULTS: dict[str, object] = {
     "include_project_mode_in_assistant_context": True,
     "include_screenplay_diagnostics_in_assistant_context": True,
     "include_screenplay_tracking_in_assistant_context": True,
+    "include_screenplay_links_in_assistant_context": True,
     "include_strategy_in_assistant_context": True,
     "include_health_in_assistant_context": False,
     "include_diagnostics_in_assistant_context": True,

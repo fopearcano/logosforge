@@ -532,10 +532,37 @@ def screenplay_health_metrics(db, project_id: int) -> list:
             confidence=0.45,
             evidence=f"{otn} of {len(sub_scenes)} scene(s) flagged on-the-nose."))
 
-    # Cinematic Continuity stays deferred (needs semantics / Phase 10E).
+    # -- Confirmed-link coverage + candidate density (Phase 10E) --
+    try:
+        confirmed = db.get_story_links(project_id, status="confirmed")
+        resolved = db.get_story_links(project_id, status="resolved")
+    except Exception:
+        confirmed, resolved = [], []
+    n_confirmed = len(confirmed) + len(resolved)
+    unresolved_cands = len(sp.unresolved_setups) if sp else 0
+    # Confirmed links carry more weight: coverage is stable once any setup/payoff
+    # is confirmed; unknown when there's nothing tracked yet.
+    if n_confirmed > 0:
+        cov_status, cov_ev = M.STATUS_STABLE, f"{n_confirmed} confirmed story link(s)."
+    elif unresolved_cands > 0:
+        cov_status = M.STATUS_WATCH
+        cov_ev = f"{unresolved_cands} candidate(s) but none confirmed yet."
+    else:
+        cov_status, cov_ev = M.STATUS_UNKNOWN, "No story links tracked."
+    metrics.append(M.NarrativeHealthMetric(
+        category=M.CAT_LINK_COVERAGE, status=cov_status, confidence=0.45,
+        evidence=cov_ev))
+    # Candidate density: many unresolved candidates -> watch (a warning, not fail).
+    dens_status = M.STATUS_WATCH if unresolved_cands >= 3 else (
+        M.STATUS_STABLE if (sp and (sp.candidates or n_confirmed)) else M.STATUS_UNKNOWN)
+    metrics.append(M.NarrativeHealthMetric(
+        category=M.CAT_CANDIDATE_DENSITY, status=dens_status, confidence=0.4,
+        evidence=f"{unresolved_cands} unresolved candidate(s)."))
+
+    # Cinematic Continuity stays deferred (needs semantics / Phase 10F).
     metrics.append(M.NarrativeHealthMetric(
         category=M.CAT_CINEMATIC_CONTINUITY, status=M.STATUS_UNKNOWN,
-        evidence="Deferred — not deterministically assessable yet (Phase 10E)."))
+        evidence="Deferred — not deterministically assessable yet (Phase 10F)."))
     return metrics
 
 

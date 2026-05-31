@@ -180,6 +180,44 @@ class PsykeRelation(SQLModel, table=True):
     relation_type: str = ""
 
 
+class StoryLink(SQLModel, table=True):
+    """A confirmed (or user-tracked) screenplay story link (Phase 10E).
+
+    References to existing entities only — never a copy of scene/PSYKE content.
+    Candidates are generated dynamically by the screenplay engines; only links a
+    user explicitly confirms/dismisses/resolves are persisted here. The table is
+    created idempotently by SQLModel ``create_all`` (old DBs gain it empty).
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    link_type: str = ""              # see SCREENPLAY_LINK_TYPES
+    source_type: str = ""            # scene | psyke | setup | motif | object | ...
+    source_id: str = ""              # reference id (string-encoded)
+    source_scene_id: Optional[int] = None
+    source_block_index: Optional[int] = None
+    target_type: str = ""
+    target_id: str = ""
+    target_scene_id: Optional[int] = None
+    target_block_index: Optional[int] = None
+    label: str = ""
+    evidence: str = ""
+    status: str = "confirmed"        # candidate | confirmed | dismissed | resolved
+    confidence: float = 0.0
+    metadata_json: str = ""
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
+SCREENPLAY_LINK_TYPES = (
+    "setup_to_payoff", "motif_recurrence", "promise_to_consequence",
+    "threat_to_consequence", "object_plant_to_use", "character_in_scene",
+    "objective_to_turn", "subtext_to_character", "psyke_to_scene",
+    "scene_to_sequence", "sequence_to_act", "diagnostic_to_scene",
+)
+STORY_LINK_STATUSES = ("candidate", "confirmed", "dismissed", "resolved")
+
+
 PSYKE_RELATION_TYPES = (
     "",                       # generic association
     "supports_setup",         # this entry plants a setup that the other pays off

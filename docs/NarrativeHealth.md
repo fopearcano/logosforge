@@ -63,9 +63,11 @@ Dialogue Economy, Scene Turn, Character Objective, Setup/Payoff**. Status uses t
 same no-score labels; categories with no analyzable data return *Not Enough Data*.
 Phase 10D additionally populates **Dialogue Subtext, Motif Recurrence** and
 **On-the-Nose Dialogue Risk** from the deterministic setup/payoff + subtext
-engines. **Cinematic Continuity** remains deferred (*Not Enough Data* until
-Phase 10E). No fake precision, no background LLM, no DB mutation. Novel/other
-modes are unaffected.
+engines. Phase 10E adds **Confirmed Setup/Payoff Coverage** (confirmed
+`StoryLink`s weigh more than candidates) and **Unresolved Candidate Density**
+(a cautious warning, never a hard failure). **Cinematic Continuity** remains
+deferred (*Not Enough Data* until Phase 10F). No fake precision, no background
+LLM, no DB mutation. Novel/other modes are unaffected.
 
 ## Settings (defaults)
 

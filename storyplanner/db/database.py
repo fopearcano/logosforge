@@ -37,6 +37,7 @@ from storyplanner.models import (
     SceneCharacterLink,
     SceneCharacterState,
     ScenePlaceLink,
+    StoryLink,
     StageBusiness,
     StageCue,
     StageEntranceExit,
@@ -3118,6 +3119,59 @@ class Database:
                 StageBranch.source_stage_id == stage_id,
             )
             return list(session.exec(stmt).all())
+
+    # -- Screenplay story links (Phase 10E) ----------------------------------
+
+    def create_story_link(self, project_id: int, **fields) -> StoryLink:
+        """Persist a confirmed/tracked story link. Never called automatically —
+        only on explicit user confirmation."""
+        from storyplanner.models.models import _now
+        fields.pop("project_id", None)
+        link = StoryLink(project_id=project_id, **fields)
+        link.updated_at = _now()
+        with Session(self._engine) as session:
+            session.add(link)
+            session.commit()
+            session.refresh(link)
+            return link
+
+    def get_story_links(
+        self, project_id: int, *, status: str | None = None,
+        link_type: str | None = None,
+    ) -> list[StoryLink]:
+        with Session(self._engine) as session:
+            stmt = select(StoryLink).where(StoryLink.project_id == project_id)
+            if status is not None:
+                stmt = stmt.where(StoryLink.status == status)
+            if link_type is not None:
+                stmt = stmt.where(StoryLink.link_type == link_type)
+            return list(session.exec(stmt).all())
+
+    def get_story_link_by_id(self, link_id: int) -> "StoryLink | None":
+        with Session(self._engine) as session:
+            return session.get(StoryLink, link_id)
+
+    def update_story_link_status(self, link_id: int, status: str) -> "StoryLink | None":
+        from storyplanner.models.models import _now
+        with Session(self._engine) as session:
+            link = session.get(StoryLink, link_id)
+            if link is None:
+                return None
+            link.status = status
+            link.updated_at = _now()
+            session.add(link)
+            session.commit()
+            session.refresh(link)
+            return link
+
+    def delete_story_link(self, link_id: int) -> bool:
+        with Session(self._engine) as session:
+            link = session.get(StoryLink, link_id)
+            if link is None:
+                return False
+            session.delete(link)
+            session.commit()
+            return True
 
     @staticmethod
     def _matches(query_lower: str, *fields: str) -> bool:

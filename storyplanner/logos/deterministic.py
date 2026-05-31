@@ -196,3 +196,52 @@ register("sp_track_unresolved_setups", _track_unresolved_setups)
 register("sp_find_possible_payoffs", _find_possible_payoffs)
 register("sp_check_subtext", _check_subtext)
 register("sp_find_exposition", _find_exposition)
+
+
+def _show_story_links(db, context: LogosContext) -> LogosResult:
+    action = "sp_show_story_links"
+    try:
+        from storyplanner.screenplay_graph import build_screenplay_graph
+        graph = build_screenplay_graph(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Graph build failed: {exc}")
+    lines = [graph.summary]
+    confirmed = [e for e in graph.edges if e.status in ("confirmed", "resolved")]
+    candidates = [e for e in graph.edges if e.status == "candidate"]
+    if confirmed:
+        lines.append("")
+        lines.append("Confirmed links:")
+        for e in confirmed[:8]:
+            lines.append(f"- {e.edge_type}: {e.label}")
+    if candidates:
+        lines.append("")
+        lines.append("Candidate links:")
+        for e in candidates[:8]:
+            lines.append(f"- {e.edge_type}: {e.label} ({e.evidence})")
+    return LogosResult(ok=True, action=action, title="Show Story Link Graph",
+                       message="\n".join(lines), suggestions=[],
+                       proposed_operations=[])
+
+
+def _explain_link(db, context: LogosContext) -> LogosResult:
+    """Deterministic, evidence-first explanation of the current scene's links."""
+    action = "sp_explain_link"
+    try:
+        from storyplanner.screenplay_graph import build_screenplay_graph
+        graph = build_screenplay_graph(db, context.project_id,
+                                       scene_id=context.current_scene_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Graph build failed: {exc}")
+    edges = [e for e in graph.edges if e.evidence]
+    if not edges:
+        msg = "No story links with explicit evidence for the current scope."
+    else:
+        msg = "Story links (evidence):\n" + "\n".join(
+            f"- {e.edge_type}: {e.label} — {e.evidence}" for e in edges[:10]
+        )
+    return LogosResult(ok=True, action=action, title="Explain This Link",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+register("sp_show_story_links", _show_story_links)
+register("sp_explain_link", _explain_link)

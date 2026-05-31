@@ -45,11 +45,15 @@ CAT_CINEMATIC_CONTINUITY = "cinematic_continuity"
 # Phase 10D additions.
 CAT_MOTIF_RECURRENCE = "motif_recurrence"
 CAT_ON_THE_NOSE = "on_the_nose"
+# Phase 10E additions (graph/link coverage).
+CAT_LINK_COVERAGE = "confirmed_link_coverage"
+CAT_CANDIDATE_DENSITY = "candidate_density"
 
 SCREENPLAY_CATEGORIES = (
     CAT_VISUAL_ACTION, CAT_SCENE_ECONOMY, CAT_DIALOGUE_ECONOMY, CAT_SCENE_TURN,
     CAT_CHARACTER_OBJECTIVE, CAT_SP_SETUP_PAYOFF, CAT_SUBTEXT,
     CAT_CINEMATIC_CONTINUITY, CAT_MOTIF_RECURRENCE, CAT_ON_THE_NOSE,
+    CAT_LINK_COVERAGE, CAT_CANDIDATE_DENSITY,
 )
 
 _CATEGORY_NAMES = {
@@ -76,6 +80,8 @@ _CATEGORY_NAMES = {
     CAT_CINEMATIC_CONTINUITY: "Cinematic Continuity",
     CAT_MOTIF_RECURRENCE: "Motif Recurrence",
     CAT_ON_THE_NOSE: "On-the-Nose Dialogue Risk",
+    CAT_LINK_COVERAGE: "Confirmed Setup/Payoff Coverage",
+    CAT_CANDIDATE_DENSITY: "Unresolved Candidate Density",
 }
 
 # -- Status ------------------------------------------------------------------

@@ -254,6 +254,51 @@ def export_subtext_report_json(db: Database, project_id: int) -> str:
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
 
+def export_screenplay_graph_json(db: Database, project_id: int) -> str:
+    """Phase 10E — screenplay story-link graph as JSON (read-only)."""
+    from storyplanner.screenplay_graph import build_screenplay_graph
+    from storyplanner.writing_modes import get_project_writing_mode
+
+    project = db.get_project_by_id(project_id)
+    graph = build_screenplay_graph(db, project_id)
+    payload = graph.to_dict()
+    payload["project"] = {
+        "title": project.title if project else "Untitled",
+        "writing_mode": get_project_writing_mode(project),
+    }
+    return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
+def export_story_links_json(db: Database, project_id: int) -> str:
+    """Phase 10E — persisted confirmed/tracked story links as JSON (read-only)."""
+    from storyplanner.writing_modes import get_project_writing_mode
+
+    project = db.get_project_by_id(project_id)
+    try:
+        links = db.get_story_links(project_id)
+    except Exception:
+        links = []
+    payload = {
+        "schema_version": 1,
+        "project": {
+            "title": project.title if project else "Untitled",
+            "writing_mode": get_project_writing_mode(project),
+        },
+        "story_links": [
+            {
+                "id": l.id, "link_type": l.link_type, "label": l.label,
+                "status": l.status, "source_type": l.source_type,
+                "source_id": l.source_id, "source_scene_id": l.source_scene_id,
+                "target_type": l.target_type, "target_id": l.target_id,
+                "target_scene_id": l.target_scene_id, "evidence": l.evidence,
+                "confidence": l.confidence,
+            }
+            for l in links
+        ],
+    }
+    return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
 def export_markdown(db: Database, project_id: int) -> str:
     data = _gather_project_data(db, project_id)
     lines: list[str] = []

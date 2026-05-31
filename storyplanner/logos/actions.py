@@ -579,6 +579,19 @@ for _name, _label, _desc in [
         category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
         prompt="", modes=_SP, deterministic=True,
     ))
+# Manuscript + Screenplay — Phase 10E (story-link graph, read-only/deterministic).
+for _name, _label, _desc in [
+    ("sp_show_story_links", "Show Story Link Graph",
+     "Summarize confirmed + candidate screenplay story links (deterministic)."),
+    ("sp_explain_link", "Explain This Link",
+     "Explain the current scene's story links from deterministic evidence."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc,
+        category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+        prompt="", modes=_SP, deterministic=True,
+    ))
+
 # Generative subtext rewrites (LLM only on explicit invocation):
 for _name, _label, _desc, _prompt in [
     ("sp_reduce_on_the_nose", "Reduce On-the-Nose Dialogue",
