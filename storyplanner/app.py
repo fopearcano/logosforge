@@ -34,6 +34,9 @@ def create_app() -> tuple[QApplication, MainWindow]:
     QApplication.setApplicationName("Logosforge")
     QApplication.setApplicationDisplayName("Logosforge")
     QApplication.setOrganizationName("Logosforge")
+    # Expose the canonical version as Qt/OS app metadata (no visible widget).
+    from storyplanner import __version__ as _app_version
+    QApplication.setApplicationVersion(_app_version)
     app = QApplication.instance() or QApplication(sys.argv)
 
     assets = get_assets_path()

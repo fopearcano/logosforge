@@ -1,6 +1,11 @@
 # Logosforge — Alpha Scope
 
-Status: **Alpha closure** (feature freeze). This document is the authoritative
+Version: **0.9.0-alpha** · Status: **alpha** (feature freeze).
+Source of truth: `storyplanner.__version__` / `storyplanner.__status__` (also
+surfaced as `QApplication.applicationVersion()` and recorded in per-project lock
+metadata via `cloud_storage`).
+
+This document is the authoritative
 scope statement for the Alpha release. It is derived from the Step 1 scope audit
 (5,885 tests collected clean; per-subsystem suites green). It defines what Alpha
 includes, what it does not, what is stable vs experimental, and what is deferred

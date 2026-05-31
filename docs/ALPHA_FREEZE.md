@@ -1,5 +1,6 @@
 # Logosforge — Alpha Freeze Policy
 
+Version: **0.9.0-alpha** (`storyplanner.__version__`).
 Status: **FROZEN for Alpha.** Logosforge is in alpha closure: the goal is
 stability, data safety, UI hardening, documentation, and release readiness —
 **not** new features.
