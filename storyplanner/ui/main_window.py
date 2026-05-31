@@ -2579,6 +2579,15 @@ class MainWindow(QMainWindow):
         from storyplanner.logos.strategy import StrategyRouter
         self._strategy_router = StrategyRouter(self._db, new_id)
         self._health_report = None
+        # Clear stale Logos surfaces so the previous project's findings never
+        # linger after a switch; rescan/refresh below for the new project.
+        if hasattr(self, "_logos_suggestions"):
+            self._logos_suggestions.set_suggestions([])
+            self._logos_suggestions.setVisible(False)
+        if hasattr(self, "_diagnostics_drawer"):
+            self._diagnostics_drawer.set_diagnostics([])
+        if hasattr(self, "_health_drawer"):
+            self._health_drawer.set_report(None)
         if self._health_visible:
             self._refresh_health()
 
@@ -2600,6 +2609,13 @@ class MainWindow(QMainWindow):
         # new project's data without forcing the user to a different
         # section.
         self._rebuild_active_section()
+
+        # 4b. Rescan Logos surfaces for the new project (the nav handlers in
+        # step 4 don't go through _set_active_section, which is where the
+        # per-section scan normally fires).
+        self._scan_logos_suggestions()
+        self._scan_diagnostics()
+        self._update_strategy_indicator()
 
         # 5. Announce the load so self-subscribed views (e.g. Dashboard)
         # re-point at the new project and recompute, regardless of whether
