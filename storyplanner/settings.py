@@ -57,6 +57,8 @@ DEFAULTS: dict[str, object] = {
     "include_rewrite_sandbox_in_assistant_context": True,
     # Controlled apply — shown only when a pending apply preview exists.
     "include_controlled_apply_in_assistant_context": True,
+    # Project intelligence — concise dashboard state (light, opt-out).
+    "include_project_intelligence_in_assistant_context": True,
     "include_strategy_in_assistant_context": True,
     "include_health_in_assistant_context": False,
     "include_diagnostics_in_assistant_context": True,

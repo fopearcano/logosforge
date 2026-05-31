@@ -598,6 +598,30 @@ for _name, _label, _desc in [
         prompt="", deterministic=True,
     ))
 
+# Manuscript — Phase 10N (Project Intelligence Dashboard; mode-agnostic, read-only).
+for _name, _label, _desc in [
+    ("pi_dashboard_status", "Project Intelligence",
+     "Summarize project status, structure and PSYKE (deterministic)."),
+    ("pi_decision_radar", "Decision Radar",
+     "Ranked decisions/risks/opportunities for the project (deterministic)."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc,
+        category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+        prompt="", deterministic=True,
+    ))
+
+register(LogosAction(
+    name="pi_explain_dashboard", label="Explain Dashboard",
+    description="Ask the Assistant to interpret the dashboard / suggest next steps.",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+    prompt=(
+        "Given the project intelligence summary, interpret the most important "
+        "current state and suggest a short prioritized list of next steps. "
+        "Advisory only; do not rewrite or mutate anything."
+    ),
+))
+
 # Manuscript — Phase 10M (Controlled Apply; mode-agnostic, read-only status).
 for _name, _label, _desc in [
     ("ca_apply_history", "Apply History",

@@ -967,3 +967,52 @@ def _ca_explain_conflicts(db, context: LogosContext) -> LogosResult:
 
 register("ca_apply_history", _ca_history)
 register("ca_explain_conflicts", _ca_explain_conflicts)
+
+
+# -- Phase 10N — project intelligence dashboard (read-only summaries) ----------
+
+
+def _pi_dashboard_status(db, context: LogosContext) -> LogosResult:
+    action = "pi_dashboard_status"
+    try:
+        from storyplanner.project_intelligence import build_project_intelligence_report
+        rep = build_project_intelligence_report(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Dashboard failed: {exc}")
+    ov, st, pk = rep.overview, rep.structure, rep.psyke
+    lines = [rep.summary_line(),
+             f"Words: {ov.get('total_words', 0)}; chapters: {ov.get('total_chapters', 0)}; "
+             f"acts: {ov.get('total_acts', 0)}; notes: {ov.get('total_notes', 0)}",
+             f"Scenes without summary: {st.get('scenes_without_summary', 0)}"]
+    if pk.get("available"):
+        lines.append(f"PSYKE: {pk.get('total', 0)} entries, "
+                     f"{pk.get('empty_notes', 0)} with empty notes")
+    if rep.health.get("available"):
+        lines.append(f"Health: {rep.health.get('overall', 'unknown')}")
+    return LogosResult(ok=True, action=action, title="Project Intelligence",
+                       message="\n".join(lines), suggestions=[], proposed_operations=[])
+
+
+def _pi_decision_radar(db, context: LogosContext) -> LogosResult:
+    action = "pi_decision_radar"
+    try:
+        from storyplanner.project_intelligence import build_project_intelligence_report
+        rep = build_project_intelligence_report(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Radar failed: {exc}")
+    if not rep.radar:
+        msg = "Decision Radar is clear — no flagged decisions."
+    else:
+        lines = [f"- [{c.severity}] {c.title}"
+                 + (f" → {c.suggested_action}" if c.suggested_action else "")
+                 for c in rep.radar[:10]]
+        msg = "Decision Radar:\n" + "\n".join(lines)
+    return LogosResult(ok=True, action=action, title="Decision Radar",
+                       message=msg,
+                       suggestions=[c.suggested_action for c in rep.top_cards(5)
+                                    if c.suggested_action],
+                       proposed_operations=[])
+
+
+register("pi_dashboard_status", _pi_dashboard_status)
+register("pi_decision_radar", _pi_decision_radar)

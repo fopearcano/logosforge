@@ -23,6 +23,7 @@ _KEY_PRODUCTION_DRAFT = "include_production_draft_in_assistant_context"
 _KEY_REVISION_IMPACT = "include_revision_impact_in_assistant_context"
 _KEY_REWRITE_SANDBOX = "include_rewrite_sandbox_in_assistant_context"
 _KEY_CONTROLLED_APPLY = "include_controlled_apply_in_assistant_context"
+_KEY_PROJECT_INTEL = "include_project_intelligence_in_assistant_context"
 _KEY_STRATEGY = "include_strategy_in_assistant_context"
 _KEY_HEALTH = "include_health_in_assistant_context"
 _KEY_DIAGNOSTICS = "include_diagnostics_in_assistant_context"
@@ -40,6 +41,7 @@ _DEFAULTS = {
     _KEY_REVISION_IMPACT: True,  # only emits when a saved impact report exists
     _KEY_REWRITE_SANDBOX: True,  # only emits when an open rewrite session exists
     _KEY_CONTROLLED_APPLY: True,  # only emits when a pending apply preview exists
+    _KEY_PROJECT_INTEL: True,  # concise dashboard state (light report)
     _KEY_STRATEGY: True,
     _KEY_HEALTH: False,        # off by default — health is expensive/broad
     _KEY_DIAGNOSTICS: True,
@@ -102,6 +104,8 @@ def gather_injected_context(
         blocks.append(_rewrite_sandbox_block(db, project_id))
     if _flag(_KEY_CONTROLLED_APPLY):
         blocks.append(_controlled_apply_block(db, project_id))
+    if _flag(_KEY_PROJECT_INTEL):
+        blocks.append(_project_intelligence_block(db, project_id))
     if _flag(_KEY_STRATEGY):
         blocks.append(_strategy_block(db, project_id, section_name))
     if _flag(_KEY_HEALTH):
@@ -453,6 +457,30 @@ def _controlled_apply_block(db, project_id: int) -> str:
             lines.append("Blocking: " + "; ".join(c["conflict_type"] for c in blocking[:3]))
         if warns:
             lines.append("Warnings: " + "; ".join(c["message"] for c in warns[:3]))
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _project_intelligence_block(db, project_id: int) -> str:
+    """Capped ``[Project Intelligence]`` — light dashboard state + top decisions.
+
+    Uses the *light* report (skips expensive Health/export passes) so it stays
+    cheap during context assembly. No full dashboard dump; no LLM/DB; no leak.
+    """
+    try:
+        from storyplanner.project_intelligence import build_project_intelligence_report
+        rep = build_project_intelligence_report(db, project_id, light=True)
+        ov = rep.overview
+        lines = ["[Project Intelligence]",
+                 f"Mode: {ov.get('writing_mode', 'novel')}; "
+                 f"{ov.get('total_scenes', 0)} scenes, "
+                 f"{ov.get('total_psyke_entries', 0)} PSYKE"]
+        top = rep.top_cards(3)
+        if top:
+            lines.append("Top decisions:")
+            for c in top:
+                lines.append(f"- [{c.severity}] {c.title}")
         return "\n".join(lines)
     except Exception:
         return ""

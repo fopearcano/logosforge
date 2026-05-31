@@ -182,6 +182,12 @@ def test_all_off_yields_empty():
               "include_screenplay_tracking_in_assistant_context",      # Phase 10D
               "include_screenplay_links_in_assistant_context",         # Phase 10E
               "include_screenplay_export_in_assistant_context",        # Phase 10F
+              "include_professional_output_in_assistant_context",      # Phase 10H
+              "include_production_draft_in_assistant_context",         # Phase 10J
+              "include_revision_impact_in_assistant_context",          # Phase 10K
+              "include_rewrite_sandbox_in_assistant_context",          # Phase 10L
+              "include_controlled_apply_in_assistant_context",         # Phase 10M
+              "include_project_intelligence_in_assistant_context",     # Phase 10N
               "include_strategy_in_assistant_context",
               "include_health_in_assistant_context",
               "include_diagnostics_in_assistant_context"):
