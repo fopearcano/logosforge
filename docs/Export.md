@@ -81,13 +81,39 @@ Derived professional formats built on the render model (see
 (compatibility levels stable/preview/experimental/deferred). Fountain stays the
 canonical interchange format.
 
-## Deferred to Phase 10I
+## Export integrity (Phase 10I)
 
-- True page-accurate PDF pagination + production-grade FDX.
-- Title-page / export-preferences **editor UI** (storage + service API exist;
-  Qt widgets deferred).
-- Fountain **import UI** (parser round-trip exists for notes/elements; project
-  import UI is deferred).
+A no-text-loss harness (`tests/helpers/screenplay_export_fixtures.py`) verifies a
+representative screenplay (title page, headings, ambiguous ALL-CAPS action,
+character + `(V.O.)`, multiline dialogue, parenthetical, transition, note,
+accented/special chars) survives every text-bearing target: **Fountain (+
+roundtrip), DOCX, HTML preview, FDX**; PDF is checked for a valid `%PDF-` file
+(no text-extraction dependency available). Verified invariants:
+
+- One source of truth: `Scenes → ScreenplayBlocks → ScreenplayRenderDocument →`
+  {Fountain (canonical), DOCX, HTML, PDF, FDX}. Reports take `(db, project_id)`,
+  read-only, no LLM/Assistant/DB-mutation.
+- **Fix:** the render model now injects a scene heading from the slug/title when
+  a scene's content has none — so DOCX/PDF/preview/FDX never drop headings
+  (previously only the Fountain path injected them). No duplicate when the
+  content already opens with a heading.
+- Fountain and Markdown are **separate** serializers (correct `.fountain` /
+  `.md` / `.fdx` extensions); screenplay never routes through Markdown.
+- Screenplay Logos/export actions are hidden in Novel / Graphic Novel / Stage
+  Script / Series; Novel export is unaffected.
+- Assistant export context is capped, never dumps the scene body, and does not
+  leak across a project switch.
+- The plain-text `export_screenplay` path and the render-model exports are
+  documented as two paths sharing the same blocks; consolidation is deferred
+  (low value / non-trivial) — both preserve text.
+
+## Deferred (future)
+
+- Export **menu / options dialog** UI (export functions + Logos actions exist).
+- True page-accurate PDF pagination + production-grade / verified FDX.
+- Title-page / export-preferences **editor UI** (storage + service API exist).
+- Fountain **import UI** (parser round-trip exists; project import UI deferred).
+- PDF text-extraction integrity test (no extractor dependency available).
 - Locked production pages, revision colors, production drafts (out of scope).
 
 ## Limitations

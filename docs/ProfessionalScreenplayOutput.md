@@ -83,7 +83,16 @@ default off) to avoid prompt bloat. Capped, deterministic, no LLM/DB.
 Attention* — experimental) are **format health**, capped at *Needs Attention* so
 they never flip the narrative overall status. Novel/other modes unaffected.
 
-## Deferred to Phase 10I
+## Phase 10I integrity
+
+All output targets pass a no-text-loss harness (Fountain + roundtrip / DOCX /
+HTML / FDX; PDF validated as a real `%PDF-` file). The render model now injects a
+scene heading from the slug/title when a scene has none, so DOCX/PDF/preview/FDX
+stay consistent with Fountain and never drop headings. Fountain and Markdown
+remain separate; screenplay exports are hidden in non-screenplay modes; Assistant
+export context is capped with no scene-body dump and no cross-project leak.
+
+## Deferred (future)
 
 - Export **menu / options dialog** UI (functions + Logos + options exist).
 - Page-accurate PDF pagination; verified Final Draft FDX compatibility.

@@ -310,7 +310,15 @@ Logos output actions; opt-in `[Professional Output Readiness]` Assistant block;
 format-health categories (Professional Output Readiness, FDX Compatibility Risk).
 Fountain remains canonical. See **docs/ProfessionalScreenplayOutput.md**.
 
-## Intentionally deferred to Phase 10I
+## Phase 10I — export integrity
+
+Audit/hardening pass: a no-text-loss harness across Fountain/DOCX/HTML/
+FDX (PDF file-validated), a render-model **scene-heading injection fix**
+(DOCX/PDF/preview/FDX no longer drop headings), verified Fountain↔Markdown
+separation, writing-mode export visibility, and capped/leak-free Assistant
+export context. See **docs/Export.md** (Export integrity).
+
+## Intentionally deferred (future)
 
 - Fountain **import UI** (parser + roundtrip exist as a service; project-import
   UI / destructive merge with preview-confirm is deferred).

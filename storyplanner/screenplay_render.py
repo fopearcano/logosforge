@@ -208,6 +208,18 @@ def build_render_document(db, project_id: int, *, prefs: dict | None = None
     for scene in scenes:
         blocks = sb.parse_screenplay_text(getattr(scene, "content", "") or "",
                                           scene_id=scene.id)
+        # Phase 10I — inject a scene heading from the slug/title when the scene
+        # content doesn't already open with one, so render-model exports
+        # (DOCX/PDF/preview/FDX) stay consistent with the Fountain path and never
+        # drop scene headings.
+        if not (blocks and blocks[0].element_type == "scene_heading"):
+            heading = (getattr(scene, "slugline", "") or getattr(scene, "title", "")
+                       or "").strip()
+            if heading:
+                doc.blocks.append(ScreenplayRenderBlock(
+                    element_type="scene_heading", text=heading, scene_id=scene.id,
+                    block_index=-1, style=_STYLE["scene_heading"],
+                    export_text=_export_text("scene_heading", heading, prefs)))
         for b in blocks:
             if b.element_type == "note" and not show_notes:
                 continue
