@@ -600,6 +600,12 @@ class MainWindow(QMainWindow):
         self._health_drawer.setVisible(False)
         outer_layout.addWidget(self._health_drawer, stretch=0)
 
+        # -- Strategy router (Phase 7) ---------------------------------------
+        # Deterministic medium-aware reasoning router. Does NOT touch the
+        # Assistant; it informs Logos action ordering and the health indicator.
+        from storyplanner.logos.strategy import StrategyRouter
+        self._strategy_router = StrategyRouter(self._db, self._project_id)
+
         # -- PSYKE Console (global bottom bar) --------------------------------
         console_row = QWidget()
         console_row.setFixedHeight(28)
@@ -1056,8 +1062,14 @@ class MainWindow(QMainWindow):
             return
         ctx = CommandContext(command=command, args=args)
         handler_result = entry.handler(ctx)
-        if isinstance(handler_result, dict) and not handler_result.get("ok", True):
-            QMessageBox.warning(self, "Command Failed", handler_result.get("error", "Unknown error"))
+        if isinstance(handler_result, dict):
+            if not handler_result.get("ok", True):
+                QMessageBox.warning(
+                    self, "Command Failed",
+                    handler_result.get("error", "Unknown error"),
+                )
+            elif handler_result.get("show_message") and handler_result.get("message"):
+                QMessageBox.information(self, "Logos", handler_result["message"])
 
     def _on_psyke_entry_selected(self, entry_id: int, name: str) -> None:
         editor = self._detect_active_editor()
@@ -1503,6 +1515,26 @@ class MainWindow(QMainWindow):
         except Exception:
             self._health_report = None
         drawer.set_report(self._health_report)
+        self._update_strategy_indicator()
+
+    def _update_strategy_indicator(self) -> None:
+        """Reflect the active dominant strategy in the health drawer header."""
+        router = getattr(self, "_strategy_router", None)
+        drawer = getattr(self, "_health_drawer", None)
+        if router is None or drawer is None:
+            return
+        try:
+            from storyplanner.settings import get_manager
+            if not bool(get_manager().get("strategy_show_indicator")):
+                drawer.set_strategy_label("")
+                return
+            decision = router.decide(self._current_section or "")
+            from storyplanner.logos.strategy import get_strategy
+            s = get_strategy(decision.dominant_strategy)
+            name = s.name if s else decision.dominant_strategy
+            drawer.set_strategy_label(f"Strategy: {name}")
+        except Exception:
+            drawer.set_strategy_label("")
 
     def _on_health_action(self, recommendation, action_name: str) -> None:
         """Launch the Logos action a health recommendation maps to."""
@@ -2544,6 +2576,8 @@ class MainWindow(QMainWindow):
         self._health_engine = HealthEngine(
             self._db, new_id, suppression=self._logos_engine.suppression,
         )
+        from storyplanner.logos.strategy import StrategyRouter
+        self._strategy_router = StrategyRouter(self._db, new_id)
         self._health_report = None
         if self._health_visible:
             self._refresh_health()

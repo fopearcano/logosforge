@@ -36,6 +36,11 @@ DEFAULTS: dict[str, object] = {
     "health_auto_refresh_on_load": True,
     "health_include_in_assistant": False,
     "health_show_unknown": True,
+    # -- Strategy layer (Phase 7) --------------------------------------------
+    "strategy_enabled": True,
+    "strategy_show_indicator": True,
+    "strategy_debug_explanation": False,
+    "strategy_user_mode_override": "",   # "" = auto; else an engine id
     "last_project_path": "",
     "plugin_states": {},
     "auto_link_ignored": [],

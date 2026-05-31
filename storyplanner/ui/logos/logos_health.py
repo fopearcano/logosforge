@@ -70,6 +70,9 @@ class LogosHealthDrawer(QWidget):
         self._overall = QLabel("Not Enough Data")
         self._overall.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 11px;")
         header.addWidget(self._overall)
+        self._strategy = QLabel("")
+        self._strategy.setStyleSheet(f"color: {theme.ACCENT}; font-size: 10px;")
+        header.addWidget(self._strategy)
         header.addStretch()
         for label, slot in (
             ("Refresh", self.refresh_requested.emit),
@@ -102,6 +105,11 @@ class LogosHealthDrawer(QWidget):
     def set_report(self, report) -> None:
         self._report = report
         self._rebuild()
+
+    def set_strategy_label(self, text: str) -> None:
+        """Show the active dominant strategy (small, non-intrusive indicator)."""
+        self._strategy.setText(text)
+        self._strategy.setVisible(bool(text))
 
     def report(self):
         return self._report

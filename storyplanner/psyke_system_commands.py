@@ -66,6 +66,51 @@ class SystemCommandHandlers:
             "idea", self.handle_idea,
             description="Controlling Idea — set / explain / check / link / scene",
         )
+        registry.register(
+            "strategy", self.handle_strategy,
+            description="Strategy router — explain / mode <engine> / off / on",
+        )
+
+    def handle_strategy(self, ctx: CommandContext) -> dict:
+        """`/strategy [explain|mode <engine>|off|on]` — inspect/steer routing."""
+        from storyplanner.logos.strategy.router import StrategyRouter
+
+        args = [a.strip() for a in (ctx.args or []) if a.strip()]
+        sub = args[0].lower() if args else "explain"
+        try:
+            from storyplanner.settings import get_manager
+            mgr = get_manager()
+        except Exception:
+            mgr = None
+
+        if sub == "off":
+            if mgr:
+                mgr.set("strategy_enabled", False)
+            return {"ok": True, "show_message": True,
+                    "message": "Strategy layer disabled."}
+        if sub == "on":
+            if mgr:
+                mgr.set("strategy_enabled", True)
+            return {"ok": True, "show_message": True,
+                    "message": "Strategy layer enabled."}
+        if sub == "mode":
+            from storyplanner.logos.strategy.registry import MEDIUM_STRATEGY
+            engine = args[1].lower() if len(args) > 1 else ""
+            if engine not in MEDIUM_STRATEGY and engine != "":
+                return {"ok": False,
+                        "error": f"Unknown mode '{engine}'. Valid: "
+                                 + ", ".join(MEDIUM_STRATEGY)}
+            if mgr:
+                mgr.set("strategy_user_mode_override", engine)
+            label = engine or "auto (project mode)"
+            return {"ok": True, "show_message": True,
+                    "message": f"Strategy override set to: {label}."}
+
+        # Default / explain: report the active decision.
+        decision = StrategyRouter(self._db, self._project_id).decide()
+        if self._on_data_changed is not None:
+            self._on_data_changed()
+        return {"ok": True, "show_message": True, "message": decision.explanation}
 
     def handle_idea(self, ctx: CommandContext) -> dict:
         from storyplanner.controlling_idea import handle_command
