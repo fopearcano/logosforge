@@ -1930,6 +1930,23 @@ class WritingCoreView(QWidget):
 
     # -- Format / element system -----------------------------------------------
 
+    def current_element_type(self) -> str:
+        """The element type of the current cursor block (or the format default).
+
+        Read-only; used by the host to carry the current screenplay element into
+        LogosContext. Returns "" if there is no active editor.
+        """
+        try:
+            editor = self._active_editor
+            if editor is None:
+                return ""
+            data = editor.textCursor().block().userData()
+            if isinstance(data, _BlockData) and data.element:
+                return data.element
+            return self._format.default_element
+        except Exception:
+            return ""
+
     def _populate_element_combo(self) -> None:
         self._element_combo.blockSignals(True)
         self._element_combo.clear()

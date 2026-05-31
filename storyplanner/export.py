@@ -422,6 +422,31 @@ def _scene_body(scene: dict) -> str:
     return scene["content"] or scene["synopsis"] or scene["summary"] or ""
 
 
+def _screenplay_body(scene: dict, *, fountain: bool = False) -> str:
+    """Render a scene body as classified screenplay text (Phase 10B).
+
+    Parses the flat scene content into screenplay blocks and serializes them so
+    character cues / transitions / scene headings are uppercased and
+    parentheticals normalized. Text-preserving; falls back to the raw body if
+    parsing yields nothing.
+    """
+    raw = _scene_body(scene)
+    if not raw.strip():
+        return ""
+    try:
+        from storyplanner.screenplay_blocks import (
+            parse_screenplay_text,
+            serialize_blocks,
+            to_fountain,
+        )
+        blocks = parse_screenplay_text(raw)
+        if not blocks:
+            return raw
+        return to_fountain(blocks) if fountain else serialize_blocks(blocks)
+    except Exception:
+        return raw
+
+
 def export_screenplay(db: Database, project_id: int) -> str:
     data = _gather_project_data(db, project_id)
     return _format_text(data, "screenplay")
@@ -512,7 +537,7 @@ def _fmt_screenplay_text(data: dict, fmt: str) -> str:
 
         lines.append(_slug_line(scene))
         lines.append("")
-        body = _scene_body(scene)
+        body = _screenplay_body(scene)
         if body:
             lines.append(body)
             lines.append("")
@@ -839,7 +864,7 @@ def export_fountain(db: Database, project_id: int) -> str:
         lines.append(f".{slug}")
         lines.append("")
 
-        body = _scene_body(scene)
+        body = _screenplay_body(scene, fountain=True)
         if body:
             lines.append(body)
             lines.append("")

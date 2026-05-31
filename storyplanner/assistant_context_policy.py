@@ -64,6 +64,7 @@ def gather_injected_context(
 
     if _flag(_KEY_PROJECT_MODE):
         blocks.append(_project_mode_block(db, project_id))
+        blocks.append(_screenplay_scene_block(db, project_id, scene_id))
     if _flag(_KEY_STRATEGY):
         blocks.append(_strategy_block(db, project_id, section_name))
     if _flag(_KEY_HEALTH):
@@ -87,6 +88,38 @@ def _project_mode_block(db, project_id: int) -> str:
             mode_context_block,
         )
         return mode_context_block(get_project_writing_mode_by_id(db, project_id))
+    except Exception:
+        return ""
+
+
+def _screenplay_scene_block(db, project_id: int, scene_id: int | None) -> str:
+    """Concise ``[Screenplay Scene]`` line — only for screenplay projects with a
+    current scene. Lists the character cues actually present in the scene (parsed
+    from its text) plus the scene heading. Data-driven, capped, no LLM/DB write.
+    """
+    if scene_id is None:
+        return ""
+    try:
+        from storyplanner.writing_modes import get_project_writing_mode_by_id
+        if get_project_writing_mode_by_id(db, project_id) != "screenplay":
+            return ""
+        scene = db.get_scene_by_id(scene_id)
+        if scene is None:
+            return ""
+        from storyplanner.screenplay_blocks import (
+            character_cues,
+            parse_screenplay_text,
+        )
+        blocks = parse_screenplay_text(getattr(scene, "content", "") or "")
+        cues = character_cues(blocks)[:8]
+        lines = ["[Screenplay Scene]"]
+        heading = (getattr(scene, "slugline", "") or getattr(scene, "title", "")
+                   or "").strip()
+        if heading:
+            lines.append(f"Heading: {heading.upper()}")
+        if cues:
+            lines.append("Characters present: " + ", ".join(cues))
+        return "\n".join(lines) if len(lines) > 1 else ""
     except Exception:
         return ""
 

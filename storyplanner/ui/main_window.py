@@ -1285,6 +1285,15 @@ class MainWindow(QMainWindow):
         extra: dict = {}
         view = self.content_area
         try:
+            # Manuscript: carry the current screenplay element type into context
+            # (only when it's a screenplay element, so Novel stays "prose").
+            if section == "Manuscript":
+                getter = getattr(view, "current_element_type", None)
+                if callable(getter):
+                    from storyplanner.screenplay import is_valid_element
+                    et = getter() or ""
+                    if is_valid_element(et):
+                        block_type = et
             from storyplanner.ui.plan_view import PlanView
             if isinstance(view, PlanView):
                 block_type = "outline_node"

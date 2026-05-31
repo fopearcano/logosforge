@@ -510,6 +510,15 @@ for _name, _label, _desc, _cat, _needs_sel, _prompt in [
      "Tighten the scene to its essential beats.", CATEGORY_GENERATIVE, True,
      "Suggest how to tighten the selected screenplay material to its essential "
      "beats — entering late, leaving early, cutting redundancy. Suggestions only."),
+    ("sp_setup_payoff", "Strengthen Setup/Payoff",
+     "Suggest setups/payoffs this scene could plant or land.", CATEGORY_GENERATIVE, True,
+     "Suggest setups this passage could plant, or payoffs it could land, to "
+     "strengthen the screenplay's causal weave. Suggestions only; do not rewrite."),
+    ("sp_overwritten_action", "Detect Overwritten Action",
+     "Flag dense/overwritten action lines.", CATEGORY_DIAGNOSTIC, True,
+     "Identify action lines in the selection that are overwritten — too dense, "
+     "novelistic, or describing the unfilmable — and point to where they could "
+     "be lean and visual. Do not rewrite; just diagnose."),
 ]:
     register(LogosAction(
         name=_name, label=_label, description=_desc, category=_cat,
@@ -531,6 +540,10 @@ for _name, _label, _desc, _cat, _prompt in [
      "Is the central dramatic question clear?", CATEGORY_DIAGNOSTIC,
      "Articulate the central dramatic question this structure poses and whether "
      "the outline keeps it active. If unclear, explain why. Do not modify."),
+    ("sp_escalation", "Improve Escalation",
+     "Do the beats escalate?", CATEGORY_DIAGNOSTIC,
+     "Assess whether the beats in this structure escalate in stakes and pressure "
+     "toward the act turn. Note flat or repetitive stretches. Do not modify."),
 ]:
     register(LogosAction(
         name=_name, label=_label, description=_desc, category=_cat,

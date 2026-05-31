@@ -42,6 +42,12 @@ notes) — it does not invent a second context system.
 
 - **Core** (`context`, `actions`, `controller`, `prompt_builder`, `result`) —
   section-aware actions (Manuscript / Outline / PSYKE / Plot / Timeline / Graph).
+  Actions may be **mode-restricted** via `LogosAction.modes` (Phase 10A/10B):
+  screenplay-only actions (e.g. Convert Prose to Visual Action, Check Scene Turn,
+  Strengthen Setup/Payoff, Detect Overwritten Action, Check Sequence Logic,
+  Track Setup/Payoff) appear and sort first only when `writing_mode ==
+  "screenplay"`, and stay hidden in Novel. `LogosController.available_actions`
+  filters + medium-orders; the toolbar passes the live `writing_mode`.
 - **operations** — controlled, validated apply ops (manuscript replace/insert,
   outline scene create/update, PSYKE notes/progression/relation). Every mutation
   is previewed and confirmed; nothing auto-applies.

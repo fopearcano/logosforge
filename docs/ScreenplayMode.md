@@ -88,21 +88,54 @@ title, a `Writing Mode: Screenplay` header line, per-scene slug lines
 body text as generic action. JSON/Markdown metadata include `writing_mode`.
 Robust when a project has no scenes or an invalid mode (falls back to novel).
 
-## Intentionally deferred to Phase 10B
+## Phase 10B — Screenplay block engine + export hardening
 
-- **Per-block element persistence** — scene content is currently flat
-  text/markdown; block element types live only in-memory while editing. A
-  block-level screenplay document model (safely migrated) is required for true
-  element-aware editing/export and is **Phase 10B**.
+`storyplanner/screenplay_blocks.py` adds a lightweight, **non-persisted** block
+layer derived on demand from flat scene text (no DB schema change):
+
+- **`ScreenplayBlock`** — `element_type / text / scene_id / order_index /
+  metadata`; element type is validated centrally (invalid → `action`).
+- **`parse_screenplay_text(text, scene_id=None)`** — conservative heuristics on
+  blank-line-separated chunks: `INT./EXT./EST.` → scene_heading; uppercase lines
+  ending `TO:` / `FADE …` → transition; an uppercase short cue leading a chunk →
+  character, with following `( … )` → parenthetical and other lines → dialogue;
+  everything uncertain → **action** (no false positives, no text loss).
+- **`serialize_blocks(blocks, uppercase=True)`** — round-trip-safe text;
+  uppercases caps elements, normalizes parentheticals.
+- **`to_fountain(blocks)`** — Fountain-like output (forced `.` headings only when
+  needed, `> ` transitions, `[[ ]]` notes).
+- **`character_cues(blocks)`** — unique, uppercased cues present in a scene.
+
+**Export hardening:** `export_screenplay` and `export_fountain` now render each
+scene body through the parser/serializer, so character cues / transitions /
+scene headings are uppercased and parentheticals normalized — while preserving
+all text. Novel export is unaffected; both carry the `Writing Mode` metadata.
+
+**Current element in context:** `WritingCoreView.current_element_type()` exposes
+the cursor block's element; the host carries it into `LogosContext.active_block_type`
+(only for screenplay element keys, so Novel stays `prose`). The Assistant gains a
+concise `[Screenplay Scene]` line (heading + characters present, parsed from the
+scene) when the project is a screenplay and a scene is active — data-driven, capped.
+
+**Logos (hardened set):** added `Strengthen Setup/Payoff`, `Detect Overwritten
+Action` (Manuscript) and `Improve Escalation` (Outline), all screenplay-only and
+preview/confirm.
+
+## Intentionally deferred to Phase 10C
+
+- **Per-block element persistence** — block types are still in-memory while
+  editing and re-derived (by the parser) for export/analysis; durable per-block
+  storage needs a (safely migrated) schema and is **Phase 10C**.
 - Shot/Note dedicated editor styling + selector entries.
-- Element-aware Fountain/FDX reconstruction; PDF pagination, revision colors,
-  locked pages, production drafts, dual dialogue, scene numbering.
+- FDX export, PDF pagination, revision colors, locked pages, production drafts,
+  dual dialogue, production scene numbering.
 - Screenplay-specific Health/Diagnostics detectors and runtime estimation.
 - Tab/Enter element cycling and character/scene-heading autocomplete UI
-  (helpers exist in `screenplay.py`; wiring is deferred).
+  (helpers exist in `screenplay.py` / `screenplay_blocks.py`; wiring deferred).
 
 ## Limitations
 
-Because block element types aren't persisted yet, export cannot reconstruct
-CHARACTER/DIALOGUE/PARENTHETICAL structure from saved content — it works from
-flat content + scene slug metadata only. This is the primary 10B prerequisite.
+Block types are **derived from saved text**, not stored — so export/analysis
+reconstruct structure heuristically and a hand-typed novelistic block may be
+read as `action`. Durable per-block element storage is the primary 10C
+prerequisite. Parsing is intentionally conservative (prefers `action`).
