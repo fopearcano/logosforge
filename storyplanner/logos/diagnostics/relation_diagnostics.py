@@ -55,6 +55,20 @@ def detect_relations(facts: ProjectFacts) -> list[NarrativeDiagnostic]:
                                        "suggest_psyke_relation"],
                 ))
 
+        # Isolated important node: no relations and no graph links.
+        if (not relations and not neighbours
+                and e.entry_type in ("character", "theme")):
+            out.append(NarrativeDiagnostic(
+                category=CAT_GRAPH, section_name="Graph",
+                title=f"'{e.name}' is isolated in the graph",
+                message="This entry has no relationships or graph links.",
+                evidence=f"0 PSYKE relations; 0 graph links; type={e.entry_type}.",
+                confidence=0.8, severity=SEVERITY_WARNING,
+                target_type="graph_node", target_id=f"PSYKE:{e.id}",
+                related_psyke_entry_ids=[e.id],
+                suggested_actions=["identify_isolated_node", "suggest_psyke_relation"],
+            ))
+
         # Over-connected hub with many weak (generic) links.
         if len(neighbours) >= _OVERCONNECTED:
             generic = sum(1 for _r, rt in relations if not (rt or "").strip())

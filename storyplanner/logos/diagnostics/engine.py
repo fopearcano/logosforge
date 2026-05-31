@@ -16,6 +16,7 @@ from storyplanner.logos.diagnostics.diagnostic import (
     NarrativeDiagnostic,
 )
 from storyplanner.logos.diagnostics.model import build_facts
+from storyplanner.logos.diagnostics.notes_diagnostics import detect_notes
 from storyplanner.logos.diagnostics.relation_diagnostics import detect_relations
 from storyplanner.logos.diagnostics.setup_payoff_diagnostics import detect_setup_payoff
 from storyplanner.logos.diagnostics.structure_diagnostics import detect_structure
@@ -32,6 +33,7 @@ _ALL_DETECTORS = [
     detect_continuity,
     detect_setup_payoff,
     detect_structure,
+    detect_notes,
 ]
 
 # Section name -> which detector outputs are relevant to that section view.

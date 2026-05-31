@@ -582,6 +582,24 @@ class MainWindow(QMainWindow):
         self._diagnostics_drawer.setVisible(False)
         outer_layout.addWidget(self._diagnostics_drawer, stretch=0)
 
+        # -- Narrative Health (Phase 6) --------------------------------------
+        from storyplanner.logos.health import HealthEngine
+        from storyplanner.ui.logos.logos_health import LogosHealthDrawer
+        self._health_engine = HealthEngine(
+            self._db, self._project_id,
+            suppression=self._logos_engine.suppression,
+        )
+        self._health_report = None
+        self._health_visible = False
+        self._health_drawer = LogosHealthDrawer()
+        self._health_drawer.set_show_unknown(bool(get_settings().get("health_show_unknown")))
+        self._health_drawer.run_action.connect(self._on_health_action)
+        self._health_drawer.open_target.connect(self._on_health_open_target)
+        self._health_drawer.refresh_requested.connect(self._refresh_health)
+        self._health_drawer.export_requested.connect(self._export_health)
+        self._health_drawer.setVisible(False)
+        outer_layout.addWidget(self._health_drawer, stretch=0)
+
         # -- PSYKE Console (global bottom bar) --------------------------------
         console_row = QWidget()
         console_row.setFixedHeight(28)
@@ -1448,16 +1466,101 @@ class MainWindow(QMainWindow):
         self._scan_diagnostics()
 
     def _on_diagnostic_open_target(self, diagnostic) -> None:
-        if diagnostic.target_type == "psyke_entry":
+        self._open_logos_target(diagnostic.target_type, diagnostic.target_id)
+
+    def _open_logos_target(self, target_type: str, target_id: str) -> None:
+        if target_type == "psyke_entry":
             try:
-                self._open_psyke_entry(int(diagnostic.target_id))
+                self._open_psyke_entry(int(target_id))
             except (TypeError, ValueError):
                 pass
-        elif diagnostic.target_type == "scene":
+        elif target_type == "scene":
             try:
-                self._open_scene_in_editor(int(diagnostic.target_id))
+                self._open_scene_in_editor(int(target_id))
             except (TypeError, ValueError):
                 pass
+
+    # -- Narrative Health (Phase 6) ------------------------------------------
+
+    def _toggle_health(self) -> None:
+        self._health_visible = not self._health_visible
+        if self._health_visible:
+            self._refresh_health()
+        self._health_drawer.setVisible(self._health_visible)
+
+    def _refresh_health(self) -> None:
+        """Generate the project health report (rule-based, no LLM/mutation)."""
+        engine = getattr(self, "_health_engine", None)
+        drawer = getattr(self, "_health_drawer", None)
+        if engine is None or drawer is None:
+            return
+        if not bool(get_settings().get("health_enabled")):
+            self._health_report = None
+            drawer.set_report(None)
+            return
+        try:
+            self._health_report = engine.generate_report()
+        except Exception:
+            self._health_report = None
+        drawer.set_report(self._health_report)
+
+    def _on_health_action(self, recommendation, action_name: str) -> None:
+        """Launch the Logos action a health recommendation maps to."""
+        if not self._logos_visible:
+            self._logos_visible = True
+            self._logos_toolbar.set_section(self._current_section or "")
+            self._logos_toolbar.refresh_actions()
+            self._logos_toolbar.setVisible(True)
+        ctx = self._recommendation_context(recommendation)
+        self._logos_toolbar.run_action_with_context(ctx, action_name)
+
+    def _recommendation_context(self, rec):
+        from storyplanner.logos.context import build_logos_context
+
+        kwargs: dict = {}
+        section = "PSYKE"
+        if rec.target_type == "psyke_entry":
+            try:
+                kwargs["selected_psyke_entry_id"] = int(rec.target_id)
+            except (TypeError, ValueError):
+                pass
+        elif rec.target_type == "scene":
+            try:
+                kwargs["current_scene_id"] = int(rec.target_id)
+                section = "Outline"
+            except (TypeError, ValueError):
+                pass
+        elif rec.target_type == "graph_node":
+            kwargs["current_graph_node_id"] = rec.target_id
+            section = "Graph"
+        return build_logos_context(
+            self._db, self._project_id, section_name=section, **kwargs,
+        )
+
+    def _on_health_open_target(self, rec) -> None:
+        self._open_logos_target(rec.target_type, rec.target_id)
+
+    def _export_health(self, fmt: str) -> None:
+        if self._health_report is None:
+            self._refresh_health()
+        report = self._health_report
+        if report is None:
+            return
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+        ext = "json" if fmt == "json" else "md"
+        default = f"narrative_health.{ext}"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Narrative Health", default,
+            "JSON (*.json)" if fmt == "json" else "Markdown (*.md)",
+        )
+        if not path:
+            return
+        try:
+            text = report.to_json() if fmt == "json" else report.to_markdown()
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+        except OSError as exc:
+            QMessageBox.warning(self, "Export failed", str(exc))
 
     def _run_logos_outline(self, descriptor: dict, action_name: str) -> None:
         """Run a Logos action for a selected Outline node (from PlanView menus).
@@ -1928,6 +2031,11 @@ class MainWindow(QMainWindow):
         scan_diag_action = QAction("Scan Project (Logos Diagnostics)", self)
         scan_diag_action.triggered.connect(self._scan_diagnostics_project)
         view_menu.addAction(scan_diag_action)
+
+        toggle_health_action = QAction("Toggle Narrative Health", self)
+        toggle_health_action.setShortcut(QKeySequence("Ctrl+Shift+H"))
+        toggle_health_action.triggered.connect(self._toggle_health)
+        view_menu.addAction(toggle_health_action)
 
         focus_action = QAction("Focus Mode", self)
         focus_action.setShortcut(QKeySequence("Ctrl+Shift+F"))
@@ -2432,6 +2540,13 @@ class MainWindow(QMainWindow):
         self._diagnostics_engine = DiagnosticsEngine(
             self._db, new_id, suppression=self._logos_engine.suppression,
         )
+        from storyplanner.logos.health import HealthEngine
+        self._health_engine = HealthEngine(
+            self._db, new_id, suppression=self._logos_engine.suppression,
+        )
+        self._health_report = None
+        if self._health_visible:
+            self._refresh_health()
 
         # 3. Drop MainWindow's own per-project caches.
         self._cached_scenes_view = None

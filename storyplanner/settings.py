@@ -31,6 +31,11 @@ DEFAULTS: dict[str, object] = {
     "logos_show_info": True,
     "logos_show_warning": True,
     "logos_ai_scan_enabled": False,   # AI-assisted scan deferred; off by default
+    # -- Narrative Health (Phase 6) ------------------------------------------
+    "health_enabled": True,
+    "health_auto_refresh_on_load": True,
+    "health_include_in_assistant": False,
+    "health_show_unknown": True,
     "last_project_path": "",
     "plugin_states": {},
     "auto_link_ignored": [],
