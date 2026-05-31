@@ -317,35 +317,11 @@ class MainWindow(QMainWindow):
         # Single source of truth for the inline Logos layer ON/OFF state.
         self._logos_enabled = bool(get_settings().get("logos_enabled"))
         self._layout_tier: str | None = None
-        self._sidebar_icons = {
-            "Projects": "\U0001F4C1",
-            "Dashboard": "\U0001F3E0",
-            "Notes": "\U0001F4DD",
-            "Scenes": "\U0001F3AC",
-            "Manuscript": "\u2712",
-            "Timeline": "\U0001F552",
-            "Outline": "\U0001F4D1",
-            "Structure": "\U0001F3D7",
-            "Acts": "\U0001F3AD",
-            "Beats": "\U0001F4CC",
-            "Tags": "\U0001F3F7",
-            "Graph": "\U0001F578",
-            "Arcs": "\U0001F4C8",
-            "PSYKE": "\U0001F4D6",
-            "Grid": "\U0001F5A5",
-            "Plot": "\U0001F4CA",
-            "Health": "\U0001F49A",
-            "Balance": "\u2696",
-            "Pacing": "\U0001F3B5",
-            "Adapt": "\U0001F9E0",
-            "Narrative": "\U0001F4CA",
-            "Plugins": "\U0001F9E9",
-            "Assistant": "\U0001F916",
-            "Logos": "\U0001F9ED",
-            "Chat": "\U0001F4AC",
-            "Stages": "\U0001F4DC",
-            "Pages": "\U0001F5BC",
-        }
+        # Flat monochrome icon set (centralized in ui/sidebar_icons.py). These
+        # are text-presentation glyphs, so they inherit the button's theme color
+        # (muted gray idle, accent when active) across Dark / Green / Warm.
+        from storyplanner.ui.sidebar_icons import SIDEBAR_ICONS
+        self._sidebar_icons = dict(SIDEBAR_ICONS)
 
         self._toggle_btn = QPushButton("\u00ab")
         self._toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -433,15 +409,15 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self._appearance_bar)
 
         # -- Import / Export / Settings ---------------------------------------
-        self._import_btn = _SidebarButton("\U0001F4E5", "Import")
+        self._import_btn = _SidebarButton(self._sidebar_icons["Import"], "Import")
         sidebar_layout.addWidget(self._import_btn)
         self._import_btn.clicked.connect(self._on_import)
 
-        self._export_btn = _SidebarButton("\U0001F4E4", "Export")
+        self._export_btn = _SidebarButton(self._sidebar_icons["Export"], "Export")
         sidebar_layout.addWidget(self._export_btn)
         self._export_btn.clicked.connect(self._on_export)
 
-        self._settings_btn = _SidebarButton("⚙", "Settings")
+        self._settings_btn = _SidebarButton(self._sidebar_icons["Settings"], "Settings")
         sidebar_layout.addWidget(self._settings_btn)
         self._settings_btn.clicked.connect(self._open_settings)
 
