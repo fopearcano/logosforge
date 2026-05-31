@@ -495,6 +495,9 @@ def _fmt_screenplay_text(data: dict, fmt: str) -> str:
     title = data["project"]["title"]
     lines.append(title.upper())
     lines.append("=" * len(title))
+    # Phase 10A — record the canonical writing mode in the screenplay header.
+    from storyplanner.writing_modes import mode_label
+    lines.append(f"Writing Mode: {mode_label(data['project'].get('writing_mode'))}")
     lines.append("")
     lines.append("")
 

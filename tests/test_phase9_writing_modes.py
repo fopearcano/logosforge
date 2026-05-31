@@ -136,12 +136,17 @@ def test_medium_constraints_distinct_and_nonempty():
 
 def test_mode_context_block_shape():
     import storyplanner.writing_modes as wm
-    block = wm.mode_context_block("screenplay")
-    assert block.startswith("[Project Mode]")
-    assert "Mode: Screenplay" in block
-    assert "Primary constraints:" in block
-    # Short — never a manual.
-    assert block.count("\n") == 2
+    # Novel has no extra guidance line — the minimal 3-line shape.
+    novel = wm.mode_context_block("novel")
+    assert novel.startswith("[Project Mode]")
+    assert "Mode: Novel" in novel
+    assert "Primary constraints:" in novel
+    assert novel.count("\n") == 2  # short — never a manual
+    # Screenplay (Phase 10A) adds exactly one guidance line — still short.
+    screen = wm.mode_context_block("screenplay")
+    assert screen.startswith("[Project Mode]")
+    assert "Mode: Screenplay" in screen
+    assert screen.count("\n") == 3
 
 
 # ===========================================================================

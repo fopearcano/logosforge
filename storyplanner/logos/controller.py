@@ -52,8 +52,28 @@ class LogosController:
 
     # -- Introspection -------------------------------------------------------
 
-    def available_actions(self, section_name: str) -> list[logos_actions.LogosAction]:
-        return logos_actions.list_actions_for_section(section_name)
+    def available_actions(
+        self, section_name: str, *, writing_mode: str = "",
+    ) -> list[logos_actions.LogosAction]:
+        """Actions for a section, mode-filtered and medium-ordered.
+
+        Mode-restricted actions (e.g. screenplay-only) are hidden when they don't
+        match ``writing_mode``; the rest are reordered so the medium's preferred
+        actions surface first. With no ``writing_mode`` the behavior is unchanged.
+        """
+        actions = logos_actions.list_actions_for_section(
+            section_name, writing_mode=writing_mode,
+        )
+        if not writing_mode:
+            return actions
+        try:
+            from storyplanner.logos.strategy import medium_profiles as mp
+            preferred = mp.get_profile(writing_mode).preferred_actions
+            order = {name: i for i, name in enumerate(preferred)}
+            actions.sort(key=lambda a: order.get(a.name, len(order)))
+        except Exception:
+            pass
+        return actions
 
     # -- Execution -----------------------------------------------------------
 

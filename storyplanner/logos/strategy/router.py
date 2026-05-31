@@ -191,11 +191,17 @@ class StrategyRouter:
         self, section_name: str, *, engine: str | None = None,
     ) -> list[str]:
         """Section's Logos actions, reordered so the medium's preferred ones
-        come first. Never invents actions — only reorders the real ones."""
+        come first. Never invents actions — only reorders the real ones.
+
+        Mode-restricted actions (e.g. screenplay-only) are filtered to the active
+        engine, so a Novel project never surfaces screenplay-only actions.
+        """
         from storyplanner.logos.actions import list_actions_for_section
         engine = engine or self._engine()
         profile = mp.get_profile(engine)
-        available = [a.name for a in list_actions_for_section(section_name)]
+        available = [
+            a.name for a in list_actions_for_section(section_name, writing_mode=engine)
+        ]
         preferred = [a for a in profile.preferred_actions if a in available]
         rest = [a for a in available if a not in preferred]
         return preferred + rest

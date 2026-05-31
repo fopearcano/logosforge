@@ -75,6 +75,20 @@ only the two formerly mode-agnostic *container* views and proved propagation):
 
 No engines, schema, provider, or AssistantDock changes were made.
 
+## Phase 10A — Screenplay Mode foundation
+
+The first medium-specific engine foundation. When the mode is Screenplay the
+Assistant `[Project Mode]` block gains one cinematic guidance line, Logos
+surfaces screenplay-only actions (hidden in Novel), and `export_screenplay`
+records the mode. The canonical screenplay element taxonomy lives in
+`storyplanner/screenplay.py`. See **docs/ScreenplayMode.md** for the full
+element table, what's implemented, and what's deferred to Phase 10B (per-block
+element persistence, Shot/Note editor styling, screenplay diagnostics, FDX/PDF).
+
+Project Writing Mode (Screenplay) stays distinct from the Manuscript Element
+Type (Action / Dialogue / …): the latter is local text formatting state and
+never changes the project's mode.
+
 ## Remaining limitations / deferred
 
 - No full medium-specific engines yet (screenplay PDF, graphic-novel script,

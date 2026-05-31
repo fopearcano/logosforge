@@ -75,8 +75,16 @@ _PROFILES: dict[str, MediumProfile] = {
         context_blocks=(CTX_SCENE, CTX_PSYKE, CTX_OUTLINE),
         diagnostic_categories=("conflict", "setup_payoff", "structure",
                                "continuity"),
-        preferred_actions=("improve_dialogue", "improve_subtext", "compress",
-                           "identify_weakness", "suggest_revision"),
+        preferred_actions=(
+            # Phase 10A screenplay-specific actions surface first…
+            "sp_visual_action", "sp_check_scene_turn", "sp_reduce_interiority",
+            "sp_clarify_objective", "sp_scene_economy",
+            "sp_sequence_logic", "sp_act_turn", "sp_central_question",
+            "sp_track_setup_payoff", "sp_causal_chain", "sp_visual_turn",
+            # …then the mode-agnostic craft actions.
+            "improve_dialogue", "improve_subtext", "compress",
+            "identify_weakness", "suggest_revision",
+        ),
         # Screenplay suppresses prose interiority in favour of action/subtext.
         principles={"interiority": "suppress", "visual_action": "emphasize",
                     "conflict": "emphasize", "dialogue_economy": "emphasize"},

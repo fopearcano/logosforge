@@ -118,17 +118,38 @@ def medium_constraints(mode: str | None) -> str:
     return _MEDIUM_CONSTRAINTS[normalize_mode(mode)]
 
 
+def mode_guidance(mode: str | None) -> str:
+    """Optional extra, mode-specific guidance line for the Assistant block.
+
+    Empty for most modes. Screenplay (Phase 10A) adds short cinematic guidance,
+    sourced from the canonical ``screenplay`` module (lazy import to avoid any
+    cycle). Deterministic; no LLM/DB.
+    """
+    if normalize_mode(mode) == SCREENPLAY:
+        try:
+            from storyplanner.screenplay import CONTEXT_GUIDANCE
+            return CONTEXT_GUIDANCE
+        except Exception:
+            return ""
+    return ""
+
+
 def mode_context_block(mode: str | None) -> str:
     """The short, labelled ``[Project Mode]`` block for Assistant context.
 
-    Deterministic and tiny — mode name plus the medium's primary constraints.
+    Deterministic and tiny — mode name, the medium's primary constraints, and an
+    optional one-line mode-specific guidance (e.g. screenplay).
     """
     m = normalize_mode(mode)
-    return (
-        "[Project Mode]\n"
-        f"Mode: {mode_label(m)}\n"
-        f"Primary constraints: {medium_constraints(m)}."
-    )
+    lines = [
+        "[Project Mode]",
+        f"Mode: {mode_label(m)}",
+        f"Primary constraints: {medium_constraints(m)}.",
+    ]
+    guidance = mode_guidance(m)
+    if guidance:
+        lines.append(guidance)
+    return "\n".join(lines)
 
 
 # -- Project accessors -------------------------------------------------------

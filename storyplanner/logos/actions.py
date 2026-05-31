@@ -40,9 +40,22 @@ class LogosAction:
     prompt: str                 # instruction sent to the shared chat backend
     needs_selection: bool = False
     destructive: bool = False
+    # Writing modes this action is restricted to (Phase 10A). Empty = all modes.
+    # Mode-restricted actions only surface when the project's writing_mode matches,
+    # so e.g. screenplay-only actions never clutter a Novel project.
+    modes: tuple[str, ...] = ()
 
     def applies_to(self, section_name: str) -> bool:
         return not self.sections or section_name in self.sections
+
+    def applies_to_mode(self, writing_mode: str) -> bool:
+        # Unrestricted actions always apply. Restricted actions apply when the
+        # mode matches; an unknown/blank mode shows everything (back-compat).
+        if not self.modes:
+            return True
+        if not writing_mode:
+            return True
+        return writing_mode in self.modes
 
     def describe(self) -> dict[str, Any]:
         return {
@@ -53,6 +66,7 @@ class LogosAction:
             "sections": list(self.sections),
             "needs_selection": self.needs_selection,
             "destructive": self.destructive,
+            "modes": list(self.modes),
         }
 
 
@@ -72,8 +86,18 @@ def list_actions() -> list[LogosAction]:
     return list(_REGISTRY.values())
 
 
-def list_actions_for_section(section_name: str) -> list[LogosAction]:
-    return [a for a in _REGISTRY.values() if a.applies_to(section_name)]
+def list_actions_for_section(
+    section_name: str, *, writing_mode: str = "",
+) -> list[LogosAction]:
+    """Actions for a section, optionally filtered by the project writing mode.
+
+    With no ``writing_mode`` the behavior is unchanged (all section actions).
+    When a mode is given, mode-restricted actions only appear for their mode.
+    """
+    return [
+        a for a in _REGISTRY.values()
+        if a.applies_to(section_name) and a.applies_to_mode(writing_mode)
+    ]
 
 
 def describe_all_actions() -> list[dict[str, Any]]:
@@ -449,6 +473,91 @@ for _name, _label, _desc, _cat, _prompt in [
 ]:
     register(LogosAction(name=_name, label=_label, description=_desc,
                          category=_cat, sections=_GRAPH, prompt=_prompt))
+
+
+# ---------------------------------------------------------------------------
+# Screenplay-mode actions (Phase 10A). Restricted to writing_mode="screenplay"
+# via the `modes` field so they never clutter Novel projects. All non-destructive
+# and run through the normal preview/confirm path. Existing mode-agnostic actions
+# (improve_dialogue, improve_subtext, …) are unchanged and still apply.
+# ---------------------------------------------------------------------------
+
+_SP = ("screenplay",)
+
+# Manuscript + Screenplay
+for _name, _label, _desc, _cat, _needs_sel, _prompt in [
+    ("sp_visual_action", "Convert Prose to Visual Action",
+     "Recast novelistic prose as visible, filmable action.", CATEGORY_GENERATIVE, True,
+     "Suggest how to recast the selected passage as visible, filmable screen "
+     "action — what the camera sees and hears. Prefer concrete behavior over "
+     "interior narration. Offer options; do not produce a finished rewrite."),
+    ("sp_check_scene_turn", "Check Scene Turn",
+     "Does the scene turn on a clear value shift?", CATEGORY_DIAGNOSTIC, False,
+     "Assess whether this scene turns on a clear value shift (a change in the "
+     "character's situation from start to end). If the turn is weak or missing, "
+     "say so and point to where. Do not modify anything."),
+    ("sp_reduce_interiority", "Reduce Novelistic Interior Exposition",
+     "Flag interior exposition that can't be filmed.", CATEGORY_GENERATIVE, True,
+     "Identify interior exposition in the selection that cannot be seen or heard "
+     "on screen, and suggest how to externalize it as action, behavior, or "
+     "subtextual dialogue. Suggestions only."),
+    ("sp_clarify_objective", "Clarify Character Objective",
+     "Is the character's scene objective clear?", CATEGORY_DIAGNOSTIC, False,
+     "Identify what the viewpoint character wants in this scene and how visibly "
+     "it drives the action. If the objective is unclear, explain why. Do not "
+     "modify anything."),
+    ("sp_scene_economy", "Improve Scene Economy",
+     "Tighten the scene to its essential beats.", CATEGORY_GENERATIVE, True,
+     "Suggest how to tighten the selected screenplay material to its essential "
+     "beats — entering late, leaving early, cutting redundancy. Suggestions only."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc, category=_cat,
+        sections=(SECTION_MANUSCRIPT,), prompt=_prompt,
+        needs_selection=_needs_sel, modes=_SP,
+    ))
+
+# Outline + Screenplay
+for _name, _label, _desc, _cat, _prompt in [
+    ("sp_sequence_logic", "Check Sequence Logic",
+     "Do the sequences build logically?", CATEGORY_DIAGNOSTIC,
+     "Assess whether the sequences in this part build on each other with clear "
+     "cause-and-effect toward the act turn. Note breaks in logic. Do not modify."),
+    ("sp_act_turn", "Strengthen Act Turn",
+     "Sharpen the act's turning point.", CATEGORY_GENERATIVE,
+     "Suggest how to make this act's turning point sharper and more "
+     "consequential for the central dramatic question. Suggestions only."),
+    ("sp_central_question", "Clarify Central Dramatic Question",
+     "Is the central dramatic question clear?", CATEGORY_DIAGNOSTIC,
+     "Articulate the central dramatic question this structure poses and whether "
+     "the outline keeps it active. If unclear, explain why. Do not modify."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc, category=_cat,
+        sections=(SECTION_OUTLINE,), prompt=_prompt, modes=_SP,
+    ))
+
+# Plot + Screenplay
+for _name, _label, _desc, _cat, _prompt in [
+    ("sp_track_setup_payoff", "Track Setup/Payoff",
+     "Trace setups and their payoffs.", CATEGORY_DIAGNOSTIC,
+     "Trace the setups planted around this plot block and whether each pays off "
+     "(or is paid off) elsewhere. Flag unpaid setups / unprepared payoffs. Do "
+     "not modify anything."),
+    ("sp_causal_chain", "Check Causal Chain",
+     "Is the cause-effect chain intact?", CATEGORY_DIAGNOSTIC,
+     "Check the cause-and-effect chain through this plot block — does each beat "
+     "cause the next rather than merely following it? Note 'and then' gaps. Do "
+     "not modify anything."),
+    ("sp_visual_turn", "Check Visual Turn",
+     "Does the beat turn on something visible?", CATEGORY_DIAGNOSTIC,
+     "Assess whether this beat turns on something the audience can see or hear "
+     "rather than only internal realization. Do not modify anything."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc, category=_cat,
+        sections=(SECTION_PLOT,), prompt=_prompt, modes=_SP,
+    ))
 
 
 # ---------------------------------------------------------------------------

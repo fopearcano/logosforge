@@ -149,7 +149,18 @@ class LogosToolbar(QWidget):
             btn.deleteLater()
         self._action_buttons = []
 
-        actions = self._controller.available_actions(self._section)
+        # Mode-aware: pull the live LogosContext so screenplay-only actions
+        # show (and order first) in screenplay projects, and stay hidden in
+        # Novel. Falls back to unfiltered if the mode can't be resolved.
+        writing_mode = ""
+        try:
+            ctx = self._context_provider()
+            writing_mode = getattr(ctx, "writing_mode", "") or ""
+        except Exception:
+            writing_mode = ""
+        actions = self._controller.available_actions(
+            self._section, writing_mode=writing_mode,
+        )
         for action in actions:
             btn = QPushButton(action.label)
             btn.setFlat(True)
