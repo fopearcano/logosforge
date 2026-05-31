@@ -231,7 +231,41 @@ _RADAR_FIX = WorkflowTemplate(
 )
 
 
-# Ordered registry of all built-in templates (A–H).
+# I. Knowledge Graph Cleanup (Phase 10P) -----------------------------------
+_GRAPH_CLEANUP = WorkflowTemplate(
+    id="knowledge_graph_cleanup",
+    title="Knowledge Graph Cleanup",
+    description="Build and tidy the narrative knowledge graph: orphans, inferred "
+                "edges, note links, structure.",
+    category="graph",
+    steps=[
+        WorkflowStep("build", "Build the knowledge graph", kind=KIND_MANUAL,
+                     section_name=_GRAPH, action_id="kg_build_graph",
+                     description="Generate the current semantic map of the project."),
+        WorkflowStep("orphans", "Review orphan PSYKE entries / elements",
+                     kind=KIND_CREATIVE, section_name=_GRAPH,
+                     action_id="kg_find_orphans",
+                     description="Connect or retire isolated story elements."),
+        WorkflowStep("confirm_edges", "Confirm important inferred edges",
+                     kind=KIND_MANUAL, section_name=_GRAPH,
+                     action_id="kg_find_weak_links",
+                     description="Promote real connections; hide noise. Confirmation "
+                                 "is required — nothing is auto-confirmed."),
+        WorkflowStep("connect_notes", "Connect notes to PSYKE", kind=KIND_CREATIVE,
+                     section_name=_GRAPH, action_id="kg_find_undefined_terms",
+                     description="Define recurring note terms in PSYKE (review first)."),
+        WorkflowStep("clean_structure", "Clean the structure graph",
+                     kind=KIND_CREATIVE, section_name=_OUTLINE,
+                     description="Ensure scenes belong to chapters/acts/plot blocks."),
+        WorkflowStep("review_before_rewrite", "Review scene neighborhood before rewrite",
+                     kind=KIND_MANUAL, section_name=_MANUSCRIPT,
+                     action_id="kg_scene_neighborhood",
+                     description="Know what a scene touches before changing it."),
+    ],
+)
+
+
+# Ordered registry of all built-in templates (A–I).
 ALL_TEMPLATES: tuple[WorkflowTemplate, ...] = (
     _PROJECT_SETUP,        # A
     _PSYKE_BIBLE,          # B
@@ -241,4 +275,5 @@ ALL_TEMPLATES: tuple[WorkflowTemplate, ...] = (
     _PRODUCTION_PREP,      # F (screenplay)
     _EXPORT_READINESS,     # G
     _RADAR_FIX,            # H
+    _GRAPH_CLEANUP,        # I
 )

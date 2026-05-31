@@ -46,3 +46,13 @@ a separate, manual `Explain Dashboard` action. Card "dismiss" is a UI-only state
 
 Radar UI with filters + per-card actions (open section / send to Assistant /
 create from suggestion); persistent dismiss state.
+
+## Knowledge Graph cards (Phase 10P)
+
+The Narrative Knowledge Graph contributes a dedicated, deterministic card feed
+via `knowledge_graph.build_graph_decision_cards` (isolated PSYKE/elements, scenes
+without PSYKE links, undefined note terms, many inferred edges to review, a theme
+not tied to scenes, a risk touching a central node). It is surfaced through the
+`Generate Decision Cards from Graph` Logos action and kept separate from the core
+10N radar so this radar's capped/fixed-id contract is unchanged. See
+docs/NarrativeKnowledgeGraph.md.

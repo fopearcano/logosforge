@@ -65,6 +65,9 @@ from storyplanner.models import (
     WorkflowRun,
     WorkflowStepState,
     WorkflowEvent,
+    KnowledgeGraphNode,
+    KnowledgeGraphEdge,
+    KnowledgeGraphSnapshot,
 )
 
 
@@ -3608,6 +3611,110 @@ class Database:
                 WorkflowEvent.workflow_run_id == workflow_run_id).order_by(
                 WorkflowEvent.id)
             return list(session.exec(stmt).all())
+
+    # -- Knowledge graph (Phase 10P) -----------------------------------------
+    # Only user-confirmed / hidden edges (and their nodes) are persisted; the
+    # live graph is computed in-memory each build and merges these back in.
+
+    def upsert_kg_node(self, project_id: int, node_key: str, **fields,
+                       ) -> KnowledgeGraphNode:
+        from storyplanner.models.models import _now
+        fields.pop("project_id", None)
+        fields.pop("node_key", None)
+        with Session(self._engine) as session:
+            stmt = select(KnowledgeGraphNode).where(
+                KnowledgeGraphNode.project_id == project_id,
+                KnowledgeGraphNode.node_key == node_key)
+            node = session.exec(stmt).first()
+            if node is None:
+                node = KnowledgeGraphNode(project_id=project_id, node_key=node_key,
+                                          **fields)
+            else:
+                for k, v in fields.items():
+                    if hasattr(node, k):
+                        setattr(node, k, v)
+            node.updated_at = _now()
+            session.add(node)
+            session.commit()
+            session.refresh(node)
+            return node
+
+    def get_kg_nodes(self, project_id: int) -> list[KnowledgeGraphNode]:
+        with Session(self._engine) as session:
+            stmt = select(KnowledgeGraphNode).where(
+                KnowledgeGraphNode.project_id == project_id).order_by(
+                KnowledgeGraphNode.id)
+            return list(session.exec(stmt).all())
+
+    def upsert_kg_edge(self, project_id: int, source_node_key: str,
+                       target_node_key: str, edge_type: str, **fields,
+                       ) -> KnowledgeGraphEdge:
+        from storyplanner.models.models import _now
+        fields.pop("project_id", None)
+        with Session(self._engine) as session:
+            stmt = select(KnowledgeGraphEdge).where(
+                KnowledgeGraphEdge.project_id == project_id,
+                KnowledgeGraphEdge.source_node_key == source_node_key,
+                KnowledgeGraphEdge.target_node_key == target_node_key,
+                KnowledgeGraphEdge.edge_type == edge_type)
+            edge = session.exec(stmt).first()
+            if edge is None:
+                edge = KnowledgeGraphEdge(
+                    project_id=project_id, source_node_key=source_node_key,
+                    target_node_key=target_node_key, edge_type=edge_type, **fields)
+            else:
+                for k, v in fields.items():
+                    if hasattr(edge, k):
+                        setattr(edge, k, v)
+            edge.updated_at = _now()
+            session.add(edge)
+            session.commit()
+            session.refresh(edge)
+            return edge
+
+    def get_kg_edges(self, project_id: int, *, include_hidden: bool = True,
+                     ) -> list[KnowledgeGraphEdge]:
+        with Session(self._engine) as session:
+            stmt = select(KnowledgeGraphEdge).where(
+                KnowledgeGraphEdge.project_id == project_id)
+            if not include_hidden:
+                stmt = stmt.where(KnowledgeGraphEdge.is_hidden == False)  # noqa: E712
+            return list(session.exec(stmt.order_by(KnowledgeGraphEdge.id)).all())
+
+    def get_kg_edge(self, edge_id: int) -> "KnowledgeGraphEdge | None":
+        with Session(self._engine) as session:
+            return session.get(KnowledgeGraphEdge, edge_id)
+
+    def update_kg_edge(self, edge_id: int, **fields) -> "KnowledgeGraphEdge | None":
+        from storyplanner.models.models import _now
+        with Session(self._engine) as session:
+            edge = session.get(KnowledgeGraphEdge, edge_id)
+            if edge is None:
+                return None
+            for k, v in fields.items():
+                if hasattr(edge, k):
+                    setattr(edge, k, v)
+            edge.updated_at = _now()
+            session.add(edge)
+            session.commit()
+            session.refresh(edge)
+            return edge
+
+    def create_kg_snapshot(self, project_id: int, **fields) -> KnowledgeGraphSnapshot:
+        fields.pop("project_id", None)
+        snap = KnowledgeGraphSnapshot(project_id=project_id, **fields)
+        with Session(self._engine) as session:
+            session.add(snap)
+            session.commit()
+            session.refresh(snap)
+            return snap
+
+    def get_latest_kg_snapshot(self, project_id: int) -> "KnowledgeGraphSnapshot | None":
+        with Session(self._engine) as session:
+            stmt = select(KnowledgeGraphSnapshot).where(
+                KnowledgeGraphSnapshot.project_id == project_id).order_by(
+                KnowledgeGraphSnapshot.id.desc())
+            return session.exec(stmt).first()
 
     @staticmethod
     def _matches(query_lower: str, *fields: str) -> bool:

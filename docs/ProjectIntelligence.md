@@ -73,3 +73,12 @@ Aggregation is deterministic and capped; some subsystem signals are heuristic
 (graph isolation, PSYKE relevance). No project-quality score by design. No UI yet
 — driven by the service API + Logos status + `[Project Intelligence]` Assistant
 context.
+
+## Narrative Knowledge Graph (Phase 10P)
+
+A traceable semantic graph (`storyplanner/knowledge_graph/`) consolidates PSYKE,
+structure, notes, plot/timeline, the link graph, setup/payoff and
+revision/rewrite/apply findings, with confidence + provenance on every edge and
+confirmed-vs-inferred distinction. It powers graph-derived decision cards and a
+scene-scoped `[Narrative Knowledge Graph]` Assistant block. See
+docs/NarrativeKnowledgeGraph.md.

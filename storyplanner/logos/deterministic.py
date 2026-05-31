@@ -1062,3 +1062,159 @@ def _wf_recommend_workflows(db, context: LogosContext) -> LogosResult:
 
 register("wf_active_workflows", _wf_active_workflows)
 register("wf_recommend_workflows", _wf_recommend_workflows)
+
+
+# -- Narrative Knowledge Graph (Phase 10P) ----------------------------------
+
+def _kg_build(db, context: LogosContext) -> LogosResult:
+    action = "kg_build_graph"
+    try:
+        from storyplanner.knowledge_graph import build_knowledge_graph
+        res = build_knowledge_graph(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Graph build failed: {exc}")
+    lines = [res.summary_line()]
+    if res.central:
+        lines.append("Central: " + ", ".join(
+            f"{n.label}({d})" for n, d in res.central[:5]))
+    if res.graph.unavailable:
+        lines.append("Deferred sources: " + ", ".join(sorted(set(res.graph.unavailable))))
+    return LogosResult(ok=True, action=action, title="Knowledge Graph",
+                       message="\n".join(lines), suggestions=[],
+                       proposed_operations=[])
+
+
+def _kg_refresh(db, context: LogosContext) -> LogosResult:
+    action = "kg_refresh_graph"
+    try:
+        from storyplanner.knowledge_graph import build_knowledge_graph, persist_snapshot
+        res = build_knowledge_graph(db, context.project_id)
+        persist_snapshot(db, context.project_id, res)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Graph refresh failed: {exc}")
+    return LogosResult(ok=True, action=action, title="Knowledge Graph",
+                       message="Refreshed. " + res.summary_line(),
+                       suggestions=[], proposed_operations=[])
+
+
+def _kg_scene_neighborhood(db, context: LogosContext) -> LogosResult:
+    action = "kg_scene_neighborhood"
+    if not context.current_scene_id:
+        return LogosResult(ok=True, action=action, title="Scene Neighborhood",
+                           message="Open a scene to see its neighborhood.",
+                           suggestions=[], proposed_operations=[])
+    try:
+        from storyplanner.knowledge_graph import (
+            build_knowledge_graph, get_scene_context_graph)
+        from storyplanner.knowledge_graph.serializers import explain_node
+        from storyplanner.knowledge_graph.models import node_key
+        from storyplanner.knowledge_graph import provenance as P
+        graph = build_knowledge_graph(db, context.project_id).graph
+        key = node_key(P.NT_SCENE, "scene", context.current_scene_id)
+        msg = explain_node(graph, key)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Neighborhood failed: {exc}")
+    return LogosResult(ok=True, action=action, title="Scene Neighborhood",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _kg_psyke_neighborhood(db, context: LogosContext) -> LogosResult:
+    action = "kg_psyke_neighborhood"
+    eid = context.current_psyke_entry_id or context.selected_psyke_entry_id
+    if not eid:
+        return LogosResult(ok=True, action=action, title="PSYKE Neighborhood",
+                           message="Select a PSYKE entry to see its neighborhood.",
+                           suggestions=[], proposed_operations=[])
+    try:
+        from storyplanner.knowledge_graph import (
+            build_knowledge_graph, get_psyke_entry_context_graph)
+        graph = build_knowledge_graph(db, context.project_id).graph
+        res = get_psyke_entry_context_graph(db, context.project_id, eid, graph=graph)
+        lines = [res.explanation]
+        for e in res.edges[:10]:
+            lines.append(f"- {e.edge_type} [{e.confidence}] ({e.source_system})")
+        msg = "\n".join(lines)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Neighborhood failed: {exc}")
+    return LogosResult(ok=True, action=action, title="PSYKE Neighborhood",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _kg_find_orphans(db, context: LogosContext) -> LogosResult:
+    action = "kg_find_orphans"
+    try:
+        from storyplanner.knowledge_graph import get_orphan_nodes
+        orphans = get_orphan_nodes(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Orphan scan failed: {exc}")
+    if not orphans:
+        msg = "No orphan nodes — every story element is connected."
+    else:
+        msg = "Orphan nodes:\n" + "\n".join(
+            f"- {n.node_type}: {n.label}" for n in orphans[:15])
+    return LogosResult(ok=True, action=action, title="Orphan Nodes",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _kg_find_weak_links(db, context: LogosContext) -> LogosResult:
+    action = "kg_find_weak_links"
+    try:
+        from storyplanner.knowledge_graph import build_knowledge_graph, get_weak_links
+        from storyplanner.knowledge_graph.serializers import _label
+        graph = build_knowledge_graph(db, context.project_id).graph
+        weak = get_weak_links(db, context.project_id, graph=graph)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Weak-link scan failed: {exc}")
+    if not weak:
+        msg = "No inferred edges needing review."
+    else:
+        msg = "Inferred edges (review/confirm):\n" + "\n".join(
+            f"- {_label(graph, e.source)} {e.edge_type} {_label(graph, e.target)} "
+            f"[{e.confidence}]" for e in weak[:15])
+    return LogosResult(ok=True, action=action, title="Weak Links",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _kg_find_undefined_terms(db, context: LogosContext) -> LogosResult:
+    action = "kg_find_undefined_terms"
+    try:
+        from storyplanner.knowledge_graph import build_knowledge_graph
+        res = build_knowledge_graph(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Term scan failed: {exc}")
+    if not res.undefined_terms:
+        msg = "No undefined note terms detected."
+    else:
+        msg = ("Note terms not defined in PSYKE (review before creating):\n"
+               + "\n".join(f"- {t}" for t in res.undefined_terms[:20]))
+    return LogosResult(ok=True, action=action, title="Undefined Terms",
+                       message=msg,
+                       suggestions=res.undefined_terms[:5], proposed_operations=[])
+
+
+def _kg_decision_cards(db, context: LogosContext) -> LogosResult:
+    action = "kg_decision_cards"
+    try:
+        from storyplanner.knowledge_graph import build_graph_decision_cards
+        cards = build_graph_decision_cards(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Card generation failed: {exc}")
+    if not cards:
+        msg = "No graph-derived decisions right now."
+    else:
+        msg = "Graph decisions:\n" + "\n".join(
+            f"- [{c.severity}] {c.title}" for c in cards)
+    return LogosResult(ok=True, action=action, title="Graph Decision Cards",
+                       message=msg,
+                       suggestions=[c.suggested_action for c in cards
+                                    if c.suggested_action], proposed_operations=[])
+
+
+register("kg_build_graph", _kg_build)
+register("kg_refresh_graph", _kg_refresh)
+register("kg_scene_neighborhood", _kg_scene_neighborhood)
+register("kg_psyke_neighborhood", _kg_psyke_neighborhood)
+register("kg_find_orphans", _kg_find_orphans)
+register("kg_find_weak_links", _kg_find_weak_links)
+register("kg_find_undefined_terms", _kg_find_undefined_terms)
+register("kg_decision_cards", _kg_decision_cards)

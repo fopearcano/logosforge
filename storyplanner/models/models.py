@@ -440,6 +440,68 @@ WORKFLOW_RUN_STATUSES = ("active", "paused", "completed", "cancelled", "blocked"
 WORKFLOW_STEP_STATUSES = ("pending", "active", "completed", "skipped", "blocked")
 
 
+class KnowledgeGraphNode(SQLModel, table=True):
+    """A persisted Narrative Knowledge Graph node (Phase 10P).
+
+    The live graph is computed in-memory each build; this table persists only
+    nodes referenced by user-confirmed edges (so confirmed edges survive a
+    rebuild). It stores references + a short summary — never full manuscript
+    text. Created idempotently by ``create_all`` (old DBs gain it empty).
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    node_key: str = Field(default="", index=True)  # "node_type:source_type:source_id"
+    node_type: str = ""
+    source_type: str = ""
+    source_id: Optional[str] = None
+    label: str = ""
+    summary: str = ""
+    metadata_json: str = ""
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
+class KnowledgeGraphEdge(SQLModel, table=True):
+    """A persisted Narrative Knowledge Graph edge (Phase 10P).
+
+    Only **user-confirmed** (or explicitly hidden) edges are persisted; inferred
+    edges are regenerated on every build and never stored. A rebuild merges these
+    persisted edges back in, so confirmed/hidden state survives. References only.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    source_node_key: str = Field(default="", index=True)
+    target_node_key: str = Field(default="", index=True)
+    edge_type: str = ""
+    confidence: str = "confirmed"    # confirmed|likely|possible|unknown
+    provenance: str = ""
+    source_system: str = ""
+    explanation: str = ""
+    metadata_json: str = ""
+    is_user_confirmed: bool = False
+    is_hidden: bool = False
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
+class KnowledgeGraphSnapshot(SQLModel, table=True):
+    """A lightweight record of a knowledge-graph build (Phase 10P)."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    summary: str = ""
+    node_count: int = 0
+    edge_count: int = 0
+    orphan_count: int = 0
+    warning_count: int = 0
+    created_at: datetime = Field(default_factory=_now)
+
+
+KG_CONFIDENCE_LEVELS = ("confirmed", "likely", "possible", "unknown")
+
+
 class ControlledApplyOperation(SQLModel, table=True):
     """A previewed, confirmable apply operation (Phase 10M). Canonical content is
     not changed until ``status`` becomes ``applied``. References only — no full

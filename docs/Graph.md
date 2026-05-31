@@ -77,3 +77,13 @@ The Change Impact Map (`revision_intelligence`) produces node/edge-style
 impact data (changed scene → impacted scenes / PSYKE / setup-payoff). A
 dedicated Graph **visualization mode** for it is deferred; the data is
 available via the impact map result. See **docs/RevisionIntelligence.md**.
+
+## Narrative Knowledge Graph (Phase 10P)
+
+A project-wide, traceable semantic graph (`storyplanner/knowledge_graph/`)
+consolidates PSYKE, scenes, structure, notes, plot/timeline, the link graph +
+confirmed StoryLinks, setup/payoff, and revision/rewrite/apply findings into one
+typed graph with confidence + provenance on every edge. Confirmed vs inferred
+edges are distinguished; confirmed/user edges survive rebuilds. This Graph
+section is unchanged; the multi-mode Graph UI upgrade is deferred. See
+**docs/NarrativeKnowledgeGraph.md**.

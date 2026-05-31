@@ -85,7 +85,11 @@ notes) — it does not invent a second context system.
   actions (Active Workflows, Recommend Workflows) and a generative Explain
   Workflow Step; the workflow engine mutates only workflow state and routes any
   content change through Controlled Apply / Rewrite Sandbox. See
-  docs/GuidedWorkflows.md and docs/ProjectOperatingSystem.md.
+  docs/GuidedWorkflows.md and docs/ProjectOperatingSystem.md. Phase 10P adds read-only Narrative Knowledge
+  Graph actions (Build/Refresh Knowledge Graph, Show Scene/PSYKE Neighborhood,
+  Find Orphan Nodes/Weak Links/Undefined Terms, Generate Decision Cards from
+  Graph) + a generative Explain Knowledge Graph; confirm/hide/convert/create are
+  confirmable service calls. See docs/NarrativeKnowledgeGraph.md.
 - **operations** — controlled, validated apply ops (manuscript replace/insert,
   outline scene create/update, PSYKE notes/progression/relation). Every mutation
   is previewed and confirmed; nothing auto-applies.

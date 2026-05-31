@@ -108,3 +108,12 @@ no cross-project leak. Disable via
 - A dedicated Workflow **UI** panel (the engine + Logos + Assistant context are
   the current surface).
 - Custom user-authored templates; per-step reminders; multi-project dashboards.
+
+## Knowledge Graph Cleanup (Phase 10P)
+
+Template **I — Knowledge Graph Cleanup** (mode-agnostic): build the graph →
+review orphan PSYKE entries → confirm important inferred edges → connect notes
+to PSYKE → clean the structure graph → review a scene neighborhood before
+rewrite. Guides graph cleanup without mutating anything automatically;
+PSYKE-relation creation / edge confirmation require confirmation. See
+docs/NarrativeKnowledgeGraph.md.

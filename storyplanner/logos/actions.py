@@ -622,6 +622,43 @@ register(LogosAction(
     ),
 ))
 
+# Manuscript — Phase 10P (Narrative Knowledge Graph; mode-agnostic, read-only).
+for _name, _label, _desc in [
+    ("kg_build_graph", "Build Knowledge Graph",
+     "Build the narrative knowledge graph and summarize it (deterministic)."),
+    ("kg_refresh_graph", "Refresh Knowledge Graph",
+     "Rebuild the knowledge graph and record a snapshot (deterministic)."),
+    ("kg_scene_neighborhood", "Show Scene Neighborhood",
+     "What the current scene connects to (deterministic)."),
+    ("kg_psyke_neighborhood", "Show PSYKE Neighborhood",
+     "What the current PSYKE entry connects to (deterministic)."),
+    ("kg_find_orphans", "Find Orphan Nodes",
+     "Story elements with no connections (deterministic)."),
+    ("kg_find_weak_links", "Find Weak Links",
+     "Inferred edges that may need confirmation (deterministic)."),
+    ("kg_find_undefined_terms", "Find Undefined Terms",
+     "Note terms not defined in PSYKE (deterministic)."),
+    ("kg_decision_cards", "Generate Decision Cards from Graph",
+     "Graph-derived decisions/risks/opportunities (deterministic)."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc,
+        category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+        prompt="", deterministic=True,
+    ))
+
+register(LogosAction(
+    name="kg_explain_graph", label="Explain Knowledge Graph",
+    description="Ask the Assistant to interpret the project's knowledge graph.",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+    prompt=(
+        "Given the narrative knowledge graph summary, interpret the project's "
+        "structure: which elements are central, which are isolated, and what the "
+        "weak/inferred links suggest. Advisory only; do not rewrite, mutate, or "
+        "confirm any edge — confirmation is the user's decision."
+    ),
+))
+
 # Manuscript — Phase 10O (Guided Workflows; mode-agnostic, read-only).
 for _name, _label, _desc in [
     ("wf_active_workflows", "Active Workflows",

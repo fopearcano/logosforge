@@ -71,6 +71,10 @@ from storyplanner.models.models import (
     WorkflowEvent,
     WORKFLOW_RUN_STATUSES,
     WORKFLOW_STEP_STATUSES,
+    KnowledgeGraphNode,
+    KnowledgeGraphEdge,
+    KnowledgeGraphSnapshot,
+    KG_CONFIDENCE_LEVELS,
 )
 
 __all__ = [
@@ -146,4 +150,8 @@ __all__ = [
     "WorkflowEvent",
     "WORKFLOW_RUN_STATUSES",
     "WORKFLOW_STEP_STATUSES",
+    "KnowledgeGraphNode",
+    "KnowledgeGraphEdge",
+    "KnowledgeGraphSnapshot",
+    "KG_CONFIDENCE_LEVELS",
 ]

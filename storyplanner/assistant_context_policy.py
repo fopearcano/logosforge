@@ -25,6 +25,7 @@ _KEY_REWRITE_SANDBOX = "include_rewrite_sandbox_in_assistant_context"
 _KEY_CONTROLLED_APPLY = "include_controlled_apply_in_assistant_context"
 _KEY_PROJECT_INTEL = "include_project_intelligence_in_assistant_context"
 _KEY_GUIDED_WORKFLOW = "include_guided_workflow_in_assistant_context"
+_KEY_KNOWLEDGE_GRAPH = "include_knowledge_graph_in_assistant_context"
 _KEY_STRATEGY = "include_strategy_in_assistant_context"
 _KEY_HEALTH = "include_health_in_assistant_context"
 _KEY_DIAGNOSTICS = "include_diagnostics_in_assistant_context"
@@ -44,6 +45,7 @@ _DEFAULTS = {
     _KEY_CONTROLLED_APPLY: True,  # only emits when a pending apply preview exists
     _KEY_PROJECT_INTEL: True,  # concise dashboard state (light report)
     _KEY_GUIDED_WORKFLOW: True,  # only emits when a guided workflow is active
+    _KEY_KNOWLEDGE_GRAPH: True,  # only emits when a scene is open (cheap, scene-scoped)
     _KEY_STRATEGY: True,
     _KEY_HEALTH: False,        # off by default — health is expensive/broad
     _KEY_DIAGNOSTICS: True,
@@ -110,6 +112,8 @@ def gather_injected_context(
         blocks.append(_project_intelligence_block(db, project_id))
     if _flag(_KEY_GUIDED_WORKFLOW):
         blocks.append(_guided_workflow_block(db, project_id))
+    if _flag(_KEY_KNOWLEDGE_GRAPH):
+        blocks.append(_knowledge_graph_block(db, project_id, scene_id))
     if _flag(_KEY_STRATEGY):
         blocks.append(_strategy_block(db, project_id, section_name))
     if _flag(_KEY_HEALTH):
@@ -512,6 +516,23 @@ def _guided_workflow_block(db, project_id: int) -> str:
         lines.append("Help with the current step; never mark steps done — "
                      "that is the user's decision.")
         return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _knowledge_graph_block(db, project_id: int, scene_id: int | None) -> str:
+    """Capped ``[Narrative Knowledge Graph]`` — current scene's neighborhood.
+
+    Only emits when a scene is open (scene-scoped keeps it cheap). Concise: top
+    related PSYKE, connected scenes, risks. Deterministic; no LLM/DB write; no
+    cross-project leak; no full graph dump.
+    """
+    if scene_id is None:
+        return ""
+    try:
+        from storyplanner.knowledge_graph import get_graph_summary_for_assistant
+        return get_graph_summary_for_assistant(
+            db, project_id, scene_id=scene_id)
     except Exception:
         return ""
 
