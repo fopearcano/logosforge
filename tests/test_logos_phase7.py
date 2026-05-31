@@ -109,9 +109,10 @@ def test_logos_actions_differ_by_mode():
     sa = StrategyRouter(db_s, pid_s).recommended_logos_actions("Manuscript")
     na = StrategyRouter(db_n, pid_n).recommended_logos_actions("Manuscript")
     assert sa != na
-    # Phase 10A: screenplay surfaces its mode-specific actions first; novel
-    # surfaces revision/voice and never sees screenplay-only actions.
-    assert sa[0] == "sp_visual_action"
+    # Phase 10A/10C: screenplay surfaces its mode-specific actions first (the
+    # deterministic scene-economy diagnostic leads); novel surfaces revision/voice
+    # and never sees screenplay-only actions.
+    assert sa[0] == "sp_diagnose_scene_economy"
     assert na[0] == "suggest_revision"
     assert not any(n.startswith("sp_") for n in na)
 

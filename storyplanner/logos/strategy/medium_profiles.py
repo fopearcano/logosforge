@@ -77,9 +77,11 @@ _PROFILES: dict[str, MediumProfile] = {
                                "continuity"),
         preferred_actions=(
             # Phase 10A screenplay-specific actions surface first…
+            "sp_diagnose_scene_economy",
             "sp_visual_action", "sp_check_scene_turn", "sp_reduce_interiority",
             "sp_clarify_objective", "sp_scene_economy", "sp_setup_payoff",
-            "sp_overwritten_action",
+            "sp_overwritten_action", "sp_tighten_dialogue", "sp_suggest_visual_beat",
+            "sp_suggest_action_interruption",
             "sp_sequence_logic", "sp_act_turn", "sp_central_question",
             "sp_escalation",
             "sp_track_setup_payoff", "sp_causal_chain", "sp_visual_turn",

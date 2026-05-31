@@ -44,6 +44,9 @@ class LogosAction:
     # Mode-restricted actions only surface when the project's writing_mode matches,
     # so e.g. screenplay-only actions never clutter a Novel project.
     modes: tuple[str, ...] = ()
+    # Deterministic actions (Phase 10C) run a rule-based handler with NO LLM call.
+    # The controller routes these to storyplanner.logos.deterministic.
+    deterministic: bool = False
 
     def applies_to(self, section_name: str) -> bool:
         return not self.sections or section_name in self.sections
@@ -67,6 +70,7 @@ class LogosAction:
             "needs_selection": self.needs_selection,
             "destructive": self.destructive,
             "modes": list(self.modes),
+            "deterministic": self.deterministic,
         }
 
 
@@ -524,6 +528,36 @@ for _name, _label, _desc, _cat, _needs_sel, _prompt in [
         name=_name, label=_label, description=_desc, category=_cat,
         sections=(SECTION_MANUSCRIPT,), prompt=_prompt,
         needs_selection=_needs_sel, modes=_SP,
+    ))
+
+# Manuscript + Screenplay — Phase 10C.
+# Deterministic diagnostic (no LLM; handler in logos.deterministic):
+register(LogosAction(
+    name="sp_diagnose_scene_economy", label="Diagnose Scene Economy",
+    description="Run deterministic screenplay scene-economy diagnostics for this scene.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=_SP, deterministic=True,
+))
+# Generative rewrite/suggestion actions (LLM only on explicit invocation):
+for _name, _label, _desc, _prompt in [
+    ("sp_tighten_dialogue", "Tighten Dialogue Economy",
+     "Suggest leaner dialogue without losing intent.",
+     "Suggest how to tighten the selected dialogue — cut throat-clearing, "
+     "on-the-nose exposition and redundancy — while preserving intent and "
+     "subtext. Suggestions only; do not produce a finished rewrite."),
+    ("sp_suggest_visual_beat", "Suggest Visual Beat",
+     "Propose a visual beat to externalize the moment.",
+     "Suggest one or two concrete visual beats (behavior, business, image) that "
+     "could externalize what this moment is doing internally. Suggestions only."),
+    ("sp_suggest_action_interruption", "Suggest Action Interruption",
+     "Break up dialogue with a visual action beat.",
+     "Suggest where a short action beat could interrupt this dialogue to vary "
+     "rhythm and show behavior. Suggestions only; do not rewrite the dialogue."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc,
+        category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+        prompt=_prompt, needs_selection=True, modes=_SP,
     ))
 
 # Outline + Screenplay

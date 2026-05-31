@@ -121,7 +121,57 @@ scene) when the project is a screenplay and a scene is active — data-driven, c
 Action` (Manuscript) and `Improve Escalation` (Outline), all screenplay-only and
 preview/confirm.
 
-## Intentionally deferred to Phase 10C
+## Phase 10C — deterministic screenplay diagnostics + scene economy
+
+`storyplanner/screenplay_diagnostics.py` evaluates a scene **as a screenplay
+scene** (built on the 10B block parser) — rule-based, no LLM, no DB writes,
+confidence-aware.
+
+- **`ScreenplaySceneReport`** / **`ScreenplayDiagnosticIssue`** (serializable):
+  block/character counts, dominant block type, `economy_label`
+  (dialogue-heavy / action-heavy / balanced / sparse), an approximate page/minute
+  estimate (clearly rough), plus issues / strengths / warnings / summary.
+- **Checks** (documented thresholds as module constants): scene economy ratios,
+  missing scene heading, only-notes, internal-prose action, overwritten action,
+  long dialogue, parenthetical overuse, single-voice scenes, transition/shot
+  overuse, **scene-turn heuristic** (says *"Scene turn unclear"* with low
+  confidence — never asserts absence), **character objective** (PSYKE-aware:
+  missing data lowers confidence, never hard-fails), and cautious **setup/payoff
+  candidates** ("Possible setup" — hooks for Phase 10D).
+
+**Warning vs error:** every issue is a *warning/suggestion* with a severity
+(`info` / `watch` / `weak` / `critical`) and confidence — never a hard error, and
+nothing is auto-changed.
+
+**Logos:** `Diagnose Scene Economy` (`sp_diagnose_scene_economy`) is a
+**deterministic** action — it runs the engine with **no LLM call** (routed via
+`storyplanner/logos/deterministic.py`). Generative helpers (`Tighten Dialogue
+Economy`, `Suggest Visual Beat`, `Suggest Action Interruption`, plus the 10A/10B
+set) call the Assistant only when the user explicitly invokes them, always
+through preview/confirm. All screenplay-only and hidden in Novel.
+
+**Assistant:** a concise `[Screenplay Diagnostics]` block (economy summary + top
+3 issues) is injected for screenplay projects with an active scene
+(`include_screenplay_diagnostics_in_assistant_context`, default on) — capped,
+deterministic, no LLM/DB during assembly.
+
+**Narrative Health:** for screenplay projects the report appends mode-aware
+categories — Visual Action, Scene Economy, Dialogue Economy, Scene Turn,
+Character Objective, Setup/Payoff — computed from the deterministic engine.
+Subtext Candidate and Cinematic Continuity are present but **deferred**
+(`Not Enough Data`). No fake precision; no background LLM.
+
+**Export:** `export_screenplay_diagnostics_json(db, project_id)` emits per-scene
+reports + writing mode (additive; existing exports untouched).
+
+## Intentionally deferred to Phase 10D
+
+- Cross-scene setup/payoff tracking engine (10C only flags candidates).
+- Dedicated screenplay-diagnostics drawer + click-to-focus-block (today the
+  diagnostic surfaces via the Logos toolbar action).
+- Subtext / Cinematic Continuity detectors (need an LLM); precise runtime.
+
+## (Earlier) Intentionally deferred to Phase 10C
 
 - **Per-block element persistence** — block types are still in-memory while
   editing and re-derived (by the parser) for export/analysis; durable per-block

@@ -32,6 +32,23 @@ ALL_CATEGORIES = (
     CAT_GRAPH, CAT_NOTES,
 )
 
+# -- Screenplay-mode categories (Phase 10C, appended only for screenplay) -----
+# Not part of the core 12; surfaced in addition for screenplay projects.
+CAT_VISUAL_ACTION = "visual_action"
+CAT_SCENE_ECONOMY = "scene_economy"
+CAT_DIALOGUE_ECONOMY = "dialogue_economy"
+CAT_SCENE_TURN = "scene_turn"
+CAT_CHARACTER_OBJECTIVE = "character_objective"
+CAT_SP_SETUP_PAYOFF = "sp_setup_payoff"
+CAT_SUBTEXT = "subtext"
+CAT_CINEMATIC_CONTINUITY = "cinematic_continuity"
+
+SCREENPLAY_CATEGORIES = (
+    CAT_VISUAL_ACTION, CAT_SCENE_ECONOMY, CAT_DIALOGUE_ECONOMY, CAT_SCENE_TURN,
+    CAT_CHARACTER_OBJECTIVE, CAT_SP_SETUP_PAYOFF, CAT_SUBTEXT,
+    CAT_CINEMATIC_CONTINUITY,
+)
+
 _CATEGORY_NAMES = {
     CAT_STRUCTURE: "Structure",
     CAT_CHARACTER: "Character",
@@ -45,6 +62,15 @@ _CATEGORY_NAMES = {
     CAT_PSYKE: "PSYKE Completeness",
     CAT_GRAPH: "Graph Connectivity",
     CAT_NOTES: "Notes Integration",
+    # Screenplay-mode names.
+    CAT_VISUAL_ACTION: "Visual Action",
+    CAT_SCENE_ECONOMY: "Scene Economy",
+    CAT_DIALOGUE_ECONOMY: "Dialogue Economy",
+    CAT_SCENE_TURN: "Scene Turn",
+    CAT_CHARACTER_OBJECTIVE: "Character Objective",
+    CAT_SP_SETUP_PAYOFF: "Setup / Payoff",
+    CAT_SUBTEXT: "Subtext Candidate",
+    CAT_CINEMATIC_CONTINUITY: "Cinematic Continuity",
 }
 
 # -- Status ------------------------------------------------------------------

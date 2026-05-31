@@ -51,6 +51,20 @@ class HealthEngine:
 
         presence = self._data_presence(facts)
         metrics = aggregate_metrics(diagnostics, presence)
+
+        # Phase 10C — append deterministic screenplay metrics for screenplay
+        # projects (additive; never affects Novel/other modes). No LLM/DB write.
+        if self._writing_mode == "screenplay":
+            try:
+                from storyplanner.screenplay_diagnostics import (
+                    screenplay_health_metrics,
+                )
+                metrics = metrics + screenplay_health_metrics(
+                    self._db, self._project_id,
+                )
+            except Exception:
+                pass
+
         overall = self._overall_status(metrics)
 
         report = NarrativeHealthReport(

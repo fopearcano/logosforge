@@ -96,6 +96,16 @@ class LogosController:
                 action_name, "Select some text first, then run this action.",
             )
 
+        # Deterministic actions (Phase 10C) compute a rule-based result and must
+        # never touch the provider/chat backend.
+        from storyplanner.logos import deterministic as det
+        handler = det.get_handler(action_name)
+        if handler is not None:
+            try:
+                return handler(self._db, context)
+            except Exception as exc:
+                return LogosResult.failure(action_name, f"Diagnostics failed: {exc}")
+
         try:
             messages = build_logos_messages(self._db, context, action)
         except Exception as exc:  # context build must never crash the UI

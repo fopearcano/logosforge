@@ -202,6 +202,26 @@ def export_json(db: Database, project_id: int) -> str:
     return json.dumps(data, indent=2, ensure_ascii=False)
 
 
+def export_screenplay_diagnostics_json(db: Database, project_id: int) -> str:
+    """Phase 10C — per-scene deterministic screenplay diagnostics as JSON.
+
+    Additive and read-only; does not touch the existing export paths. Includes
+    the project's writing mode and a per-scene report list.
+    """
+    from storyplanner.screenplay_diagnostics import analyze_project
+    from storyplanner.writing_modes import get_project_writing_mode
+
+    project = db.get_project_by_id(project_id)
+    payload = {
+        "project": {
+            "title": project.title if project else "Untitled",
+            "writing_mode": get_project_writing_mode(project),
+        },
+        "scenes": [r.to_dict() for r in analyze_project(db, project_id)],
+    }
+    return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
 def export_markdown(db: Database, project_id: int) -> str:
     data = _gather_project_data(db, project_id)
     lines: list[str] = []

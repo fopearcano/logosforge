@@ -14,6 +14,7 @@ from __future__ import annotations
 
 # Settings keys + conservative defaults.
 _KEY_PROJECT_MODE = "include_project_mode_in_assistant_context"
+_KEY_SCREENPLAY_DIAG = "include_screenplay_diagnostics_in_assistant_context"
 _KEY_STRATEGY = "include_strategy_in_assistant_context"
 _KEY_HEALTH = "include_health_in_assistant_context"
 _KEY_DIAGNOSTICS = "include_diagnostics_in_assistant_context"
@@ -22,6 +23,7 @@ _KEY_MAX_DIAG = "max_diagnostics_in_context"
 
 _DEFAULTS = {
     _KEY_PROJECT_MODE: True,   # on by default — tiny, deterministic, always relevant
+    _KEY_SCREENPLAY_DIAG: True,  # screenplay-only; concise top-issues summary
     _KEY_STRATEGY: True,
     _KEY_HEALTH: False,        # off by default — health is expensive/broad
     _KEY_DIAGNOSTICS: True,
@@ -65,6 +67,8 @@ def gather_injected_context(
     if _flag(_KEY_PROJECT_MODE):
         blocks.append(_project_mode_block(db, project_id))
         blocks.append(_screenplay_scene_block(db, project_id, scene_id))
+    if _flag(_KEY_SCREENPLAY_DIAG):
+        blocks.append(_screenplay_diagnostics_block(db, project_id, scene_id))
     if _flag(_KEY_STRATEGY):
         blocks.append(_strategy_block(db, project_id, section_name))
     if _flag(_KEY_HEALTH):
@@ -120,6 +124,34 @@ def _screenplay_scene_block(db, project_id: int, scene_id: int | None) -> str:
         if cues:
             lines.append("Characters present: " + ", ".join(cues))
         return "\n".join(lines) if len(lines) > 1 else ""
+    except Exception:
+        return ""
+
+
+def _screenplay_diagnostics_block(db, project_id: int, scene_id: int | None) -> str:
+    """Concise ``[Screenplay Diagnostics]`` block — economy summary + top 3 issues.
+
+    Screenplay projects with a current scene only. Deterministic (rule-based), no
+    LLM, no DB write; capped at three issues so the prompt never bloats.
+    """
+    if scene_id is None:
+        return ""
+    try:
+        from storyplanner.writing_modes import get_project_writing_mode_by_id
+        if get_project_writing_mode_by_id(db, project_id) != "screenplay":
+            return ""
+        from storyplanner.screenplay_diagnostics import analyze_scene_by_id
+        report = analyze_scene_by_id(db, project_id, scene_id)
+        if report.block_count == 0:
+            return ""
+        lines = ["[Screenplay Diagnostics]",
+                 f"Scene economy: {report.economy_label or 'unknown'}."]
+        top = report.top_issues(3)
+        if top:
+            lines.append("Top issues:")
+            for n, i in enumerate(top, 1):
+                lines.append(f"{n}. {i.label}.")
+        return "\n".join(lines)
     except Exception:
         return ""
 

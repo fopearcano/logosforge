@@ -48,6 +48,11 @@ notes) — it does not invent a second context system.
   Track Setup/Payoff) appear and sort first only when `writing_mode ==
   "screenplay"`, and stay hidden in Novel. `LogosController.available_actions`
   filters + medium-orders; the toolbar passes the live `writing_mode`.
+  Actions may also be **deterministic** (`LogosAction.deterministic`, Phase 10C):
+  the controller routes these to `storyplanner/logos/deterministic.py` and runs a
+  rule-based handler with **no provider/LLM call** (e.g. `Diagnose Scene Economy`
+  runs the screenplay diagnostics engine). Generative actions still call the
+  shared backend only on explicit invocation, through preview/confirm.
 - **operations** — controlled, validated apply ops (manuscript replace/insert,
   outline scene create/update, PSYKE notes/progression/relation). Every mutation
   is previewed and confirmed; nothing auto-applies.

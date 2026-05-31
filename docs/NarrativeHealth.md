@@ -54,6 +54,17 @@ Non-modal, never steals focus, hidden by default. Dismissals share the proactive
 for optional prompt inclusion (`health_include_in_assistant`, default **false**).
 The Assistant is not auto-fed the report.
 
+## Screenplay-mode categories (Phase 10C)
+
+For projects whose writing mode is **screenplay**, the report appends mode-aware
+categories computed deterministically from the screenplay diagnostics engine
+(`storyplanner/screenplay_diagnostics.py`): **Visual Action, Scene Economy,
+Dialogue Economy, Scene Turn, Character Objective, Setup/Payoff**. Status uses the
+same no-score labels; categories with no analyzable data return *Not Enough Data*.
+**Subtext Candidate** and **Cinematic Continuity** are present but intentionally
+deferred (always *Not Enough Data* until Phase 10D). No fake precision, no
+background LLM, no DB mutation. Novel/other modes are unaffected.
+
 ## Settings (defaults)
 
 `health_enabled=True`, `health_auto_refresh_on_load=True`,
