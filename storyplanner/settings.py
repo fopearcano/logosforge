@@ -63,6 +63,8 @@ DEFAULTS: dict[str, object] = {
     "include_guided_workflow_in_assistant_context": True,
     # Knowledge graph — shown only when a scene is open (scene-scoped).
     "include_knowledge_graph_in_assistant_context": True,
+    # Continuity — shown only when there are open continuity issues.
+    "include_continuity_in_assistant_context": True,
     "include_strategy_in_assistant_context": True,
     "include_health_in_assistant_context": False,
     "include_diagnostics_in_assistant_context": True,

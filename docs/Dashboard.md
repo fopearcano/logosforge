@@ -18,3 +18,12 @@ PSYKE/elements, scenes without PSYKE links, undefined note terms, weak/inferred
 links to review, risks touching central nodes — surfaced via the
 `Generate Decision Cards from Graph` Logos action. The core Project
 Intelligence radar contract is unchanged.
+
+## Semantic Continuity (Phase 10Q)
+
+The Semantic Continuity Engine (docs/SemanticContinuityEngine.md) adds a
+deterministic, traceable continuity decision-card feed
+(`build_continuity_decision_cards`, category `continuity`) — dangling
+setup/payoff links, location jumps, production-continuity risks, character
+state drift — surfaced via the `Continuity Decision Cards` Logos action. The
+core Project Intelligence radar contract is unchanged.

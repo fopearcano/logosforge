@@ -89,7 +89,11 @@ notes) — it does not invent a second context system.
   Graph actions (Build/Refresh Knowledge Graph, Show Scene/PSYKE Neighborhood,
   Find Orphan Nodes/Weak Links/Undefined Terms, Generate Decision Cards from
   Graph) + a generative Explain Knowledge Graph; confirm/hide/convert/create are
-  confirmable service calls. See docs/NarrativeKnowledgeGraph.md.
+  confirmable service calls. See docs/NarrativeKnowledgeGraph.md. Phase 10Q adds read-only Semantic Continuity
+  actions (Run Continuity Check, Check Current Scene Continuity, Show Continuity
+  Issues, Continuity Decision Cards) + a generative Explain Continuity Issue;
+  dismiss/resolve are issue-metadata writes and change-validation is a service
+  call (preview-only). See docs/SemanticContinuityEngine.md.
 - **operations** — controlled, validated apply ops (manuscript replace/insert,
   outline scene create/update, PSYKE notes/progression/relation). Every mutation
   is previewed and confirmed; nothing auto-applies.

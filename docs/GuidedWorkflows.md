@@ -117,3 +117,11 @@ to PSYKE → clean the structure graph → review a scene neighborhood before
 rewrite. Guides graph cleanup without mutating anything automatically;
 PSYKE-relation creation / edge confirmation require confirmation. See
 docs/NarrativeKnowledgeGraph.md.
+
+## Continuity workflows (Phase 10Q)
+
+Template **J — Continuity Review** (mode-agnostic): run a continuity check →
+review issues → resolve missing transitions → resolve setups → re-check.
+Template **K — Screenplay Continuity Pass** (screenplay): check → fix heading
+data → validate export. Both guide the user; no automatic mutation — fixes route
+through Controlled Apply. See docs/SemanticContinuityEngine.md.

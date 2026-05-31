@@ -56,3 +56,11 @@ not tied to scenes, a risk touching a central node). It is surfaced through the
 `Generate Decision Cards from Graph` Logos action and kept separate from the core
 10N radar so this radar's capped/fixed-id contract is unchanged. See
 docs/NarrativeKnowledgeGraph.md.
+
+## Continuity cards (Phase 10Q)
+
+The Semantic Continuity Engine contributes a dedicated, deterministic card feed
+(`continuity.build_continuity_decision_cards`, category `continuity`) ranked by
+severity and traceable to specific issues, surfaced via the `Continuity Decision
+Cards` Logos action. Kept separate from the core 10N radar so its capped/fixed-id
+contract is unchanged. See docs/SemanticContinuityEngine.md.

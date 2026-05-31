@@ -26,6 +26,7 @@ _KEY_CONTROLLED_APPLY = "include_controlled_apply_in_assistant_context"
 _KEY_PROJECT_INTEL = "include_project_intelligence_in_assistant_context"
 _KEY_GUIDED_WORKFLOW = "include_guided_workflow_in_assistant_context"
 _KEY_KNOWLEDGE_GRAPH = "include_knowledge_graph_in_assistant_context"
+_KEY_CONTINUITY = "include_continuity_in_assistant_context"
 _KEY_STRATEGY = "include_strategy_in_assistant_context"
 _KEY_HEALTH = "include_health_in_assistant_context"
 _KEY_DIAGNOSTICS = "include_diagnostics_in_assistant_context"
@@ -46,6 +47,7 @@ _DEFAULTS = {
     _KEY_PROJECT_INTEL: True,  # concise dashboard state (light report)
     _KEY_GUIDED_WORKFLOW: True,  # only emits when a guided workflow is active
     _KEY_KNOWLEDGE_GRAPH: True,  # only emits when a scene is open (cheap, scene-scoped)
+    _KEY_CONTINUITY: True,  # only emits when there are open continuity issues
     _KEY_STRATEGY: True,
     _KEY_HEALTH: False,        # off by default — health is expensive/broad
     _KEY_DIAGNOSTICS: True,
@@ -114,6 +116,8 @@ def gather_injected_context(
         blocks.append(_guided_workflow_block(db, project_id))
     if _flag(_KEY_KNOWLEDGE_GRAPH):
         blocks.append(_knowledge_graph_block(db, project_id, scene_id))
+    if _flag(_KEY_CONTINUITY):
+        blocks.append(_continuity_block(db, project_id, section_name, scene_id))
     if _flag(_KEY_STRATEGY):
         blocks.append(_strategy_block(db, project_id, section_name))
     if _flag(_KEY_HEALTH):
@@ -533,6 +537,19 @@ def _knowledge_graph_block(db, project_id: int, scene_id: int | None) -> str:
         from storyplanner.knowledge_graph import get_graph_summary_for_assistant
         return get_graph_summary_for_assistant(
             db, project_id, scene_id=scene_id)
+    except Exception:
+        return ""
+
+
+def _continuity_block(db, project_id: int, section_name: str,
+                      scene_id: int | None) -> str:
+    """Capped ``[Continuity]`` block — top open issues (scene-scoped if a scene
+    is open). Only emits when issues exist. Deterministic; no LLM/DB write; no
+    cross-project leak; advisory (never auto-fix/dismiss)."""
+    try:
+        from storyplanner.continuity import get_continuity_summary_for_assistant
+        return get_continuity_summary_for_assistant(
+            db, project_id, section_name=section_name, scene_id=scene_id)
     except Exception:
         return ""
 

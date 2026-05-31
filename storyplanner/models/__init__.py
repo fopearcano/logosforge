@@ -75,6 +75,11 @@ from storyplanner.models.models import (
     KnowledgeGraphEdge,
     KnowledgeGraphSnapshot,
     KG_CONFIDENCE_LEVELS,
+    ContinuityIssue,
+    ContinuityCheckRun,
+    CONTINUITY_ISSUE_STATUSES,
+    CONTINUITY_SEVERITIES,
+    CONTINUITY_DIMENSIONS,
 )
 
 __all__ = [
@@ -154,4 +159,9 @@ __all__ = [
     "KnowledgeGraphEdge",
     "KnowledgeGraphSnapshot",
     "KG_CONFIDENCE_LEVELS",
+    "ContinuityIssue",
+    "ContinuityCheckRun",
+    "CONTINUITY_ISSUE_STATUSES",
+    "CONTINUITY_SEVERITIES",
+    "CONTINUITY_DIMENSIONS",
 ]

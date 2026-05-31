@@ -622,6 +622,35 @@ register(LogosAction(
     ),
 ))
 
+# Manuscript — Phase 10Q (Semantic Continuity Engine; mode-agnostic, read-only).
+for _name, _label, _desc in [
+    ("ct_run_check", "Run Continuity Check",
+     "Run a project continuity check and record the run (deterministic)."),
+    ("ct_check_scene", "Check Current Scene Continuity",
+     "Continuity issues touching the current scene (deterministic)."),
+    ("ct_show_issues", "Show Continuity Issues",
+     "List the top open continuity issues (deterministic)."),
+    ("ct_decision_cards", "Continuity Decision Cards",
+     "Continuity issues as ranked decision cards (deterministic)."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc,
+        category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+        prompt="", deterministic=True,
+    ))
+
+register(LogosAction(
+    name="ct_explain_issue", label="Explain Continuity Issue",
+    description="Ask the Assistant to explain the top continuity issue / fix options.",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+    prompt=(
+        "Given the continuity issue summary, explain the most important open issue "
+        "and propose concrete fix options (e.g. a bridge beat or transition). "
+        "Advisory only; do not rewrite, apply, auto-fix, or dismiss anything — the "
+        "user decides, and any change must route through Controlled Apply."
+    ),
+))
+
 # Manuscript — Phase 10P (Narrative Knowledge Graph; mode-agnostic, read-only).
 for _name, _label, _desc in [
     ("kg_build_graph", "Build Knowledge Graph",

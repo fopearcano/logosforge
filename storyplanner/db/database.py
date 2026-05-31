@@ -68,6 +68,8 @@ from storyplanner.models import (
     KnowledgeGraphNode,
     KnowledgeGraphEdge,
     KnowledgeGraphSnapshot,
+    ContinuityIssue,
+    ContinuityCheckRun,
 )
 
 
@@ -3714,6 +3716,80 @@ class Database:
             stmt = select(KnowledgeGraphSnapshot).where(
                 KnowledgeGraphSnapshot.project_id == project_id).order_by(
                 KnowledgeGraphSnapshot.id.desc())
+            return session.exec(stmt).first()
+
+    # -- Semantic continuity (Phase 10Q) -------------------------------------
+    # Only user issue *status* (dismiss/resolve/defer) + check runs persist; the
+    # issues themselves are recomputed each run and merged with these by key.
+
+    def upsert_continuity_issue(self, project_id: int, issue_key: str, **fields,
+                                ) -> ContinuityIssue:
+        from storyplanner.models.models import _now
+        fields.pop("project_id", None)
+        fields.pop("issue_key", None)
+        with Session(self._engine) as session:
+            stmt = select(ContinuityIssue).where(
+                ContinuityIssue.project_id == project_id,
+                ContinuityIssue.issue_key == issue_key)
+            issue = session.exec(stmt).first()
+            if issue is None:
+                issue = ContinuityIssue(project_id=project_id, issue_key=issue_key,
+                                        **fields)
+            else:
+                for k, v in fields.items():
+                    if hasattr(issue, k):
+                        setattr(issue, k, v)
+            issue.updated_at = _now()
+            session.add(issue)
+            session.commit()
+            session.refresh(issue)
+            return issue
+
+    def get_continuity_issues(self, project_id: int, *, status: str | None = None,
+                              ) -> list[ContinuityIssue]:
+        with Session(self._engine) as session:
+            stmt = select(ContinuityIssue).where(
+                ContinuityIssue.project_id == project_id)
+            if status is not None:
+                stmt = stmt.where(ContinuityIssue.status == status)
+            return list(session.exec(stmt.order_by(ContinuityIssue.id)).all())
+
+    def get_continuity_issue_by_key(self, project_id: int, issue_key: str,
+                                    ) -> "ContinuityIssue | None":
+        with Session(self._engine) as session:
+            stmt = select(ContinuityIssue).where(
+                ContinuityIssue.project_id == project_id,
+                ContinuityIssue.issue_key == issue_key)
+            return session.exec(stmt).first()
+
+    def set_continuity_issue_status(self, project_id: int, issue_key: str,
+                                    status: str, **fields) -> ContinuityIssue:
+        return self.upsert_continuity_issue(project_id, issue_key,
+                                            status=status, **fields)
+
+    def create_continuity_check_run(self, project_id: int, **fields,
+                                    ) -> ContinuityCheckRun:
+        fields.pop("project_id", None)
+        run = ContinuityCheckRun(project_id=project_id, **fields)
+        with Session(self._engine) as session:
+            session.add(run)
+            session.commit()
+            session.refresh(run)
+            return run
+
+    def get_continuity_check_runs(self, project_id: int) -> list[ContinuityCheckRun]:
+        with Session(self._engine) as session:
+            stmt = select(ContinuityCheckRun).where(
+                ContinuityCheckRun.project_id == project_id).order_by(
+                ContinuityCheckRun.id)
+            return list(session.exec(stmt).all())
+
+    def get_latest_continuity_check_run(self, project_id: int,
+                                        ) -> "ContinuityCheckRun | None":
+        with Session(self._engine) as session:
+            stmt = select(ContinuityCheckRun).where(
+                ContinuityCheckRun.project_id == project_id).order_by(
+                ContinuityCheckRun.id.desc())
             return session.exec(stmt).first()
 
     @staticmethod

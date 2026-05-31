@@ -265,7 +265,53 @@ _GRAPH_CLEANUP = WorkflowTemplate(
 )
 
 
-# Ordered registry of all built-in templates (A–I).
+# J. Continuity Review (Phase 10Q) -----------------------------------------
+_CONTINUITY_REVIEW = WorkflowTemplate(
+    id="continuity_review",
+    title="Continuity Review",
+    description="Run a continuity check and work down the open issues.",
+    category="continuity",
+    steps=[
+        WorkflowStep("run", "Run a continuity check", kind=KIND_MANUAL,
+                     section_name=_MANUSCRIPT, action_id="ct_run_check",
+                     description="Build the project's continuity report."),
+        WorkflowStep("review", "Review open continuity issues", kind=KIND_MANUAL,
+                     section_name=_MANUSCRIPT, action_id="ct_show_issues",
+                     description="Read the ranked issues and their evidence."),
+        WorkflowStep("transitions", "Resolve missing transitions / location jumps",
+                     kind=KIND_CREATIVE, section_name=_MANUSCRIPT,
+                     description="Add bridge beats or confirm intentional jumps."),
+        WorkflowStep("setups", "Resolve unresolved setups / dangling payoffs",
+                     kind=KIND_CREATIVE, section_name=_MANUSCRIPT,
+                     description="Pay off or retire open setup/payoff chains."),
+        WorkflowStep("recheck", "Re-run the continuity check", kind=KIND_MANUAL,
+                     section_name=_MANUSCRIPT, action_id="ct_run_check",
+                     description="Confirm the issues you addressed are gone."),
+    ],
+)
+
+# K. Screenplay Continuity Pass (Phase 10Q, screenplay) ---------------------
+_SCREENPLAY_CONTINUITY = WorkflowTemplate(
+    id="screenplay_continuity_pass",
+    title="Screenplay Continuity Pass",
+    description="Tidy production continuity: headings, INT/EXT, time of day.",
+    category="continuity",
+    modes=(SCREENPLAY,),
+    steps=[
+        WorkflowStep("run", "Run a continuity check", kind=KIND_MANUAL,
+                     section_name=_MANUSCRIPT, action_id="ct_run_check",
+                     description="Surface production-continuity risks."),
+        WorkflowStep("headings", "Fix missing scene heading data", kind=KIND_CREATIVE,
+                     section_name=_MANUSCRIPT,
+                     description="Set slugline / INT-EXT / time of day on flagged scenes."),
+        WorkflowStep("validate", "Validate the export", kind=KIND_MANUAL,
+                     section_name=_EXPORT, action_id="sp_validate_export",
+                     description="Confirm the script still exports cleanly."),
+    ],
+)
+
+
+# Ordered registry of all built-in templates (A–K).
 ALL_TEMPLATES: tuple[WorkflowTemplate, ...] = (
     _PROJECT_SETUP,        # A
     _PSYKE_BIBLE,          # B
@@ -276,4 +322,6 @@ ALL_TEMPLATES: tuple[WorkflowTemplate, ...] = (
     _EXPORT_READINESS,     # G
     _RADAR_FIX,            # H
     _GRAPH_CLEANUP,        # I
+    _CONTINUITY_REVIEW,    # J
+    _SCREENPLAY_CONTINUITY,  # K (screenplay)
 )

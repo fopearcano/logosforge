@@ -174,3 +174,11 @@ project-scoped. (UI-side stale-clearing lands with the deferred Graph UI.)
 Build the deferred multi-mode **Graph UI** on top of this service (filters,
 neighborhood centering, confirm/hide actions, size caps), and optionally wire the
 graph decision cards directly into the Dashboard's radar panel.
+
+## Semantic Continuity (Phase 10Q)
+
+The Semantic Continuity Engine (docs/SemanticContinuityEngine.md) builds on this
+graph + PSYKE + scenes to detect contradictions, missing transitions and
+unresolved commitments, and to validate proposed rewrite / controlled-apply
+changes before they become canonical. Dedicated Continuity-Risk / Character-State
+/ Setup-Payoff Graph visualization modes are deferred with the Graph UI.

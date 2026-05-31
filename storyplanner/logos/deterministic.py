@@ -1218,3 +1218,84 @@ register("kg_find_orphans", _kg_find_orphans)
 register("kg_find_weak_links", _kg_find_weak_links)
 register("kg_find_undefined_terms", _kg_find_undefined_terms)
 register("kg_decision_cards", _kg_decision_cards)
+
+
+# -- Semantic Continuity Engine (Phase 10Q) ---------------------------------
+
+def _ct_run_check(db, context: LogosContext) -> LogosResult:
+    action = "ct_run_check"
+    try:
+        from storyplanner.continuity import build_continuity_report, persist_check_run
+        report = build_continuity_report(db, context.project_id)
+        persist_check_run(db, context.project_id, report)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Continuity check failed: {exc}")
+    lines = [report.summary_line()]
+    for i in report.top_issues(8):
+        lines.append(f"- [{i.severity}] {i.title}")
+    if report.unavailable:
+        lines.append("Deferred: " + ", ".join(sorted(set(report.unavailable))))
+    return LogosResult(ok=True, action=action, title="Continuity Check",
+                       message="\n".join(lines),
+                       suggestions=[i.suggested_action for i in report.top_issues(5)
+                                    if i.suggested_action], proposed_operations=[])
+
+
+def _ct_check_scene(db, context: LogosContext) -> LogosResult:
+    action = "ct_check_scene"
+    if not context.current_scene_id:
+        return LogosResult(ok=True, action=action, title="Scene Continuity",
+                           message="Open a scene to check its continuity.",
+                           suggestions=[], proposed_operations=[])
+    try:
+        from storyplanner.continuity import check_scene_continuity
+        report = check_scene_continuity(db, context.project_id,
+                                        context.current_scene_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Scene continuity failed: {exc}")
+    top = report.top_issues(8)
+    if not top:
+        msg = "No continuity issues touch this scene."
+    else:
+        msg = "Scene continuity:\n" + "\n".join(
+            f"- [{i.severity}/{i.confidence}] {i.title}" for i in top)
+    return LogosResult(ok=True, action=action, title="Scene Continuity",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _ct_show_issues(db, context: LogosContext) -> LogosResult:
+    action = "ct_show_issues"
+    try:
+        from storyplanner.continuity import get_continuity_issues
+        issues = get_continuity_issues(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Continuity failed: {exc}")
+    if not issues:
+        msg = "No open continuity issues."
+    else:
+        msg = "Open continuity issues:\n" + "\n".join(
+            f"- [{i.severity}] ({i.dimension}) {i.title}" for i in issues[:15])
+    return LogosResult(ok=True, action=action, title="Continuity Issues",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _ct_decision_cards(db, context: LogosContext) -> LogosResult:
+    action = "ct_decision_cards"
+    try:
+        from storyplanner.continuity import build_continuity_decision_cards
+        cards = build_continuity_decision_cards(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Card generation failed: {exc}")
+    if not cards:
+        msg = "No continuity decisions right now."
+    else:
+        msg = "Continuity decisions:\n" + "\n".join(
+            f"- [{c.severity}] {c.title}" for c in cards)
+    return LogosResult(ok=True, action=action, title="Continuity Decision Cards",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+register("ct_run_check", _ct_run_check)
+register("ct_check_scene", _ct_check_scene)
+register("ct_show_issues", _ct_show_issues)
+register("ct_decision_cards", _ct_decision_cards)

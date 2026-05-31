@@ -502,6 +502,56 @@ class KnowledgeGraphSnapshot(SQLModel, table=True):
 KG_CONFIDENCE_LEVELS = ("confirmed", "likely", "possible", "unknown")
 
 
+class ContinuityIssue(SQLModel, table=True):
+    """A persisted Semantic Continuity issue (Phase 10Q).
+
+    Issues are *computed* deterministically each check run; this table persists
+    only the user's **status** (dismissed / resolved / deferred), keyed by a
+    stable ``issue_key`` so that status survives re-runs (open issues are merged
+    from the computed run). References/excerpts only — never full manuscript
+    text. Created idempotently by ``create_all`` (old DBs gain it empty).
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    issue_key: str = Field(default="", index=True)
+    issue_type: str = ""
+    dimension: str = ""              # character|temporal|spatial|object|plot|lore|theme|dialogue|production|mode_specific
+    severity: str = "suggestion"     # info|suggestion|warning|blocking
+    confidence: str = "possible"     # confirmed|likely|possible|unknown
+    title: str = ""
+    explanation: str = ""
+    evidence_json: str = ""
+    related_node_ids_json: str = ""
+    related_scene_ids_json: str = ""
+    suggested_action: str = ""
+    status: str = "open"             # open|dismissed|resolved|deferred
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
+class ContinuityCheckRun(SQLModel, table=True):
+    """A lightweight record of a continuity check run (Phase 10Q)."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    scope: str = "project"           # project|act|chapter|scene|selection
+    target_type: Optional[str] = None
+    target_id: Optional[int] = None
+    writing_mode: str = "novel"
+    summary: str = ""
+    issue_count: int = 0
+    blocking_count: int = 0
+    warning_count: int = 0
+    created_at: datetime = Field(default_factory=_now)
+
+
+CONTINUITY_ISSUE_STATUSES = ("open", "dismissed", "resolved", "deferred")
+CONTINUITY_SEVERITIES = ("info", "suggestion", "warning", "blocking")
+CONTINUITY_DIMENSIONS = ("character", "temporal", "spatial", "object", "plot",
+                         "lore", "theme", "dialogue", "production", "mode_specific")
+
+
 class ControlledApplyOperation(SQLModel, table=True):
     """A previewed, confirmable apply operation (Phase 10M). Canonical content is
     not changed until ``status`` becomes ``applied``. References only — no full
