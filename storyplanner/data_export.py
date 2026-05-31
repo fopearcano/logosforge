@@ -144,12 +144,14 @@ def _project_meta(db: Database, project_id: int, opts: ExportOptions) -> dict:
         get_project_narrative_engine,
         get_project_writing_format,
     )
+    from storyplanner.writing_modes import get_project_writing_mode
 
     project = db.get_project_by_id(project_id)
     meta: dict = {
         "title": project.title if project else "Untitled",
         "description": project.description if project else "",
         "format_mode": (project.format_mode if project else "novel") or "novel",
+        "writing_mode": get_project_writing_mode(project),
         "narrative_engine": get_project_narrative_engine(project),
         "default_writing_format": get_project_writing_format(project),
     }

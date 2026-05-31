@@ -177,7 +177,8 @@ def test_all_off_yields_empty():
     from storyplanner.assistant_context_policy import gather_injected_context
     from storyplanner.settings import get_manager
     db, pid, sid = _project()
-    for k in ("include_strategy_in_assistant_context",
+    for k in ("include_project_mode_in_assistant_context",  # Phase 9 block
+              "include_strategy_in_assistant_context",
               "include_health_in_assistant_context",
               "include_diagnostics_in_assistant_context"):
         get_manager().set(k, False)

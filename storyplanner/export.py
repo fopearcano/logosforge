@@ -149,11 +149,13 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
         get_project_narrative_engine,
         get_project_writing_format,
     )
+    from storyplanner.writing_modes import get_project_writing_mode
     data = {
         "project": {
             "title": project.title if project else "Untitled",
             "description": project.description if project else "",
             "format_mode": (project.format_mode if project else "novel") or "novel",
+            "writing_mode": get_project_writing_mode(project),
             "narrative_engine": get_project_narrative_engine(project),
             "default_writing_format": get_project_writing_format(project),
         },
@@ -206,6 +208,9 @@ def export_markdown(db: Database, project_id: int) -> str:
 
     # Project header
     lines.append(f"# {data['project']['title']}")
+    from storyplanner.writing_modes import mode_label
+    lines.append("")
+    lines.append(f"*Writing Mode: {mode_label(data['project'].get('writing_mode'))}*")
     if data["project"]["description"]:
         lines.append("")
         lines.append(data["project"]["description"])

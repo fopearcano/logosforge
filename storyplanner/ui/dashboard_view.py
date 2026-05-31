@@ -227,6 +227,23 @@ class DashboardView(QWidget):
                 f"color: {theme.TEXT_SECONDARY}; font-size: 12px;"
             )
             box.addWidget(self._mode_label)
+
+            # Structural vocabulary for the active writing mode (Phase 9) —
+            # makes the project's declared medium visibly active on the
+            # Dashboard, e.g. "Structure: Acts / Chapters / Scenes".
+            from storyplanner.writing_modes import (
+                get_project_writing_mode,
+                structural_vocabulary,
+            )
+            mode = get_project_writing_mode(project)
+            self._structure_label = QLabel(
+                f"Structure: {structural_vocabulary(mode)}"
+            )
+            self._structure_label.setObjectName("dashboardStructureChip")
+            self._structure_label.setStyleSheet(
+                f"color: {theme.TEXT_SECONDARY}; font-size: 11px;"
+            )
+            box.addWidget(self._structure_label)
         except Exception:
             pass
 

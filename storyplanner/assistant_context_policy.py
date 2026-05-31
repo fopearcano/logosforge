@@ -13,6 +13,7 @@ the caller prepends to its structural context block.
 from __future__ import annotations
 
 # Settings keys + conservative defaults.
+_KEY_PROJECT_MODE = "include_project_mode_in_assistant_context"
 _KEY_STRATEGY = "include_strategy_in_assistant_context"
 _KEY_HEALTH = "include_health_in_assistant_context"
 _KEY_DIAGNOSTICS = "include_diagnostics_in_assistant_context"
@@ -20,6 +21,7 @@ _KEY_MAX_HEALTH = "max_health_risks_in_context"
 _KEY_MAX_DIAG = "max_diagnostics_in_context"
 
 _DEFAULTS = {
+    _KEY_PROJECT_MODE: True,   # on by default — tiny, deterministic, always relevant
     _KEY_STRATEGY: True,
     _KEY_HEALTH: False,        # off by default — health is expensive/broad
     _KEY_DIAGNOSTICS: True,
@@ -60,6 +62,8 @@ def gather_injected_context(
     """
     blocks: list[str] = []
 
+    if _flag(_KEY_PROJECT_MODE):
+        blocks.append(_project_mode_block(db, project_id))
     if _flag(_KEY_STRATEGY):
         blocks.append(_strategy_block(db, project_id, section_name))
     if _flag(_KEY_HEALTH):
@@ -73,6 +77,18 @@ def gather_injected_context(
 
 
 # -- Individual blocks (each short, labelled, deterministic) -----------------
+
+
+def _project_mode_block(db, project_id: int) -> str:
+    """Tiny ``[Project Mode]`` block — mode name + primary medium constraints."""
+    try:
+        from storyplanner.writing_modes import (
+            get_project_writing_mode_by_id,
+            mode_context_block,
+        )
+        return mode_context_block(get_project_writing_mode_by_id(db, project_id))
+    except Exception:
+        return ""
 
 
 def _strategy_block(db, project_id: int, section_name: str) -> str:

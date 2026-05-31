@@ -32,6 +32,10 @@ class LogosContext:
     cursor_text_excerpt: str = ""
     active_block_type: str = ""
     narrative_engine: str = ""
+    # Project writing mode (Phase 9). Same canonical value as narrative_engine
+    # — carried explicitly so consumers can read the project's declared medium
+    # without re-deriving it. Always one of writing_modes.ALL_MODES.
+    writing_mode: str = ""
     writing_format: str = ""
     outline_template: str = ""
     # The outline item the user acted on (PlanView is scene-derived, so these
@@ -64,6 +68,7 @@ class LogosContext:
             "cursor_text_excerpt": self.cursor_text_excerpt,
             "active_block_type": self.active_block_type,
             "narrative_engine": self.narrative_engine,
+            "writing_mode": self.writing_mode,
             "writing_format": self.writing_format,
             "outline_template": self.outline_template,
             "outline_node_label": self.outline_node_label,
@@ -120,14 +125,17 @@ def build_logos_context(
     """
     engine = ""
     writing_format = ""
+    writing_mode = ""
     try:
         from storyplanner.project_compat import (
             get_project_narrative_engine,
             get_project_writing_format,
         )
+        from storyplanner.writing_modes import normalize_mode
         project = db.get_project_by_id(project_id)
         engine = get_project_narrative_engine(project)
         writing_format = get_project_writing_format(project)
+        writing_mode = normalize_mode(engine)
     except Exception:
         pass
 
@@ -141,6 +149,7 @@ def build_logos_context(
         cursor_text_excerpt=(cursor_text_excerpt or "")[:_EXCERPT_LIMIT],
         active_block_type=active_block_type,
         narrative_engine=engine,
+        writing_mode=writing_mode,
         writing_format=writing_format,
         outline_template=outline_template,
         outline_node_label=outline_node_label,

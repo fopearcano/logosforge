@@ -48,10 +48,24 @@ _SECTION_SECTIONS = {
 
 
 class DiagnosticsEngine:
-    def __init__(self, db, project_id: int, *, suppression=None) -> None:
+    def __init__(
+        self, db, project_id: int, *, suppression=None, writing_mode: str = "",
+    ) -> None:
         self._db = db
         self._project_id = project_id
         self._suppression = suppression
+        # Phase 9 — project writing mode, resolved from the project when not
+        # supplied so callers can be mode-aware. Detectors stay rule-based and
+        # data-driven; the mode is exposed (``self.writing_mode``) for wording
+        # / prioritization, never to fabricate findings.
+        self.writing_mode = writing_mode or self._resolve_writing_mode()
+
+    def _resolve_writing_mode(self) -> str:
+        try:
+            from storyplanner.writing_modes import get_project_writing_mode_by_id
+            return get_project_writing_mode_by_id(self._db, self._project_id)
+        except Exception:
+            return "novel"
 
     # -- Scans ---------------------------------------------------------------
 

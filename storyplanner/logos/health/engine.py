@@ -20,10 +20,23 @@ _CORE = {M.CAT_STRUCTURE, M.CAT_CONTINUITY, M.CAT_CHARACTER}
 
 
 class HealthEngine:
-    def __init__(self, db, project_id: int, *, suppression=None) -> None:
+    def __init__(
+        self, db, project_id: int, *, suppression=None, writing_mode: str = "",
+    ) -> None:
         self._db = db
         self._project_id = project_id
         self._suppression = suppression
+        # Phase 9 — the project's writing mode. Resolved from the project when
+        # not supplied so Health is always mode-aware. Recorded on the report;
+        # no metrics are invented from it (it only contextualizes wording).
+        self._writing_mode = writing_mode or self._resolve_writing_mode()
+
+    def _resolve_writing_mode(self) -> str:
+        try:
+            from storyplanner.writing_modes import get_project_writing_mode_by_id
+            return get_project_writing_mode_by_id(self._db, self._project_id)
+        except Exception:
+            return "novel"
 
     def generate_report(self) -> NarrativeHealthReport:
         facts = build_facts(self._db, self._project_id)
@@ -47,6 +60,7 @@ class HealthEngine:
             metrics=metrics,
             diagnostic_ids=[d.id for d in diagnostics],
             recommendations=build_recommendations(diagnostics),
+            writing_mode=self._writing_mode,
         )
         report.top_risks = self._top_risks(metrics)
         report.strengths = self._strengths(metrics)

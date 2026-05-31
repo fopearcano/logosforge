@@ -56,6 +56,7 @@ class NarrativeHealthReport:
     recommendations: list[HealthRecommendation] = field(default_factory=list)
     diagnostic_ids: list[str] = field(default_factory=list)
     section_summaries: dict[str, str] = field(default_factory=dict)
+    writing_mode: str = ""   # Phase 9 — project medium the report was built for
 
     @property
     def overall_label(self) -> str:
@@ -82,6 +83,7 @@ class NarrativeHealthReport:
             "recommendations": [r.to_dict() for r in self.recommendations],
             "diagnostic_ids": list(self.diagnostic_ids),
             "section_summaries": dict(self.section_summaries),
+            "writing_mode": self.writing_mode,
         }
 
     def to_json(self) -> str:
