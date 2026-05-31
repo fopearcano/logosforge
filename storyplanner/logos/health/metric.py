@@ -25,6 +25,11 @@ CAT_SETUP_PAYOFF = "setup_payoff"
 CAT_PSYKE = "psyke"
 CAT_GRAPH = "graph"
 CAT_NOTES = "notes"
+# Phase 10L — rewrite sandbox (general / cross-mode; only when an open session
+# exists). NOT part of the core 12 and NOT screenplay-only.
+CAT_REWRITE_CONTINUITY = "rewrite_continuity_risk"
+CAT_PSYKE_PRESERVATION = "psyke_preservation_risk"
+CAT_SOURCE_STALENESS = "source_staleness_risk"
 
 ALL_CATEGORIES = (
     CAT_STRUCTURE, CAT_CHARACTER, CAT_RELATIONSHIP, CAT_THEME, CAT_CONTINUITY,
@@ -118,6 +123,9 @@ _CATEGORY_NAMES = {
     CAT_REVISION_SET: "Revision Set Integrity",
     CAT_REVISION_CAUSALITY: "Revision Causality Risk",
     CAT_CONTINUITY_REVISION: "Continuity Revision Risk",
+    CAT_REWRITE_CONTINUITY: "Rewrite Continuity Risk",
+    CAT_PSYKE_PRESERVATION: "PSYKE Preservation Risk",
+    CAT_SOURCE_STALENESS: "Source Staleness Risk",
 }
 
 # -- Status ------------------------------------------------------------------

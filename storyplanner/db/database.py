@@ -43,6 +43,9 @@ from storyplanner.models import (
     RevisionImpactItem,
     RevisionImpactReport,
     RevisionSet,
+    RewriteApplyRecord,
+    RewriteSession,
+    RewriteVariant,
     ScenePlaceLink,
     StoryLink,
     StageBusiness,
@@ -3351,6 +3354,97 @@ class Database:
                 RevisionImpactItem.report_id == report_id).order_by(
                 RevisionImpactItem.id)
             return list(session.exec(stmt).all())
+
+    # -- Rewrite sandbox (Phase 10L) -----------------------------------------
+
+    def create_rewrite_session(self, project_id: int, **fields) -> RewriteSession:
+        from storyplanner.models.models import _now
+        fields.pop("project_id", None)
+        s = RewriteSession(project_id=project_id, **fields)
+        s.updated_at = _now()
+        with Session(self._engine) as session:
+            session.add(s)
+            session.commit()
+            session.refresh(s)
+            return s
+
+    def get_rewrite_sessions(self, project_id: int, *, status: str | None = None,
+                             ) -> list[RewriteSession]:
+        with Session(self._engine) as session:
+            stmt = select(RewriteSession).where(RewriteSession.project_id == project_id)
+            if status is not None:
+                stmt = stmt.where(RewriteSession.status == status)
+            return list(session.exec(stmt.order_by(RewriteSession.id)).all())
+
+    def get_rewrite_session(self, session_id: int) -> "RewriteSession | None":
+        with Session(self._engine) as session:
+            return session.get(RewriteSession, session_id)
+
+    def get_latest_rewrite_session(self, project_id: int, *, status: str | None = None,
+                                   ) -> "RewriteSession | None":
+        rows = self.get_rewrite_sessions(project_id, status=status)
+        return rows[-1] if rows else None
+
+    def update_rewrite_session(self, session_id: int, **fields) -> "RewriteSession | None":
+        from storyplanner.models.models import _now
+        with Session(self._engine) as session:
+            s = session.get(RewriteSession, session_id)
+            if s is None:
+                return None
+            for k, v in fields.items():
+                if hasattr(s, k):
+                    setattr(s, k, v)
+            s.updated_at = _now()
+            session.add(s)
+            session.commit()
+            session.refresh(s)
+            return s
+
+    def create_rewrite_variant(self, project_id: int, session_id: int,
+                               **fields) -> RewriteVariant:
+        from storyplanner.models.models import _now
+        v = RewriteVariant(project_id=project_id, session_id=session_id, **fields)
+        v.updated_at = _now()
+        with Session(self._engine) as session:
+            session.add(v)
+            session.commit()
+            session.refresh(v)
+            return v
+
+    def get_rewrite_variants(self, session_id: int) -> list[RewriteVariant]:
+        with Session(self._engine) as session:
+            stmt = select(RewriteVariant).where(
+                RewriteVariant.session_id == session_id).order_by(RewriteVariant.id)
+            return list(session.exec(stmt).all())
+
+    def get_rewrite_variant(self, variant_id: int) -> "RewriteVariant | None":
+        with Session(self._engine) as session:
+            return session.get(RewriteVariant, variant_id)
+
+    def update_rewrite_variant(self, variant_id: int, **fields) -> "RewriteVariant | None":
+        from storyplanner.models.models import _now
+        with Session(self._engine) as session:
+            v = session.get(RewriteVariant, variant_id)
+            if v is None:
+                return None
+            for k, val in fields.items():
+                if hasattr(v, k):
+                    setattr(v, k, val)
+            v.updated_at = _now()
+            session.add(v)
+            session.commit()
+            session.refresh(v)
+            return v
+
+    def create_rewrite_apply_record(self, project_id: int, session_id: int,
+                                    variant_id: int, **fields) -> RewriteApplyRecord:
+        r = RewriteApplyRecord(project_id=project_id, session_id=session_id,
+                              variant_id=variant_id, **fields)
+        with Session(self._engine) as session:
+            session.add(r)
+            session.commit()
+            session.refresh(r)
+            return r
 
     @staticmethod
     def _matches(query_lower: str, *fields: str) -> bool:

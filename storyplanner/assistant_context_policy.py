@@ -21,6 +21,7 @@ _KEY_SCREENPLAY_EXPORT = "include_screenplay_export_in_assistant_context"
 _KEY_PROFESSIONAL_OUTPUT = "include_professional_output_in_assistant_context"
 _KEY_PRODUCTION_DRAFT = "include_production_draft_in_assistant_context"
 _KEY_REVISION_IMPACT = "include_revision_impact_in_assistant_context"
+_KEY_REWRITE_SANDBOX = "include_rewrite_sandbox_in_assistant_context"
 _KEY_STRATEGY = "include_strategy_in_assistant_context"
 _KEY_HEALTH = "include_health_in_assistant_context"
 _KEY_DIAGNOSTICS = "include_diagnostics_in_assistant_context"
@@ -36,6 +37,7 @@ _DEFAULTS = {
     _KEY_PROFESSIONAL_OUTPUT: False,  # opt-in; DOCX/PDF/FDX readiness
     _KEY_PRODUCTION_DRAFT: True,  # only emits when production mode is active
     _KEY_REVISION_IMPACT: True,  # only emits when a saved impact report exists
+    _KEY_REWRITE_SANDBOX: True,  # only emits when an open rewrite session exists
     _KEY_STRATEGY: True,
     _KEY_HEALTH: False,        # off by default — health is expensive/broad
     _KEY_DIAGNOSTICS: True,
@@ -94,6 +96,8 @@ def gather_injected_context(
         blocks.append(_production_draft_block(db, project_id))
     if _flag(_KEY_REVISION_IMPACT):
         blocks.append(_revision_impact_block(db, project_id))
+    if _flag(_KEY_REWRITE_SANDBOX):
+        blocks.append(_rewrite_sandbox_block(db, project_id))
     if _flag(_KEY_STRATEGY):
         blocks.append(_strategy_block(db, project_id, section_name))
     if _flag(_KEY_HEALTH):
@@ -387,6 +391,33 @@ def _revision_impact_block(db, project_id: int) -> str:
             lines.append("PSYKE: " + ", ".join(i.label for i in psyke))
         if sp:
             lines.append("Setup/payoff risks: " + ", ".join(i.label for i in sp))
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _rewrite_sandbox_block(db, project_id: int) -> str:
+    """Capped ``[Rewrite Sandbox]`` — only when an open rewrite session exists.
+
+    Writing-mode-aware (not screenplay-only). Cheap read of session status; never
+    dumps variant text; no LLM/DB during assembly.
+    """
+    try:
+        from storyplanner.rewrite_sandbox.engine import session_status
+        st = session_status(db, project_id)
+        if not st.get("active"):
+            return ""
+        lines = ["[Rewrite Sandbox]",
+                 f"Source: {st['source_type']} ({st['writing_mode']})",
+                 f"Variants: {st['variant_count']}"
+                 + (f"; preferred: {st['preferred']}" if st.get("preferred") else "")]
+        if st.get("stale"):
+            lines.append("Stale source: variants generated before a source edit.")
+        if st.get("psyke_terms_removed"):
+            lines.append(f"PSYKE references removed across variants: "
+                         f"{st['psyke_terms_removed']}")
+        if st.get("warnings"):
+            lines.append("Warnings: " + "; ".join(st["warnings"][:3]))
         return "\n".join(lines)
     except Exception:
         return ""

@@ -74,6 +74,15 @@ narrative overall status: format problems are kept distinct from craft problems.
 No fake precision, no background LLM, no DB mutation. Novel/other modes are
 unaffected.
 
+## Rewrite sandbox health (Phase 10L)
+
+For **any** writing mode, when an open Adaptive Rewrite Sandbox session
+exists, the report appends **Rewrite Continuity Risk**, **PSYKE
+Preservation Risk** and **Source Staleness Risk** — capped at *Needs
+Attention*. These reflect *open, unapplied* variants only; rejected/applied
+variants and canonical story health are unaffected. See
+**docs/AdaptiveRewriteSandbox.md**.
+
 ## Settings (defaults)
 
 `health_enabled=True`, `health_auto_refresh_on_load=True`,

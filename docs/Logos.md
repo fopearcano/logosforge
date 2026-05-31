@@ -73,7 +73,10 @@ notes) — it does not invent a second context system.
   production mutations are an explicit service API. Phase 10K adds deterministic revision-intelligence
   actions (Generate Revision Impact Map, Check PSYKE/Setup-Payoff/Continuity/
   Impacted-Scenes, Prepare Revision Follow-up); saving reports / graph-link
-  conversion are explicit, confirmed service calls.
+  conversion are explicit, confirmed service calls. Phase 10L adds writing-mode-aware
+  rewrite-sandbox status actions (Rewrite Sandbox status, Explain Rewrite
+  Tradeoffs, Score Variants, Check PSYKE Preservation) + a generative Suggest
+  Rewrite Strategy; variant generation and confirmed apply use the engine API.
 - **operations** — controlled, validated apply ops (manuscript replace/insert,
   outline scene create/update, PSYKE notes/progression/relation). Every mutation
   is previewed and confirmed; nothing auto-applies.

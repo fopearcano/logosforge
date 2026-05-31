@@ -329,6 +329,69 @@ class RevisionDiffSnapshot(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
 
 
+class RewriteSession(SQLModel, table=True):
+    """An isolated rewrite sandbox session (Phase 10L). Canonical content is NOT
+    changed until a variant is explicitly applied. Created idempotently."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    source_type: str = "scene"       # manuscript|scene|outline|screenplay_block|psyke_entry|note|...
+    source_id: Optional[int] = None
+    writing_mode: str = "novel"
+    title: str = ""
+    instruction: str = ""
+    source_text_hash: str = ""
+    source_excerpt: str = ""
+    status: str = "open"             # open | applied | discarded | archived
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
+class RewriteVariant(SQLModel, table=True):
+    """A generated rewrite variant within a session (never auto-applied)."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    session_id: int = Field(foreign_key="rewritesession.id", index=True)
+    label: str = ""
+    strategy: str = ""
+    model_provider: str = ""
+    model_name: str = ""
+    prompt_summary: str = ""
+    variant_text: str = ""
+    variant_text_hash: str = ""
+    score_json: str = ""
+    diagnostics_json: str = ""
+    impact_report_id: Optional[int] = None
+    status: str = "candidate"        # candidate | preferred | applied | rejected
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
+class RewriteApplyRecord(SQLModel, table=True):
+    """Audit record of an applied variant (explicit, confirmed)."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    session_id: int = Field(foreign_key="rewritesession.id", index=True)
+    variant_id: int = Field(foreign_key="rewritevariant.id", index=True)
+    source_type: str = ""
+    source_id: Optional[int] = None
+    apply_mode: str = "replace_scene"  # replace_selection|replace_scene|replace_block|append|insert_after|manual_copy
+    before_hash: str = ""
+    after_hash: str = ""
+    created_stage_id: Optional[int] = None
+    created_at: datetime = Field(default_factory=_now)
+
+
+REWRITE_SOURCE_TYPES = (
+    "manuscript", "scene", "outline", "screenplay_block", "psyke_entry", "note",
+    "plot_block", "timeline_event",
+)
+REWRITE_SESSION_STATUSES = ("open", "applied", "discarded", "archived")
+REWRITE_VARIANT_STATUSES = ("candidate", "preferred", "applied", "rejected")
+
+
 IMPACT_LEVELS = ("low", "medium", "high", "critical")
 IMPACT_CONFIDENCE = ("confirmed", "likely", "possible", "unknown")
 IMPACT_SEVERITIES = ("info", "warning", "error", "blocking")

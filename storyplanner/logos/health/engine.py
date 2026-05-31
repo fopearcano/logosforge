@@ -65,6 +65,14 @@ class HealthEngine:
             except Exception:
                 pass
 
+        # Phase 10L — cross-mode rewrite-sandbox metrics (only when an open
+        # session exists; never affects canonical content). Additive, no LLM/DB.
+        try:
+            from storyplanner.rewrite_sandbox.engine import rewrite_health_metrics
+            metrics = metrics + rewrite_health_metrics(self._db, self._project_id)
+        except Exception:
+            pass
+
         overall = self._overall_status(metrics)
 
         report = NarrativeHealthReport(

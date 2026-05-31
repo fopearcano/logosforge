@@ -69,6 +69,12 @@ Interpreting an impact map with the Assistant/Counterpart is a **manual,
 user-triggered** action through the existing provider path (no new backend, no
 automatic call) — advisory only. Wiring is deferred to a future phase.
 
+## Rewrite Sandbox integration (Phase 10L)
+
+The Adaptive Rewrite Sandbox can run a Change Impact Map on a candidate
+variant (`build_revision_impact_map(before=source, after=variant)`) to show
+what applying it would affect. See **docs/AdaptiveRewriteSandbox.md**.
+
 ## Deferred (future)
 
 - Revision-impact **UI** (report dialog with severity/confidence filters) and

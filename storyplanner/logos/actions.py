@@ -579,6 +579,37 @@ for _name, _label, _desc in [
         category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
         prompt="", modes=_SP, deterministic=True,
     ))
+# Manuscript — Phase 10L (Adaptive Rewrite Sandbox; writing-mode-aware, NOT
+# screenplay-only). Deterministic status/score actions (mutations + generation go
+# through the explicit engine API).
+for _name, _label, _desc in [
+    ("rw_sandbox_status", "Rewrite Sandbox",
+     "Show the open rewrite session status (deterministic; nothing auto-applies)."),
+    ("rw_explain_tradeoffs", "Explain Rewrite Tradeoffs",
+     "Summarize the tradeoffs across the open session's variants."),
+    ("rw_score_variants", "Score Rewrite Variants",
+     "Re-score the open session's variants deterministically."),
+    ("rw_check_psyke_preservation", "Check PSYKE Preservation",
+     "Per-variant PSYKE preservation (preserved/removed/added)."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc,
+        category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+        prompt="", deterministic=True,
+    ))
+
+register(LogosAction(
+    name="rw_suggest_strategy", label="Suggest Rewrite Strategy",
+    description="Suggest a rewrite strategy for the selection (advisory).",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+    needs_selection=True,
+    prompt=(
+        "Suggest which rewrite strategy (clarify, compress, intensify, subtext, "
+        "etc.) would most improve the selected passage, and why — one short "
+        "paragraph. Advisory only; do not rewrite the passage."
+    ),
+))
+
 # Manuscript + Screenplay — Phase 10K (revision intelligence, read-only/deterministic).
 for _name, _label, _desc in [
     ("sp_revision_impact", "Generate Revision Impact Map",

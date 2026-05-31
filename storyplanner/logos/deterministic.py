@@ -816,3 +816,102 @@ register("sp_check_setup_payoff_impact", _check_setup_payoff_impact)
 register("sp_check_continuity_impact", _check_continuity_impact)
 register("sp_check_impacted_scenes", _check_impacted_scenes)
 register("sp_prepare_revision_followup", _prepare_revision_followup)
+
+
+# -- Phase 10L — rewrite sandbox (writing-mode-aware, read-only status/score;
+#    generation + apply are the explicit engine API) ---------------------------
+
+
+def _rw_status(db, context: LogosContext) -> LogosResult:
+    action = "rw_sandbox_status"
+    try:
+        from storyplanner.rewrite_sandbox.engine import session_status
+        st = session_status(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Sandbox status failed: {exc}")
+    if not st.get("active"):
+        msg = ("No open rewrite session. Use the Rewrite Sandbox to generate "
+               "variants for a selection/scene — nothing is applied automatically.")
+    else:
+        lines = [f"Source: {st['source_type']} ({st['writing_mode']})",
+                 f"Variants: {st['variant_count']}"
+                 + (f"; preferred: {st['preferred']}" if st.get("preferred") else ""),
+                 f"Stale source: {'yes' if st['stale'] else 'no'}"]
+        if st.get("psyke_terms_removed"):
+            lines.append(f"PSYKE references removed across variants: "
+                         f"{st['psyke_terms_removed']}")
+        if st.get("warnings"):
+            lines.append("Warnings: " + "; ".join(st["warnings"]))
+        msg = "\n".join(lines)
+    return LogosResult(ok=True, action=action, title="Rewrite Sandbox",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _rw_explain_tradeoffs(db, context: LogosContext) -> LogosResult:
+    action = "rw_explain_tradeoffs"
+    import json
+    try:
+        sess = db.get_latest_rewrite_session(context.project_id, status="open")
+        variants = db.get_rewrite_variants(sess.id) if sess else []
+    except Exception as exc:
+        return LogosResult.failure(action, f"Tradeoffs failed: {exc}")
+    if not variants:
+        msg = "No variants to compare. Generate rewrite variants first."
+    else:
+        lines = []
+        for v in variants[:6]:
+            try:
+                s = json.loads(v.score_json or "{}")
+            except Exception:
+                s = {}
+            lines.append(f"- {v.label}: {s.get('summary', 'no score')}")
+        msg = "Variant tradeoffs:\n" + "\n".join(lines)
+    return LogosResult(ok=True, action=action, title="Explain Rewrite Tradeoffs",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _rw_score_variants(db, context: LogosContext) -> LogosResult:
+    action = "rw_score_variants"
+    try:
+        from storyplanner.rewrite_sandbox.engine import score_rewrite_variant
+        sess = db.get_latest_rewrite_session(context.project_id, status="open")
+        variants = db.get_rewrite_variants(sess.id) if sess else []
+        for v in variants:
+            score_rewrite_variant(db, context.project_id, v.id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Scoring failed: {exc}")
+    return LogosResult(ok=True, action=action, title="Score Rewrite Variants",
+                       message=f"Re-scored {len(variants)} variant(s) "
+                               "(deterministic).", suggestions=[],
+                       proposed_operations=[])
+
+
+def _rw_check_psyke_preservation(db, context: LogosContext) -> LogosResult:
+    action = "rw_check_psyke_preservation"
+    import json
+    try:
+        sess = db.get_latest_rewrite_session(context.project_id, status="open")
+        variants = db.get_rewrite_variants(sess.id) if sess else []
+    except Exception as exc:
+        return LogosResult.failure(action, f"Check failed: {exc}")
+    if not variants:
+        msg = "No variants to check."
+    else:
+        lines = []
+        for v in variants[:6]:
+            try:
+                s = json.loads(v.score_json or "{}")
+            except Exception:
+                s = {}
+            lines.append(f"- {v.label}: preserved {s.get('psyke_terms_preserved', 0)}, "
+                         f"removed {s.get('psyke_terms_removed', 0)}, "
+                         f"added {s.get('psyke_terms_added', 0)}")
+        msg = "PSYKE preservation per variant:\n" + "\n".join(lines)
+    return LogosResult(ok=True, action=action, title="Check PSYKE Preservation",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+register("rw_sandbox_status", _rw_status)
+register("rw_explain_tradeoffs", _rw_explain_tradeoffs)
+register("rw_score_variants", _rw_score_variants)
+register("rw_check_psyke_preservation", _rw_check_psyke_preservation)
