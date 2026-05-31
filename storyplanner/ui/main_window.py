@@ -563,6 +563,25 @@ class MainWindow(QMainWindow):
         self._logos_suggestions.setVisible(False)
         outer_layout.addWidget(self._logos_suggestions, stretch=0)
 
+        # -- Logos PSYKE diagnostics (Phase 5) -------------------------------
+        # Deeper, PSYKE-aware diagnostics. Drawer hidden until toggled; shares
+        # the proactive engine's suppression so dismissals are consistent.
+        from storyplanner.logos.diagnostics import DiagnosticsEngine
+        from storyplanner.ui.logos.logos_diagnostics import LogosDiagnosticsDrawer
+        self._diagnostics_engine = DiagnosticsEngine(
+            self._db, self._project_id,
+            suppression=self._logos_engine.suppression,
+        )
+        self._diagnostics_visible = False
+        self._diagnostics_drawer = LogosDiagnosticsDrawer()
+        self._diagnostics_drawer.run_action.connect(self._on_diagnostic_action)
+        self._diagnostics_drawer.suppress.connect(self._on_diagnostic_suppress)
+        self._diagnostics_drawer.open_target.connect(self._on_diagnostic_open_target)
+        self._diagnostics_drawer.rescan_requested.connect(self._scan_diagnostics)
+        self._diagnostics_drawer.project_scan_requested.connect(self._scan_diagnostics_project)
+        self._diagnostics_drawer.setVisible(False)
+        outer_layout.addWidget(self._diagnostics_drawer, stretch=0)
+
         # -- PSYKE Console (global bottom bar) --------------------------------
         console_row = QWidget()
         console_row.setFixedHeight(28)
@@ -943,6 +962,7 @@ class MainWindow(QMainWindow):
             logos.set_section(name)
         # Proactive suggestions are section-scoped — rescan on section change.
         self._scan_logos_suggestions()
+        self._scan_diagnostics()
 
     def _ensure_active_visible(self, name: str) -> None:
         """Expand the parent group if the active section is collapsed inside it."""
@@ -1351,6 +1371,93 @@ class MainWindow(QMainWindow):
     def _refresh_logos_suggestions_command(self) -> None:
         """Manual 'Refresh Logos Suggestions' command."""
         self._scan_logos_suggestions()
+
+    # -- PSYKE narrative diagnostics (Phase 5) -------------------------------
+
+    def _toggle_diagnostics(self) -> None:
+        self._diagnostics_visible = not self._diagnostics_visible
+        if self._diagnostics_visible:
+            self._scan_diagnostics()
+        self._diagnostics_drawer.setVisible(self._diagnostics_visible)
+
+    def _scan_diagnostics(self) -> None:
+        """Current-section diagnostics scan (fast, rule-based, no LLM/mutation)."""
+        engine = getattr(self, "_diagnostics_engine", None)
+        drawer = getattr(self, "_diagnostics_drawer", None)
+        if engine is None or drawer is None or not self._diagnostics_visible:
+            return
+        section = self._current_section or ""
+        try:
+            diags = engine.scan_section(section) if section else engine.scan_project()
+        except Exception:
+            diags = []
+        drawer.set_diagnostics(diags)
+
+    def _scan_diagnostics_project(self) -> None:
+        """Manual project-wide diagnostics scan."""
+        engine = getattr(self, "_diagnostics_engine", None)
+        drawer = getattr(self, "_diagnostics_drawer", None)
+        if engine is None or drawer is None:
+            return
+        self._diagnostics_visible = True
+        self._diagnostics_drawer.setVisible(True)
+        try:
+            diags = engine.scan_project()
+        except Exception:
+            diags = []
+        drawer.set_diagnostics(diags)
+
+    def _on_diagnostic_action(self, diagnostic, action_name: str) -> None:
+        """Run the suggested Logos action for a diagnostic (preview/confirm)."""
+        if not self._logos_visible:
+            self._logos_visible = True
+            self._logos_toolbar.set_section(self._current_section or "")
+            self._logos_toolbar.refresh_actions()
+            self._logos_toolbar.setVisible(True)
+        ctx = self._diagnostic_context(diagnostic, action_name)
+        self._logos_toolbar.run_action_with_context(ctx, action_name)
+
+    def _diagnostic_context(self, diagnostic, action_name: str):
+        """Build a LogosContext targeting the diagnostic's entity."""
+        from storyplanner.logos.context import build_logos_context
+
+        kwargs: dict = {}
+        section = "PSYKE"
+        if diagnostic.target_type == "psyke_entry":
+            try:
+                kwargs["selected_psyke_entry_id"] = int(diagnostic.target_id)
+            except (TypeError, ValueError):
+                pass
+        elif diagnostic.target_type == "scene":
+            try:
+                kwargs["current_scene_id"] = int(diagnostic.target_id)
+                section = "Outline"
+            except (TypeError, ValueError):
+                pass
+        elif diagnostic.target_type == "graph_node":
+            kwargs["current_graph_node_id"] = diagnostic.target_id
+            section = "Graph"
+        return build_logos_context(
+            self._db, self._project_id, section_name=section, **kwargs,
+        )
+
+    def _on_diagnostic_suppress(self, diagnostic, kind: str) -> None:
+        store = self._diagnostics_engine._suppression
+        if store is not None and kind == "dismiss":
+            store.dismiss(diagnostic.to_suggestion().id)
+        self._scan_diagnostics()
+
+    def _on_diagnostic_open_target(self, diagnostic) -> None:
+        if diagnostic.target_type == "psyke_entry":
+            try:
+                self._open_psyke_entry(int(diagnostic.target_id))
+            except (TypeError, ValueError):
+                pass
+        elif diagnostic.target_type == "scene":
+            try:
+                self._open_scene_in_editor(int(diagnostic.target_id))
+            except (TypeError, ValueError):
+                pass
 
     def _run_logos_outline(self, descriptor: dict, action_name: str) -> None:
         """Run a Logos action for a selected Outline node (from PlanView menus).
@@ -1812,6 +1919,15 @@ class MainWindow(QMainWindow):
         refresh_logos_action = QAction("Refresh Logos Suggestions", self)
         refresh_logos_action.triggered.connect(self._refresh_logos_suggestions_command)
         view_menu.addAction(refresh_logos_action)
+
+        toggle_diag_action = QAction("Toggle Logos Diagnostics", self)
+        toggle_diag_action.setShortcut(QKeySequence("Ctrl+Shift+D"))
+        toggle_diag_action.triggered.connect(self._toggle_diagnostics)
+        view_menu.addAction(toggle_diag_action)
+
+        scan_diag_action = QAction("Scan Project (Logos Diagnostics)", self)
+        scan_diag_action.triggered.connect(self._scan_diagnostics_project)
+        view_menu.addAction(scan_diag_action)
 
         focus_action = QAction("Focus Mode", self)
         focus_action.setShortcut(QKeySequence("Ctrl+Shift+F"))
@@ -2312,6 +2428,10 @@ class MainWindow(QMainWindow):
         # Rebuild the proactive engine for the new project (fresh suppression).
         from storyplanner.logos.proactive import ProactiveEngine
         self._logos_engine = ProactiveEngine(self._db, new_id)
+        from storyplanner.logos.diagnostics import DiagnosticsEngine
+        self._diagnostics_engine = DiagnosticsEngine(
+            self._db, new_id, suppression=self._logos_engine.suppression,
+        )
 
         # 3. Drop MainWindow's own per-project caches.
         self._cached_scenes_view = None
@@ -2366,6 +2486,7 @@ class MainWindow(QMainWindow):
         self._refresh_active_view()
         # Re-run the lightweight proactive scan after any data change.
         self._scan_logos_suggestions()
+        self._scan_diagnostics()
 
     def _on_scene_content_saved(self) -> None:
         """Lightweight notification for in-place edits.
