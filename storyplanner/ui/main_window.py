@@ -552,6 +552,17 @@ class MainWindow(QMainWindow):
         self._logos_toolbar.setVisible(False)
         outer_layout.addWidget(self._logos_toolbar, stretch=0)
 
+        # -- Logos proactive suggestions (Phase 4) ---------------------------
+        # Rule-based, non-intrusive. Hidden until a scan produces suggestions.
+        from storyplanner.logos.proactive import ProactiveEngine
+        from storyplanner.ui.logos.logos_suggestions import LogosSuggestionBar
+        self._logos_engine = ProactiveEngine(self._db, self._project_id)
+        self._logos_suggestions = LogosSuggestionBar()
+        self._logos_suggestions.run_action.connect(self._on_logos_suggestion_action)
+        self._logos_suggestions.suppress.connect(self._on_logos_suggestion_suppress)
+        self._logos_suggestions.setVisible(False)
+        outer_layout.addWidget(self._logos_suggestions, stretch=0)
+
         # -- PSYKE Console (global bottom bar) --------------------------------
         console_row = QWidget()
         console_row.setFixedHeight(28)
@@ -930,6 +941,8 @@ class MainWindow(QMainWindow):
         logos = getattr(self, "_logos_toolbar", None)
         if logos is not None and self._logos_visible:
             logos.set_section(name)
+        # Proactive suggestions are section-scoped — rescan on section change.
+        self._scan_logos_suggestions()
 
     def _ensure_active_visible(self, name: str) -> None:
         """Expand the parent group if the active section is collapsed inside it."""
@@ -1289,6 +1302,55 @@ class MainWindow(QMainWindow):
             self._logos_toolbar.set_section(self._current_section or "")
             self._logos_toolbar.refresh_actions()
         self._logos_toolbar.setVisible(self._logos_visible)
+
+    # -- Proactive suggestions (Phase 4) -------------------------------------
+
+    def _scan_logos_suggestions(self) -> None:
+        """Run a fast, rule-based proactive scan for the current section.
+
+        Safe to call on section-open / selection-change / data-changed. Never
+        calls an LLM, never mutates the DB, never blocks. Hidden when empty.
+        """
+        engine = getattr(self, "_logos_engine", None)
+        bar = getattr(self, "_logos_suggestions", None)
+        if engine is None or bar is None:
+            return
+        if not engine.config.enabled:
+            bar.set_suggestions([])
+            bar.setVisible(False)
+            return
+        section = self._current_section or ""
+        try:
+            ctx = self._build_logos_context()
+            suggestions = engine.scan_section(section, ctx)
+        except Exception:
+            suggestions = []
+        bar.set_suggestions(suggestions)
+        bar.setVisible(bool(suggestions))
+
+    def _on_logos_suggestion_action(self, suggestion, action_name: str) -> None:
+        """Run the existing Logos action a suggestion points to (preview/confirm)."""
+        if not self._logos_visible:
+            self._logos_visible = True
+            self._logos_toolbar.set_section(self._current_section or "")
+            self._logos_toolbar.refresh_actions()
+            self._logos_toolbar.setVisible(True)
+        ctx = self._build_logos_context()
+        self._logos_toolbar.run_action_with_context(ctx, action_name)
+
+    def _on_logos_suggestion_suppress(self, suggestion, kind: str) -> None:
+        store = self._logos_engine.suppression
+        if kind == "dismiss":
+            store.dismiss(suggestion.id)
+        elif kind == "snooze":
+            store.snooze(suggestion.id)
+        elif kind == "hide_type":
+            store.hide_type(suggestion.type)
+        self._scan_logos_suggestions()
+
+    def _refresh_logos_suggestions_command(self) -> None:
+        """Manual 'Refresh Logos Suggestions' command."""
+        self._scan_logos_suggestions()
 
     def _run_logos_outline(self, descriptor: dict, action_name: str) -> None:
         """Run a Logos action for a selected Outline node (from PlanView menus).
@@ -1746,6 +1808,10 @@ class MainWindow(QMainWindow):
         toggle_logos_action.setShortcut(QKeySequence("Ctrl+L"))
         toggle_logos_action.triggered.connect(self._toggle_logos)
         view_menu.addAction(toggle_logos_action)
+
+        refresh_logos_action = QAction("Refresh Logos Suggestions", self)
+        refresh_logos_action.triggered.connect(self._refresh_logos_suggestions_command)
+        view_menu.addAction(refresh_logos_action)
 
         focus_action = QAction("Focus Mode", self)
         focus_action.setShortcut(QKeySequence("Ctrl+Shift+F"))
@@ -2243,6 +2309,9 @@ class MainWindow(QMainWindow):
         self._assistant_panel.set_project(new_id)
         if hasattr(self, '_system_command_handlers'):
             self._system_command_handlers.set_project(new_id)
+        # Rebuild the proactive engine for the new project (fresh suppression).
+        from storyplanner.logos.proactive import ProactiveEngine
+        self._logos_engine = ProactiveEngine(self._db, new_id)
 
         # 3. Drop MainWindow's own per-project caches.
         self._cached_scenes_view = None
@@ -2295,6 +2364,8 @@ class MainWindow(QMainWindow):
         self._cached_scene_entry_ids = None
         self._psyke_console.mark_index_dirty()
         self._refresh_active_view()
+        # Re-run the lightweight proactive scan after any data change.
+        self._scan_logos_suggestions()
 
     def _on_scene_content_saved(self) -> None:
         """Lightweight notification for in-place edits.

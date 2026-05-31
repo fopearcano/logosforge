@@ -25,6 +25,12 @@ DEFAULTS: dict[str, object] = {
     "assistant_include_bible": False,
     "assistant_include_notes": True,
     "assistant_irrational": False,
+    # -- Logos proactive suggestions (Phase 4) -------------------------------
+    "logos_proactive_enabled": True,
+    "logos_confidence_threshold": 0.65,
+    "logos_show_info": True,
+    "logos_show_warning": True,
+    "logos_ai_scan_enabled": False,   # AI-assisted scan deferred; off by default
     "last_project_path": "",
     "plugin_states": {},
     "auto_link_ignored": [],
