@@ -109,3 +109,48 @@ def emit_project_created(project_id: int) -> None:
     bus = get_event_bus()
     bus.project_created.emit(project_id)
     bus.project_loaded.emit(project_id)
+
+
+# -- Conceptual → real event mapping (documentation + compatibility) ---------
+#
+# Earlier specs referred to granular signals (manuscript_changed,
+# timeline_changed, graph_changed, strategy_changed, health_report_changed,
+# assistant_settings_changed) that this codebase does NOT define. The real model
+# is intentionally coarser: most writes raise ``project_data_changed`` (the
+# catch-all) plus a specific signal where one exists (scene_changed / scenes_
+# changed / outline_changed / psyke_changed / psyke_list_changed / notes_changed
+# / plot_changed). Strategy/Health are derived state, not events — they recompute
+# from project_data_changed.
+#
+# This map documents the equivalence and lets callers raise a conceptual event
+# without inventing fake signals. (Timeline/Plot/Graph are scene-derived, so a
+# scene/data change already refreshes them.)
+CONCEPTUAL_EVENT_MAP: dict[str, tuple[str, ...]] = {
+    "manuscript_changed": ("scene_changed", "project_data_changed"),
+    "timeline_changed": ("project_data_changed",),
+    "graph_changed": ("project_data_changed",),
+    "strategy_changed": ("project_data_changed",),
+    "health_report_changed": ("project_data_changed",),
+    "assistant_settings_changed": ("project_data_changed",),
+}
+
+
+def emit_conceptual(event_name: str, scene_id: int | None = None) -> None:
+    """Emit the real signal(s) a conceptual event maps to.
+
+    Unknown names fall back to ``project_data_changed`` so a caller can use a
+    descriptive name without the bus needing a dedicated signal.
+    """
+    bus = get_event_bus()
+    real = CONCEPTUAL_EVENT_MAP.get(event_name, ("project_data_changed",))
+    for sig_name in real:
+        sig = getattr(bus, sig_name, None)
+        if sig is None:
+            continue
+        try:
+            if sig_name == "scene_changed" and scene_id is not None:
+                sig.emit(scene_id)
+            else:
+                sig.emit()
+        except TypeError:
+            pass

@@ -502,15 +502,9 @@ _REFINE_SYSTEM_PROMPT = (
 
 
 def _build_provider():
-    from storyplanner.providers import ProviderConfig
-    from storyplanner.settings import get_manager
-    settings = get_manager()
-    return ProviderConfig(
-        name=str(settings.get("ai_provider") or "LM Studio"),
-        base_url=str(settings.get("ai_base_url") or "http://localhost:1234/v1"),
-        model=str(settings.get("ai_model") or ""),
-        api_key=str(settings.get("ai_api_key") or ""),
-    )
+    # Delegates to the single shared provider builder (Phase 8B).
+    from storyplanner.providers import build_active_provider
+    return build_active_provider()
 
 
 def _parse_llm_metrics(raw: str) -> dict[str, float] | None:

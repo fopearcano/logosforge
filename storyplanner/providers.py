@@ -150,6 +150,42 @@ def default_config(name: str) -> ProviderConfig:
     )
 
 
+# Default endpoint used when nothing is configured (matches the prior wrappers).
+_DEFAULT_LOCAL_BASE_URL = "http://localhost:1234/v1"
+
+
+def build_active_provider(*, require_configured: bool = False) -> "ProviderConfig | None":
+    """Resolve the single, currently-configured AI provider from settings.
+
+    This is the one place every feature builds its provider from — it reads the
+    same four settings keys (``ai_provider`` / ``ai_base_url`` / ``ai_model`` /
+    ``ai_api_key``) the Assistant settings UI writes, so provider switching,
+    per-provider memory and autosave all flow through unchanged.
+
+    * ``require_configured=False`` (default): always returns a config, falling
+      back to ``LM Studio`` at the local endpoint when nothing is set. (Matches
+      the background-feature wrappers that assume a local server.)
+    * ``require_configured=True``: returns ``None`` when neither a provider name
+      nor a base URL is set. (Matches the UI wrappers that must not call an
+      unconfigured provider.)
+
+    Never logs the API key; never mutates settings.
+    """
+    from storyplanner.settings import get_manager
+
+    mgr = get_manager()
+    name = str(mgr.get("ai_provider") or "")
+    base_url = str(mgr.get("ai_base_url") or "")
+    if require_configured and not (name or base_url):
+        return None
+    return ProviderConfig(
+        name=name or "LM Studio",
+        base_url=base_url or _DEFAULT_LOCAL_BASE_URL,
+        model=str(mgr.get("ai_model") or ""),
+        api_key=str(mgr.get("ai_api_key") or ""),
+    )
+
+
 def resolve_api_key(config: ProviderConfig) -> str:
     """Return the API key from config, falling back to environment variable."""
     if config.api_key:

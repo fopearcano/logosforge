@@ -42,7 +42,6 @@ from storyplanner.connector_registry import get_action
 from storyplanner.db import Database
 from storyplanner.models.models import CHAT_PERSONALITIES
 from storyplanner.providers import ProviderConfig
-from storyplanner.settings import get_manager as get_settings
 from storyplanner.ui import theme
 
 _PERSONALITY_LABELS: dict[str, str] = {
@@ -490,19 +489,9 @@ class ChatView(QWidget):
         self._worker.start()
 
     def _build_provider(self) -> ProviderConfig | None:
-        settings = get_settings()
-        name = str(settings.get("ai_provider") or "")
-        base_url = str(settings.get("ai_base_url") or "")
-        model = str(settings.get("ai_model") or "")
-        api_key = str(settings.get("ai_api_key") or "")
-        if not (name or base_url):
-            return None
-        return ProviderConfig(
-            name=name or "LM Studio",
-            base_url=base_url or "http://localhost:1234/v1",
-            model=model,
-            api_key=api_key,
-        )
+        # Thin delegate to the single shared provider builder (Phase 8B).
+        from storyplanner.providers import build_active_provider
+        return build_active_provider(require_configured=True)
 
     def _show_typing_indicator(self) -> None:
         if self._typing_label is not None:

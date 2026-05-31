@@ -41,6 +41,12 @@ DEFAULTS: dict[str, object] = {
     "strategy_show_indicator": True,
     "strategy_debug_explanation": False,
     "strategy_user_mode_override": "",   # "" = auto; else an engine id
+    # -- Assistant context injection (Phase 8B) ------------------------------
+    "include_strategy_in_assistant_context": True,
+    "include_health_in_assistant_context": False,
+    "include_diagnostics_in_assistant_context": True,
+    "max_health_risks_in_context": 3,
+    "max_diagnostics_in_context": 5,
     "last_project_path": "",
     "plugin_states": {},
     "auto_link_ignored": [],

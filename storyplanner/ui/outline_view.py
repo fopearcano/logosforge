@@ -620,19 +620,9 @@ class OutlineView(QWidget):
     # -- AI generation ---------------------------------------------------------
 
     def _build_provider(self):
-        from storyplanner.providers import ProviderConfig
-        from storyplanner.settings import get_manager
-        mgr = get_manager()
-        name = str(mgr.get("ai_provider") or "")
-        base_url = str(mgr.get("ai_base_url") or "")
-        if not (name or base_url):
-            return None
-        return ProviderConfig(
-            name=name or "LM Studio",
-            base_url=base_url or "http://localhost:1234/v1",
-            model=str(mgr.get("ai_model") or ""),
-            api_key=str(mgr.get("ai_api_key") or ""),
-        )
+        # Thin delegate to the single shared provider builder (Phase 8B).
+        from storyplanner.providers import build_active_provider
+        return build_active_provider(require_configured=True)
 
     def build_generation_prompt(self, scope: str, parent_id: int | None) -> str:
         """Compose the outline-generation prompt (engine + template + PSYKE)."""

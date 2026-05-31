@@ -1241,6 +1241,27 @@ class AssistantPanel(QWidget):
         except Exception:
             pass
 
+        # Phase 8B — controlled Strategy / Narrative Health / Diagnostics
+        # injection. Gated by settings with conservative defaults and hard
+        # caps so the prompt never receives a bloated dump. Read-only,
+        # deterministic, no LLM/DB writes. Reads the current project / section /
+        # scene each build so a project switch can't leak old context.
+        try:
+            from storyplanner.assistant_context_policy import (
+                gather_injected_context,
+            )
+            injected = gather_injected_context(
+                self._db, self._project_id,
+                section_name=self._active_section, scene_id=scene_id,
+            )
+            if injected:
+                structural_ctx = (
+                    injected + "\n\n" + structural_ctx
+                    if structural_ctx else injected
+                )
+        except Exception:
+            pass
+
         # Graphic Novel — when the project's engine is graphic_novel,
         # surface page rhythm / motifs / density / continuity and PSYKE
         # visual identity so the Assistant reasons visually.

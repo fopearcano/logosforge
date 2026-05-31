@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 from storyplanner.assistant import chat_completion
 from storyplanner.providers import ProviderConfig
 from storyplanner.quantum_outliner.psyke_adapter import find_entry_by_name
-from storyplanner.settings import get_manager as get_settings
 
 if TYPE_CHECKING:
     from storyplanner.db import Database
@@ -37,13 +36,9 @@ _SYSTEM_PROMPT = (
 
 
 def _build_provider() -> ProviderConfig:
-    settings = get_settings()
-    return ProviderConfig(
-        name=str(settings.get("ai_provider") or "LM Studio"),
-        base_url=str(settings.get("ai_base_url") or "http://localhost:1234/v1"),
-        model=str(settings.get("ai_model") or ""),
-        api_key=str(settings.get("ai_api_key") or ""),
-    )
+    # Delegates to the single shared provider builder (Phase 8B).
+    from storyplanner.providers import build_active_provider
+    return build_active_provider()
 
 
 def reframe_scene(
