@@ -579,6 +579,27 @@ for _name, _label, _desc in [
         category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
         prompt="", modes=_SP, deterministic=True,
     ))
+# Manuscript + Screenplay — Phase 10F (export polish, read-only/deterministic).
+for _name, _label, _desc in [
+    ("sp_validate_export", "Validate Screenplay Export",
+     "Check export readiness — blocking errors + warnings (deterministic)."),
+    ("sp_export_readiness_report", "Generate Export Readiness Report",
+     "Summarize export readiness, title, and approximate length."),
+    ("sp_preview_render", "Preview Screenplay Render",
+     "Build the render document and report block count / length (approximate)."),
+    ("sp_find_orphan_dialogue", "Find Orphan Dialogue",
+     "List dialogue blocks with no preceding character cue."),
+    ("sp_find_orphan_parenthetical", "Find Orphan Parentheticals",
+     "List parentheticals without dialogue context."),
+    ("sp_check_production_polish", "Check Production Polish",
+     "Summarize format issues to review before export."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc,
+        category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+        prompt="", modes=_SP, deterministic=True,
+    ))
+
 # Manuscript + Screenplay — Phase 10E (story-link graph, read-only/deterministic).
 for _name, _label, _desc in [
     ("sp_show_story_links", "Show Story Link Graph",

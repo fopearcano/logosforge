@@ -245,3 +245,109 @@ def _explain_link(db, context: LogosContext) -> LogosResult:
 
 register("sp_show_story_links", _show_story_links)
 register("sp_explain_link", _explain_link)
+
+
+def _validation_report(db, project_id: int):
+    from storyplanner.screenplay_export_validation import validate_screenplay_export
+    from storyplanner.screenplay_render import get_export_prefs
+    prefs = get_export_prefs(db, project_id)
+    return validate_screenplay_export(
+        db, project_id, target_format=prefs.get("export_target", "fountain"),
+        prefs=prefs)
+
+
+def _validate_export(db, context: LogosContext) -> LogosResult:
+    action = "sp_validate_export"
+    try:
+        rep = _validation_report(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Validation failed: {exc}")
+    lines = [rep.summary]
+    if rep.blocking_errors:
+        lines += ["", "Blocking errors:"] + [f"- {e}" for e in rep.blocking_errors]
+    if rep.warnings:
+        lines += ["", "Warnings:"] + [f"- {w}" for w in rep.warnings]
+    if rep.suggestions:
+        lines += ["", "Suggestions:"] + [f"- {s}" for s in rep.suggestions]
+    return LogosResult(ok=True, action=action, title="Validate Screenplay Export",
+                       message="\n".join(lines),
+                       suggestions=list(rep.warnings[:5]), proposed_operations=[])
+
+
+def _export_readiness_report(db, context: LogosContext) -> LogosResult:
+    action = "sp_export_readiness_report"
+    try:
+        rep = _validation_report(db, context.project_id)
+        from storyplanner.screenplay_render import build_render_document
+        doc = build_render_document(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Report failed: {exc}")
+    lines = [
+        f"Target: {rep.target_format}",
+        f"Export-safe: {'yes' if rep.is_export_safe else 'NO'}",
+        f"Title: {doc.title or '(none)'}",
+    ]
+    if doc.estimated_pages is not None:
+        lines.append(f"Approx. length: ~{doc.estimated_pages} pages / "
+                     f"~{doc.estimated_minutes} min (approximate)")
+    lines.append(rep.summary)
+    return LogosResult(ok=True, action=action, title="Export Readiness Report",
+                       message="\n".join(lines), suggestions=[],
+                       proposed_operations=[])
+
+
+def _preview_render(db, context: LogosContext) -> LogosResult:
+    action = "sp_preview_render"
+    try:
+        from storyplanner.screenplay_render import build_render_document
+        doc = build_render_document(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Render prep failed: {exc}")
+    msg = (f"Render document: {len(doc.blocks)} block(s); "
+           f"title '{doc.title or '(none)'}'.")
+    if doc.estimated_pages is not None:
+        msg += f" ~{doc.estimated_pages} pages (approximate)."
+    if doc.warnings:
+        msg += "\nWarnings:\n" + "\n".join(f"- {w}" for w in doc.warnings)
+    return LogosResult(ok=True, action=action, title="Preview Screenplay Render",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _find_orphans(db, context: LogosContext, *, want: str) -> LogosResult:
+    action = f"sp_find_orphan_{want}"
+    try:
+        rep = _validation_report(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Validation failed: {exc}")
+    needle = "dialogue block" if want == "dialogue" else "parenthetical"
+    hits = [w for w in rep.warnings if needle in w]
+    msg = ("\n".join(f"- {h}" for h in hits) if hits
+           else f"No orphan {want} detected.")
+    title = ("Find Orphan Dialogue" if want == "dialogue"
+             else "Find Orphan Parentheticals")
+    return LogosResult(ok=True, action=action, title=title, message=msg,
+                       suggestions=[], proposed_operations=[])
+
+
+def _check_production_polish(db, context: LogosContext) -> LogosResult:
+    action = "sp_check_production_polish"
+    try:
+        rep = _validation_report(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Validation failed: {exc}")
+    n = len(rep.blocking_errors) + len(rep.warnings)
+    head = ("Looks production-clean." if n == 0
+            else f"{n} format issue(s) to review before export.")
+    lines = [head] + [f"- {w}" for w in (rep.blocking_errors + rep.warnings)[:8]]
+    return LogosResult(ok=True, action=action, title="Check Production Polish",
+                       message="\n".join(lines), suggestions=[],
+                       proposed_operations=[])
+
+
+register("sp_validate_export", _validate_export)
+register("sp_export_readiness_report", _export_readiness_report)
+register("sp_preview_render", _preview_render)
+register("sp_find_orphan_dialogue", lambda db, c: _find_orphans(db, c, want="dialogue"))
+register("sp_find_orphan_parenthetical",
+         lambda db, c: _find_orphans(db, c, want="parenthetical"))
+register("sp_check_production_polish", _check_production_polish)

@@ -519,13 +519,31 @@ def _scene_body(scene: dict) -> str:
     return scene["content"] or scene["synopsis"] or scene["summary"] or ""
 
 
-def _screenplay_body(scene: dict, *, fountain: bool = False) -> str:
-    """Render a scene body as classified screenplay text (Phase 10B).
+def _scene_starts_with_heading(scene: dict) -> bool:
+    """True if the scene content already opens with a parsed scene heading.
+
+    Used to avoid emitting a duplicate metadata slug line on export.
+    """
+    raw = _scene_body(scene)
+    if not raw.strip():
+        return False
+    try:
+        from storyplanner.screenplay_blocks import parse_screenplay_text
+        blocks = parse_screenplay_text(raw)
+        return bool(blocks) and blocks[0].element_type == "scene_heading"
+    except Exception:
+        return False
+
+
+def _screenplay_body(scene: dict, *, fountain: bool = False,
+                     include_notes: bool = True) -> str:
+    """Render a scene body as classified screenplay text (Phase 10B/10F).
 
     Parses the flat scene content into screenplay blocks and serializes them so
     character cues / transitions / scene headings are uppercased and
     parentheticals normalized. Text-preserving; falls back to the raw body if
-    parsing yields nothing.
+    parsing yields nothing. When *include_notes* is False, ``note`` blocks are
+    dropped (production export).
     """
     raw = _scene_body(scene)
     if not raw.strip():
@@ -539,6 +557,8 @@ def _screenplay_body(scene: dict, *, fountain: bool = False) -> str:
         blocks = parse_screenplay_text(raw)
         if not blocks:
             return raw
+        if not include_notes:
+            blocks = [b for b in blocks if b.element_type != "note"]
         return to_fountain(blocks) if fountain else serialize_blocks(blocks)
     except Exception:
         return raw
@@ -632,8 +652,9 @@ def _fmt_screenplay_text(data: dict, fmt: str) -> str:
             lines.append(f"        {act.upper()}")
             lines.append("")
 
-        lines.append(_slug_line(scene))
-        lines.append("")
+        if not _scene_starts_with_heading(scene):
+            lines.append(_slug_line(scene))
+            lines.append("")
         body = _screenplay_body(scene)
         if body:
             lines.append(body)
@@ -939,10 +960,23 @@ def export_fountain(db: Database, project_id: int) -> str:
     data = _gather_project_data(db, project_id)
     lines: list[str] = []
 
-    lines.append(f"Title: {data['project']['title']}")
-    lines.append(f"Credit: Written by")
-    lines.append(f"Author: ")
-    lines.append(f"Draft date: ")
+    # Phase 10F — title page from project settings (falls back to project title).
+    show_notes = False
+    try:
+        from storyplanner.screenplay_render import (
+            get_title_page, get_export_prefs, title_page_to_fountain,
+        )
+        prefs = get_export_prefs(db, project_id)
+        show_notes = bool(prefs.get("show_notes_in_export", False))
+        tp_lines = []
+        if prefs.get("include_title_page", True):
+            tp_lines = title_page_to_fountain(get_title_page(db, project_id))
+        if tp_lines:
+            lines.extend(tp_lines)
+        else:
+            lines.append(f"Title: {data['project']['title']}")
+    except Exception:
+        lines.append(f"Title: {data['project']['title']}")
     lines.append("")
     lines.append("")
 
@@ -957,16 +991,45 @@ def export_fountain(db: Database, project_id: int) -> str:
                 lines.append(f"= {act}")
                 lines.append("")
 
-        slug = _slug_line(scene)
-        lines.append(f".{slug}")
-        lines.append("")
+        # Avoid a duplicate heading: only emit the metadata slug when the scene
+        # content doesn't already start with its own scene heading.
+        if not _scene_starts_with_heading(scene):
+            slug = _slug_line(scene)
+            lines.append(f".{slug}")
+            lines.append("")
 
-        body = _screenplay_body(scene, fountain=True)
+        body = _screenplay_body(scene, fountain=True, include_notes=show_notes)
         if body:
             lines.append(body)
             lines.append("")
 
     return "\n".join(lines)
+
+
+def export_screenplay_preview_html(db: Database, project_id: int) -> str:
+    """Phase 10F — conservative screenplay preview HTML (not page-accurate)."""
+    from storyplanner.screenplay_render import build_render_document, render_to_html
+    return render_to_html(build_render_document(db, project_id))
+
+
+def export_screenplay_export_validation_json(db: Database, project_id: int,
+                                             *, target_format: str = "fountain") -> str:
+    """Phase 10F — export-readiness validation as JSON (read-only)."""
+    import datetime as _dt
+    from storyplanner.screenplay_export_validation import validate_screenplay_export
+    from storyplanner.screenplay_render import get_export_prefs
+    from storyplanner.writing_modes import get_project_writing_mode
+
+    project = db.get_project_by_id(project_id)
+    report = validate_screenplay_export(
+        db, project_id, target_format=target_format,
+        prefs=get_export_prefs(db, project_id))
+    payload = report.to_dict()
+    payload["schema_version"] = 1
+    payload["writing_mode"] = get_project_writing_mode(project)
+    payload["exported_at"] = _dt.datetime.now().isoformat(timespec="seconds")
+    payload["project_title"] = project.title if project else "Untitled"
+    return json.dumps(payload, indent=2, ensure_ascii=False)
 
 
 # -- FDX (Final Draft XML) export ---------------------------------------------

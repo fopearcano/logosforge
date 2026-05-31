@@ -179,6 +179,9 @@ def test_all_off_yields_empty():
     db, pid, sid = _project()
     for k in ("include_project_mode_in_assistant_context",  # Phase 9 block
               "include_screenplay_diagnostics_in_assistant_context",  # Phase 10C
+              "include_screenplay_tracking_in_assistant_context",      # Phase 10D
+              "include_screenplay_links_in_assistant_context",         # Phase 10E
+              "include_screenplay_export_in_assistant_context",        # Phase 10F
               "include_strategy_in_assistant_context",
               "include_health_in_assistant_context",
               "include_diagnostics_in_assistant_context"):

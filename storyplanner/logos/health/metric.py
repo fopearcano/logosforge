@@ -48,12 +48,19 @@ CAT_ON_THE_NOSE = "on_the_nose"
 # Phase 10E additions (graph/link coverage).
 CAT_LINK_COVERAGE = "confirmed_link_coverage"
 CAT_CANDIDATE_DENSITY = "candidate_density"
+# Phase 10F additions (export/format readiness — format health, not narrative).
+CAT_EXPORT_READINESS = "export_readiness"
+CAT_TITLE_PAGE = "title_page_completeness"
+CAT_SCENE_HEADING_INTEGRITY = "scene_heading_integrity"
+CAT_DIALOGUE_FORMAT = "dialogue_formatting_integrity"
 
 SCREENPLAY_CATEGORIES = (
     CAT_VISUAL_ACTION, CAT_SCENE_ECONOMY, CAT_DIALOGUE_ECONOMY, CAT_SCENE_TURN,
     CAT_CHARACTER_OBJECTIVE, CAT_SP_SETUP_PAYOFF, CAT_SUBTEXT,
     CAT_CINEMATIC_CONTINUITY, CAT_MOTIF_RECURRENCE, CAT_ON_THE_NOSE,
     CAT_LINK_COVERAGE, CAT_CANDIDATE_DENSITY,
+    CAT_EXPORT_READINESS, CAT_TITLE_PAGE, CAT_SCENE_HEADING_INTEGRITY,
+    CAT_DIALOGUE_FORMAT,
 )
 
 _CATEGORY_NAMES = {
@@ -82,6 +89,10 @@ _CATEGORY_NAMES = {
     CAT_ON_THE_NOSE: "On-the-Nose Dialogue Risk",
     CAT_LINK_COVERAGE: "Confirmed Setup/Payoff Coverage",
     CAT_CANDIDATE_DENSITY: "Unresolved Candidate Density",
+    CAT_EXPORT_READINESS: "Export Readiness",
+    CAT_TITLE_PAGE: "Title Page Completeness",
+    CAT_SCENE_HEADING_INTEGRITY: "Scene Heading Integrity",
+    CAT_DIALOGUE_FORMAT: "Dialogue Formatting Integrity",
 }
 
 # -- Status ------------------------------------------------------------------

@@ -104,6 +104,12 @@ def _is_parenthetical(line: str) -> bool:
     return len(s) >= 2 and s.startswith("(") and s.endswith(")")
 
 
+def _is_note(line: str) -> bool:
+    # Fountain note syntax: [[ ... ]] on its own line.
+    s = line.strip()
+    return len(s) >= 4 and s.startswith("[[") and s.endswith("]]")
+
+
 def parse_screenplay_text(
     text: str, scene_id: int | None = None,
 ) -> list[ScreenplayBlock]:
@@ -151,6 +157,8 @@ def parse_screenplay_text(
                 add("scene_heading", first)
             elif _is_transition(first):
                 add("transition", first)
+            elif _is_note(first):
+                add("note", first[2:-2].strip())   # strip [[ ]]
             else:
                 add("action", lines[0].rstrip())
             continue

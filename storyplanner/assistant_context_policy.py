@@ -17,6 +17,7 @@ _KEY_PROJECT_MODE = "include_project_mode_in_assistant_context"
 _KEY_SCREENPLAY_DIAG = "include_screenplay_diagnostics_in_assistant_context"
 _KEY_SCREENPLAY_TRACK = "include_screenplay_tracking_in_assistant_context"
 _KEY_SCREENPLAY_LINKS = "include_screenplay_links_in_assistant_context"
+_KEY_SCREENPLAY_EXPORT = "include_screenplay_export_in_assistant_context"
 _KEY_STRATEGY = "include_strategy_in_assistant_context"
 _KEY_HEALTH = "include_health_in_assistant_context"
 _KEY_DIAGNOSTICS = "include_diagnostics_in_assistant_context"
@@ -28,6 +29,7 @@ _DEFAULTS = {
     _KEY_SCREENPLAY_DIAG: True,  # screenplay-only; concise top-issues summary
     _KEY_SCREENPLAY_TRACK: True,  # screenplay-only; setup/payoff + subtext summaries
     _KEY_SCREENPLAY_LINKS: True,  # screenplay-only; confirmed + candidate story links
+    _KEY_SCREENPLAY_EXPORT: True,  # screenplay-only; export readiness summary
     _KEY_STRATEGY: True,
     _KEY_HEALTH: False,        # off by default — health is expensive/broad
     _KEY_DIAGNOSTICS: True,
@@ -78,6 +80,8 @@ def gather_injected_context(
         blocks.append(_screenplay_subtext_block(db, project_id, scene_id))
     if _flag(_KEY_SCREENPLAY_LINKS):
         blocks.append(_screenplay_links_block(db, project_id, scene_id))
+    if _flag(_KEY_SCREENPLAY_EXPORT):
+        blocks.append(_screenplay_export_block(db, project_id, scene_id))
     if _flag(_KEY_STRATEGY):
         blocks.append(_strategy_block(db, project_id, section_name))
     if _flag(_KEY_HEALTH):
@@ -234,6 +238,34 @@ def _screenplay_links_block(db, project_id: int, scene_id: int | None) -> str:
                              ("Motif", motif)):
             for e in items[:3]:
                 lines.append(f"- {label}: {e.label}")
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _screenplay_export_block(db, project_id: int, scene_id: int | None) -> str:
+    """Capped ``[Screenplay Export Readiness]`` — target, top issues, title, length."""
+    if scene_id is None or not _is_screenplay(db, project_id):
+        return ""
+    try:
+        from storyplanner.screenplay_render import get_export_prefs, get_title_page
+        from storyplanner.screenplay_export_validation import (
+            validate_screenplay_export,
+        )
+        prefs = get_export_prefs(db, project_id)
+        rep = validate_screenplay_export(
+            db, project_id, target_format=prefs.get("export_target", "fountain"),
+            prefs=prefs)
+        title = (get_title_page(db, project_id).get("title") or "").strip()
+        lines = ["[Screenplay Export Readiness]",
+                 f"Target: {rep.target_format}",
+                 f"Title page: {'set' if title else 'missing'}"]
+        if rep.blocking_errors:
+            lines.append("Blocking: " + "; ".join(rep.blocking_errors[:3]))
+        if rep.warnings:
+            lines.append("Warnings: " + "; ".join(rep.warnings[:3]))
+        if len(lines) == 3 and rep.is_export_safe:
+            lines.append("No blocking issues.")
         return "\n".join(lines)
     except Exception:
         return ""

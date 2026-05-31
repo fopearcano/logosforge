@@ -228,7 +228,49 @@ copies of scene/PSYKE text (the graph is **not** a source of truth). See
 - **Export**: `export_screenplay_graph_json` + `export_story_links_json`
   (schema-versioned).
 
-## Intentionally deferred to Phase 10F
+## Phase 10F — production polish + export preparation
+
+- **Render model** (`screenplay_render.py`): serializable `ScreenplayRenderDocument`
+  / `ScreenplayRenderBlock` built from the parsed blocks (style + `export_text`,
+  title page, **approximate** page/minute estimate, warnings) + `render_to_html`
+  / `render_to_plain_text`. Foundation for future PDF/FDX.
+- **Title page metadata**: `title/credit/author/source/draft_date/contact/notes`
+  stored in project settings (no schema change); falls back to the project title;
+  exported at the top of Fountain.
+- **Export preferences** (project settings, conservative defaults): note
+  inclusion (off), casing, title page, export target, approximate estimate.
+- **Fountain hardening**: title page emitted; notes honor the pref (excluded by
+  default, `[[ ]]` when shown); the parser now recognizes `[[ ]]` notes and they
+  round-trip; **duplicate scene headings fixed** (the metadata slug is skipped
+  when the scene content already opens with a heading); no text loss.
+- **Validation** (`screenplay_export_validation.py`): deterministic readiness
+  report — blocking errors (empty / unsupported target) vs warnings (missing
+  title/headings, orphan dialogue/parentheticals) vs suggestions. Blocks export
+  only when truly unsafe.
+- **Logos** (deterministic, no LLM): `Validate Screenplay Export`, `Generate
+  Export Readiness Report`, `Preview Screenplay Render`, `Find Orphan Dialogue`,
+  `Find Orphan Parentheticals`, `Check Production Polish`.
+- **Assistant**: capped `[Screenplay Export Readiness]` block
+  (`include_screenplay_export_in_assistant_context`).
+- **Health**: format-health categories (Export Readiness, Title Page
+  Completeness, Scene Heading Integrity, Dialogue Formatting Integrity) — **capped
+  at *Needs Attention*** so a formatting issue never flips the narrative overall
+  status. Format problems are kept distinct from craft problems.
+- **Preview HTML** export (`export_screenplay_preview_html`) — conservative, not
+  page-accurate.
+
+See **docs/Export.md** for the full export surface, what is approximate vs
+professional, and why PDF/FDX remain basic.
+
+## Intentionally deferred to Phase 10G
+
+- Page-accurate PDF pagination + production-grade FDX.
+- Title-page / export-preferences **editor UI** (storage + service API exist).
+- Fountain **import UI** (parser round-trip exists; project import UI deferred).
+- Manuscript screenplay margin polish beyond the current approximation; Cinematic
+  Continuity detector.
+
+## (Earlier) Intentionally deferred to Phase 10F
 
 - Interactive screenplay graph **widget** + filters + evidence panel.
 - UI confirmation buttons + mutating Logos actions (Confirm/Dismiss/Resolve, Add

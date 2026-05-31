@@ -559,10 +559,56 @@ def screenplay_health_metrics(db, project_id: int) -> list:
         category=M.CAT_CANDIDATE_DENSITY, status=dens_status, confidence=0.4,
         evidence=f"{unresolved_cands} unresolved candidate(s)."))
 
-    # Cinematic Continuity stays deferred (needs semantics / Phase 10F).
+    # -- Export / format readiness (Phase 10F — format health, NOT narrative) --
+    # Capped at WATCH so a formatting issue never flips the narrative overall to
+    # weak/critical: format problems are distinct from craft problems.
+    try:
+        from storyplanner.screenplay_export_validation import (
+            validate_screenplay_export,
+        )
+        from storyplanner.screenplay_render import get_export_prefs, get_title_page
+        prefs = get_export_prefs(db, project_id)
+        val = validate_screenplay_export(
+            db, project_id, target_format=prefs.get("export_target", "fountain"),
+            prefs=prefs)
+        title = (get_title_page(db, project_id).get("title") or "").strip()
+    except Exception:
+        val, title = None, ""
+
+    if n == 0 or val is None:
+        for cat in (M.CAT_EXPORT_READINESS, M.CAT_TITLE_PAGE,
+                    M.CAT_SCENE_HEADING_INTEGRITY, M.CAT_DIALOGUE_FORMAT):
+            metrics.append(M.NarrativeHealthMetric(
+                category=cat, status=M.STATUS_UNKNOWN,
+                evidence="No screenplay scenes to assess."))
+    else:
+        readiness = M.STATUS_STABLE if (val.is_export_safe and not val.warnings) else M.STATUS_WATCH
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_EXPORT_READINESS, status=readiness, confidence=0.5,
+            evidence=val.summary))
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_TITLE_PAGE,
+            status=M.STATUS_STABLE if title else M.STATUS_WATCH, confidence=0.5,
+            evidence=("Title page set." if title else "No title page set.")))
+        heading_warn = any("scene heading" in w for w in val.warnings)
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_SCENE_HEADING_INTEGRITY,
+            status=M.STATUS_WATCH if heading_warn else M.STATUS_STABLE, confidence=0.5,
+            evidence=next((w for w in val.warnings if "scene heading" in w),
+                         "Scene headings present.")))
+        dlg_warn = any(("dialogue block" in w or "parenthetical" in w)
+                       for w in val.warnings)
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_DIALOGUE_FORMAT,
+            status=M.STATUS_WATCH if dlg_warn else M.STATUS_STABLE, confidence=0.5,
+            evidence=next((w for w in val.warnings
+                           if "dialogue block" in w or "parenthetical" in w),
+                          "Dialogue formatting looks consistent.")))
+
+    # Cinematic Continuity stays deferred (needs semantics / Phase 10G).
     metrics.append(M.NarrativeHealthMetric(
         category=M.CAT_CINEMATIC_CONTINUITY, status=M.STATUS_UNKNOWN,
-        evidence="Deferred — not deterministically assessable yet (Phase 10F)."))
+        evidence="Deferred — not deterministically assessable yet (Phase 10G)."))
     return metrics
 
 
