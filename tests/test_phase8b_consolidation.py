@@ -188,6 +188,7 @@ def test_all_off_yields_empty():
               "include_rewrite_sandbox_in_assistant_context",          # Phase 10L
               "include_controlled_apply_in_assistant_context",         # Phase 10M
               "include_project_intelligence_in_assistant_context",     # Phase 10N
+              "include_guided_workflow_in_assistant_context",          # Phase 10O
               "include_strategy_in_assistant_context",
               "include_health_in_assistant_context",
               "include_diagnostics_in_assistant_context"):

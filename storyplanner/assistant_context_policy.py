@@ -24,6 +24,7 @@ _KEY_REVISION_IMPACT = "include_revision_impact_in_assistant_context"
 _KEY_REWRITE_SANDBOX = "include_rewrite_sandbox_in_assistant_context"
 _KEY_CONTROLLED_APPLY = "include_controlled_apply_in_assistant_context"
 _KEY_PROJECT_INTEL = "include_project_intelligence_in_assistant_context"
+_KEY_GUIDED_WORKFLOW = "include_guided_workflow_in_assistant_context"
 _KEY_STRATEGY = "include_strategy_in_assistant_context"
 _KEY_HEALTH = "include_health_in_assistant_context"
 _KEY_DIAGNOSTICS = "include_diagnostics_in_assistant_context"
@@ -42,6 +43,7 @@ _DEFAULTS = {
     _KEY_REWRITE_SANDBOX: True,  # only emits when an open rewrite session exists
     _KEY_CONTROLLED_APPLY: True,  # only emits when a pending apply preview exists
     _KEY_PROJECT_INTEL: True,  # concise dashboard state (light report)
+    _KEY_GUIDED_WORKFLOW: True,  # only emits when a guided workflow is active
     _KEY_STRATEGY: True,
     _KEY_HEALTH: False,        # off by default — health is expensive/broad
     _KEY_DIAGNOSTICS: True,
@@ -106,6 +108,8 @@ def gather_injected_context(
         blocks.append(_controlled_apply_block(db, project_id))
     if _flag(_KEY_PROJECT_INTEL):
         blocks.append(_project_intelligence_block(db, project_id))
+    if _flag(_KEY_GUIDED_WORKFLOW):
+        blocks.append(_guided_workflow_block(db, project_id))
     if _flag(_KEY_STRATEGY):
         blocks.append(_strategy_block(db, project_id, section_name))
     if _flag(_KEY_HEALTH):
@@ -481,6 +485,32 @@ def _project_intelligence_block(db, project_id: int) -> str:
             lines.append("Top decisions:")
             for c in top:
                 lines.append(f"- [{c.severity}] {c.title}")
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _guided_workflow_block(db, project_id: int) -> str:
+    """Capped ``[Guided Workflow]`` block — only when a workflow is active.
+
+    Names the active workflow(s), progress and current step so the Assistant can
+    help with *this* step. Deterministic; no LLM/DB write; capped; no cross-
+    project leak. The Assistant must never mark steps done — that's the user's.
+    """
+    try:
+        from storyplanner.guided_workflows import get_active_workflows
+        views = get_active_workflows(db, project_id)
+        if not views:
+            return ""
+        lines = ["[Guided Workflow]"]
+        for v in views[:2]:
+            lines.append(v.progress_line())
+            cur = v.current_step
+            if cur is not None:
+                lines.append(f"Current step: {cur.title}"
+                             + (f" (open {cur.section_name})" if cur.section_name else ""))
+        lines.append("Help with the current step; never mark steps done — "
+                     "that is the user's decision.")
         return "\n".join(lines)
     except Exception:
         return ""

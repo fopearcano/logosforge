@@ -81,7 +81,11 @@ notes) — it does not invent a second context system.
   mutation routes through the Controlled Apply service (preview + diff +
   conflicts + confirmed apply + checkpoint). See docs/ControlledApply.md. Phase 10N adds read-only Project Intelligence
   + Decision Radar actions (Project Intelligence status, Decision Radar) and a
-  generative Explain Dashboard. See docs/ProjectIntelligence.md.
+  generative Explain Dashboard. See docs/ProjectIntelligence.md. Phase 10O adds read-only Guided Workflow
+  actions (Active Workflows, Recommend Workflows) and a generative Explain
+  Workflow Step; the workflow engine mutates only workflow state and routes any
+  content change through Controlled Apply / Rewrite Sandbox. See
+  docs/GuidedWorkflows.md and docs/ProjectOperatingSystem.md.
 - **operations** — controlled, validated apply ops (manuscript replace/insert,
   outline scene create/update, PSYKE notes/progression/relation). Every mutation
   is previewed and confirmed; nothing auto-applies.

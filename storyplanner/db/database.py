@@ -62,6 +62,9 @@ from storyplanner.models import (
     StageSnapshot,
     StoryMemoryEntry,
     VoiceProfile,
+    WorkflowRun,
+    WorkflowStepState,
+    WorkflowEvent,
 )
 
 
@@ -3504,6 +3507,106 @@ class Database:
             stmt = select(ControlledApplyConflict).where(
                 ControlledApplyConflict.operation_id == operation_id).order_by(
                 ControlledApplyConflict.id)
+            return list(session.exec(stmt).all())
+
+    # -- Guided workflows (Phase 10O) ----------------------------------------
+
+    def create_workflow_run(self, project_id: int, **fields) -> WorkflowRun:
+        from storyplanner.models.models import _now
+        fields.pop("project_id", None)
+        run = WorkflowRun(project_id=project_id, **fields)
+        run.updated_at = _now()
+        with Session(self._engine) as session:
+            session.add(run)
+            session.commit()
+            session.refresh(run)
+            return run
+
+    def get_workflow_run(self, run_id: int) -> "WorkflowRun | None":
+        with Session(self._engine) as session:
+            return session.get(WorkflowRun, run_id)
+
+    def get_workflow_runs(self, project_id: int, *, status: str | None = None,
+                          ) -> list[WorkflowRun]:
+        with Session(self._engine) as session:
+            stmt = select(WorkflowRun).where(WorkflowRun.project_id == project_id)
+            if status is not None:
+                stmt = stmt.where(WorkflowRun.status == status)
+            return list(session.exec(stmt.order_by(WorkflowRun.id)).all())
+
+    def update_workflow_run(self, run_id: int, **fields) -> "WorkflowRun | None":
+        from storyplanner.models.models import _now
+        with Session(self._engine) as session:
+            run = session.get(WorkflowRun, run_id)
+            if run is None:
+                return None
+            for k, v in fields.items():
+                if hasattr(run, k):
+                    setattr(run, k, v)
+            run.updated_at = _now()
+            session.add(run)
+            session.commit()
+            session.refresh(run)
+            return run
+
+    def create_workflow_step_state(self, project_id: int, workflow_run_id: int,
+                                   **fields) -> WorkflowStepState:
+        from storyplanner.models.models import _now
+        fields.pop("project_id", None)
+        fields.pop("workflow_run_id", None)
+        st = WorkflowStepState(project_id=project_id,
+                               workflow_run_id=workflow_run_id, **fields)
+        st.updated_at = _now()
+        with Session(self._engine) as session:
+            session.add(st)
+            session.commit()
+            session.refresh(st)
+            return st
+
+    def get_workflow_step_states(self, workflow_run_id: int) -> list[WorkflowStepState]:
+        with Session(self._engine) as session:
+            stmt = select(WorkflowStepState).where(
+                WorkflowStepState.workflow_run_id == workflow_run_id).order_by(
+                WorkflowStepState.sort_index, WorkflowStepState.id)
+            return list(session.exec(stmt).all())
+
+    def get_workflow_step_state(self, step_state_id: int) -> "WorkflowStepState | None":
+        with Session(self._engine) as session:
+            return session.get(WorkflowStepState, step_state_id)
+
+    def update_workflow_step_state(self, step_state_id: int, **fields
+                                   ) -> "WorkflowStepState | None":
+        from storyplanner.models.models import _now
+        with Session(self._engine) as session:
+            st = session.get(WorkflowStepState, step_state_id)
+            if st is None:
+                return None
+            for k, v in fields.items():
+                if hasattr(st, k):
+                    setattr(st, k, v)
+            st.updated_at = _now()
+            session.add(st)
+            session.commit()
+            session.refresh(st)
+            return st
+
+    def create_workflow_event(self, project_id: int, workflow_run_id: int,
+                              **fields) -> WorkflowEvent:
+        fields.pop("project_id", None)
+        fields.pop("workflow_run_id", None)
+        ev = WorkflowEvent(project_id=project_id,
+                           workflow_run_id=workflow_run_id, **fields)
+        with Session(self._engine) as session:
+            session.add(ev)
+            session.commit()
+            session.refresh(ev)
+            return ev
+
+    def get_workflow_events(self, workflow_run_id: int) -> list[WorkflowEvent]:
+        with Session(self._engine) as session:
+            stmt = select(WorkflowEvent).where(
+                WorkflowEvent.workflow_run_id == workflow_run_id).order_by(
+                WorkflowEvent.id)
             return list(session.exec(stmt).all())
 
     @staticmethod

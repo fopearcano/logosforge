@@ -1016,3 +1016,49 @@ def _pi_decision_radar(db, context: LogosContext) -> LogosResult:
 
 register("pi_dashboard_status", _pi_dashboard_status)
 register("pi_decision_radar", _pi_decision_radar)
+
+
+# -- Guided workflows (Phase 10O) -------------------------------------------
+
+def _wf_active_workflows(db, context: LogosContext) -> LogosResult:
+    action = "wf_active_workflows"
+    try:
+        from storyplanner.guided_workflows import get_active_workflows
+        views = get_active_workflows(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Workflows failed: {exc}")
+    if not views:
+        return LogosResult(ok=True, action=action, title="Active Workflows",
+                           message="No active guided workflows.",
+                           suggestions=[], proposed_operations=[])
+    lines: list[str] = []
+    for v in views:
+        lines.append(v.progress_line())
+        cur = v.current_step
+        if cur is not None:
+            lines.append(f"  Current: {cur.title}"
+                         + (f" (open {cur.section_name})" if cur.section_name else ""))
+    return LogosResult(ok=True, action=action, title="Active Workflows",
+                       message="\n".join(lines), suggestions=[],
+                       proposed_operations=[])
+
+
+def _wf_recommend_workflows(db, context: LogosContext) -> LogosResult:
+    action = "wf_recommend_workflows"
+    try:
+        from storyplanner.guided_workflows import build_workflow_recommendations
+        recs = build_workflow_recommendations(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Recommendations failed: {exc}")
+    if not recs:
+        return LogosResult(ok=True, action=action, title="Recommend Workflows",
+                           message="No workflow recommendations right now.",
+                           suggestions=[], proposed_operations=[])
+    lines = [f"- {r.title}: {r.reason}" for r in recs]
+    return LogosResult(ok=True, action=action, title="Recommend Workflows",
+                       message="Suggested workflows:\n" + "\n".join(lines),
+                       suggestions=[r.title for r in recs], proposed_operations=[])
+
+
+register("wf_active_workflows", _wf_active_workflows)
+register("wf_recommend_workflows", _wf_recommend_workflows)

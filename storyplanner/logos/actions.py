@@ -622,6 +622,31 @@ register(LogosAction(
     ),
 ))
 
+# Manuscript — Phase 10O (Guided Workflows; mode-agnostic, read-only).
+for _name, _label, _desc in [
+    ("wf_active_workflows", "Active Workflows",
+     "Show active guided workflows and the current step (deterministic)."),
+    ("wf_recommend_workflows", "Recommend Workflows",
+     "Suggest guided workflows from the Decision Radar (deterministic)."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc,
+        category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+        prompt="", deterministic=True,
+    ))
+
+register(LogosAction(
+    name="wf_explain_next_step", label="Explain Workflow Step",
+    description="Ask the Assistant to explain the current guided-workflow step.",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+    prompt=(
+        "Given the active guided workflow and its current step, explain what the "
+        "step is asking for and suggest a concrete way to accomplish it using the "
+        "current project. Advisory only; do not rewrite or mutate anything, and do "
+        "not mark the step done — that is the user's decision."
+    ),
+))
+
 # Manuscript — Phase 10M (Controlled Apply; mode-agnostic, read-only status).
 for _name, _label, _desc in [
     ("ca_apply_history", "Apply History",

@@ -384,6 +384,62 @@ class RewriteApplyRecord(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
 
 
+class WorkflowRun(SQLModel, table=True):
+    """A guided-workflow run (Phase 10O). Tracks workflow state only — never
+    mutates manuscript/PSYKE/outline content. Created idempotently."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    template_id: str = ""
+    title: str = ""
+    writing_mode: str = "novel"
+    status: str = "active"           # active|paused|completed|cancelled|blocked
+    current_step_id: str = ""
+    source_type: Optional[str] = None
+    source_id: Optional[int] = None
+    context_json: str = ""
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+    completed_at: Optional[datetime] = None
+
+
+class WorkflowStepState(SQLModel, table=True):
+    """Per-step state within a workflow run."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    workflow_run_id: int = Field(foreign_key="workflowrun.id", index=True)
+    step_id: str = ""
+    title: str = ""
+    status: str = "pending"          # pending|active|completed|skipped|blocked
+    section_name: Optional[str] = None
+    action_id: Optional[str] = None
+    target_type: Optional[str] = None
+    target_id: Optional[int] = None
+    result_json: str = ""
+    notes: str = ""
+    sort_index: int = 0
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
+class WorkflowEvent(SQLModel, table=True):
+    """An audit event for a workflow run."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    workflow_run_id: int = Field(foreign_key="workflowrun.id", index=True)
+    step_id: Optional[str] = None
+    event_type: str = "note"         # started|advanced|completed|skipped|blocked|cancelled|note|action
+    message: str = ""
+    metadata_json: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+WORKFLOW_RUN_STATUSES = ("active", "paused", "completed", "cancelled", "blocked")
+WORKFLOW_STEP_STATUSES = ("pending", "active", "completed", "skipped", "blocked")
+
+
 class ControlledApplyOperation(SQLModel, table=True):
     """A previewed, confirmable apply operation (Phase 10M). Canonical content is
     not changed until ``status`` becomes ``applied``. References only — no full
