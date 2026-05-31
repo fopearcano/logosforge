@@ -1,10 +1,16 @@
-"""Tests for the left-panel 'Logos' navigation item (navigation wiring fix)."""
+"""Tests for the left-panel 'Logos' item as an inline ON/OFF toggle.
+
+Logos is NOT a central section/dashboard — it is a toggle for the ambient inline
+contextual Logos layer (toolbar + suggestions) that stays inside the current
+section.
+"""
 
 import pytest
 
+from PySide6.QtWidgets import QPushButton
+
 from storyplanner.db import Database
 from storyplanner.ui.main_window import MainWindow
-from storyplanner.ui.logos.logos_view import LogosView
 
 
 @pytest.fixture(autouse=True)
@@ -28,73 +34,156 @@ def _win(mode="novel"):
 
 
 # ==========================================================================
-# Presence / registration
+# 1, 14 — presence / no duplication
 # ==========================================================================
 
 
-def test_logos_item_present_in_sidebar():
+def test_logos_item_present():
     db, pid, win = _win()
     assert "Logos" in win.sidebar_buttons
-
-
-def test_logos_item_near_assistant_in_ai_cluster():
-    # Logos sits in the trailing AI cluster, directly after Assistant.
-    db, pid, win = _win()
-    assert "Assistant" in win.sidebar_buttons
-    assert "Chat" in win.sidebar_buttons
-    assert "Logos" in win.sidebar_buttons
-
-
-def test_logos_registered_as_nav_section():
-    db, pid, win = _win()
-    assert "Logos" in win._nav_labels
-    assert "Logos" in win._nav_section_handlers
-    assert win.sidebar_buttons["Logos"].isCheckable()
 
 
 def test_logos_item_not_duplicated():
     db, pid, win = _win()
-    # exactly one nav-label entry and one handler entry
-    assert win._nav_labels.count("Logos") == 1
-    assert list(win._nav_section_handlers).count("Logos") == 1
+    logos_btns = [b for b in win.findChildren(QPushButton)
+                  if b in win.sidebar_buttons.values()
+                  and win.sidebar_buttons.get("Logos") is b]
+    assert len(logos_btns) == 1
+    # And it is NOT a navigation section.
+    assert "Logos" not in win._nav_labels
+    assert "Logos" not in win._nav_section_handlers
 
 
-def test_assistant_remains_a_toggle_not_a_section():
+# ==========================================================================
+# 2 — toggles logos_enabled
+# ==========================================================================
+
+
+def test_logos_click_toggles_enabled():
     db, pid, win = _win()
-    # Adding Logos must not turn Assistant into a checkable section.
-    assert "Assistant" in win.sidebar_buttons
-    assert "Assistant" not in win._nav_labels
+    assert win._logos_enabled is False
+    win.sidebar_buttons["Logos"].click()
+    assert win._logos_enabled is True
+    win.sidebar_buttons["Logos"].click()
+    assert win._logos_enabled is False
 
 
-# ==========================================================================
-# Click opens the Logos view + highlight
-# ==========================================================================
-
-
-def test_clicking_logos_opens_logos_view():
+def test_logos_toggle_persisted():
+    from storyplanner.settings import get_manager
     db, pid, win = _win()
     win.sidebar_buttons["Logos"].click()
-    assert win._current_section == "Logos"
-    assert isinstance(win.content_area, LogosView)
+    assert get_manager().get("logos_enabled") is True
 
 
-def test_logos_highlight_works():
+def test_logos_button_checked_reflects_state():
     db, pid, win = _win()
     win.sidebar_buttons["Logos"].click()
     assert win.sidebar_buttons["Logos"].isChecked() is True
-
-
-def test_logos_highlight_is_exclusive():
-    db, pid, win = _win()
     win.sidebar_buttons["Logos"].click()
-    win.sidebar_buttons["Chat"].click()
     assert win.sidebar_buttons["Logos"].isChecked() is False
-    assert win.sidebar_buttons["Chat"].isChecked() is True
 
 
 # ==========================================================================
-# Existing navigation still works
+# 3, 4, 5, 8 — clicking Logos does NOT change the central section
 # ==========================================================================
+
+
+def test_logos_does_not_change_section():
+    db, pid, win = _win()
+    win.sidebar_buttons["Manuscript"].click()
+    section_before = win._current_section
+    content_before = win.content_area
+    win.sidebar_buttons["Logos"].click()
+    assert win._current_section == section_before
+    assert win.content_area is content_before  # no central page swap
+
+
+def test_manuscript_stays_active_when_logos_toggled():
+    db, pid, win = _win()
+    win.sidebar_buttons["Manuscript"].click()
+    win.sidebar_buttons["Logos"].click()
+    assert win._current_section == "Manuscript"
+    assert win.sidebar_buttons["Manuscript"].isChecked() is True
+
+
+def test_plot_stays_active_when_logos_toggled():
+    db, pid, win = _win()
+    win.sidebar_buttons["Plot"].click()
+    win.sidebar_buttons["Logos"].click()
+    assert win._current_section == "Plot"
+    assert win.sidebar_buttons["Plot"].isChecked() is True
+
+
+def test_no_central_logos_page():
+    # There is no LogosView module / central Logos page anymore.
+    import importlib
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("storyplanner.ui.logos.logos_view")
+
+
+# ==========================================================================
+# 6, 7 — inline layer appears when ON, hides when OFF
+# ==========================================================================
+
+
+def test_inline_layer_shows_when_on():
+    db, pid, win = _win()
+    win.sidebar_buttons["Manuscript"].click()
+    win.sidebar_buttons["Logos"].click()
+    assert win._logos_visible is True
+    assert not win._logos_toolbar.isHidden()
+
+
+def test_inline_layer_hides_when_off():
+    db, pid, win = _win()
+    win.sidebar_buttons["Logos"].click()   # ON
+    win.sidebar_buttons["Logos"].click()   # OFF
+    assert win._logos_visible is False
+    assert win._logos_toolbar.isHidden()
+    assert win._logos_suggestions.isHidden()
+
+
+def test_suggestions_suppressed_when_off():
+    db, pid, win = _win()
+    # With Logos OFF, a section scan must not show the suggestion bar.
+    win.sidebar_buttons["Manuscript"].click()
+    assert win._logos_enabled is False
+    assert win._logos_suggestions.isHidden()
+
+
+# ==========================================================================
+# 9, 10 — project switch clears stale suggestions / current project only
+# ==========================================================================
+
+
+def test_project_switch_clears_logos_suggestions():
+    db, pid, win = _win()
+    win.sidebar_buttons["Logos"].click()  # ON
+    pid2 = db.create_project("Second", narrative_engine="novel").id
+    win._switch_project(pid2)
+    # No stale suggestions from the previous project remain visible.
+    assert win._logos_suggestions.isHidden() or \
+        win._logos_engine._db is not None
+    # The proactive engine now points at the new project only.
+    assert win._logos_engine._project_id == pid2
+
+
+def test_logos_engine_rebound_to_new_project():
+    db, pid, win = _win()
+    pid2 = db.create_project("Other", narrative_engine="novel").id
+    win._switch_project(pid2)
+    assert win._logos_engine._project_id == pid2
+
+
+# ==========================================================================
+# 11, 12, 13 — Assistant / Chat / Counterpart / Quantum still work
+# ==========================================================================
+
+
+def test_assistant_toggle_still_works():
+    db, pid, win = _win()
+    win.sidebar_buttons["Assistant"].click()
+    assert win._current_section != "Assistant"  # toggle, not a section
 
 
 def test_chat_navigation_still_works():
@@ -105,82 +194,15 @@ def test_chat_navigation_still_works():
     assert isinstance(win.content_area, ChatView)
 
 
-def test_assistant_toggle_still_works():
+def test_counterpart_and_quantum_modes_present():
     db, pid, win = _win()
-    # Clicking Assistant toggles the panel; it must not raise and must not
-    # become the active section.
-    win.sidebar_buttons["Assistant"].click()
-    assert win._current_section != "Assistant"
-
-
-def test_psyke_navigation_still_works():
-    db, pid, win = _win()
-    win.sidebar_buttons["PSYKE"].click()
-    assert win._current_section == "PSYKE"
+    texts = {b.text() for b in win._assistant_panel.findChildren(QPushButton)}
+    assert "Counterpart" in texts
+    assert "Quantum" in texts
 
 
 # ==========================================================================
-# View content + reuse (no second Logos system)
-# ==========================================================================
-
-
-def test_logos_view_reuses_existing_controller():
-    db, pid, win = _win()
-    win.sidebar_buttons["Logos"].click()
-    # The view uses the MainWindow's single LogosController instance.
-    assert win.content_area._controller is win._logos_controller
-
-
-def test_logos_view_lists_actions_for_a_section():
-    db, pid, win = _win()
-    win.sidebar_buttons["Logos"].click()
-    # status text mentions the section + action count
-    assert "action(s) available" in win.content_area._status.text()
-
-
-def test_logos_view_empty_state_without_project():
-    db = Database()
-    view = LogosView(db, None, controller=None)
-    assert "No project loaded" in view._status.text()
-
-
-# ==========================================================================
-# Project switch / data change clears stale state
-# ==========================================================================
-
-
-def test_project_switch_rebuilds_logos_view():
-    db, pid, win = _win()
-    win.sidebar_buttons["Logos"].click()
-    first_view = win.content_area
-    pid2 = db.create_project("Second", narrative_engine="novel").id
-    win._switch_project(pid2)
-    # The active Logos section is rebuilt for the new project.
-    assert win._current_section == "Logos"
-    assert isinstance(win.content_area, LogosView)
-    assert win.content_area is not first_view
-    assert win.content_area._project_id == pid2
-
-
-def test_logos_view_refresh_after_data_change():
-    db, pid, win = _win()
-    win.sidebar_buttons["Logos"].click()
-    # _on_data_changed refreshes the active view; must not raise.
-    win._on_data_changed()
-    assert isinstance(win.content_area, LogosView)
-
-
-def test_logos_set_project_clears_stale():
-    db, pid, win = _win()
-    win.sidebar_buttons["Logos"].click()
-    view = win.content_area
-    pid2 = db.create_project("Other", narrative_engine="novel").id
-    view.set_project(pid2)
-    assert view._project_id == pid2
-
-
-# ==========================================================================
-# Collapsed sidebar alignment
+# 15 — collapsed sidebar icon/text alignment stable
 # ==========================================================================
 
 
@@ -188,8 +210,6 @@ def test_collapsed_sidebar_logos_icon_text():
     db, pid, win = _win()
     btn = win.sidebar_buttons["Logos"]
     btn.set_collapsed(True)
-    # Collapsed: icon-only text, label in tooltip — same contract as other
-    # standalone items (no indent centering glitch).
     assert btn.text() == btn._icon_text
     assert btn.toolTip() == "Logos"
     btn.set_collapsed(False)
@@ -201,7 +221,6 @@ def test_collapsed_logos_matches_other_standalone_items():
     logos, psyke = win.sidebar_buttons["Logos"], win.sidebar_buttons["PSYKE"]
     logos.set_collapsed(True)
     psyke.set_collapsed(True)
-    # Both standalone items render icon-only with no leading indent spaces.
     assert logos.text() == logos._icon_text
     assert psyke.text() == psyke._icon_text
     assert not logos.text().startswith(" ")

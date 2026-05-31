@@ -92,6 +92,7 @@ def test_window_has_proactive_engine_and_bar():
 
 def test_section_switch_scans_psyke():
     win, *_ = _window()
+    win._logos_enabled = True  # inline Logos layer must be ON for suggestions
     win._show_psyke()
     win._set_active_section("PSYKE")
     QApplication.instance().processEvents()
@@ -101,6 +102,7 @@ def test_section_switch_scans_psyke():
 
 def test_bar_shown_when_suggestions_exist():
     win, *_ = _window()
+    win._logos_enabled = True
     win._show_psyke()
     win._set_active_section("PSYKE")
     QApplication.instance().processEvents()
@@ -109,6 +111,7 @@ def test_bar_shown_when_suggestions_exist():
 
 def test_suppress_dismiss_removes_suggestion():
     win, *_ = _window()
+    win._logos_enabled = True
     win._show_psyke(); win._set_active_section("PSYKE")
     QApplication.instance().processEvents()
     suggestions = win._logos_suggestions.suggestions()
@@ -121,6 +124,7 @@ def test_suppress_dismiss_removes_suggestion():
 
 def test_suggestion_action_opens_toolbar(monkeypatch):
     win, db, pid = _window()
+    win._logos_enabled = True
     win._logos_controller._provider_resolver = lambda: object()
     win._logos_controller._chat_fn = lambda m, p: "Some detail"
     win._show_psyke(); win._set_active_section("PSYKE")

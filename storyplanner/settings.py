@@ -25,6 +25,10 @@ DEFAULTS: dict[str, object] = {
     "assistant_include_bible": False,
     "assistant_include_notes": True,
     "assistant_irrational": False,
+    # -- Logos inline contextual layer (left-panel ON/OFF toggle) ------------
+    # Master switch for the ambient inline Logos layer (toolbar + contextual
+    # suggestions). Off by default — non-intrusive until the user turns it on.
+    "logos_enabled": False,
     # -- Logos proactive suggestions (Phase 4) -------------------------------
     "logos_proactive_enabled": True,
     "logos_confidence_threshold": 0.65,

@@ -56,6 +56,7 @@ def test_switch_clears_stale_suggestions():
     db, p1, p2 = _two_projects()
     win = MainWindow(db, p1)
     win.resize(1400, 900)
+    win._logos_enabled = True  # inline Logos layer must be ON for suggestions
     win._show_psyke(); win._set_active_section("PSYKE")
     QApplication.instance().processEvents()
     assert win._logos_suggestions.suggestions()  # P1 has findings
@@ -93,6 +94,7 @@ def test_switch_clears_diagnostics_and_health_drawers():
 def test_switch_back_restores_findings():
     db, p1, p2 = _two_projects()
     win = MainWindow(db, p1)
+    win._logos_enabled = True
     win._show_psyke(); win._set_active_section("PSYKE")
     win._switch_project(p2)
     win._switch_project(p1)

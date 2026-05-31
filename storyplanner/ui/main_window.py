@@ -314,6 +314,8 @@ class MainWindow(QMainWindow):
         self._assistant_user_visible = False
         self._assistant_overlay = False
         self._logos_visible = False
+        # Single source of truth for the inline Logos layer ON/OFF state.
+        self._logos_enabled = bool(get_settings().get("logos_enabled"))
         self._layout_tier: str | None = None
         self._sidebar_icons = {
             "Projects": "\U0001F4C1",
@@ -449,7 +451,7 @@ class MainWindow(QMainWindow):
             "Outline", "Scenes", "Manuscript", "Timeline", "Plot",
             "Structure", "Acts", "Beats", "Tags", "Graph", "Arcs",
             "Health", "Balance", "Pacing", "Adapt", "Narrative", "PSYKE", "Plugins",
-            "Stages", "Logos", "Chat",
+            "Stages", "Chat",
         ]
         if self._is_graphic_novel:
             self._nav_labels.append("Pages")
@@ -477,7 +479,6 @@ class MainWindow(QMainWindow):
             "Plugins": self._show_plugins,
             "Chat": self._show_chat,
             "Stages": self._show_stages,
-            "Logos": self._show_logos,
             "Pages": self._show_gn_pages,
         }
         for label in self._nav_labels:
@@ -493,6 +494,15 @@ class MainWindow(QMainWindow):
         self.sidebar_buttons["Assistant"].clicked.connect(
             self._toggle_assistant
         )
+
+        # Logos is NOT a navigation section — it is an ON/OFF toggle for the
+        # inline contextual Logos layer. It stays out of _nav_labels so it never
+        # steals the active-section highlight; its checked state simply reflects
+        # whether the inline layer is enabled.
+        logos_btn = self.sidebar_buttons.get("Logos")
+        if logos_btn is not None:
+            logos_btn.setCheckable(True)
+            logos_btn.clicked.connect(self._toggle_logos_layer)
 
         # -- Right content area ----------------------------------------------
         self.content_area = self._build_initial_content()
@@ -607,6 +617,10 @@ class MainWindow(QMainWindow):
         # Assistant; it informs Logos action ordering and the health indicator.
         from storyplanner.logos.strategy import StrategyRouter
         self._strategy_router = StrategyRouter(self._db, self._project_id)
+
+        # Apply the persisted Logos ON/OFF state to the inline layer + sidebar
+        # button now that all Logos surfaces exist.
+        self._apply_logos_enabled(initial=True)
 
         # -- PSYKE Console (global bottom bar) --------------------------------
         console_row = QWidget()
@@ -1117,52 +1131,6 @@ class MainWindow(QMainWindow):
             )
         )
 
-    def _logos_section_for_view(self) -> str:
-        """Section whose Logos actions the central Logos view should show.
-
-        Uses the last meaningful section the user was on (not "Logos" itself),
-        falling back to Manuscript.
-        """
-        sec = getattr(self, "_current_section", None)
-        if not sec or sec == "Logos":
-            return "Manuscript"
-        return sec
-
-    def _logos_writing_mode(self) -> str:
-        try:
-            from storyplanner.writing_modes import get_project_writing_mode_by_id
-            return get_project_writing_mode_by_id(self._db, self._project_id)
-        except Exception:
-            return ""
-
-    def _logos_collect_suggestions(self) -> list:
-        """Current proactive suggestions for the Logos view (reuses the existing
-        engine; deterministic; no LLM; no mutation; [] when disabled/empty)."""
-        engine = getattr(self, "_logos_engine", None)
-        if engine is None or not getattr(engine.config, "enabled", True):
-            return []
-        try:
-            ctx = self._build_logos_context()
-            return list(engine.scan_section(self._logos_section_for_view(), ctx))
-        except Exception:
-            return []
-
-    def _show_logos(self) -> None:
-        from storyplanner.ui.logos.logos_view import LogosView
-        self._set_content(
-            LogosView(
-                self._db,
-                self._project_id,
-                controller=getattr(self, "_logos_controller", None),
-                get_context=self._build_logos_context,
-                get_writing_mode=self._logos_writing_mode,
-                get_section=self._logos_section_for_view,
-                scan_suggestions=self._logos_collect_suggestions,
-                on_open_diagnostics=self._toggle_diagnostics,
-                on_open_health=self._toggle_health,
-            )
-        )
-
     def _show_stages(self) -> None:
         self._set_content(
             StagesView(
@@ -1410,6 +1378,46 @@ class MainWindow(QMainWindow):
             self._logos_toolbar.refresh_actions()
         self._logos_toolbar.setVisible(self._logos_visible)
 
+    # -- Inline Logos layer ON/OFF (contextual assistant, not a section) ------
+
+    def _toggle_logos_layer(self) -> None:
+        """Left-panel Logos toggle: flip the inline contextual Logos layer.
+
+        Does NOT change the central section — the user stays exactly where they
+        are; only the ambient Logos layer (toolbar + contextual suggestions) is
+        shown/hidden, scoped to the current section.
+        """
+        self._logos_enabled = not self._logos_enabled
+        try:
+            get_settings().set("logos_enabled", self._logos_enabled)
+        except Exception:
+            pass
+        self._apply_logos_enabled()
+
+    def _apply_logos_enabled(self, *, initial: bool = False) -> None:
+        """Sync the inline Logos surfaces + sidebar button to ``logos_enabled``."""
+        on = bool(getattr(self, "_logos_enabled", False))
+        btn = self.sidebar_buttons.get("Logos")
+        if btn is not None and btn.isChecked() != on:
+            btn.setChecked(on)
+        # Inline toolbar tracks the master switch.
+        self._logos_visible = on
+        toolbar = getattr(self, "_logos_toolbar", None)
+        if toolbar is not None:
+            if on:
+                toolbar.set_section(self._current_section or "")
+                toolbar.refresh_actions()
+            toolbar.setVisible(on)
+        # Contextual suggestions: rescan for the current section when ON,
+        # clear + hide when OFF.
+        if on:
+            self._scan_logos_suggestions()
+        else:
+            bar = getattr(self, "_logos_suggestions", None)
+            if bar is not None:
+                bar.set_suggestions([])
+                bar.setVisible(False)
+
     # -- Proactive suggestions (Phase 4) -------------------------------------
 
     def _scan_logos_suggestions(self) -> None:
@@ -1421,6 +1429,12 @@ class MainWindow(QMainWindow):
         engine = getattr(self, "_logos_engine", None)
         bar = getattr(self, "_logos_suggestions", None)
         if engine is None or bar is None:
+            return
+        # The inline Logos layer must be turned ON (left-panel toggle) for any
+        # contextual suggestions to surface.
+        if not getattr(self, "_logos_enabled", False):
+            bar.set_suggestions([])
+            bar.setVisible(False)
             return
         if not engine.config.enabled:
             bar.set_suggestions([])
