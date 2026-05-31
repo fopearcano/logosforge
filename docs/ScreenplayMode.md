@@ -310,6 +310,16 @@ Logos output actions; opt-in `[Professional Output Readiness]` Assistant block;
 format-health categories (Professional Output Readiness, FDX Compatibility Risk).
 Fountain remains canonical. See **docs/ProfessionalScreenplayOutput.md**.
 
+## Phase 10K — revision intelligence
+
+A deterministic change-impact layer: when a scene changes, a Change Impact
+Map reports affected scenes, PSYKE entries, setup/payoff chains and continuity
+risks with explicit confidence (confirmed/likely/possible/unknown). Saved
+reports persist lightweight references only; deterministic Logos actions; a
+capped `[Revision Impact]` Assistant block (from the last saved report); and
+Revision Causality / Continuity Revision health categories. Assisted, never
+autonomous — no auto-rewrite/mutation. See **docs/RevisionIntelligence.md**.
+
 ## Phase 10J — production draft layer
 
 Optional, screenplay-only production drafts: persistent scene numbering,

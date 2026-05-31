@@ -20,6 +20,7 @@ _KEY_SCREENPLAY_LINKS = "include_screenplay_links_in_assistant_context"
 _KEY_SCREENPLAY_EXPORT = "include_screenplay_export_in_assistant_context"
 _KEY_PROFESSIONAL_OUTPUT = "include_professional_output_in_assistant_context"
 _KEY_PRODUCTION_DRAFT = "include_production_draft_in_assistant_context"
+_KEY_REVISION_IMPACT = "include_revision_impact_in_assistant_context"
 _KEY_STRATEGY = "include_strategy_in_assistant_context"
 _KEY_HEALTH = "include_health_in_assistant_context"
 _KEY_DIAGNOSTICS = "include_diagnostics_in_assistant_context"
@@ -34,6 +35,7 @@ _DEFAULTS = {
     _KEY_SCREENPLAY_EXPORT: True,  # screenplay-only; export readiness summary
     _KEY_PROFESSIONAL_OUTPUT: False,  # opt-in; DOCX/PDF/FDX readiness
     _KEY_PRODUCTION_DRAFT: True,  # only emits when production mode is active
+    _KEY_REVISION_IMPACT: True,  # only emits when a saved impact report exists
     _KEY_STRATEGY: True,
     _KEY_HEALTH: False,        # off by default — health is expensive/broad
     _KEY_DIAGNOSTICS: True,
@@ -90,6 +92,8 @@ def gather_injected_context(
         blocks.append(_professional_output_block(db, project_id, scene_id))
     if _flag(_KEY_PRODUCTION_DRAFT):
         blocks.append(_production_draft_block(db, project_id))
+    if _flag(_KEY_REVISION_IMPACT):
+        blocks.append(_revision_impact_block(db, project_id))
     if _flag(_KEY_STRATEGY):
         blocks.append(_strategy_block(db, project_id, section_name))
     if _flag(_KEY_HEALTH):
@@ -353,6 +357,36 @@ def _production_draft_block(db, project_id: int) -> str:
                  f"Page locking: {st.get('page_locking_status', 'disabled')}"]
         if st.get("warnings"):
             lines.append("Warnings: " + "; ".join(st["warnings"][:3]))
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _revision_impact_block(db, project_id: int) -> str:
+    """Capped ``[Revision Impact]`` from the last saved report (cheap read).
+
+    Never computes a fresh project-wide impact map during context assembly — it
+    only summarizes the most recent persisted report, so it's bounded and fast.
+    """
+    if not _is_screenplay(db, project_id):
+        return ""
+    try:
+        report = db.get_latest_revision_impact_report(project_id)
+        if report is None:
+            return ""
+        items = db.get_revision_impact_items(report.id)
+        scenes = [i for i in items if i.target_type == "scene"][:3]
+        psyke = [i for i in items if i.target_type == "psyke_entry"][:3]
+        sp = [i for i in items if i.target_type == "setup_payoff"][:3]
+        lines = ["[Revision Impact]",
+                 f"Scene {report.scene_id}: {report.impact_level} "
+                 f"({report.confidence})"]
+        if scenes:
+            lines.append("Impacted scenes: " + ", ".join(i.label for i in scenes))
+        if psyke:
+            lines.append("PSYKE: " + ", ".join(i.label for i in psyke))
+        if sp:
+            lines.append("Setup/payoff risks: " + ", ".join(i.label for i in sp))
         return "\n".join(lines)
     except Exception:
         return ""

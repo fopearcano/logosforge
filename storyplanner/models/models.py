@@ -279,6 +279,61 @@ class RevisionChange(SQLModel, table=True):
 
 
 # Standard production revision colour sequence (metadata only).
+class RevisionImpactReport(SQLModel, table=True):
+    """A saved revision change-impact report (Phase 10K). Lightweight references
+    only — no full manuscript copies. Created idempotently by ``create_all``."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    draft_id: Optional[int] = None
+    revision_set_id: Optional[int] = None
+    scene_id: Optional[int] = Field(default=None, foreign_key="scene.id")
+    source_revision_change_id: Optional[int] = None
+    title: str = ""
+    summary: str = ""
+    impact_level: str = "low"        # low | medium | high | critical
+    confidence: str = "possible"     # confirmed | likely | possible | unknown
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
+class RevisionImpactItem(SQLModel, table=True):
+    """One finding within a revision impact report."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    report_id: int = Field(foreign_key="revisionimpactreport.id", index=True)
+    target_type: str = ""            # scene|psyke_entry|setup_payoff|timeline_event|...
+    target_id: str = ""
+    label: str = ""
+    impact_kind: str = ""            # changed|depends_on|contradicts|missing_payoff|...
+    severity: str = "info"           # info | warning | error | blocking
+    confidence: str = "possible"     # confirmed | likely | possible | unknown
+    explanation: str = ""
+    suggested_action: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+class RevisionDiffSnapshot(SQLModel, table=True):
+    """A lightweight before/after diff snapshot for a scene (hashes + excerpts)."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    scene_id: Optional[int] = Field(default=None, foreign_key="scene.id")
+    revision_set_id: Optional[int] = None
+    before_hash: str = ""
+    after_hash: str = ""
+    before_excerpt: str = ""
+    after_excerpt: str = ""
+    changed_tokens_json: str = ""
+    created_at: datetime = Field(default_factory=_now)
+
+
+IMPACT_LEVELS = ("low", "medium", "high", "critical")
+IMPACT_CONFIDENCE = ("confirmed", "likely", "possible", "unknown")
+IMPACT_SEVERITIES = ("info", "warning", "error", "blocking")
+
+
 REVISION_COLORS = (
     "White", "Blue", "Pink", "Yellow", "Green", "Goldenrod", "Buff", "Salmon",
     "Cherry", "Tan", "Ivory",

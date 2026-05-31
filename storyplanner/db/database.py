@@ -39,6 +39,9 @@ from storyplanner.models import (
     ProductionDraft,
     ProductionSceneNumber,
     RevisionChange,
+    RevisionDiffSnapshot,
+    RevisionImpactItem,
+    RevisionImpactReport,
     RevisionSet,
     ScenePlaceLink,
     StoryLink,
@@ -3293,6 +3296,60 @@ class Database:
         with Session(self._engine) as session:
             stmt = select(RevisionChange).where(
                 RevisionChange.draft_id == draft_id).order_by(RevisionChange.id)
+            return list(session.exec(stmt).all())
+
+    # -- Revision impact reports (Phase 10K) ---------------------------------
+
+    def create_revision_impact_report(self, project_id: int, *, items=None,
+                                      diff=None, **fields) -> RevisionImpactReport:
+        """Persist an impact report + its items (+ optional diff snapshot).
+
+        *items* is a list of dicts (RevisionImpactItem fields); *diff* is an
+        optional dict (RevisionDiffSnapshot fields). Explicit/user-confirmed.
+        """
+        from storyplanner.models.models import _now
+        fields.pop("project_id", None)
+        report = RevisionImpactReport(project_id=project_id, **fields)
+        report.updated_at = _now()
+        with Session(self._engine) as session:
+            session.add(report)
+            session.commit()
+            session.refresh(report)
+            for it in (items or []):
+                it = dict(it)
+                it.pop("project_id", None)
+                it.pop("report_id", None)
+                session.add(RevisionImpactItem(
+                    project_id=project_id, report_id=report.id, **it))
+            if diff is not None:
+                d = dict(diff)
+                d.pop("project_id", None)
+                session.add(RevisionDiffSnapshot(project_id=project_id, **d))
+            session.commit()
+            session.refresh(report)
+            return report
+
+    def get_revision_impact_reports(self, project_id: int, *,
+                                    scene_id: int | None = None,
+                                    ) -> list[RevisionImpactReport]:
+        with Session(self._engine) as session:
+            stmt = select(RevisionImpactReport).where(
+                RevisionImpactReport.project_id == project_id)
+            if scene_id is not None:
+                stmt = stmt.where(RevisionImpactReport.scene_id == scene_id)
+            stmt = stmt.order_by(RevisionImpactReport.id)
+            return list(session.exec(stmt).all())
+
+    def get_latest_revision_impact_report(self, project_id: int,
+                                          ) -> "RevisionImpactReport | None":
+        reports = self.get_revision_impact_reports(project_id)
+        return reports[-1] if reports else None
+
+    def get_revision_impact_items(self, report_id: int) -> list[RevisionImpactItem]:
+        with Session(self._engine) as session:
+            stmt = select(RevisionImpactItem).where(
+                RevisionImpactItem.report_id == report_id).order_by(
+                RevisionImpactItem.id)
             return list(session.exec(stmt).all())
 
     @staticmethod

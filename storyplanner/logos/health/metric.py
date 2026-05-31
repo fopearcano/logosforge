@@ -63,6 +63,9 @@ CAT_FDX_COMPAT_RISK = "fdx_compatibility_risk"
 CAT_PRODUCTION_READINESS = "production_draft_readiness"
 CAT_SCENE_NUMBERING = "scene_numbering_integrity"
 CAT_REVISION_SET = "revision_set_integrity"
+# Phase 10K additions (revision intelligence — only when a saved report exists).
+CAT_REVISION_CAUSALITY = "revision_causality_risk"
+CAT_CONTINUITY_REVISION = "continuity_revision_risk"
 
 SCREENPLAY_CATEGORIES = (
     CAT_VISUAL_ACTION, CAT_SCENE_ECONOMY, CAT_DIALOGUE_ECONOMY, CAT_SCENE_TURN,
@@ -73,6 +76,7 @@ SCREENPLAY_CATEGORIES = (
     CAT_DIALOGUE_FORMAT, CAT_FOUNTAIN_READINESS, CAT_UNSUPPORTED_ELEMENTS,
     CAT_PRO_OUTPUT_READINESS, CAT_FDX_COMPAT_RISK,
     CAT_PRODUCTION_READINESS, CAT_SCENE_NUMBERING, CAT_REVISION_SET,
+    CAT_REVISION_CAUSALITY, CAT_CONTINUITY_REVISION,
 )
 
 _CATEGORY_NAMES = {
@@ -112,6 +116,8 @@ _CATEGORY_NAMES = {
     CAT_PRODUCTION_READINESS: "Production Draft Readiness",
     CAT_SCENE_NUMBERING: "Scene Numbering Integrity",
     CAT_REVISION_SET: "Revision Set Integrity",
+    CAT_REVISION_CAUSALITY: "Revision Causality Risk",
+    CAT_CONTINUITY_REVISION: "Continuity Revision Risk",
 }
 
 # -- Status ------------------------------------------------------------------

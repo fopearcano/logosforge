@@ -70,3 +70,10 @@ Candidate links are heuristic (lexical setup/payoff + structural inference);
 confidence is honest and modest. Confirmed links persist, but generating them
 still requires a human decision. The existing relationship `GraphView` is
 unchanged — the screenplay graph is a separate, additive data/report layer.
+
+## Revision impact (Phase 10K)
+
+The Change Impact Map (`revision_intelligence`) produces node/edge-style
+impact data (changed scene → impacted scenes / PSYKE / setup-payoff). A
+dedicated Graph **visualization mode** for it is deferred; the data is
+available via the impact map result. See **docs/RevisionIntelligence.md**.

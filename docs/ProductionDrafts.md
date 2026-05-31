@@ -93,6 +93,13 @@ are intentionally not coupled to the STAGES/versioning snapshot system; deeper
 integration (snapshot references) is deferred. Autosave/versioning is unaffected
 — editing never auto-creates a revision.
 
+## Revision Intelligence (Phase 10K)
+
+Production revision sets are explained by the Revision Intelligence layer
+(Change Impact Map): a saved RevisionChange can seed an impact report that
+lists affected scenes/PSYKE/setup-payoff/continuity. See
+**docs/RevisionIntelligence.md**.
+
 ## Deferred (future)
 
 - Production UI controls (enable mode, assign numbers, revision sets, omit/

@@ -51,6 +51,8 @@ DEFAULTS: dict[str, object] = {
     "include_professional_output_in_assistant_context": False,
     # Production draft status — shown only when production mode is active.
     "include_production_draft_in_assistant_context": True,
+    # Revision impact — shown only when a saved impact report exists.
+    "include_revision_impact_in_assistant_context": True,
     "include_strategy_in_assistant_context": True,
     "include_health_in_assistant_context": False,
     "include_diagnostics_in_assistant_context": True,

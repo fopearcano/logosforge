@@ -691,6 +691,30 @@ def screenplay_health_metrics(db, project_id: int) -> list:
             evidence=(f"{len(revs)} revision set(s)." if revs
                       else "No revision sets yet.")))
 
+    # -- Revision intelligence (Phase 10K — only when a saved report exists) --
+    # Diagnostic, capped at WATCH; based on the latest persisted impact report.
+    try:
+        report = db.get_latest_revision_impact_report(project_id)
+    except Exception:
+        report = None
+    if report is not None:
+        high = report.impact_level in ("high", "critical")
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_REVISION_CAUSALITY,
+            status=(M.STATUS_WATCH if high else M.STATUS_STABLE), confidence=0.4,
+            evidence=f"Latest revision impact: {report.impact_level} "
+                     f"({report.confidence})."))
+        try:
+            items = db.get_revision_impact_items(report.id)
+        except Exception:
+            items = []
+        cont = [i for i in items if i.impact_kind == "continuity_risk"
+                and i.confidence != "unknown"]
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_CONTINUITY_REVISION,
+            status=(M.STATUS_WATCH if cont else M.STATUS_STABLE), confidence=0.35,
+            evidence=(cont[0].label if cont else "No flagged continuity revision risk.")))
+
     # Cinematic Continuity stays deferred (needs semantics / future phase).
     metrics.append(M.NarrativeHealthMetric(
         category=M.CAT_CINEMATIC_CONTINUITY, status=M.STATUS_UNKNOWN,

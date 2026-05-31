@@ -697,3 +697,122 @@ register("sp_summarize_revision_set", _summarize_revision_set)
 register("sp_explain_page_locking", _explain_page_locking)
 register("sp_check_fountain_production_export", _check_fountain_production_export)
 register("sp_prepare_production_export", _prepare_production_export)
+
+
+# -- Phase 10K — revision intelligence (read-only; saving a report is a separate
+#    explicit service call) -----------------------------------------------------
+
+
+def _impact_map(db, context: LogosContext):
+    from storyplanner.revision_intelligence.impact_map import build_revision_impact_map
+    return build_revision_impact_map(db, context.project_id,
+                                     scene_id=context.current_scene_id)
+
+
+def _needs_scene(action: str, title: str) -> LogosResult:
+    return LogosResult(ok=True, action=action, title=title,
+                       message="Open a scene to run revision intelligence.",
+                       suggestions=[], proposed_operations=[])
+
+
+def _revision_impact(db, context: LogosContext) -> LogosResult:
+    action = "sp_revision_impact"
+    if context.current_scene_id is None:
+        return _needs_scene(action, "Revision Impact Map")
+    try:
+        m = _impact_map(db, context)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Impact map failed: {exc}")
+    lines = [m.summary]
+    if m.impacted_scenes:
+        lines.append("Impacted scenes: " + ", ".join(
+            f"{s['label']} ({s['confidence']})" for s in m.impacted_scenes[:3]))
+    if m.impacted_psyke_entries:
+        lines.append("PSYKE: " + ", ".join(
+            p["name"] for p in m.impacted_psyke_entries[:3]))
+    if m.limitations:
+        lines.append("Limitations: " + "; ".join(m.limitations))
+    return LogosResult(ok=True, action=action, title="Generate Revision Impact Map",
+                       message="\n".join(lines), suggestions=[], proposed_operations=[])
+
+
+def _check_psyke_impact(db, context: LogosContext) -> LogosResult:
+    action = "sp_check_psyke_impact"
+    if context.current_scene_id is None:
+        return _needs_scene(action, "Check PSYKE Impact")
+    m = _impact_map(db, context)
+    if not m.impacted_psyke_entries:
+        msg = "No PSYKE entries detected in this scene."
+    else:
+        msg = "\n".join(f"- {p['name']} ({p['impact_kind']}, {p['confidence']})"
+                        for p in m.impacted_psyke_entries[:10])
+    return LogosResult(ok=True, action=action, title="Check PSYKE Impact",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _check_setup_payoff_impact(db, context: LogosContext) -> LogosResult:
+    action = "sp_check_setup_payoff_impact"
+    if context.current_scene_id is None:
+        return _needs_scene(action, "Check Setup/Payoff Impact")
+    m = _impact_map(db, context)
+    if not m.setup_payoff_impacts:
+        msg = "No setup/payoff chains connected to this scene."
+    else:
+        msg = "\n".join(f"- {s['label']} ({s['impact_kind']})"
+                        for s in m.setup_payoff_impacts[:10])
+    return LogosResult(ok=True, action=action, title="Check Setup/Payoff Impact",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _check_continuity_impact(db, context: LogosContext) -> LogosResult:
+    action = "sp_check_continuity_impact"
+    if context.current_scene_id is None:
+        return _needs_scene(action, "Check Continuity Impact")
+    m = _impact_map(db, context)
+    msg = "\n".join(f"- {c['label']} ({c['confidence']})"
+                    for c in m.continuity_impacts[:10])
+    return LogosResult(ok=True, action=action, title="Check Continuity Impact",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _check_impacted_scenes(db, context: LogosContext) -> LogosResult:
+    action = "sp_check_impacted_scenes"
+    if context.current_scene_id is None:
+        return _needs_scene(action, "Check Impacted Scenes")
+    m = _impact_map(db, context)
+    if not m.impacted_scenes:
+        msg = "No dependent scenes detected."
+    else:
+        msg = "\n".join(f"- {s['label']}: {s['impact_kind']} "
+                        f"({s['confidence']}) — {s['explanation']}"
+                        for s in m.impacted_scenes[:12])
+    return LogosResult(ok=True, action=action, title="Check Impacted Scenes",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _prepare_revision_followup(db, context: LogosContext) -> LogosResult:
+    action = "sp_prepare_revision_followup"
+    if context.current_scene_id is None:
+        return _needs_scene(action, "Prepare Revision Follow-up Checklist")
+    m = _impact_map(db, context)
+    checks = []
+    for s in m.impacted_scenes[:5]:
+        if s.get("suggested_action"):
+            checks.append(f"{s['label']}: {s['suggested_action']}")
+    for sp in m.setup_payoff_impacts[:3]:
+        if sp.get("suggested_action"):
+            checks.append(sp["suggested_action"])
+    if not checks:
+        checks = ["No follow-up checks flagged by deterministic analysis."]
+    return LogosResult(ok=True, action=action,
+                       title="Prepare Revision Follow-up Checklist",
+                       message="\n".join(f"- {c}" for c in checks),
+                       suggestions=checks[:5], proposed_operations=[])
+
+
+register("sp_revision_impact", _revision_impact)
+register("sp_check_psyke_impact", _check_psyke_impact)
+register("sp_check_setup_payoff_impact", _check_setup_payoff_impact)
+register("sp_check_continuity_impact", _check_continuity_impact)
+register("sp_check_impacted_scenes", _check_impacted_scenes)
+register("sp_prepare_revision_followup", _prepare_revision_followup)

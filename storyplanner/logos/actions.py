@@ -579,6 +579,27 @@ for _name, _label, _desc in [
         category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
         prompt="", modes=_SP, deterministic=True,
     ))
+# Manuscript + Screenplay — Phase 10K (revision intelligence, read-only/deterministic).
+for _name, _label, _desc in [
+    ("sp_revision_impact", "Generate Revision Impact Map",
+     "Map what the current scene's change affects (deterministic)."),
+    ("sp_check_psyke_impact", "Check PSYKE Impact",
+     "PSYKE entries touched by the current scene."),
+    ("sp_check_setup_payoff_impact", "Check Setup/Payoff Impact",
+     "Setup/payoff chains connected to the current scene."),
+    ("sp_check_continuity_impact", "Check Continuity Impact",
+     "Deterministic continuity risks for the current scene."),
+    ("sp_check_impacted_scenes", "Check Impacted Scenes",
+     "Scenes that may depend on the current scene."),
+    ("sp_prepare_revision_followup", "Prepare Revision Follow-up Checklist",
+     "Checklist of follow-up checks after a revision."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc,
+        category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+        prompt="", modes=_SP, deterministic=True,
+    ))
+
 # Manuscript + Screenplay — Phase 10J (production draft, read-only/deterministic).
 for _name, _label, _desc in [
     ("sp_production_status", "Explain Production Draft Status",

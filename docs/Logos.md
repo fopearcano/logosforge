@@ -70,7 +70,10 @@ notes) — it does not invent a second context system.
   Professional Export) — read-only; DOCX/PDF/FDX file writes are export functions. Phase 10J adds deterministic production-draft status
   actions (Explain/Validate Production Draft, Check Duplicate Scene Numbers,
   Summarize Revision Set, Explain Page Locking, Prepare for Production Export);
-  production mutations are an explicit service API.
+  production mutations are an explicit service API. Phase 10K adds deterministic revision-intelligence
+  actions (Generate Revision Impact Map, Check PSYKE/Setup-Payoff/Continuity/
+  Impacted-Scenes, Prepare Revision Follow-up); saving reports / graph-link
+  conversion are explicit, confirmed service calls.
 - **operations** — controlled, validated apply ops (manuscript replace/insert,
   outline scene create/update, PSYKE notes/progression/relation). Every mutation
   is previewed and confirmed; nothing auto-applies.
