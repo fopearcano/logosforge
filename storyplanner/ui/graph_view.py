@@ -45,6 +45,22 @@ class GraphView(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Relationship Graph"))
 
+        # Phase 9B — surface the active project writing mode (read fresh at
+        # construction; the view is rebuilt on project switch, so no stale
+        # mode). Read-only reflection of Project.narrative_engine — never a
+        # second source of truth.
+        try:
+            from storyplanner.writing_modes import (
+                get_project_writing_mode,
+                mode_label,
+            )
+            _mode = get_project_writing_mode(db.get_project_by_id(project_id))
+            self._mode_label = QLabel(f"Mode: {mode_label(_mode)}")
+            self._mode_label.setObjectName("graphModeChip")
+            layout.addWidget(self._mode_label)
+        except Exception:
+            pass
+
         self._legend = QLabel(self._build_legend())
         layout.addWidget(self._legend)
 

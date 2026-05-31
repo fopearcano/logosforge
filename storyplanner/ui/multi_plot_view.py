@@ -209,6 +209,26 @@ class _TimelineStrip(_SceneCardContextMixin, QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
+        # Phase 9B — surface the active project writing mode + structural
+        # vocabulary (read fresh at construction; the view is rebuilt on
+        # project switch, so no stale mode). Read-only reflection of
+        # Project.narrative_engine — never a second source of truth.
+        try:
+            from storyplanner.writing_modes import (
+                get_project_writing_mode,
+                mode_label,
+                structural_vocabulary,
+            )
+            _mode = get_project_writing_mode(project)
+            self._mode_label = QLabel(
+                f"Mode: {mode_label(_mode)}  ·  {structural_vocabulary(_mode)}"
+            )
+            self._mode_label.setObjectName("plotModeChip")
+            self._mode_label.setContentsMargins(16, 8, 16, 0)
+            outer.addWidget(self._mode_label)
+        except Exception:
+            pass
+
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)

@@ -56,6 +56,25 @@ drive the Outline.
   resolve `writing_mode`; the report records it. No metrics are invented.
 - **Export** — JSON metadata and the Markdown header include `writing_mode`.
 
+## Phase 9B — propagation hardening
+
+A narrow follow-up pass (Phase 9A confirmed the model is sound; Phase 9B fixed
+only the two formerly mode-agnostic *container* views and proved propagation):
+
+- **Graph** (`graph_view.py`) and **Plot** (`multi_plot_view.py`) now show a
+  read-only `Mode: …` header (Plot also shows the structural vocabulary). These
+  are reflections of `Project.narrative_engine`, read fresh at construction —
+  never a second source of truth, and the views are rebuilt on project switch so
+  no stale mode can appear. Their embedded grids (`StoryGridView` /
+  `FocusGraphView`) were already mode-aware.
+- **Guard tests** (`tests/test_phase9b_propagation.py`) prove that Assistant
+  context, LogosContext, Strategy, Export, and Health/Diagnostics all follow an
+  A→B→A project switch with no stale mode, that invalid modes fall back to
+  `novel` everywhere, that manuscript formatting is independent of project mode,
+  and that the provider path (`build_active_provider`) is untouched.
+
+No engines, schema, provider, or AssistantDock changes were made.
+
 ## Remaining limitations / deferred
 
 - No full medium-specific engines yet (screenplay PDF, graphic-novel script,
