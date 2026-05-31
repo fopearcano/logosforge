@@ -291,7 +291,9 @@ def test_assistant_subtext_block_present_and_capped():
     ).id
     ctx = gather_injected_context(db, pid, section_name="Manuscript", scene_id=sid)
     assert "[Screenplay Subtext]" in ctx
-    block = ctx.split("[Screenplay Subtext]")[-1]
+    # Isolate just the subtext block (stop at the next block header) — later
+    # Assistant blocks may follow it in the gather order.
+    block = ctx.split("[Screenplay Subtext]")[-1].split("\n[")[0]
     assert block.count("\n- ") <= 3   # capped at 3 signals
 
 
