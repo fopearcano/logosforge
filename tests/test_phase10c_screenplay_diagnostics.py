@@ -373,7 +373,7 @@ def test_health_defers_unsupported_categories():
     db.create_scene(pid, "Open", content="INT. X - DAY\n\nJohn waits.", summary="x")
     report = HealthEngine(db, pid).generate_report()
     by_cat = {m.category: m for m in report.metrics}
-    assert by_cat[M.CAT_SUBTEXT].status == M.STATUS_UNKNOWN
+    # Cinematic Continuity stays deferred (Subtext is now populated in Phase 10D).
     assert by_cat[M.CAT_CINEMATIC_CONTINUITY].status == M.STATUS_UNKNOWN
 
 

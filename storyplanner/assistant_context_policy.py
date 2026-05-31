@@ -15,6 +15,7 @@ from __future__ import annotations
 # Settings keys + conservative defaults.
 _KEY_PROJECT_MODE = "include_project_mode_in_assistant_context"
 _KEY_SCREENPLAY_DIAG = "include_screenplay_diagnostics_in_assistant_context"
+_KEY_SCREENPLAY_TRACK = "include_screenplay_tracking_in_assistant_context"
 _KEY_STRATEGY = "include_strategy_in_assistant_context"
 _KEY_HEALTH = "include_health_in_assistant_context"
 _KEY_DIAGNOSTICS = "include_diagnostics_in_assistant_context"
@@ -24,6 +25,7 @@ _KEY_MAX_DIAG = "max_diagnostics_in_context"
 _DEFAULTS = {
     _KEY_PROJECT_MODE: True,   # on by default — tiny, deterministic, always relevant
     _KEY_SCREENPLAY_DIAG: True,  # screenplay-only; concise top-issues summary
+    _KEY_SCREENPLAY_TRACK: True,  # screenplay-only; setup/payoff + subtext summaries
     _KEY_STRATEGY: True,
     _KEY_HEALTH: False,        # off by default — health is expensive/broad
     _KEY_DIAGNOSTICS: True,
@@ -69,6 +71,9 @@ def gather_injected_context(
         blocks.append(_screenplay_scene_block(db, project_id, scene_id))
     if _flag(_KEY_SCREENPLAY_DIAG):
         blocks.append(_screenplay_diagnostics_block(db, project_id, scene_id))
+    if _flag(_KEY_SCREENPLAY_TRACK):
+        blocks.append(_screenplay_setup_payoff_block(db, project_id, scene_id))
+        blocks.append(_screenplay_subtext_block(db, project_id, scene_id))
     if _flag(_KEY_STRATEGY):
         blocks.append(_strategy_block(db, project_id, section_name))
     if _flag(_KEY_HEALTH):
@@ -151,6 +156,54 @@ def _screenplay_diagnostics_block(db, project_id: int, scene_id: int | None) -> 
             lines.append("Top issues:")
             for n, i in enumerate(top, 1):
                 lines.append(f"{n}. {i.label}.")
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _is_screenplay(db, project_id: int) -> bool:
+    try:
+        from storyplanner.writing_modes import get_project_writing_mode_by_id
+        return get_project_writing_mode_by_id(db, project_id) == "screenplay"
+    except Exception:
+        return False
+
+
+def _screenplay_setup_payoff_block(db, project_id: int, scene_id: int | None) -> str:
+    """Capped ``[Screenplay Setup/Payoff]`` — 3 unresolved / 3 payoffs / 3 motifs."""
+    if scene_id is None or not _is_screenplay(db, project_id):
+        return ""
+    try:
+        from storyplanner.screenplay_setup_payoff import analyze_setup_payoff
+        report = analyze_setup_payoff(db, project_id)
+        if not (report.unresolved_setups or report.possible_payoffs
+                or report.recurring_motifs):
+            return ""
+        lines = ["[Screenplay Setup/Payoff]"]
+        for label, items in (
+            ("Unresolved setups", report.unresolved_setups),
+            ("Possible payoffs", report.possible_payoffs),
+            ("Recurring motifs", report.recurring_motifs),
+        ):
+            for c in items[:3]:
+                lines.append(f"- {label[:-1] if label.endswith('s') else label}: {c.label}")
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _screenplay_subtext_block(db, project_id: int, scene_id: int | None) -> str:
+    """Capped ``[Screenplay Subtext]`` — status + top 3 signals for the scene."""
+    if scene_id is None or not _is_screenplay(db, project_id):
+        return ""
+    try:
+        from storyplanner.screenplay_subtext import analyze_subtext_by_id
+        report = analyze_subtext_by_id(db, project_id, scene_id)
+        if not report.signals:
+            return ""
+        lines = ["[Screenplay Subtext]", report.summary]
+        for s in report.top_signals(3):
+            lines.append(f"- {s.signal_type}: {s.evidence}")
         return "\n".join(lines)
     except Exception:
         return ""

@@ -42,11 +42,14 @@ CAT_CHARACTER_OBJECTIVE = "character_objective"
 CAT_SP_SETUP_PAYOFF = "sp_setup_payoff"
 CAT_SUBTEXT = "subtext"
 CAT_CINEMATIC_CONTINUITY = "cinematic_continuity"
+# Phase 10D additions.
+CAT_MOTIF_RECURRENCE = "motif_recurrence"
+CAT_ON_THE_NOSE = "on_the_nose"
 
 SCREENPLAY_CATEGORIES = (
     CAT_VISUAL_ACTION, CAT_SCENE_ECONOMY, CAT_DIALOGUE_ECONOMY, CAT_SCENE_TURN,
     CAT_CHARACTER_OBJECTIVE, CAT_SP_SETUP_PAYOFF, CAT_SUBTEXT,
-    CAT_CINEMATIC_CONTINUITY,
+    CAT_CINEMATIC_CONTINUITY, CAT_MOTIF_RECURRENCE, CAT_ON_THE_NOSE,
 )
 
 _CATEGORY_NAMES = {
@@ -69,8 +72,10 @@ _CATEGORY_NAMES = {
     CAT_SCENE_TURN: "Scene Turn",
     CAT_CHARACTER_OBJECTIVE: "Character Objective",
     CAT_SP_SETUP_PAYOFF: "Setup / Payoff",
-    CAT_SUBTEXT: "Subtext Candidate",
+    CAT_SUBTEXT: "Dialogue Subtext",
     CAT_CINEMATIC_CONTINUITY: "Cinematic Continuity",
+    CAT_MOTIF_RECURRENCE: "Motif Recurrence",
+    CAT_ON_THE_NOSE: "On-the-Nose Dialogue Risk",
 }
 
 # -- Status ------------------------------------------------------------------

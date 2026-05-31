@@ -560,6 +560,50 @@ for _name, _label, _desc, _prompt in [
         prompt=_prompt, needs_selection=True, modes=_SP,
     ))
 
+# Manuscript + Screenplay — Phase 10D (setup/payoff + subtext).
+# Deterministic (no LLM; handlers in logos.deterministic):
+for _name, _label, _desc in [
+    ("sp_detect_setup_payoff", "Detect Setup/Payoff Candidates",
+     "Scan the project for setup/payoff candidates (deterministic)."),
+    ("sp_track_unresolved_setups", "Track Unresolved Setups",
+     "List planted setups that never recur."),
+    ("sp_find_possible_payoffs", "Find Possible Payoffs",
+     "List elements that recur as possible payoffs."),
+    ("sp_check_subtext", "Check Dialogue Subtext",
+     "Flag on-the-nose / expositional dialogue in this scene (deterministic)."),
+    ("sp_find_exposition", "Find Exposition in Dialogue",
+     "Surface exposition markers in this scene's dialogue."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc,
+        category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+        prompt="", modes=_SP, deterministic=True,
+    ))
+# Generative subtext rewrites (LLM only on explicit invocation):
+for _name, _label, _desc, _prompt in [
+    ("sp_reduce_on_the_nose", "Reduce On-the-Nose Dialogue",
+     "Make on-the-nose dialogue more subtextual.",
+     "Suggest how to make the selected dialogue less on-the-nose — put the "
+     "feeling/intent under the line rather than in it. Suggestions only."),
+    ("sp_objective_gap", "Strengthen Character Objective Gap",
+     "Sharpen the gap between want and spoken line.",
+     "Suggest how to widen the gap between what the character wants and what they "
+     "say here, so the scene plays with more subtext. Suggestions only."),
+    ("sp_action_beat_subtext", "Add Action Beat for Subtext",
+     "Add behavior that carries the subtext.",
+     "Suggest a small action beat (behavior/business) that could carry the "
+     "subtext of this moment instead of stating it. Suggestions only."),
+    ("sp_emotion_to_behavior", "Convert Stated Emotion to Behavior",
+     "Show the emotion through behavior.",
+     "Suggest how to convert directly-stated emotion in the selection into "
+     "observable behavior or action. Suggestions only; do not rewrite."),
+]:
+    register(LogosAction(
+        name=_name, label=_label, description=_desc,
+        category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+        prompt=_prompt, needs_selection=True, modes=_SP,
+    ))
+
 # Outline + Screenplay
 for _name, _label, _desc, _cat, _prompt in [
     ("sp_sequence_logic", "Check Sequence Logic",

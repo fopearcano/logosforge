@@ -478,27 +478,64 @@ def screenplay_health_metrics(db, project_id: int) -> list:
                ("objective_unclear", "no_active_character"),
                "unclear character objective", 0.45),
     ]
-    # Setup/Payoff: WATCH when untracked candidates exist, else unknown (we can't
-    # assess whether setups *should* exist without the Phase 10D engine).
-    setup_hits = sum(
-        1 for r in reports if any(i.id.startswith("setup_candidate") for i in r.issues)
-    )
-    if n == 0:
-        sp_status, sp_ev = M.STATUS_UNKNOWN, "No screenplay scenes to analyze."
-    elif setup_hits:
-        sp_status = M.STATUS_WATCH
-        sp_ev = f"{setup_hits} untracked setup candidate(s) — payoff tracking is Phase 10D."
-    else:
-        sp_status, sp_ev = M.STATUS_UNKNOWN, "No setup/payoff candidates detected."
-    metrics.append(M.NarrativeHealthMetric(
-        category=M.CAT_SP_SETUP_PAYOFF, status=sp_status, confidence=0.4, evidence=sp_ev,
-    ))
-    # Deferred categories — honestly unknown (need an LLM / future engine).
-    for cat in (M.CAT_SUBTEXT, M.CAT_CINEMATIC_CONTINUITY):
+    # -- Setup/Payoff + Motif (Phase 10D — deterministic tracker) --
+    try:
+        from storyplanner.screenplay_setup_payoff import analyze_setup_payoff
+        sp = analyze_setup_payoff(db, project_id)
+    except Exception:
+        sp = None
+    if n == 0 or sp is None:
         metrics.append(M.NarrativeHealthMetric(
-            category=cat, status=M.STATUS_UNKNOWN,
-            evidence="Deferred — not deterministically assessable yet (Phase 10D).",
-        ))
+            category=M.CAT_SP_SETUP_PAYOFF, status=M.STATUS_UNKNOWN,
+            evidence="No screenplay scenes to analyze."))
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_MOTIF_RECURRENCE, status=M.STATUS_UNKNOWN,
+            evidence="No screenplay scenes to analyze."))
+    else:
+        un = len(sp.unresolved_setups)
+        sp_status = M.STATUS_WATCH if un else M.STATUS_STABLE
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_SP_SETUP_PAYOFF, status=sp_status, confidence=0.45,
+            evidence=(f"{un} unresolved setup candidate(s); "
+                      f"{len(sp.possible_payoffs)} possible payoff(s).")))
+        motif_status = M.STATUS_STABLE if sp.recurring_motifs else M.STATUS_UNKNOWN
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_MOTIF_RECURRENCE, status=motif_status, confidence=0.4,
+            evidence=(f"{len(sp.recurring_motifs)} recurring motif candidate(s)."
+                      if sp.recurring_motifs else "No recurring motifs detected.")))
+
+    # -- Subtext + On-the-Nose (Phase 10D — deterministic subtext) --
+    try:
+        from storyplanner.screenplay_subtext import (
+            analyze_subtext_project, S_ON_THE_NOSE_RISK,
+        )
+        sub_reports = analyze_subtext_project(db, project_id)
+        sub_reports = [r for r in sub_reports if r.signals or True]
+    except Exception:
+        sub_reports = []
+    sub_scenes = [r for r in (sub_reports or []) if r.scene_id is not None]
+    if not sub_scenes or n == 0:
+        for cat in (M.CAT_SUBTEXT, M.CAT_ON_THE_NOSE):
+            metrics.append(M.NarrativeHealthMetric(
+                category=cat, status=M.STATUS_UNKNOWN,
+                evidence="No screenplay dialogue to analyze."))
+    else:
+        flagged_sub = sum(1 for r in sub_scenes if r.signals)
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_SUBTEXT, status=_status_for_fraction(flagged_sub / len(sub_scenes)),
+            confidence=0.45,
+            evidence=f"{flagged_sub} of {len(sub_scenes)} scene(s) have subtext signals."))
+        otn = sum(1 for r in sub_scenes
+                  if any(s.signal_type == S_ON_THE_NOSE_RISK for s in r.signals))
+        metrics.append(M.NarrativeHealthMetric(
+            category=M.CAT_ON_THE_NOSE, status=_status_for_fraction(otn / len(sub_scenes)),
+            confidence=0.45,
+            evidence=f"{otn} of {len(sub_scenes)} scene(s) flagged on-the-nose."))
+
+    # Cinematic Continuity stays deferred (needs semantics / Phase 10E).
+    metrics.append(M.NarrativeHealthMetric(
+        category=M.CAT_CINEMATIC_CONTINUITY, status=M.STATUS_UNKNOWN,
+        evidence="Deferred — not deterministically assessable yet (Phase 10E)."))
     return metrics
 
 

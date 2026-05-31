@@ -164,7 +164,61 @@ Subtext Candidate and Cinematic Continuity are present but **deferred**
 **Export:** `export_screenplay_diagnostics_json(db, project_id)` emits per-scene
 reports + writing mode (additive; existing exports untouched).
 
-## Intentionally deferred to Phase 10D
+## Phase 10D — setup/payoff + subtext tracking
+
+Two deterministic, report-only engines (no LLM, no DB writes, no auto-mutation of
+PSYKE/Graph/Plot) that help the writer *track* cinematic promises and dialogue
+subtext across scenes — they do not judge art.
+
+**Setup/Payoff** (`storyplanner/screenplay_setup_payoff.py`) —
+`SetupPayoffCandidate` / `SetupPayoffReport`. Detects promise/threat/secret/
+plan/deadline markers, loaded objects, and PSYKE object/place/lore/theme name
+mentions; cross-scene recurrence → **recurring motif** + **possible payoff**
+(linked back to the planting scene as a graph-hook suggestion); single
+occurrences → **unresolved setup candidate**. Character names are excluded from
+motif tracking (they naturally recur). Cautious wording, confidence-scaled.
+
+**Subtext** (`storyplanner/screenplay_subtext.py`) — `SubtextSignal` /
+`SubtextReport`. Flags on-the-nose / stated-emotion lines, exposition markers,
+avoidance/indirect answers, parenthetical over-explanation, and objective gaps
+(PSYKE-aware: missing data lowers confidence, never hard-fails). Wording is
+suggestive ("may be too on-the-nose"), never a verdict.
+
+**Persistence decision:** *report-only / in-memory* — no new DB schema. A
+persistent `ScreenplayLink` table (confirmed setup→payoff / motif links, dismiss
+state) and Graph-edge / PSYKE-entry creation actions are **deferred to Phase 10E**
+(candidates surface as suggestions only; nothing is confirmed automatically).
+
+**Logos:** deterministic (no LLM) — `Detect Setup/Payoff Candidates`,
+`Track Unresolved Setups`, `Find Possible Payoffs`, `Check Dialogue Subtext`,
+`Find Exposition in Dialogue`; generative rewrites (LLM on explicit invoke only) —
+`Reduce On-the-Nose Dialogue`, `Strengthen Character Objective Gap`, `Add Action
+Beat for Subtext`, `Convert Stated Emotion to Behavior`. Screenplay-only; hidden
+in Novel; preview/confirm for any mutation.
+
+**Assistant:** gated `[Screenplay Setup/Payoff]` (≤3 unresolved/payoffs/motifs)
+and `[Screenplay Subtext]` (status + ≤3 signals) blocks via
+`include_screenplay_tracking_in_assistant_context` (default on) — capped,
+deterministic, no LLM/DB during assembly, no stale-project leak.
+
+**Narrative Health:** Setup/Payoff, Motif Recurrence, Dialogue Subtext and
+On-the-Nose categories are now populated from these engines; Cinematic Continuity
+remains deferred (`Not Enough Data`).
+
+**Export:** `export_setup_payoff_report_json` and `export_subtext_report_json`
+(additive; existing exports untouched).
+
+## Intentionally deferred to Phase 10E
+
+- Persistent confirmed setup↔payoff / motif links (`ScreenplayLink` table) with
+  confirmed/dismissed/resolved state + idempotent migration.
+- User-approved Graph edges (setup→payoff, motif recurrence) and PSYKE entry
+  creation/linking from candidates (preview/confirm operations).
+- Strategy-explanation enrichment that cites live tracking state.
+- Dedicated tracking drawer UI; Cinematic Continuity / contradiction /
+  power-shift detectors (need semantics).
+
+## (Earlier) Intentionally deferred to Phase 10D
 
 - Cross-scene setup/payoff tracking engine (10C only flags candidates).
 - Dedicated screenplay-diagnostics drawer + click-to-focus-block (today the

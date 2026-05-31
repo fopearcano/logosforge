@@ -77,3 +77,122 @@ def _diagnose_scene_economy(db, context: LogosContext) -> LogosResult:
 
 
 register("sp_diagnose_scene_economy", _diagnose_scene_economy)
+
+
+def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
+    action = "sp_detect_setup_payoff"
+    try:
+        from storyplanner.screenplay_setup_payoff import analyze_setup_payoff
+        report = analyze_setup_payoff(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Setup/payoff analysis failed: {exc}")
+    lines = [report.summary, ""]
+    if report.unresolved_setups:
+        lines.append("Unresolved setups:")
+        for c in report.unresolved_setups[:5]:
+            lines.append(f"- {c.label} — {c.evidence}")
+    if report.possible_payoffs:
+        lines.append("")
+        lines.append("Possible payoffs:")
+        for c in report.possible_payoffs[:5]:
+            lines.append(f"- {c.label} — {c.evidence}")
+    if report.recurring_motifs:
+        lines.append("")
+        lines.append("Recurring motifs:")
+        for c in report.recurring_motifs[:5]:
+            lines.append(f"- {c.label} — {c.evidence}")
+    suggestions = [f"{c.label}: {c.suggested_action}"
+                   for c in report.unresolved_setups[:5]]
+    return LogosResult(ok=True, action=action, title="Detect Setup/Payoff Candidates",
+                       message="\n".join(lines).strip(), suggestions=suggestions,
+                       proposed_operations=[])
+
+
+def _track_unresolved_setups(db, context: LogosContext) -> LogosResult:
+    action = "sp_track_unresolved_setups"
+    try:
+        from storyplanner.screenplay_setup_payoff import analyze_setup_payoff
+        report = analyze_setup_payoff(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Setup/payoff analysis failed: {exc}")
+    items = report.unresolved_setups
+    if not items:
+        msg = "No unresolved setup candidates detected."
+    else:
+        msg = "Unresolved setup candidates:\n" + "\n".join(
+            f"- {c.label} (scene {c.scene_id}) — {c.evidence}" for c in items[:10]
+        )
+    return LogosResult(ok=True, action=action, title="Track Unresolved Setups",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _find_possible_payoffs(db, context: LogosContext) -> LogosResult:
+    action = "sp_find_possible_payoffs"
+    try:
+        from storyplanner.screenplay_setup_payoff import analyze_setup_payoff
+        report = analyze_setup_payoff(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Setup/payoff analysis failed: {exc}")
+    items = report.possible_payoffs
+    if not items:
+        msg = "No possible payoffs detected (need a planted element to recur)."
+    else:
+        msg = "Possible payoffs:\n" + "\n".join(
+            f"- {c.label} (scene {c.scene_id}) — {c.evidence}" for c in items[:10]
+        )
+    return LogosResult(ok=True, action=action, title="Find Possible Payoffs",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+def _check_subtext(db, context: LogosContext) -> LogosResult:
+    action = "sp_check_subtext"
+    scene_id = context.current_scene_id
+    if scene_id is None:
+        return LogosResult(ok=True, action=action, title="Check Dialogue Subtext",
+                           message="Open a scene to check dialogue subtext.",
+                           suggestions=[], proposed_operations=[])
+    try:
+        from storyplanner.screenplay_subtext import analyze_subtext_by_id
+        report = analyze_subtext_by_id(db, context.project_id, scene_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Subtext analysis failed: {exc}")
+    lines = [report.summary]
+    if report.signals:
+        lines.append("")
+        for s in report.top_signals(8):
+            lines.append(f"- [{s.signal_type}] {s.evidence}")
+    suggestions = [s.suggested_action for s in report.top_signals(5)
+                   if s.suggested_action]
+    return LogosResult(ok=True, action=action, title="Check Dialogue Subtext",
+                       message="\n".join(lines), suggestions=suggestions,
+                       proposed_operations=[])
+
+
+def _find_exposition(db, context: LogosContext) -> LogosResult:
+    action = "sp_find_exposition"
+    scene_id = context.current_scene_id
+    if scene_id is None:
+        return LogosResult(ok=True, action=action, title="Find Exposition in Dialogue",
+                           message="Open a scene to scan dialogue for exposition.",
+                           suggestions=[], proposed_operations=[])
+    try:
+        from storyplanner.screenplay_subtext import (
+            analyze_subtext_by_id, S_EXPOSITION_RISK,
+        )
+        report = analyze_subtext_by_id(db, context.project_id, scene_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Subtext analysis failed: {exc}")
+    exp = [s for s in report.signals if s.signal_type == S_EXPOSITION_RISK]
+    if not exp:
+        msg = "No obvious exposition markers detected in this scene's dialogue."
+    else:
+        msg = "Possible exposition:\n" + "\n".join(f"- {s.evidence}" for s in exp)
+    return LogosResult(ok=True, action=action, title="Find Exposition in Dialogue",
+                       message=msg, suggestions=[], proposed_operations=[])
+
+
+register("sp_detect_setup_payoff", _detect_setup_payoff)
+register("sp_track_unresolved_setups", _track_unresolved_setups)
+register("sp_find_possible_payoffs", _find_possible_payoffs)
+register("sp_check_subtext", _check_subtext)
+register("sp_find_exposition", _find_exposition)

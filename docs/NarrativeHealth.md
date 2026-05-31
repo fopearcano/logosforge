@@ -61,9 +61,11 @@ categories computed deterministically from the screenplay diagnostics engine
 (`storyplanner/screenplay_diagnostics.py`): **Visual Action, Scene Economy,
 Dialogue Economy, Scene Turn, Character Objective, Setup/Payoff**. Status uses the
 same no-score labels; categories with no analyzable data return *Not Enough Data*.
-**Subtext Candidate** and **Cinematic Continuity** are present but intentionally
-deferred (always *Not Enough Data* until Phase 10D). No fake precision, no
-background LLM, no DB mutation. Novel/other modes are unaffected.
+Phase 10D additionally populates **Dialogue Subtext, Motif Recurrence** and
+**On-the-Nose Dialogue Risk** from the deterministic setup/payoff + subtext
+engines. **Cinematic Continuity** remains deferred (*Not Enough Data* until
+Phase 10E). No fake precision, no background LLM, no DB mutation. Novel/other
+modes are unaffected.
 
 ## Settings (defaults)
 

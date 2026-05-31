@@ -222,6 +222,38 @@ def export_screenplay_diagnostics_json(db: Database, project_id: int) -> str:
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
 
+def export_setup_payoff_report_json(db: Database, project_id: int) -> str:
+    """Phase 10D — project setup/payoff candidate report as JSON (read-only)."""
+    from storyplanner.screenplay_setup_payoff import analyze_setup_payoff
+    from storyplanner.writing_modes import get_project_writing_mode
+
+    project = db.get_project_by_id(project_id)
+    payload = {
+        "project": {
+            "title": project.title if project else "Untitled",
+            "writing_mode": get_project_writing_mode(project),
+        },
+        "setup_payoff": analyze_setup_payoff(db, project_id).to_dict(),
+    }
+    return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
+def export_subtext_report_json(db: Database, project_id: int) -> str:
+    """Phase 10D — per-scene subtext report as JSON (read-only)."""
+    from storyplanner.screenplay_subtext import analyze_subtext_project
+    from storyplanner.writing_modes import get_project_writing_mode
+
+    project = db.get_project_by_id(project_id)
+    payload = {
+        "project": {
+            "title": project.title if project else "Untitled",
+            "writing_mode": get_project_writing_mode(project),
+        },
+        "scenes": [r.to_dict() for r in analyze_subtext_project(db, project_id)],
+    }
+    return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
 def export_markdown(db: Database, project_id: int) -> str:
     data = _gather_project_data(db, project_id)
     lines: list[str] = []

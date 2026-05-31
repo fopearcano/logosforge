@@ -52,7 +52,12 @@ notes) — it does not invent a second context system.
   the controller routes these to `storyplanner/logos/deterministic.py` and runs a
   rule-based handler with **no provider/LLM call** (e.g. `Diagnose Scene Economy`
   runs the screenplay diagnostics engine). Generative actions still call the
-  shared backend only on explicit invocation, through preview/confirm.
+  shared backend only on explicit invocation, through preview/confirm. Phase 10D
+  adds deterministic setup/payoff + subtext actions (`Detect Setup/Payoff
+  Candidates`, `Track Unresolved Setups`, `Find Possible Payoffs`, `Check
+  Dialogue Subtext`, `Find Exposition in Dialogue`) and generative subtext
+  rewrites — all screenplay-only and report-only (no PSYKE/Graph auto-mutation;
+  persistence is Phase 10E).
 - **operations** — controlled, validated apply ops (manuscript replace/insert,
   outline scene create/update, PSYKE notes/progression/relation). Every mutation
   is previewed and confirmed; nothing auto-applies.
