@@ -8,7 +8,16 @@
 
 <p align="center">Plan, write, and evolve your story with AI — without losing control.</p>
 
+<p align="center"><strong>Status: 0.9.0-alpha</strong> — private alpha. Feature-frozen, focused on stability/data-safety. Expect rough edges. <strong>Back up your work</strong> (see below).</p>
+
 ---
+
+> [!IMPORTANT]
+> **Alpha — back up before serious writing.** Your work lives in a local SQLite
+> database and autosaved project files, with automatic version snapshots — but
+> this is alpha software. Use **File → Export → JSON / Full Project** regularly,
+> and keep copies. See [Backup & Restore](docs/BackupRestore.md) and
+> [Data Safety](docs/DataSafety.md).
 
 ## What it is
 
@@ -53,9 +62,26 @@ python -m storyplanner.api --mode lan --host 0.0.0.0 --port 9000
 
 Interactive docs and the schema are auto-generated at `/docs` and `/openapi.json`. **Full contract, endpoints, payloads, events and config:** [`docs/API.md`](docs/API.md).
 
+> **Alpha note:** for this alpha the API is intended for **desktop / localhost**
+> use. `--mode lan` / `--mode remote` are **experimental** and deferred to beta;
+> if you expose the API on a network, set an auth token. The desktop app does not
+> require the API.
+
 ## Install & Run
 
-**Requirements:** Python 3.10+ and pip.
+**Requirements:** Python **3.10+** and pip. Core dependencies (`requirements.txt`):
+PySide6 (Qt 6), FastAPI, Uvicorn.
+
+**Optional** (only for those export formats — install if you want them):
+
+```bash
+pip install reportlab    # PDF export
+pip install python-docx  # DOCX export
+```
+
+Without these, PDF/DOCX export shows a readable "install the optional library"
+message; **Markdown / TXT / Fountain / FDX / HTML / JSON** export work with no
+extra libraries.
 
 ```bash
 python3 -m venv venv
@@ -78,6 +104,43 @@ python run.py
 ```bash
 python -m pytest tests/
 ```
+
+## AI Providers
+
+Logosforge talks to any **OpenAI-compatible** endpoint plus Anthropic, through a
+single in-app provider setting (Assistant → Settings). No keys are stored in
+your project files or exports.
+
+| Provider | API key | Default endpoint |
+|----------|---------|------------------|
+| **LM Studio** (local) | none | `http://localhost:1234/v1` |
+| **Ollama** (local) | none | `http://localhost:11434/v1` |
+| **OpenAI** | required | `https://api.openai.com/v1` |
+| **Anthropic** | required | `https://api.anthropic.com` |
+| **OpenRouter** | required | `https://openrouter.ai/api/v1` |
+
+Local models get a longer default timeout (300s vs 120s for cloud), configurable
+in Assistant Settings. Step-by-step setup: **[`docs/AI_SETUP.md`](docs/AI_SETUP.md)**.
+
+## Known Limitations (Alpha)
+
+- Some intelligence services (Knowledge Graph, Semantic Continuity, Decision
+  Radar, Guided Workflows) ship as **services + Logos/Assistant surfaces**;
+  their dedicated **UI panels are deferred to beta**.
+- **PDF/DOCX** export needs optional libraries (see Install). **FDX** and **LAN/
+  remote API** are experimental.
+- Plot/Timeline are derived from scene fields (no separate rich models).
+- Grammar/spell is a basic rule-based checker.
+- Single-user, **local-only** — no cloud sync or collaboration.
+
+Full list: **[`docs/KNOWN_LIMITATIONS_ALPHA.md`](docs/KNOWN_LIMITATIONS_ALPHA.md)**.
+
+## Documentation
+
+- **[User Guide (Alpha)](docs/USER_GUIDE_ALPHA.md)** · **[AI Setup](docs/AI_SETUP.md)** · **[Troubleshooting](docs/TROUBLESHOOTING.md)**
+- **[Alpha Scope](docs/ALPHA_SCOPE.md)** · **[Known Limitations](docs/KNOWN_LIMITATIONS_ALPHA.md)** · **[Alpha Test Plan](docs/ALPHA_TEST_PLAN.md)**
+- **[Backup & Restore](docs/BackupRestore.md)** · **[Data Safety](docs/DataSafety.md)** · **[Export / Interchange](docs/Interchange.md)**
+- Full index: **[`docs/index.md`](docs/index.md)**
 
 ## Tech Stack
 
