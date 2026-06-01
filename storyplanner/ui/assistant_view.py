@@ -981,7 +981,9 @@ class AssistantPanel(QWidget):
         quantum_load_state(self._db, project_id)
         self._quantum_timeline._project_id = project_id
         self._quantum_timeline.refresh()
-        self._mode_strip.refresh()
+        # Re-point the mode strip at the new project (was only refreshed against
+        # the previous project_id, leaving a stale mode + manual override).
+        self._mode_strip.set_project(project_id)
 
     def set_active_scene(self, scene_id: int) -> None:
         pass

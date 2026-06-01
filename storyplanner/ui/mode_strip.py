@@ -96,6 +96,13 @@ class ModeStrip(QFrame):
 
         self.refresh()
 
+    def set_project(self, project_id: int) -> None:
+        """Re-point at a new project: clear any manual override (it must not
+        carry across projects) and recompute from the new project's state."""
+        self._project_id = project_id
+        self._override = None
+        self.refresh()
+
     def refresh(self) -> None:
         """Recompute mode from project state."""
         self._mode_result = compute_mode(self._db, self._project_id)
