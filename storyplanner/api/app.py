@@ -20,6 +20,19 @@ from storyplanner.db import Database
 
 API_PREFIX = "/api"
 
+# Version of the HTTP DTO/action *contract* (bump when the API shape changes).
+# Kept separate from the Logosforge core build version so generated clients have
+# a stable contract version while still being able to check the core build.
+API_CONTRACT_VERSION = "1.0.0"
+
+
+def _core_version() -> str:
+    try:
+        from storyplanner import __version__
+        return str(__version__)
+    except Exception:
+        return "unknown"
+
 
 def create_api(
     db: Database | None = None,
@@ -37,8 +50,9 @@ def create_api(
 
     app = FastAPI(
         title="Logosforge API",
-        version="1.0.0",
-        description="Authoritative Python core for the shared React UI.",
+        version=API_CONTRACT_VERSION,
+        description="Authoritative Python core for the shared React UI "
+                    "(Electron desktop + Web/PWA).",
     )
     app.state.db = db
     app.state.config = config
@@ -58,11 +72,16 @@ def create_api(
 
     @app.get("/api/health", tags=["health"])
     def health():
+        # Clients (Electron desktop + Web/PWA) read this to verify they're
+        # talking to a compatible backend: ``api_version`` is the stable DTO
+        # contract; ``core_version`` is the Logosforge build.
         return {
             "status": "ok",
             "service": "logosforge-api",
             "mode": config.mode,
-            "version": app.version,
+            "version": app.version,          # = api_version (backward-compat)
+            "api_version": API_CONTRACT_VERSION,
+            "core_version": _core_version(),
         }
 
     # Every project/data router sits behind the auth hook (a no-op until a

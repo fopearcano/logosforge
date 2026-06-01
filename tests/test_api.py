@@ -50,6 +50,35 @@ def test_health(env):
     assert body["mode"] == "desktop"
 
 
+def test_health_reports_versions_for_client_compat(env):
+    """Desktop (Electron) + Web/PWA clients read these to verify the backend."""
+    import storyplanner
+    from storyplanner.api.app import API_CONTRACT_VERSION
+
+    client, _, _ = env
+    body = client.get("/api/health").json()
+    assert body["api_version"] == API_CONTRACT_VERSION
+    assert body["core_version"] == storyplanner.__version__
+    # OpenAPI schema (used to generate the shared React client) is reachable
+    # and carries the stable contract version.
+    info = client.get("/openapi.json").json()["info"]
+    assert info["version"] == API_CONTRACT_VERSION
+
+
+def test_cors_allows_localhost_dev_server_in_desktop_mode(env):
+    """The React/Vite dev server (any localhost port) must be allowed for
+    Electron + local web development."""
+    client, _, _ = env
+    r = client.get(
+        "/api/health",
+        headers={"Origin": "http://localhost:5173"},  # Vite default
+    )
+    assert r.status_code == 200
+    assert r.headers.get("access-control-allow-origin") in (
+        "http://localhost:5173", "*",
+    )
+
+
 def test_list_projects(env):
     client, _, pid = env
     r = client.get("/api/projects")

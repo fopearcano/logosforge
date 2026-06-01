@@ -87,8 +87,13 @@ Configuration comes from `API_*` environment variables (CLI flags win):
 
 ### Health
 ```
-GET  /api/health → { status, service, mode, version }
+GET  /api/health → { status, service, mode, version, api_version, core_version }
 ```
+`api_version` is the stable HTTP DTO/action **contract** version (also the
+`info.version` in `/openapi.json`, used to generate the shared React client).
+`core_version` is the Logosforge build (e.g. `0.9.0-alpha`). Clients (Electron
+desktop and Web/PWA) read these to verify they're talking to a compatible
+backend. `version` mirrors `api_version` for backward compatibility.
 
 ### Projects
 ```
