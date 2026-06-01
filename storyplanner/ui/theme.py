@@ -698,7 +698,6 @@ def build_stylesheet() -> str:
         color: {TEXT_MUTED};
         font-size: 11px;
         font-weight: bold;
-        letter-spacing: 2.5px;
         background: transparent;
     }}
     #writingChapterHeader {{
@@ -867,7 +866,6 @@ def build_stylesheet() -> str:
         color: {TEXT_MUTED};
         font-size: 11px;
         font-weight: bold;
-        letter-spacing: 1px;
         background: transparent;
         padding: 4px 8px;
     }}
@@ -1480,7 +1478,6 @@ def hero_card_style() -> str:
 def eyebrow() -> str:
     return (
         f"color: {TEXT_MUTED}; font-size: 10px;"
-        f" letter-spacing: 1.5px; text-transform: uppercase;"
         f" font-weight: bold;"
     )
 

@@ -2488,7 +2488,6 @@ class WritingCoreView(QWidget):
             f"  color: {theme.TEXT_MUTED};"
             f"  font-size: 11px;"
             f"  font-weight: bold;"
-            f"  letter-spacing: 2.5px;"
             f"  background: transparent;"
             f"  padding: 0;"
             f"}}"

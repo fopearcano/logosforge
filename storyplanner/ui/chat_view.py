@@ -234,8 +234,7 @@ class _MessageBubble(QFrame):
         role_label = QLabel(role_label_text)
         role_label.setStyleSheet(
             f"color: {theme.get('TEXT_MUTED')};"
-            f" font-size: 11px; text-transform: uppercase;"
-            f" letter-spacing: 0.05em;"
+            f" font-size: 11px;"
         )
         layout.addWidget(role_label)
 

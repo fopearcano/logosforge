@@ -196,8 +196,7 @@ class _SidebarGroupHeader(QPushButton):
             "QPushButton#sidebarGroupHeader {"
             " border: none; text-align: left; padding: 6px 8px;"
             " margin: 6px 4px 2px 4px; background-color: transparent;"
-            " font-size: 11px; font-weight: bold;"
-            " letter-spacing: 1px; text-transform: uppercase; }"
+            " font-size: 11px; font-weight: bold; }"
             "QPushButton#sidebarGroupHeader:hover { background-color: rgba(255,255,255,0.05); }"
         )
         self.clicked.connect(self._toggle)
