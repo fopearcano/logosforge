@@ -210,10 +210,14 @@ def test_collapsed_sidebar_logos_icon_text():
     db, pid, win = _win()
     btn = win.sidebar_buttons["Logos"]
     btn.set_collapsed(True)
-    assert btn.text() == btn._icon_text
+    # Collapsed = icon-only: no label text, label moves to the tooltip; the
+    # coloured glyph icon is still present.
+    assert btn.text() == ""
     assert btn.toolTip() == "Logos"
+    assert not btn.icon().isNull()
     btn.set_collapsed(False)
-    assert "Logos" in btn.text()
+    assert btn.text() == "Logos"          # label only (glyph lives in the icon)
+    assert not btn.icon().isNull()
 
 
 def test_collapsed_logos_matches_other_standalone_items():
@@ -221,6 +225,5 @@ def test_collapsed_logos_matches_other_standalone_items():
     logos, psyke = win.sidebar_buttons["Logos"], win.sidebar_buttons["PSYKE"]
     logos.set_collapsed(True)
     psyke.set_collapsed(True)
-    assert logos.text() == logos._icon_text
-    assert psyke.text() == psyke._icon_text
-    assert not logos.text().startswith(" ")
+    assert logos.text() == "" and psyke.text() == ""
+    assert not logos.icon().isNull() and not psyke.icon().isNull()

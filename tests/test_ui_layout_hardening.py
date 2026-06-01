@@ -135,11 +135,23 @@ def test_sidebar_collapsed_icon_text_no_glitch():
     db, pid, win = _win()
     btn = win.sidebar_buttons["Manuscript"]
     btn.set_collapsed(True)
-    assert btn.text() == btn._icon_text          # icon only
+    assert btn.text() == ""                       # icon-only (glyph in QIcon)
     assert btn.toolTip() == "Manuscript"          # label moved to tooltip
+    assert not btn.icon().isNull()
     btn.set_collapsed(False)
-    assert "Manuscript" in btn.text()             # label back, no leading indent
-    assert not btn.text().startswith(" ")
+    assert btn.text() == "Manuscript"             # label back
+    assert not btn.text().startswith(" ")         # no leading indent in text
+
+
+def test_sidebar_icons_are_flat_colored():
+    db, pid, win = _win()
+    # Each item carries a distinct flat colour and a rendered (non-null) icon.
+    m, p, g = (win.sidebar_buttons["Manuscript"], win.sidebar_buttons["PSYKE"],
+               win.sidebar_buttons["Graph"])
+    assert m._icon_color != p._icon_color != g._icon_color
+    for b in (m, p, g):
+        assert b._icon_color.startswith("#")
+        assert not b.icon().isNull()
 
 
 # ==========================================================================

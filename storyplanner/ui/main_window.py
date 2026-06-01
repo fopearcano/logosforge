@@ -94,16 +94,19 @@ class _SidebarButton(QPushButton):
     def __init__(
         self, icon_text: str, label: str,
         parent: QWidget | None = None, indent: bool = False,
+        icon_color: str = "",
     ) -> None:
         super().__init__(parent)
         self._icon_text = icon_text
         self._label_text = label
+        self._icon_color = icon_color or "#9aa4b2"
         self._collapsed = False
         self._indent = indent
         self.setCheckable(True)
         self.setFlat(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setObjectName("sidebarBtn")
+        self._render_icon()
         self._update_text()
 
         self._hover_blend = 0.0
@@ -162,15 +165,47 @@ class _SidebarButton(QPushButton):
 
     def set_collapsed(self, collapsed: bool) -> None:
         self._collapsed = collapsed
+        self._render_icon()
         self._update_text()
 
+    def _render_icon(self) -> None:
+        """Render the glyph into a flat, per-section coloured QIcon.
+
+        Group children get extra left space baked into the icon geometry so the
+        whole row is clearly indented — and because it lives in the icon (not a
+        QSS padding rule) the indent survives the inline hover/checked styles.
+        """
+        from PySide6.QtCore import QRect, QSize
+        from PySide6.QtGui import QFont, QPainter, QPixmap
+
+        slot = 18                      # glyph cell
+        pad_left = 16 if (self._indent and not self._collapsed) else 0
+        w, h = slot + pad_left, slot
+        pm = QPixmap(w, h)
+        pm.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pm)
+        try:
+            font = QFont(self.font())
+            font.setPixelSize(14)
+            painter.setFont(font)
+            painter.setPen(QColor(self._icon_color))
+            painter.drawText(
+                QRect(pad_left, 0, slot, h),
+                Qt.AlignmentFlag.AlignCenter, self._icon_text,
+            )
+        finally:
+            painter.end()
+        self.setIcon(QIcon(pm))
+        self.setIconSize(QSize(w, h))
+
     def _update_text(self) -> None:
-        indent = "   " if (self._indent and not self._collapsed) else ""
+        # The coloured glyph lives in the QIcon; the button text is just the
+        # label (hidden when the sidebar is collapsed to icon-only).
         if self._collapsed:
-            self.setText(self._icon_text)
+            self.setText("")
             self.setToolTip(self._label_text)
         else:
-            self.setText(f"{indent}{self._icon_text}  {self._label_text}")
+            self.setText(self._label_text)
             self.setToolTip("")
 
 
@@ -335,7 +370,7 @@ class MainWindow(QMainWindow):
         # Flat monochrome icon set (centralized in ui/sidebar_icons.py). These
         # are text-presentation glyphs, so they inherit the button's theme color
         # (muted gray idle, accent when active) across Dark / Green / Warm.
-        from storyplanner.ui.sidebar_icons import SIDEBAR_ICONS
+        from storyplanner.ui.sidebar_icons import SIDEBAR_ICONS, sidebar_icon_color
         self._sidebar_icons = dict(SIDEBAR_ICONS)
 
         self._toggle_btn = QPushButton("\u00ab")
@@ -360,21 +395,24 @@ class MainWindow(QMainWindow):
         ]
         self.sidebar_buttons: dict[str, _SidebarButton] = {}
         self._sidebar_groups: list[_SidebarGroupHeader] = []
-        persisted_groups = get_settings().get("sidebar_groups_expanded") or {}
-        if not isinstance(persisted_groups, dict):
-            persisted_groups = {}
+        # Groups always open collapsed (the previous session's expanded state is
+        # intentionally not restored — see _SidebarGroupHeader(expanded=False)).
         for item in _SIDEBAR_LAYOUT:
             if isinstance(item, tuple) and item[0] == "group":
                 _, group_label, member_labels = item
                 children: list[QPushButton] = []
                 for member in member_labels:
                     icon = self._sidebar_icons.get(member, "")
-                    btn = _SidebarButton(icon, member, indent=True)
+                    btn = _SidebarButton(
+                        icon, member, indent=True,
+                        icon_color=sidebar_icon_color(member),
+                    )
                     self.sidebar_buttons[member] = btn
                     children.append(btn)
-                expanded = bool(persisted_groups.get(group_label, False))
+                # Groups always start collapsed on app open (never restore the
+                # previous session's expanded state).
                 header = _SidebarGroupHeader(
-                    group_label, children, expanded=expanded,
+                    group_label, children, expanded=False,
                 )
                 header.expanded_changed.connect(self._on_group_expanded_changed)
                 sidebar_layout.addWidget(header)
@@ -383,7 +421,8 @@ class MainWindow(QMainWindow):
                 self._sidebar_groups.append(header)
             else:
                 icon = self._sidebar_icons.get(item, "")
-                btn = _SidebarButton(icon, item)
+                btn = _SidebarButton(icon, item,
+                                     icon_color=sidebar_icon_color(item))
                 sidebar_layout.addWidget(btn)
                 self.sidebar_buttons[item] = btn
 
@@ -417,15 +456,18 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self._appearance_bar)
 
         # -- Import / Export / Settings ---------------------------------------
-        self._import_btn = _SidebarButton(self._sidebar_icons["Import"], "Import")
+        self._import_btn = _SidebarButton(self._sidebar_icons["Import"], "Import",
+                                          icon_color=sidebar_icon_color("Import"))
         sidebar_layout.addWidget(self._import_btn)
         self._import_btn.clicked.connect(self._on_import)
 
-        self._export_btn = _SidebarButton(self._sidebar_icons["Export"], "Export")
+        self._export_btn = _SidebarButton(self._sidebar_icons["Export"], "Export",
+                                          icon_color=sidebar_icon_color("Export"))
         sidebar_layout.addWidget(self._export_btn)
         self._export_btn.clicked.connect(self._on_export)
 
-        self._settings_btn = _SidebarButton(self._sidebar_icons["Settings"], "Settings")
+        self._settings_btn = _SidebarButton(self._sidebar_icons["Settings"], "Settings",
+                                            icon_color=sidebar_icon_color("Settings"))
         sidebar_layout.addWidget(self._settings_btn)
         self._settings_btn.clicked.connect(self._open_settings)
 

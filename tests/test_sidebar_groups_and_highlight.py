@@ -82,21 +82,23 @@ def test_clicking_expanded_group_collapses_it():
 
 
 # ==========================================================================
-# 3. Persistence across sessions
+# 3. Groups always start collapsed when the app opens
 # ==========================================================================
 
-def test_expanded_state_persists():
+def test_groups_always_collapse_on_reopen():
+    """A group expanded in one session must open collapsed next time — groups
+    are always hidden at the beginning when the app opens."""
     db, proj = _setup()
     win = MainWindow(db, proj.id)
     target = win._sidebar_groups[0]
     label = target.label
     target._toggle()
-    assert target.expanded is True
+    assert target.expanded is True   # expanded in this session
 
     win2 = MainWindow(db, proj.id)
     matching = [g for g in win2._sidebar_groups if g.label == label]
     assert len(matching) == 1
-    assert matching[0].expanded is True
+    assert matching[0].expanded is False  # collapsed again on reopen
 
 
 def test_collapsed_state_persists():

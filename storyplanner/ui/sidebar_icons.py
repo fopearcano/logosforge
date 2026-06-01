@@ -56,6 +56,58 @@ SIDEBAR_ICONS: dict[str, str] = {
 }
 
 
+# Flat icon colours — each section gets a distinct, medium-saturation flat hue
+# (no gradients/3D) so sections are easy to tell apart at a glance. Tuned to read
+# on both the dark and the two light sidebar backgrounds. Grouped by family so a
+# group's items share a hue range. Used to tint the rendered glyph icon; the
+# label text still follows the theme colour.
+_DEFAULT_ICON_COLOR = "#9aa4b2"
+SIDEBAR_ICON_COLORS: dict[str, str] = {
+    # Top-level
+    "Projects": "#d08a3c",     # amber
+    "Dashboard": "#2fa898",    # teal
+    "Notes": "#c79a3e",        # gold
+    "Manuscript": "#3b82c4",   # blue
+    "Tags": "#caa83a",         # yellow
+    "Graph": "#2f9ea8",        # cyan
+    # Plan group — greens
+    "Outline": "#4a9e4a",
+    "Scenes": "#4f9ed8",
+    "Timeline": "#9b6fc0",
+    "Plot": "#cf7a4a",
+    "Pages": "#b06fc0",
+    # Structure group — purples/sage
+    "Structure": "#8a78c8",
+    "Acts": "#a05fb0",
+    "Beats": "#cc5b5b",
+    "Arcs": "#5a8fd0",
+    # Analytics group — warm/green
+    "Health": "#4faa5a",
+    "Balance": "#c79a3e",
+    "Pacing": "#b06fc0",
+    "Narrative": "#4f9ed8",
+    # Other top-level
+    "Adapt": "#5a8fd0",
+    "PSYKE": "#cd5c97",        # pink/magenta
+    "Stages": "#c79a3e",
+    "Plugins": "#9b6fc0",
+    "Grid": "#3b82c4",
+    # AI cluster
+    "Assistant": "#3fa37a",    # accent green
+    "Logos": "#3aa856",        # bright green (lambda)
+    "Chat": "#4f9ed8",         # blue
+    # Footer
+    "Import": "#5aa86a",
+    "Export": "#5a8f9c",
+    "Settings": "#9aa4b2",
+}
+
+
 def sidebar_icon(name: str) -> str:
     """Return the monochrome glyph for *name* (empty string if unknown)."""
     return SIDEBAR_ICONS.get(name, "")
+
+
+def sidebar_icon_color(name: str) -> str:
+    """Return the flat icon colour for *name* (a sensible default if unknown)."""
+    return SIDEBAR_ICON_COLORS.get(name, _DEFAULT_ICON_COLOR)
