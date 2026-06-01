@@ -1867,51 +1867,63 @@ class MainWindow(QMainWindow):
         if not path:
             return
 
-        if "PDF" in selected_filter:
-            if not path.endswith(".pdf"):
-                path += ".pdf"
-            export_pdf(self._db, self._project_id, path)
-            QMessageBox.information(self, "Export", f"Exported to {path}")
+        try:
+            if "PDF" in selected_filter:
+                if not path.endswith(".pdf"):
+                    path += ".pdf"
+                export_pdf(self._db, self._project_id, path)
+                QMessageBox.information(self, "Export", f"Exported to {path}")
+                return
+
+            if "DOCX" in selected_filter:
+                if not path.endswith(".docx"):
+                    path += ".docx"
+                export_docx_manuscript(self._db, self._project_id, path)
+                QMessageBox.information(self, "Export", f"Exported to {path}")
+                return
+
+            if path.endswith(".csv") or "CSV" in selected_filter:
+                content = export_csv_scenes(self._db, self._project_id)
+                if not path.endswith(".csv"):
+                    path += ".csv"
+            elif "Fountain" in selected_filter or path.endswith(".fountain"):
+                content = export_fountain(self._db, self._project_id)
+                if not path.endswith(".fountain"):
+                    path += ".fountain"
+            elif "Final Draft" in selected_filter or path.endswith(".fdx"):
+                content = export_fdx(self._db, self._project_id)
+                if not path.endswith(".fdx"):
+                    path += ".fdx"
+            elif "HTML" in selected_filter or path.endswith(".html"):
+                content = export_html(self._db, self._project_id)
+                if not path.endswith(".html"):
+                    path += ".html"
+            elif fmt_label in selected_filter:
+                content = export_formatted_text(self._db, self._project_id)
+                if not path.endswith(".txt"):
+                    path += ".txt"
+            elif path.endswith(".md") or "Markdown" in selected_filter:
+                content = export_markdown(self._db, self._project_id)
+                if not path.endswith(".md"):
+                    path += ".md"
+            else:
+                content = export_json(self._db, self._project_id)
+                if not path.endswith(".json"):
+                    path += ".json"
+
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+        except (ImportError, ModuleNotFoundError) as exc:
+            # PDF/DOCX need optional libraries (reportlab / python-docx).
+            QMessageBox.warning(
+                self, "Export failed",
+                f"This format needs an optional library that isn't installed:\n"
+                f"{exc}\n\nTry Markdown, TXT, Fountain or JSON instead.")
             return
-
-        if "DOCX" in selected_filter:
-            if not path.endswith(".docx"):
-                path += ".docx"
-            export_docx_manuscript(self._db, self._project_id, path)
-            QMessageBox.information(self, "Export", f"Exported to {path}")
+        except Exception as exc:  # write/permission/serialization errors
+            QMessageBox.warning(self, "Export failed",
+                                f"Could not export:\n{exc}")
             return
-
-        if path.endswith(".csv") or "CSV" in selected_filter:
-            content = export_csv_scenes(self._db, self._project_id)
-            if not path.endswith(".csv"):
-                path += ".csv"
-        elif "Fountain" in selected_filter or path.endswith(".fountain"):
-            content = export_fountain(self._db, self._project_id)
-            if not path.endswith(".fountain"):
-                path += ".fountain"
-        elif "Final Draft" in selected_filter or path.endswith(".fdx"):
-            content = export_fdx(self._db, self._project_id)
-            if not path.endswith(".fdx"):
-                path += ".fdx"
-        elif "HTML" in selected_filter or path.endswith(".html"):
-            content = export_html(self._db, self._project_id)
-            if not path.endswith(".html"):
-                path += ".html"
-        elif fmt_label in selected_filter:
-            content = export_formatted_text(self._db, self._project_id)
-            if not path.endswith(".txt"):
-                path += ".txt"
-        elif path.endswith(".md") or "Markdown" in selected_filter:
-            content = export_markdown(self._db, self._project_id)
-            if not path.endswith(".md"):
-                path += ".md"
-        else:
-            content = export_json(self._db, self._project_id)
-            if not path.endswith(".json"):
-                path += ".json"
-
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(content)
 
         QMessageBox.information(self, "Export", f"Exported to {path}")
 

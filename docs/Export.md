@@ -129,3 +129,13 @@ roundtrip), DOCX, HTML preview, FDX**; PDF is checked for a valid `%PDF-` file
 Screenplay block types are derived from flat scene text (not persisted), so
 export classification is heuristic; a hand-typed novelistic block may export as
 action. Novel and other-mode exports are unchanged.
+
+## Alpha export hardening (Step 18)
+
+The manuscript export menu (`MainWindow._on_export`) now wraps every export in a
+try/except: failures show a readable **"Export failed"** dialog instead of a
+traceback. PDF/DOCX failures (when their optional libraries are missing) report a
+clear "install … or use Markdown/TXT/Fountain/JSON" message — no crash.
+
+See **docs/Interchange.md** for the full Alpha Export Matrix and honest
+formatting-preservation notes.
