@@ -160,7 +160,10 @@ class VersionManager(QObject):
             raw = json.loads(path.read_text(encoding="utf-8"))
             raw.pop("_version_meta", None)
             return raw
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError) as exc:
+            # Surface the cause (corrupt/unreadable snapshot) instead of failing
+            # silently — the restore UI reports a generic error, this logs why.
+            log.warning("Could not load version snapshot %s: %s", path, exc)
             return None
 
     # -- Restore -------------------------------------------------------------
