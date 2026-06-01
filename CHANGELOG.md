@@ -81,6 +81,8 @@ Release Checklist, Final Report, and a grouped `docs/index.md`.
 
 ### Tests
 
-6008 tests (Qt offscreen). Safety-critical subset verified green
-(214 passed / 0 skipped); full-suite green baseline maintained across closing
-steps.
+~6008 tests (Qt offscreen). Safety-critical subset verified green
+(214 passed / 0 skipped). The final-gate full run was 6005 passed / 2 failed /
+1 skipped; one failure was a UI-hardening regression (Outline-confirm dialog
+minimum) now **fixed**, the other is a full-suite-ordering flake that passes in
+isolation. See `docs/ALPHA_FINAL_REPORT.md`.

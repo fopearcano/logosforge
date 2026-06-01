@@ -63,14 +63,23 @@ a new project; API keys plaintext in local settings (never exported). Full list:
 
 ## Tests run
 
-- **Suite size:** 6008 tests collected (Qt offscreen).
+- **Suite size:** ~6008 tests (Qt offscreen).
+- **Full gate run:** `6005 passed, 2 failed, 1 skipped` (≈63 min). Of the two
+  failures:
+  - `test_outline_apply_scenes::test_confirm_dialog_is_resizable_with_pinned_buttons`
+    — a **regression introduced during the UI-hardening step** (Outline-confirm
+    dialog minimum raised too far). **Fixed** (reverted to a small minimum that
+    fits a 13-inch screen); verified green.
+  - `test_logos_integration::test_toolbar_run_action_renders_result_with_injected_chat`
+    — **passes in isolation and in combined runs**; a pre-existing
+    full-suite-ordering flake (a Qt signal `_wait` after ~6000 tests in one
+    process). Not a regression; code unchanged.
 - **Safety-critical subset verified green:** 214 passed, **0 skipped** —
   versioning/backup, autosave, project lifecycle + switch + state reset, writing-
   mode integrity, provider/language, export, UI layout, AI-UI, manuscript
   experience, refresh propagation, PSYKE console, version constant.
-- **Full suite:** reproduces the green baseline established across closing steps
-  (5784 passed / 1 skipped after Phase 10Q, growing to 6008 with closing-step
-  tests; targeted regressions green at every step).
+- **Post-fix expectation:** 6007 passed / 1 skipped, modulo the one known
+  full-suite-ordering flake above (which is order-dependent, not a code defect).
 
 ## Tests skipped
 
@@ -78,7 +87,13 @@ a new project; API keys plaintext in local settings (never exported). Full list:
   installed; it is in `requirements.txt`, so it runs).
 - `test_graph_polish.py`, `test_story_gravity.py` — two **conditional**
   `pytest.skip` guards that trigger only when offscreen layout produces no
-  visible graph nodes (environment-dependent, 0–2 tests). No `xfail` markers.
+  visible graph nodes (environment-dependent, 0–1 tests). No `xfail` markers.
+
+## Known flaky (full-suite ordering)
+
+- `test_logos_integration::test_toolbar_run_action_renders_result_with_injected_chat`
+  passes alone but can fail when run after the whole suite in one process
+  (accumulated Qt state / signal-wait timing). Re-run it in isolation to confirm.
 
 ## Suggested version tag
 
