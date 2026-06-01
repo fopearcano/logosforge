@@ -7,6 +7,7 @@ existing AssistantPanel / AssistantDock are present and unchanged.
 
 from __future__ import annotations
 
+import time
 import warnings
 
 import pytest
@@ -14,19 +15,36 @@ from PySide6.QtWidgets import QApplication
 
 warnings.filterwarnings("ignore")
 
-from PySide6.QtCore import QEventLoop, QTimer
-
 from storyplanner.db import Database
 from storyplanner.ui.logos.logos_toolbar import LogosToolbar
 from storyplanner.ui.main_window import MainWindow
 
 
-def _wait(signal, timeout_ms: int = 4000) -> None:
-    """Spin the event loop until *signal* fires (the toolbar runs async)."""
-    loop = QEventLoop()
-    signal.connect(lambda *a: loop.quit())
-    QTimer.singleShot(timeout_ms, loop.quit)
-    loop.exec()
+def _wait_for_action(toolbar: LogosToolbar, timeout_ms: int = 15000) -> None:
+    """Deterministically wait for the toolbar's async action to finish.
+
+    The action runs on a ``_LogosWorker`` QThread and signals completion via the
+    cross-thread ``done`` → ``action_completed`` chain. The previous helper spun
+    a plain event loop against a fixed 4s timeout, which under heavy full-suite
+    load could expire *before* the worker delivered its result (a flaky race).
+
+    Instead, join the worker thread itself (the toolbar clears ``_worker`` to
+    ``None`` in ``_on_done`` once the queued result has been rendered) and drain
+    queued signals, so the ``action_completed`` slots have definitely run before
+    the caller asserts. Falls back to the timeout only as a hard safety stop.
+    """
+    app = QApplication.instance()
+    deadline = time.monotonic() + timeout_ms / 1000.0
+    while time.monotonic() < deadline:
+        app.processEvents()
+        worker = toolbar._worker
+        if worker is None:
+            # Either the action ran synchronously (no worker started) or
+            # _on_done already cleared it; drain any last queued slots.
+            app.processEvents()
+            return
+        worker.wait(50)  # block until the QThread's run() returns
+    app.processEvents()
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -126,7 +144,7 @@ def test_toolbar_run_action_renders_result_with_injected_chat():
     done = []
     win._logos_toolbar.action_completed.connect(lambda n, ok: done.append((n, ok)))
     win._logos_toolbar.run_action("identify_weakness")
-    _wait(win._logos_toolbar.action_completed)
+    _wait_for_action(win._logos_toolbar)
     assert done == [("identify_weakness", True)]
     assert "A weakness." in win._logos_toolbar.result_text()
     # Result is copyable and dismissible.
@@ -145,7 +163,7 @@ def test_outline_node_run_via_descriptor():
     win._run_logos_outline(
         {"kind": "scene", "scene_id": sid, "label": "Opening"}, "summarize_node",
     )
-    _wait(win._logos_toolbar.action_completed)
+    _wait_for_action(win._logos_toolbar)
     assert done == [("summarize_node", True)]
     assert "Node summary." in win._logos_toolbar.result_text()
 
@@ -163,5 +181,5 @@ def test_logos_toggle_does_not_mutate_db():
     win._toggle_logos()
     win._logos_controller._provider_resolver = lambda: None  # offline preview
     win._logos_toolbar.run_action("identify_weakness")
-    _wait(win._logos_toolbar.action_completed)
+    _wait_for_action(win._logos_toolbar)
     assert len(db.get_all_scenes(pid)) == before
