@@ -53,6 +53,11 @@ class ProjectsView(QWidget):
 
         self._build()
 
+    def refresh(self) -> None:
+        """Re-read the project list (so create/rename/remove appear without a
+        manual section switch). Rebuild reads recent/known projects fresh."""
+        self._build()
+
     def _build(self) -> None:
         self._clear_layout()
 
