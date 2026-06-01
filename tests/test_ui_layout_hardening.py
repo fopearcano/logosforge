@@ -151,8 +151,11 @@ def test_outline_confirm_modal_minimum_fits_small_screen():
     from storyplanner.ui.outline_confirm_dialog import OutlineConfirmDialog
     dlg = OutlineConfirmDialog("preview text", 3)
     msz = dlg.minimumSize()
-    assert msz.height() >= 420          # tall enough for the preview
-    assert msz.width() <= 1280 and msz.height() <= 800  # fits the screen
+    # The minimum is intentionally SMALL so the dialog always fits a 13-inch
+    # screen (the preview scrolls; the buttons stay pinned). Comfortable default
+    # is larger (560x600) and the user can resize.
+    assert msz.width() <= 360 and msz.height() <= 320
+    assert dlg.isSizeGripEnabled()
 
 
 def test_core_dialog_minimums_fit_screen():

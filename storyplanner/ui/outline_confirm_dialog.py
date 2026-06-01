@@ -31,12 +31,12 @@ class OutlineConfirmDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(title)
-        # A comfortable default; the user can resize, and the minimum still
-        # leaves room for the scrollable preview + always-visible buttons.
+        # A comfortable default (the user can resize); the minimum stays SMALL
+        # on purpose so the dialog always fits a 13-inch / 800px screen — the
+        # preview area scrolls, and the confirm/cancel buttons stay pinned
+        # outside it.
         self.resize(560, 600)
-        # Taller minimum so the scrollable preview is never cramped while the
-        # confirm/cancel buttons stay visible (fits a 13-inch / 800px screen).
-        self.setMinimumSize(380, 420)
+        self.setMinimumSize(360, 320)
         self.setSizeGripEnabled(True)
 
         layout = QVBoxLayout(self)
