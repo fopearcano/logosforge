@@ -159,3 +159,65 @@ def test_on_data_changed_still_refreshes_active_view():
     from storyplanner.ui.main_window import MainWindow
     source = inspect.getsource(MainWindow._on_data_changed)
     assert "_refresh_active_view" in source
+
+
+# -- refresh must not lose in-progress keystrokes or steal focus -------------
+
+def test_refresh_flushes_pending_keystrokes():
+    """A legitimate refresh (e.g. Assistant/Logos apply) must flush unsaved
+    typing first, so the rebuild reads the user's latest text — never the
+    pre-typing version."""
+    db = Database()
+    proj, s1, _ = _make_project(db)
+    view = WritingCoreView(db, proj.id, on_content_saved=lambda: None)
+    editor = view._editors[s1.id]
+    editor.setPlainText("Unsaved sentence in flight.")
+    # Simulate the 500ms debounce being pending (user just typed).
+    view._schedule_save(s1.id)
+    assert view._save_timers[s1.id].isActive()
+
+    view.refresh()  # rebuild triggered while a save is pending
+
+    scene = db.get_scene_by_id(s1.id)
+    assert "Unsaved sentence in flight" in (scene.content or "")
+    # And the rebuilt editor shows it (no keystroke loss).
+    assert "Unsaved sentence in flight" in view._editors[s1.id].toPlainText()
+
+
+def test_flush_pending_saves_persists_and_stops_timer():
+    db = Database()
+    proj, s1, _ = _make_project(db)
+    view = WritingCoreView(db, proj.id, on_content_saved=lambda: None)
+    view._editors[s1.id].setPlainText("Flush me.")
+    view._schedule_save(s1.id)
+    view._flush_pending_saves()
+    assert not view._save_timers[s1.id].isActive()
+    assert "Flush me" in (db.get_scene_by_id(s1.id).content or "")
+
+
+def test_refresh_restores_cursor_for_focused_scene(monkeypatch):
+    db = Database()
+    proj, s1, s2 = _make_project(db)
+    view = WritingCoreView(db, proj.id, on_content_saved=lambda: None)
+    editor = view._editors[s2.id]
+    # Make this editor report focus + place the cursor a few chars in.
+    monkeypatch.setattr(editor, "hasFocus", lambda: True)
+    cur = editor.textCursor()
+    cur.setPosition(3)
+    editor.setTextCursor(cur)
+
+    view.refresh()
+
+    # The scene still exists; the rebuilt editor restores the cursor position.
+    new_editor = view._editors[s2.id]
+    assert new_editor.textCursor().position() == 3
+
+
+def test_refresh_keeps_editor_enabled_and_editable():
+    db = Database()
+    proj, s1, _ = _make_project(db)
+    view = WritingCoreView(db, proj.id, on_content_saved=lambda: None)
+    view.refresh()
+    editor = view._editors[s1.id]
+    assert editor.isEnabled() is True
+    assert editor.isReadOnly() is False

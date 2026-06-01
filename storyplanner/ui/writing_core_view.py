@@ -1693,7 +1693,37 @@ class WritingCoreView(QWidget):
 
     # -- Data loading ---------------------------------------------------------
 
+    def _flush_pending_saves(self) -> None:
+        """Persist any per-scene edits still waiting on their debounce timer.
+
+        ``refresh()`` rebuilds every editor from the DB, so without flushing
+        first, keystrokes typed within the last debounce window (timer pending,
+        not yet fired) would be discarded by ``_clear_canvas`` — losing the
+        user's most recent typing. Flushing writes the current editor text to the
+        DB so the rebuild reads it back intact.
+        """
+        for scene_id, timer in list(self._save_timers.items()):
+            if timer.isActive():
+                timer.stop()
+                self._save_scene(scene_id)
+
+    def _focused_editor_state(self) -> tuple[int, int] | None:
+        """(scene_id, cursor_position) of the focused editor, or None."""
+        for scene_id, editor in self._editors.items():
+            if editor.hasFocus():
+                try:
+                    return scene_id, editor.textCursor().position()
+                except Exception:
+                    return scene_id, 0
+        return None
+
     def refresh(self) -> None:
+        # Never lose in-progress typing or steal focus when a rebuild is
+        # triggered (e.g. by an Assistant/Logos apply) while the editor is in
+        # use: flush pending saves first, then restore focus + cursor after.
+        self._flush_pending_saves()
+        focus_state = self._focused_editor_state()
+
         self._clear_canvas()
         scenes = self._db.get_all_scenes(self._project_id)
 
@@ -1729,6 +1759,20 @@ class WritingCoreView(QWidget):
         self.refresh_psyke_terms()
         self._refresh_suggestions()
         self._restore_session_state()
+
+        # Restore focus + cursor to the scene the user was editing (if it still
+        # exists after the rebuild) so a refresh never interrupts typing flow.
+        if focus_state is not None:
+            sid, pos = focus_state
+            editor = self._editors.get(sid)
+            if editor is not None:
+                try:
+                    cursor = editor.textCursor()
+                    cursor.setPosition(min(pos, len(editor.toPlainText())))
+                    editor.setTextCursor(cursor)
+                except Exception:
+                    pass
+                editor.setFocus()
 
     def _clear_canvas(self) -> None:
         self._format_toolbar.untrack_all()
