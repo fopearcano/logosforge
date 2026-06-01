@@ -63,7 +63,11 @@ def test_clicking_group_expands_it():
     group._toggle()
     assert group.expanded is True
     for child in group._children:
-        assert child.isVisible() is True
+        # Children marked unavailable for the current writing mode (e.g. the
+        # Graphic-Novel-only Pages item in a novel project) stay hidden even
+        # when the group is expanded.
+        available = child.property("nav_available") is not False
+        assert child.isVisible() is available
 
 
 def test_clicking_expanded_group_collapses_it():

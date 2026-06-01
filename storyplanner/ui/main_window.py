@@ -202,8 +202,24 @@ class _SidebarGroupHeader(QPushButton):
         )
         self.clicked.connect(self._toggle)
         for c in self._children:
-            c.setVisible(self._expanded)
+            c.setVisible(self._expanded and self._child_available(c))
         self._update_text()
+
+    @staticmethod
+    def _child_available(child: QPushButton) -> bool:
+        """A child may be marked unavailable (``nav_available`` property False)
+        for the current project's writing mode — e.g. the Graphic-Novel-only
+        Pages item. Such children stay hidden through expand/collapse."""
+        return child.property("nav_available") is not False
+
+    def refresh_child_visibility(self) -> None:
+        """Re-apply child visibility honoring expand/collapse + availability."""
+        if self._sidebar_collapsed:
+            for c in self._children:
+                c.setVisible(self._child_available(c))
+        else:
+            for c in self._children:
+                c.setVisible(self._expanded and self._child_available(c))
 
     @property
     def label(self) -> str:
@@ -219,7 +235,7 @@ class _SidebarGroupHeader(QPushButton):
         self._expanded = expanded
         if not self._sidebar_collapsed:
             for c in self._children:
-                c.setVisible(self._expanded)
+                c.setVisible(self._expanded and self._child_available(c))
         self._update_text()
 
     def expand_for_member(self, member_btn: QPushButton) -> bool:
@@ -234,12 +250,12 @@ class _SidebarGroupHeader(QPushButton):
         self._sidebar_collapsed = collapsed
         if collapsed:
             for c in self._children:
-                c.setVisible(True)
+                c.setVisible(self._child_available(c))
             self.setVisible(False)
         else:
             self.setVisible(True)
             for c in self._children:
-                c.setVisible(self._expanded)
+                c.setVisible(self._expanded and self._child_available(c))
         self._update_text()
 
     def _toggle(self) -> None:
@@ -328,19 +344,12 @@ class MainWindow(QMainWindow):
         self._toggle_btn.clicked.connect(self._toggle_sidebar)
         sidebar_layout.addWidget(self._toggle_btn)
 
-        # Pages is a Graphic-Novel-only surface — include it in the sidebar
-        # only for GN projects so group expand/collapse can't re-show it.
-        try:
-            from storyplanner.project_compat import get_project_narrative_engine
-            _project = self._db.get_project_by_id(self._project_id)
-            self._is_graphic_novel = (
-                get_project_narrative_engine(_project) == "graphic_novel"
-            )
-        except Exception:
-            self._is_graphic_novel = False
-        _plan_members = ["Outline", "Scenes", "Timeline", "Plot"]
-        if self._is_graphic_novel:
-            _plan_members.append("Pages")
+        # Pages is a Graphic-Novel-only surface. The button is always created in
+        # a stable layout slot (last Plan member), but its sidebar registration
+        # + visibility are toggled per the *current* project's writing mode via
+        # _apply_pages_availability() — at startup and on every project switch.
+        self._is_graphic_novel = self._project_is_graphic_novel()
+        _plan_members = ["Outline", "Scenes", "Timeline", "Plot", "Pages"]
 
         _SIDEBAR_LAYOUT: list = [
             "Projects", "Dashboard", "Notes", "Manuscript",
@@ -429,8 +438,8 @@ class MainWindow(QMainWindow):
             "Health", "Balance", "Pacing", "Adapt", "Narrative", "PSYKE", "Plugins",
             "Stages", "Chat",
         ]
-        if self._is_graphic_novel:
-            self._nav_labels.append("Pages")
+        # "Pages" is added/removed by _apply_pages_availability() for the current
+        # project's writing mode (called below + on project switch).
         self._nav_section_handlers = {
             "Projects": self._show_projects,
             "Dashboard": self._show_dashboard,
@@ -455,7 +464,7 @@ class MainWindow(QMainWindow):
             "Plugins": self._show_plugins,
             "Chat": self._show_chat,
             "Stages": self._show_stages,
-            "Pages": self._show_gn_pages,
+            # "Pages" handler registered by _apply_pages_availability().
         }
         for label in self._nav_labels:
             btn = self.sidebar_buttons[label]
@@ -479,6 +488,17 @@ class MainWindow(QMainWindow):
         if logos_btn is not None:
             logos_btn.setCheckable(True)
             logos_btn.clicked.connect(self._toggle_logos_layer)
+
+        # The Pages button widget always exists (last Plan member) so its click
+        # is wired exactly once here; registration/visibility are toggled per
+        # writing mode by _apply_pages_availability(). It is kept out of the
+        # nav-wiring loop above to avoid a double connection.
+        self._pages_btn = self.sidebar_buttons["Pages"]
+        self._pages_btn.setCheckable(True)
+        self._pages_btn.clicked.connect(
+            lambda _: (self._set_active_section("Pages"), self._show_gn_pages())
+        )
+        self._apply_pages_availability()
 
         # -- Right content area ----------------------------------------------
         self.content_area = self._build_initial_content()
@@ -1117,7 +1137,53 @@ class MainWindow(QMainWindow):
             )
         )
 
+    def _project_is_graphic_novel(self) -> bool:
+        """True if the *current* project's writing mode is graphic_novel."""
+        try:
+            from storyplanner.project_compat import get_project_narrative_engine
+            project = self._db.get_project_by_id(self._project_id)
+            return get_project_narrative_engine(project) == "graphic_novel"
+        except Exception:
+            return False
+
+    def _apply_pages_availability(self) -> None:
+        """Show/register the Graphic-Novel-only Pages item for the *current*
+        project's writing mode. Idempotent; called at startup and on every
+        project switch so the sidebar never shows a stale (or missing) Pages
+        item after switching projects."""
+        is_gn = self._project_is_graphic_novel()
+        self._is_graphic_novel = is_gn
+        btn = getattr(self, "_pages_btn", None)
+        if btn is None:
+            return
+        btn.setProperty("nav_available", is_gn)
+        if is_gn:
+            self.sidebar_buttons["Pages"] = btn
+            self._nav_section_handlers["Pages"] = self._show_gn_pages
+            if "Pages" not in self._nav_labels:
+                self._nav_labels.append("Pages")
+        else:
+            self.sidebar_buttons.pop("Pages", None)
+            self._nav_section_handlers.pop("Pages", None)
+            if "Pages" in self._nav_labels:
+                self._nav_labels.remove("Pages")
+            # If we were viewing Pages in the previous (GN) project, fall back to
+            # the Dashboard so a non-GN project never lands on the Pages view.
+            if getattr(self, "_current_section", None) == "Pages":
+                self._current_section = "Dashboard"
+        # Re-apply Plan-group child visibility honoring availability.
+        plan = next((g for g in getattr(self, "_sidebar_groups", [])
+                     if g.label == "Plan"), None)
+        if plan is not None:
+            plan.refresh_child_visibility()
+
     def _show_gn_pages(self) -> None:
+        # Defensive: Pages is a Graphic-Novel-only surface. If the current
+        # project is not a graphic novel, never mount the Pages view — route to
+        # the Dashboard instead (the button is normally hidden for non-GN).
+        if not self._project_is_graphic_novel():
+            self._show_dashboard()
+            return
         from storyplanner.ui.graphic_novel_pages_view import GraphicNovelPagesView
         self._set_content(
             GraphicNovelPagesView(
@@ -2605,6 +2671,9 @@ class MainWindow(QMainWindow):
         # 2. Swap the active project id and hand it to long-lived
         # sub-systems.
         self._project_id = new_id
+        # Recompute the writing-mode-dependent sidebar nav (Graphic-Novel-only
+        # Pages item) for the new project before the active section is rebuilt.
+        self._apply_pages_availability()
         self._psyke_console.set_project(new_id)
         self._set_current_file(file_path)
         self._autosave.set_project(new_id)
