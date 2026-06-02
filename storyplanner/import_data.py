@@ -278,4 +278,31 @@ def import_json(db: Database, data: dict) -> int:
             continue
         db.add_memory(project_id, sid, memory_type, target, value)
 
+    # Restore Timeline lanes + event links (optional; absent in older exports).
+    # Note: a distinct "plot_timeline" key avoids colliding with the separate
+    # Interchange exporter's "timeline" (a list of events).
+    timeline = data.get("plot_timeline", {}) or {}
+    if not isinstance(timeline, dict):
+        timeline = {}
+    for lane in timeline.get("lanes", []):
+        name = (lane.get("name") or "").strip()
+        if not name:
+            continue
+        db.create_timeline_lane(
+            project_id, name,
+            color_label=lane.get("color_label", ""),
+            order_index=lane.get("order_index"),
+        )
+    for link in timeline.get("links", []):
+        src = scene_id_by_title.get(link.get("source_title", ""))
+        tgt = scene_id_by_title.get(link.get("target_title", ""))
+        if src is None or tgt is None:
+            continue
+        db.add_timeline_link(
+            project_id, src, tgt,
+            color_label=link.get("color_label", "gray"),
+            link_type=link.get("link_type", "custom"),
+            label=link.get("label", ""),
+        )
+
     return project_id

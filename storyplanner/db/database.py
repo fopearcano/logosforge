@@ -57,6 +57,8 @@ from storyplanner.models import (
     Episode,
     SeriesArc,
     EpisodePlotline,
+    TimelineLane,
+    TimelineLink,
     Stage,
     StageBranch,
     StageSnapshot,
@@ -1318,6 +1320,188 @@ class Database:
                 return
             scene.plotline = plotline
             session.commit()
+
+    # -- Timeline lanes (plot/subplot rows) ---------------------------------
+
+    def get_timeline_lanes(self, project_id: int) -> list["TimelineLane"]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(TimelineLane)
+                .where(TimelineLane.project_id == project_id)
+                .order_by(TimelineLane.order_index, TimelineLane.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def create_timeline_lane(
+        self, project_id: int, name: str, color_label: str = "",
+        order_index: int | None = None,
+    ) -> "TimelineLane":
+        with Session(self._engine) as session:
+            if order_index is None:
+                from sqlalchemy import func
+                max_order = session.exec(
+                    select(func.max(TimelineLane.order_index)).where(
+                        TimelineLane.project_id == project_id
+                    )
+                ).one()
+                order_index = (max_order or 0) + 1
+            lane = TimelineLane(
+                project_id=project_id, name=name,
+                color_label=color_label or "", order_index=order_index,
+            )
+            session.add(lane)
+            session.commit()
+            session.refresh(lane)
+            return lane
+
+    def ensure_timeline_lanes(self, project_id: int) -> list["TimelineLane"]:
+        """Materialise a lane row for each distinct ``Scene.plotline`` value that
+        doesn't have one yet, so existing plot data appears as editable lanes.
+        Returns the full ordered lane list. Additive and idempotent."""
+        existing = {ln.name for ln in self.get_timeline_lanes(project_id)}
+        for plotline in self.get_scene_plotlines(project_id):
+            if plotline and plotline not in existing:
+                self.create_timeline_lane(project_id, plotline)
+                existing.add(plotline)
+        return self.get_timeline_lanes(project_id)
+
+    def rename_timeline_lane(self, lane_id: int, name: str) -> None:
+        """Rename a lane and re-point its member scenes' plotline to match."""
+        with Session(self._engine) as session:
+            lane = session.get(TimelineLane, lane_id)
+            if lane is None:
+                return
+            old_name = lane.name
+            lane.name = name
+            if old_name and old_name != name:
+                scenes = session.exec(
+                    select(Scene)
+                    .where(Scene.project_id == lane.project_id)
+                    .where(Scene.plotline == old_name)
+                ).all()
+                for s in scenes:
+                    s.plotline = name
+            session.commit()
+
+    def set_timeline_lane_color(self, lane_id: int, color_label: str) -> None:
+        with Session(self._engine) as session:
+            lane = session.get(TimelineLane, lane_id)
+            if lane is None:
+                return
+            lane.color_label = color_label or ""
+            session.commit()
+
+    def set_timeline_lane_collapsed(self, lane_id: int, collapsed: bool) -> None:
+        with Session(self._engine) as session:
+            lane = session.get(TimelineLane, lane_id)
+            if lane is None:
+                return
+            lane.collapsed = bool(collapsed)
+            session.commit()
+
+    def reorder_timeline_lane(self, lane_id: int, new_index: int) -> None:
+        with Session(self._engine) as session:
+            lane = session.get(TimelineLane, lane_id)
+            if lane is None:
+                return
+            lanes = list(session.exec(
+                select(TimelineLane)
+                .where(TimelineLane.project_id == lane.project_id)
+                .order_by(TimelineLane.order_index, TimelineLane.id)
+            ).all())
+            old = next((i for i, ln in enumerate(lanes) if ln.id == lane_id), None)
+            if old is None:
+                return
+            moved = lanes.pop(old)
+            new_index = max(0, min(new_index, len(lanes)))
+            lanes.insert(new_index, moved)
+            for i, ln in enumerate(lanes):
+                ln.order_index = i
+            session.commit()
+
+    def delete_timeline_lane(self, lane_id: int) -> None:
+        """Delete a lane row. Member scenes are NOT deleted — they are simply
+        unassigned (plotline cleared) so no story content is ever lost."""
+        with Session(self._engine) as session:
+            lane = session.get(TimelineLane, lane_id)
+            if lane is None:
+                return
+            scenes = session.exec(
+                select(Scene)
+                .where(Scene.project_id == lane.project_id)
+                .where(Scene.plotline == lane.name)
+            ).all()
+            for s in scenes:
+                s.plotline = ""
+            session.delete(lane)
+            session.commit()
+
+    # -- Timeline links (event ↔ event) -------------------------------------
+
+    def get_timeline_links(self, project_id: int) -> list["TimelineLink"]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(TimelineLink)
+                .where(TimelineLink.project_id == project_id)
+                .order_by(TimelineLink.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def add_timeline_link(
+        self, project_id: int, source_scene_id: int, target_scene_id: int,
+        color_label: str = "gray", link_type: str = "custom", label: str = "",
+    ) -> "TimelineLink | None":
+        """Create a link between two events. No-op (returns existing) if the
+        pair already exists in either direction, or if source == target."""
+        if source_scene_id == target_scene_id:
+            return None
+        with Session(self._engine) as session:
+            existing = session.exec(
+                select(TimelineLink)
+                .where(TimelineLink.project_id == project_id)
+                .where(TimelineLink.source_scene_id.in_(
+                    [source_scene_id, target_scene_id]))
+                .where(TimelineLink.target_scene_id.in_(
+                    [source_scene_id, target_scene_id]))
+            ).first()
+            if existing is not None:
+                return existing
+            link = TimelineLink(
+                project_id=project_id,
+                source_scene_id=source_scene_id,
+                target_scene_id=target_scene_id,
+                color_label=color_label or "gray",
+                link_type=link_type or "custom",
+                label=label or "",
+            )
+            session.add(link)
+            session.commit()
+            session.refresh(link)
+            return link
+
+    def set_timeline_link_color(self, link_id: int, color_label: str) -> None:
+        with Session(self._engine) as session:
+            link = session.get(TimelineLink, link_id)
+            if link is None:
+                return
+            link.color_label = color_label or "gray"
+            session.commit()
+
+    def set_timeline_link_type(self, link_id: int, link_type: str) -> None:
+        with Session(self._engine) as session:
+            link = session.get(TimelineLink, link_id)
+            if link is None:
+                return
+            link.link_type = link_type or "custom"
+            session.commit()
+
+    def remove_timeline_link(self, link_id: int) -> None:
+        """Delete a link row only — never the linked scenes."""
+        with Session(self._engine) as session:
+            link = session.get(TimelineLink, link_id)
+            if link is not None:
+                session.delete(link)
+                session.commit()
 
     def update_scene_content(self, scene_id: int, content: str) -> None:
         with Session(self._engine) as session:

@@ -8,6 +8,36 @@ import xml.etree.ElementTree as ET
 from storyplanner.db import Database
 
 
+def _build_timeline_section(db: Database, project_id: int, scenes: list) -> dict:
+    """Timeline lanes + event links. Event positions/colours are already carried
+    on each scene (order_index/plotline/color_label); links reference scenes by
+    their 1-based export order so they survive re-import."""
+    order_by_sid = {s.id: i + 1 for i, s in enumerate(scenes)}
+    title_by_sid = {s.id: s.title for s in scenes}
+    lanes = [
+        {
+            "name": ln.name,
+            "color_label": ln.color_label,
+            "order_index": ln.order_index,
+            "collapsed": ln.collapsed,
+        }
+        for ln in db.get_timeline_lanes(project_id)
+    ]
+    links = [
+        {
+            "source_order": order_by_sid.get(ln.source_scene_id),
+            "target_order": order_by_sid.get(ln.target_scene_id),
+            "source_title": title_by_sid.get(ln.source_scene_id, ""),
+            "target_title": title_by_sid.get(ln.target_scene_id, ""),
+            "color_label": ln.color_label,
+            "link_type": ln.link_type,
+            "label": ln.label,
+        }
+        for ln in db.get_timeline_links(project_id)
+    ]
+    return {"lanes": lanes, "links": links}
+
+
 def _gather_project_data(db: Database, project_id: int) -> dict:
     project = db.get_project_by_id(project_id)
 
@@ -188,6 +218,7 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
         "psyke_entries": psyke_list,
         "outline": _build_outline_tree(None),
         "continuity": continuity_items,
+        "plot_timeline": _build_timeline_section(db, project_id, scenes),
     }
 
     quantum = export_quantum_state(db, project_id)

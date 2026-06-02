@@ -829,8 +829,9 @@ class MainWindow(QMainWindow):
 
     def _show_timeline(self) -> None:
         preferences.set_flag("has_seen_timeline_hint", True)
+        from storyplanner.ui.plot_timeline_view import PlotTimelineView
         self._set_content(
-            TimelineView(
+            PlotTimelineView(
                 self._db,
                 self._project_id,
                 on_scene_selected=self._open_scene_in_editor,

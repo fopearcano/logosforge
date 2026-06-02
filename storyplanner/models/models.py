@@ -1075,3 +1075,48 @@ class EpisodePlotline(SQLModel, table=True):
     resolution_state: str = ""
     order_index: int = 0
     created_at: datetime = Field(default_factory=_now)
+
+
+# Link semantics between two Timeline events (kept small; extend as needed).
+TIMELINE_LINK_TYPES: dict[str, str] = {
+    "custom": "Custom",
+    "causality": "Causality",
+    "setup_payoff": "Setup / Payoff",
+    "echo": "Echo / Motif",
+    "conflict": "Conflict",
+    "dependency": "Dependency",
+}
+
+
+class TimelineLane(SQLModel, table=True):
+    """A horizontal plot/subplot lane in the Timeline section.
+
+    A lane groups Timeline events (scenes) by matching ``Scene.plotline`` to
+    ``name`` — so the Timeline and the Plot section stay in sync (both read the
+    scene's plotline). The lane row carries the metadata a bare string can't:
+    colour, ordering and collapsed state. Project-scoped.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id")
+    name: str
+    color_label: str = ""           # key into color_labels palette
+    order_index: int = 0
+    collapsed: bool = False
+    created_at: datetime = Field(default_factory=_now)
+
+
+class TimelineLink(SQLModel, table=True):
+    """A visual link between two Timeline events (scenes).
+
+    Removing a link deletes only this row — never the linked scenes.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id")
+    source_scene_id: int = Field(foreign_key="scene.id")
+    target_scene_id: int = Field(foreign_key="scene.id")
+    color_label: str = "gray"       # key into color_labels palette
+    link_type: str = "custom"       # TIMELINE_LINK_TYPES
+    label: str = ""
+    created_at: datetime = Field(default_factory=_now)
