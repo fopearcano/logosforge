@@ -228,6 +228,23 @@ _MAX_DESC = 400          # a description longer than this reads like prose
 _DESC_TRIM = 300         # trim an over-long description to this many chars
 _MAX_TITLE = 200         # a title longer than this is prose, not a heading
 
+# A leading meta/preamble line the model sometimes emits before the real
+# structure — e.g. "A Complete Outline for Your Novel", "Here is your outline".
+# Such prose, when parsed, becomes a bogus top-level structural node (and then a
+# placeholder scene that surfaces in the Manuscript canvas). We drop these so
+# they never become structure. Kept conservative: only a top-level, kind-less,
+# childless node whose title mentions "outline" qualifies — real acts/scenes
+# don't look like that.
+_PREAMBLE_RE = re.compile(r"\boutlines?\b", re.IGNORECASE)
+
+
+def _is_preamble_node(op: "OutlineOp") -> bool:
+    return (
+        not op.kind
+        and not op.children
+        and bool(_PREAMBLE_RE.search(op.title or ""))
+    )
+
 
 def _fallback_description(op: "OutlineOp") -> str:
     """A concise, useful planning placeholder for a node missing a description."""
@@ -252,6 +269,14 @@ def repair_outline_ops(ops: list[OutlineOp]) -> tuple[list[OutlineOp], list[str]
     """
     counters = {"missing": 0, "trimmed": 0}
 
+    # Drop any leading meta/preamble node ("A Complete Outline for Your Novel",
+    # …) so the model's prose intro never becomes a bogus act/scene that would
+    # surface in the Manuscript canvas. Top-level only.
+    dropped = [op for op in ops if _is_preamble_node(op)]
+    if dropped:
+        dropped_ids = {id(op) for op in dropped}
+        ops = [op for op in ops if id(op) not in dropped_ids]
+
     def _walk(nodes: list[OutlineOp]) -> None:
         for op in nodes:
             desc = (op.description or "").strip()
@@ -266,6 +291,12 @@ def repair_outline_ops(ops: list[OutlineOp]) -> tuple[list[OutlineOp], list[str]
 
     _walk(ops)
     warnings: list[str] = []
+    if dropped:
+        warnings.append(
+            f"Removed {len(dropped)} non-structural intro line(s) (e.g. "
+            f"“{dropped[0].title[:40]}”) so they aren't added as "
+            "outline items."
+        )
     if counters["missing"]:
         warnings.append(
             f"{counters['missing']} item(s) had no description — added a "
