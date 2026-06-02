@@ -1120,3 +1120,31 @@ class TimelineLink(SQLModel, table=True):
     link_type: str = "custom"       # TIMELINE_LINK_TYPES
     label: str = ""
     created_at: datetime = Field(default_factory=_now)
+
+
+class CanvasPlotNode(SQLModel, table=True):
+    """A free-form block on the Canvas Plot board (Miro-style thinking canvas).
+
+    Canvas Plot is deliberately NOT scene-/timeline-derived: each node carries
+    its own free spatial position, size, text, colour and optional group so the
+    board is an independent visual layer owned entirely by its project. An
+    optional ``scene_id`` lets a node *reference* a scene (e.g. when seeded from
+    existing structure) without making scenes the source of truth.
+
+    (Phase 1 introduces the storage + project boundary; the canvas editing UI
+    is built on top of this in a later phase.)
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id")
+    title: str = ""
+    body: str = ""
+    x: float = 0.0
+    y: float = 0.0
+    width: float = 180.0
+    height: float = 110.0
+    color_label: str = ""           # key into color_labels palette
+    group_label: str = ""           # optional free grouping/cluster label
+    scene_id: Optional[int] = Field(default=None, foreign_key="scene.id")
+    sort_order: int = 0
+    created_at: datetime = Field(default_factory=_now)

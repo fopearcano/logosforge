@@ -88,6 +88,19 @@ from storyplanner.ui.writing_core_view import WritingCoreView
 _ICON_SLOT_WIDTH = 48
 
 
+# Display labels can differ from the internal section *key*. The key (used by
+# nav handlers, highlight, the assistant section logic, and tests via
+# ``sidebar_buttons[key]``) stays stable; only the visible text changes. This
+# lets us rename "Plot" → "Canvas Plot" with zero behavioural risk.
+SECTION_DISPLAY_NAMES: dict[str, str] = {
+    "Plot": "Canvas Plot",
+}
+
+
+def _display_name(key: str) -> str:
+    return SECTION_DISPLAY_NAMES.get(key, key)
+
+
 class _SidebarButton(QPushButton):
     """Sidebar button with fixed icon slot and collapsible label."""
 
@@ -404,7 +417,7 @@ class MainWindow(QMainWindow):
                 for member in member_labels:
                     icon = self._sidebar_icons.get(member, "")
                     btn = _SidebarButton(
-                        icon, member, indent=True,
+                        icon, _display_name(member), indent=True,
                         icon_color=sidebar_icon_color(member),
                     )
                     self.sidebar_buttons[member] = btn
@@ -421,7 +434,7 @@ class MainWindow(QMainWindow):
                 self._sidebar_groups.append(header)
             else:
                 icon = self._sidebar_icons.get(item, "")
-                btn = _SidebarButton(icon, item,
+                btn = _SidebarButton(icon, _display_name(item),
                                      icon_color=sidebar_icon_color(item))
                 sidebar_layout.addWidget(btn)
                 self.sidebar_buttons[item] = btn

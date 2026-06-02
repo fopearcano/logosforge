@@ -59,6 +59,7 @@ from storyplanner.models import (
     EpisodePlotline,
     TimelineLane,
     TimelineLink,
+    CanvasPlotNode,
     Stage,
     StageBranch,
     StageSnapshot,
@@ -1502,6 +1503,88 @@ class Database:
             if link is not None:
                 session.delete(link)
                 session.commit()
+
+    # -- Canvas Plot (free visual board; project-owned, not scene-derived) ---
+
+    def get_canvas_plot_nodes(self, project_id: int) -> list["CanvasPlotNode"]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(CanvasPlotNode)
+                .where(CanvasPlotNode.project_id == project_id)
+                .order_by(CanvasPlotNode.sort_order, CanvasPlotNode.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def create_canvas_plot_node(
+        self, project_id: int, title: str = "", body: str = "",
+        x: float = 0.0, y: float = 0.0, width: float = 180.0,
+        height: float = 110.0, color_label: str = "", group_label: str = "",
+        scene_id: int | None = None,
+    ) -> "CanvasPlotNode":
+        with Session(self._engine) as session:
+            from sqlalchemy import func
+            max_order = session.exec(
+                select(func.max(CanvasPlotNode.sort_order)).where(
+                    CanvasPlotNode.project_id == project_id
+                )
+            ).one()
+            node = CanvasPlotNode(
+                project_id=project_id, title=title, body=body, x=x, y=y,
+                width=width, height=height, color_label=color_label or "",
+                group_label=group_label or "", scene_id=scene_id,
+                sort_order=(max_order or 0) + 1,
+            )
+            session.add(node)
+            session.commit()
+            session.refresh(node)
+            return node
+
+    def update_canvas_plot_node(
+        self, node_id: int, *, title: str | None = None, body: str | None = None,
+        x: float | None = None, y: float | None = None,
+        width: float | None = None, height: float | None = None,
+        color_label: str | None = None, group_label: str | None = None,
+    ) -> None:
+        with Session(self._engine) as session:
+            node = session.get(CanvasPlotNode, node_id)
+            if node is None:
+                return
+            if title is not None:
+                node.title = title
+            if body is not None:
+                node.body = body
+            if x is not None:
+                node.x = x
+            if y is not None:
+                node.y = y
+            if width is not None:
+                node.width = width
+            if height is not None:
+                node.height = height
+            if color_label is not None:
+                node.color_label = color_label
+            if group_label is not None:
+                node.group_label = group_label
+            session.commit()
+
+    def delete_canvas_plot_node(self, node_id: int) -> None:
+        with Session(self._engine) as session:
+            node = session.get(CanvasPlotNode, node_id)
+            if node is not None:
+                session.delete(node)
+                session.commit()
+
+    def clear_canvas_plot(self, project_id: int) -> None:
+        """Remove all Canvas Plot nodes for a project (project-scoped)."""
+        with Session(self._engine) as session:
+            nodes = session.exec(
+                select(CanvasPlotNode).where(
+                    CanvasPlotNode.project_id == project_id
+                )
+            ).all()
+            for node in nodes:
+                session.delete(node)
+            session.commit()
 
     def update_scene_content(self, scene_id: int, content: str) -> None:
         with Session(self._engine) as session:
