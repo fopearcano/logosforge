@@ -978,12 +978,26 @@ class AssistantPanel(QWidget):
         # must be evaluated against the new project's context.
         self._pending_messages = None
         self._project_id = project_id
+        # Clear the previous project's visible AI context so nothing from the
+        # old project lingers in the always-on dock (and so the next answer is
+        # never built on the prior project's prompt/response/context).
+        self._reset_ai_context()
         quantum_load_state(self._db, project_id)
         self._quantum_timeline._project_id = project_id
         self._quantum_timeline.refresh()
         # Re-point the mode strip at the new project (was only refreshed against
         # the previous project_id, leaving a stale mode + manual override).
         self._mode_strip.set_project(project_id)
+
+    def _reset_ai_context(self) -> None:
+        """Clear project-bound visible state so no previous-project AI context
+        (prompt, response, gathered context preview) survives a project switch."""
+        if hasattr(self, "_prompt_input"):
+            self._prompt_input.clear()
+        if hasattr(self, "_response_output"):
+            self._response_output.clear()
+        if hasattr(self, "_ctx_viewer"):
+            self._ctx_viewer.clear()
 
     def set_active_scene(self, scene_id: int) -> None:
         pass

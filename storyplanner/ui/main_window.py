@@ -2753,6 +2753,11 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_logos_suggestions"):
             self._logos_suggestions.set_suggestions([])
             self._logos_suggestions.setVisible(False)
+        # The inline Logos toolbar (always-present, not rebuilt on switch) keeps
+        # its last result — drop it so a prior project's Logos output doesn't
+        # linger in the bar after switching.
+        if hasattr(self, "_logos_toolbar"):
+            self._logos_toolbar.clear_result()
         if hasattr(self, "_diagnostics_drawer"):
             self._diagnostics_drawer.set_diagnostics([])
         if hasattr(self, "_health_drawer"):
