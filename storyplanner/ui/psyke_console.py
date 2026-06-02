@@ -400,6 +400,17 @@ class PsykeConsole(QWidget):
         self._search_index._project_id = project_id
         self._psyke_entries_cache = None
         self._index_dirty = True
+        # The console is an always-on surface: drop any in-progress query and
+        # visible results from the previous project, and rebuild the index
+        # eagerly so it never surfaces stale (previous-project) PSYKE entries
+        # before the next keystroke.
+        if getattr(self, "_input", None) is not None:
+            self._input.blockSignals(True)
+            self._input.clear()
+            self._input.blockSignals(False)
+        if getattr(self, "_dropdown", None) is not None:
+            self._dropdown.hide_results()
+        self.rebuild_index()
 
     def rebuild_index(self) -> None:
         self._refresh_cache()

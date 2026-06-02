@@ -2727,6 +2727,10 @@ class MainWindow(QMainWindow):
         # Recompute the writing-mode-dependent sidebar nav (Graphic-Novel-only
         # Pages item) for the new project before the active section is rebuilt.
         self._apply_pages_availability()
+        # Re-bind the always-on PSYKE console to the new project: clears its
+        # in-progress query + stale results and rebuilds the index eagerly.
+        # (The PSYKE section view itself is rebuilt fresh in step 4, so its
+        # entry list / selection / relations / progressions reload cleanly.)
         self._psyke_console.set_project(new_id)
         self._set_current_file(file_path)
         self._autosave.set_project(new_id)

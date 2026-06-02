@@ -539,8 +539,12 @@ class TestEntriesCache:
         console.rebuild_index()
         assert any(e.name == "John" for e in console._psyke_entries_cache)
 
+        # set_project drops the previous project's entries and eagerly rebuilds
+        # the index for the new project (no stale results before next keystroke).
         console.set_project(p2.id)
-        assert console._psyke_entries_cache is None
+        assert not any(e.name == "John" for e in console._psyke_entries_cache)
+        assert any(e.name == "Jane" for e in console._psyke_entries_cache)
+        assert console._input.text() == ""
 
         console._input.setText("jan")
         console._run_search()
