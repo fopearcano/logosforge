@@ -1009,6 +1009,15 @@ class AssistantPanel(QWidget):
         outline = self._is_outline_mode()
         if hasattr(self, "_apply_outline_btn"):
             self._apply_outline_btn.setVisible(outline)
+        # In Outline Mode the generated text is planning structure, NOT
+        # manuscript prose. Hide the prose-targeting actions so a generated
+        # outline can never be written into a scene's manuscript body; only
+        # "Apply to Outline" (and Copy) remain. (A hard guard in each handler
+        # backs this up even if a button is triggered programmatically.)
+        for attr in ("_replace_content_btn", "_insert_cursor_btn", "_append_btn"):
+            btn = getattr(self, attr, None)
+            if btn is not None:
+                btn.setVisible(not outline)
         if hasattr(self, "_outline_template_row"):
             self._reload_outline_templates()
             self._outline_template_row.setVisible(outline)
@@ -1824,6 +1833,13 @@ class AssistantPanel(QWidget):
         if text is None:
             return
 
+        # Outline Mode: the response is planning structure — route it through
+        # the outline pipeline (parse/validate/apply as acts/chapters/scenes),
+        # never into manuscript prose.
+        if self._is_outline_mode():
+            self._apply_to_outline()
+            return
+
         editor = self._active_editor()
         if editor and hasattr(editor, "textCursor"):
             cursor = editor.textCursor()
@@ -1865,6 +1881,10 @@ class AssistantPanel(QWidget):
         if text is None:
             return
 
+        if self._is_outline_mode():
+            self._apply_to_outline()
+            return
+
         editor = self._active_editor()
         if editor and hasattr(editor, "textCursor"):
             answer = QMessageBox.question(
@@ -1886,6 +1906,10 @@ class AssistantPanel(QWidget):
     def _apply_append(self) -> None:
         text = self._get_response_text()
         if text is None:
+            return
+
+        if self._is_outline_mode():
+            self._apply_to_outline()
             return
 
         editor = self._active_editor()
@@ -1952,16 +1976,32 @@ class AssistantPanel(QWidget):
         return created
 
     def _apply_to_outline(self, *, confirm: bool = True) -> list[int]:
-        """Outline Mode: propose the structure, confirm, then apply additively."""
-        ops, n = self.propose_outline_ops()
+        """Outline Mode: propose the structure, validate/repair, confirm, apply."""
+        ops, _n = self.propose_outline_ops()
         if not ops:
             return []
+        from storyplanner.outline_actions import (
+            count_ops,
+            format_outline_preview,
+            repair_outline_ops,
+            validate_outline_ops,
+        )
+        # Fill empty descriptions / trim prose, then reject unusable output so
+        # nothing broken or prose-like is silently applied.
+        ops, gen_warnings = repair_outline_ops(ops)
+        ok, errors = validate_outline_ops(ops)
+        if not ok:
+            QMessageBox.warning(
+                self, "Apply to Outline",
+                "The generated outline can't be applied safely:\n\n• "
+                + "\n• ".join(errors),
+            )
+            return []
         if confirm:
-            from storyplanner.outline_actions import format_outline_preview
             from storyplanner.ui.outline_confirm_dialog import OutlineConfirmDialog
             if not OutlineConfirmDialog.confirm(
-                format_outline_preview(ops), n,
-                title="Apply to Outline", parent=self,
+                format_outline_preview(ops), count_ops(ops),
+                title="Apply to Outline", warnings=gen_warnings, parent=self,
             ):
                 return []
         return self.apply_outline_ops(ops)

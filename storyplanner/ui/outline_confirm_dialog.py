@@ -27,6 +27,7 @@ class OutlineConfirmDialog(QDialog):
         node_count: int,
         *,
         title: str = "Apply to Outline",
+        warnings: list[str] | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -51,6 +52,15 @@ class OutlineConfirmDialog(QDialog):
         heading.setStyleSheet("font-weight: bold;")
         layout.addWidget(heading)
 
+        # Quality warnings (missing descriptions repaired, prose trimmed, …) —
+        # shown above the preview so the user sees them before applying.
+        if warnings:
+            warn = QLabel("⚠ " + "\n⚠ ".join(warnings))
+            warn.setWordWrap(True)
+            warn.setStyleSheet("color: #c79a3e;")  # amber
+            self._warnings_label = warn
+            layout.addWidget(warn)
+
         # Scrolling preview — read-only; only this area grows/scrolls.
         self._preview = QPlainTextEdit()
         self._preview.setReadOnly(True)
@@ -71,10 +81,11 @@ class OutlineConfirmDialog(QDialog):
     @staticmethod
     def confirm(
         preview: str, node_count: int, *,
-        title: str = "Apply to Outline", parent=None,
+        title: str = "Apply to Outline",
+        warnings: list[str] | None = None, parent=None,
     ) -> bool:
         """Show the dialog modally; return True if the user clicked Apply."""
         dlg = OutlineConfirmDialog(
-            preview, node_count, title=title, parent=parent,
+            preview, node_count, title=title, warnings=warnings, parent=parent,
         )
         return dlg.exec() == QDialog.DialogCode.Accepted

@@ -213,6 +213,97 @@ def format_outline_preview(ops: list[OutlineOp]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Repair & validation — keep generated outlines structured and complete
+# ---------------------------------------------------------------------------
+#
+# Generation can return nodes with no description, or (when the model ignores
+# the "no prose" instruction) a wall of prose masquerading as an outline.  The
+# Outline must never contain empty placeholder blocks, and prose must never be
+# applied as structure.  ``repair_outline_ops`` fills missing descriptions with
+# a concise, useful placeholder and trims prose-like ones; ``validate_outline_ops``
+# rejects output that is not a usable outline.  Neither adds or removes nodes,
+# so node counts are preserved for the caller's confirmation/preview.
+
+_MAX_DESC = 400          # a description longer than this reads like prose
+_DESC_TRIM = 300         # trim an over-long description to this many chars
+_MAX_TITLE = 200         # a title longer than this is prose, not a heading
+
+
+def _fallback_description(op: "OutlineOp") -> str:
+    """A concise, useful planning placeholder for a node missing a description."""
+    kind = _effective_kind(op)
+    title = (op.title or "").strip() or kind.capitalize()
+    if kind in ("act", "part"):
+        return f"{title}: the dramatic purpose and stakes of this part."
+    if kind in ("chapter", "sequence"):
+        return (f"{title}: what this chapter accomplishes and how it moves the "
+                "story forward.")
+    if kind == "beat":
+        return f"{title}: the turning point this beat delivers."
+    return f"{title}: the goal, conflict, and narrative movement of this scene."
+
+
+def repair_outline_ops(ops: list[OutlineOp]) -> tuple[list[OutlineOp], list[str]]:
+    """Fill empty descriptions and trim prose-like ones; return (ops, warnings).
+
+    Repairs the tree in place (and returns it). Never adds or removes nodes, so
+    ``count_ops`` is unchanged. *warnings* summarise what was repaired so the
+    caller can surface it before applying.
+    """
+    counters = {"missing": 0, "trimmed": 0}
+
+    def _walk(nodes: list[OutlineOp]) -> None:
+        for op in nodes:
+            desc = (op.description or "").strip()
+            if not desc:
+                op.description = _fallback_description(op)
+                counters["missing"] += 1
+            elif len(desc) > _MAX_DESC:
+                cut = desc[:_DESC_TRIM].rsplit(" ", 1)[0].rstrip()
+                op.description = (cut or desc[:_DESC_TRIM]).rstrip() + "…"
+                counters["trimmed"] += 1
+            _walk(op.children)
+
+    _walk(ops)
+    warnings: list[str] = []
+    if counters["missing"]:
+        warnings.append(
+            f"{counters['missing']} item(s) had no description — added a "
+            "concise placeholder you can refine."
+        )
+    if counters["trimmed"]:
+        warnings.append(
+            f"{counters['trimmed']} description(s) looked like prose and were "
+            "shortened to a one-line summary."
+        )
+    return ops, warnings
+
+
+def validate_outline_ops(ops: list[OutlineOp]) -> tuple[bool, list[str]]:
+    """Return (ok, errors). Rejects empty output or prose masquerading as outline."""
+    if not ops:
+        return False, ["No outline structure was found in the response."]
+
+    errors: list[str] = []
+
+    def _walk(nodes: list[OutlineOp]) -> None:
+        for op in nodes:
+            if not (op.title or "").strip():
+                errors.append("An outline item has no title.")
+            elif len(op.title) > _MAX_TITLE:
+                errors.append(
+                    "The response looks like prose, not a structured outline."
+                )
+            _walk(op.children)
+
+    _walk(ops)
+    # De-duplicate, preserving order.
+    seen: set[str] = set()
+    unique = [e for e in errors if not (e in seen or seen.add(e))]
+    return (not unique), unique
+
+
+# ---------------------------------------------------------------------------
 # AI generation prompt builder (scope-aware, engine-aware, PSYKE-aware)
 # ---------------------------------------------------------------------------
 
@@ -281,8 +372,11 @@ def build_outline_generation_prompt(
     parts.append(
         "Format as a Markdown outline using '#'/'##'/'###' headers and/or "
         "'- ' bullets. Prefix items with the structural unit ("
-        + ", ".join(labels) + ") where appropriate. Give each node a short "
-        "title and a one-line description. Do not write prose."
+        + ", ".join(labels) + ") where appropriate. For EVERY node give a "
+        "short title, then on the same line after ' — ' a one-line planning "
+        "description stating its purpose, and for scenes the central "
+        "conflict/tension or narrative movement. Output planning structure "
+        "ONLY: no prose, no dialogue, no full paragraphs, no commentary."
     )
 
     if template_name:

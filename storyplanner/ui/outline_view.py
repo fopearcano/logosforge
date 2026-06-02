@@ -718,6 +718,8 @@ class OutlineView(QWidget):
             count_ops,
             format_outline_preview,
             parse_outline_response,
+            repair_outline_ops,
+            validate_outline_ops,
         )
         ops = parse_outline_response(text or "")
         if not ops:
@@ -726,13 +728,25 @@ class OutlineView(QWidget):
                 "The AI response did not contain a usable outline structure.",
             )
             return []
+        # Fill empty descriptions / trim prose, then reject unusable output so
+        # we never create empty placeholder nodes or apply prose as structure.
+        ops, gen_warnings = repair_outline_ops(ops)
+        ok, errors = validate_outline_ops(ops)
+        if not ok:
+            QMessageBox.warning(
+                self, "AI Generate Outline",
+                "The generated outline can't be applied safely:\n\n• "
+                + "\n• ".join(errors),
+            )
+            return []
         if confirm:
             preview = format_outline_preview(ops)
+            warn_txt = ("\n\n⚠ " + "\n⚠ ".join(gen_warnings)) if gen_warnings else ""
             answer = QMessageBox.question(
                 self, "Apply generated outline",
                 f"Add {count_ops(ops)} outline node(s)?\n\n"
-                "Existing nodes are kept; the new structure is appended.\n\n"
-                + preview,
+                "Existing nodes are kept; the new structure is appended."
+                + warn_txt + "\n\n" + preview,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )

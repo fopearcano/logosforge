@@ -978,6 +978,8 @@ class PlanView(QWidget):
             count_ops,
             format_outline_preview,
             parse_outline_response,
+            repair_outline_ops,
+            validate_outline_ops,
         )
         ops = parse_outline_response(text or "")
         if not ops:
@@ -986,11 +988,22 @@ class PlanView(QWidget):
                 "The AI response did not contain a usable outline structure.",
             )
             return []
+        # Fill empty descriptions / trim prose, then reject unusable output.
+        ops, gen_warnings = repair_outline_ops(ops)
+        ok, errors = validate_outline_ops(ops)
+        if not ok:
+            QMessageBox.warning(
+                self, "AI Generate Outline",
+                "The generated outline can't be applied safely:\n\n• "
+                + "\n• ".join(errors),
+            )
+            return []
         if confirm:
             from storyplanner.ui.outline_confirm_dialog import OutlineConfirmDialog
             if not OutlineConfirmDialog.confirm(
                 format_outline_preview(ops), count_ops(ops),
-                title="Apply generated outline", parent=self,
+                title="Apply generated outline", warnings=gen_warnings,
+                parent=self,
             ):
                 return []
         base_act = act if scope in ("chapter", "scene") else ""
