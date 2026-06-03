@@ -68,7 +68,8 @@ def test_on_data_changed_refreshes_plot_view():
     win._set_active_section("Plot")
     win._show_plot()
     view = win.content_area
-    assert isinstance(view, MultiPlotView)
+    from storyplanner.ui.canvas_plot_view import CanvasPlotView
+    assert isinstance(view, CanvasPlotView)
     db.create_scene(proj.id, "S2", content="y")
     win._on_data_changed()
     # View was refreshed — no crash, and grid view picked up new scene

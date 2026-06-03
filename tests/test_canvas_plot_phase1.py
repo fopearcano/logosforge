@@ -65,13 +65,13 @@ def test_display_name_map():
 
 
 def test_canvas_plot_section_opens():
-    from storyplanner.ui.multi_plot_view import MultiPlotView
+    from storyplanner.ui.canvas_plot_view import CanvasPlotView
     db = Database()
     pid = db.create_project("P").id
     win = _win(db, pid)
     win.sidebar_buttons["Plot"].click()
     assert win._current_section == "Plot"
-    assert isinstance(win.content_area, MultiPlotView)
+    assert isinstance(win.content_area, CanvasPlotView)
 
 
 # ==========================================================================
@@ -80,7 +80,7 @@ def test_canvas_plot_section_opens():
 
 
 def test_timeline_unchanged_and_distinct_from_canvas_plot():
-    from storyplanner.ui.multi_plot_view import MultiPlotView
+    from storyplanner.ui.canvas_plot_view import CanvasPlotView
     from storyplanner.ui.plot_timeline_view import PlotTimelineView
     db = Database()
     pid = db.create_project("P").id
@@ -89,9 +89,9 @@ def test_timeline_unchanged_and_distinct_from_canvas_plot():
     win.sidebar_buttons["Timeline"].click()
     assert isinstance(win.content_area, PlotTimelineView)
     win.sidebar_buttons["Plot"].click()
-    assert isinstance(win.content_area, MultiPlotView)
+    assert isinstance(win.content_area, CanvasPlotView)
     # The two sections are different view classes (not mirrors).
-    assert MultiPlotView is not PlotTimelineView
+    assert CanvasPlotView is not PlotTimelineView
 
 
 def test_timeline_label_still_timeline():

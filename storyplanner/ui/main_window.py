@@ -853,12 +853,12 @@ class MainWindow(QMainWindow):
         )
 
     def _show_plot(self) -> None:
+        from storyplanner.ui.canvas_plot_view import CanvasPlotView
         self._set_content(
-            MultiPlotView(
+            CanvasPlotView(
                 self._db,
                 self._project_id,
                 on_data_changed=self._on_data_changed,
-                on_open_scene=self._open_scene_in_editor,
             )
         )
 
