@@ -1184,3 +1184,24 @@ class CanvasPlotFrame(SQLModel, table=True):
     width: float = 360.0
     height: float = 260.0
     created_at: datetime = Field(default_factory=_now)
+
+
+class Chapter(SQLModel, table=True):
+    """The primary writing unit in Novel mode.
+
+    Additive and independent of ``Scene`` (which stays the universal unit for
+    Screenplay / Graphic Novel / Stage Script / Series and for legacy data). New
+    table — ``create_all`` creates it; existing projects gain it empty, so no
+    migration and no scene is ever touched. ``act`` is a string label (acts are
+    not separate objects), mirroring ``Scene.act``.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id")
+    act: str = ""                   # act label (string; no Act table)
+    title: str = ""
+    summary: str = ""               # planning description
+    content: str = ""               # manuscript body for the chapter
+    order_index: int = 0
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)

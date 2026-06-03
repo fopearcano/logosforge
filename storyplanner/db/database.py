@@ -62,6 +62,7 @@ from storyplanner.models import (
     CanvasPlotNode,
     CanvasPlotLink,
     CanvasPlotFrame,
+    Chapter,
     Stage,
     StageBranch,
     StageSnapshot,
@@ -1731,6 +1732,91 @@ class Database:
             frame = session.get(CanvasPlotFrame, frame_id)
             if frame is not None:
                 session.delete(frame)
+                session.commit()
+
+    # -- Chapters (Novel primary writing unit; additive, never touches scenes) --
+
+    def get_chapters(self, project_id: int) -> list["Chapter"]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(Chapter)
+                .where(Chapter.project_id == project_id)
+                .order_by(Chapter.order_index, Chapter.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def get_chapter_by_id(self, chapter_id: int) -> "Chapter | None":
+        with Session(self._engine) as session:
+            return session.get(Chapter, chapter_id)
+
+    def create_chapter(
+        self, project_id: int, title: str = "", summary: str = "",
+        content: str = "", act: str = "", order_index: int | None = None,
+    ) -> "Chapter":
+        with Session(self._engine) as session:
+            if order_index is None:
+                from sqlalchemy import func
+                max_order = session.exec(
+                    select(func.max(Chapter.order_index)).where(
+                        Chapter.project_id == project_id
+                    )
+                ).one()
+                order_index = (max_order or 0) + 1
+            chapter = Chapter(
+                project_id=project_id, title=title, summary=summary,
+                content=content, act=act, order_index=order_index,
+            )
+            session.add(chapter)
+            session.commit()
+            session.refresh(chapter)
+            return chapter
+
+    def update_chapter(
+        self, chapter_id: int, *, title: str | None = None,
+        summary: str | None = None, content: str | None = None,
+        act: str | None = None,
+    ) -> None:
+        with Session(self._engine) as session:
+            chapter = session.get(Chapter, chapter_id)
+            if chapter is None:
+                return
+            if title is not None:
+                chapter.title = title
+            if summary is not None:
+                chapter.summary = summary
+            if content is not None:
+                chapter.content = content
+            if act is not None:
+                chapter.act = act
+            from datetime import datetime, timezone
+            chapter.updated_at = datetime.now(timezone.utc)
+            session.commit()
+
+    def reorder_chapter(self, chapter_id: int, new_index: int) -> None:
+        with Session(self._engine) as session:
+            chapter = session.get(Chapter, chapter_id)
+            if chapter is None:
+                return
+            chapters = list(session.exec(
+                select(Chapter)
+                .where(Chapter.project_id == chapter.project_id)
+                .order_by(Chapter.order_index, Chapter.id)
+            ).all())
+            old = next((i for i, c in enumerate(chapters) if c.id == chapter_id), None)
+            if old is None:
+                return
+            moved = chapters.pop(old)
+            new_index = max(0, min(new_index, len(chapters)))
+            chapters.insert(new_index, moved)
+            for i, c in enumerate(chapters):
+                c.order_index = i
+            session.commit()
+
+    def delete_chapter(self, chapter_id: int) -> None:
+        with Session(self._engine) as session:
+            chapter = session.get(Chapter, chapter_id)
+            if chapter is not None:
+                session.delete(chapter)
                 session.commit()
 
     def clear_canvas_plot(self, project_id: int) -> None:

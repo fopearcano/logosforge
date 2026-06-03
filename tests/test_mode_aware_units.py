@@ -1,0 +1,220 @@
+"""Mode-aware primary writing unit: Novel = Chapters, others = Scenes.
+
+Covers navigation visibility per writing mode, project-switch updates, clean
+new-project state, legacy scene preservation, the additive Chapter store, and
+selection clearing on switch. No destructive migration; scenes are never deleted.
+"""
+
+from __future__ import annotations
+
+import warnings
+
+import pytest
+from PySide6.QtWidgets import QApplication
+
+warnings.filterwarnings("ignore")
+
+from storyplanner.db import Database
+from storyplanner.ui.chapters_view import ChaptersView
+from storyplanner.ui.main_window import MainWindow
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _qapp():
+    app = QApplication.instance() or QApplication([])
+    yield app
+
+
+@pytest.fixture(autouse=True)
+def reset_settings(monkeypatch, tmp_path):
+    import storyplanner.settings as settings
+    settings._instance = None
+    monkeypatch.setattr(settings, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(settings, "SETTINGS_FILE", tmp_path / "settings.json")
+    import storyplanner.gomckee_bridge as gb
+    monkeypatch.setattr(gb, "is_gomckee_enabled", lambda: False, raising=False)
+    yield
+    settings._instance = None
+
+
+def _project(db, engine, fmt=""):
+    return db.create_project("P", narrative_engine=engine,
+                             default_writing_format=fmt or engine).id
+
+
+def _avail(win, name):
+    btn = win.sidebar_buttons.get(name)
+    return None if btn is None else btn.property("nav_available")
+
+
+# ==========================================================================
+# Section visibility per mode
+# ==========================================================================
+
+
+def test_novel_shows_chapters_hides_scenes_when_clean(tmp_path):
+    db = Database(str(tmp_path / "sp.db"))
+    pid = _project(db, "novel")
+    win = MainWindow(db, pid)
+    assert _avail(win, "Chapters") is True
+    assert _avail(win, "Scenes") is False
+    assert "Chapters" in win._nav_labels
+
+
+@pytest.mark.parametrize("engine,fmt", [
+    ("screenplay", "screenplay"),
+    ("graphic_novel", "graphic_novel"),
+    ("stage_script", "stage_script"),
+    ("series", "series"),
+])
+def test_non_novel_shows_scenes_hides_chapters(tmp_path, engine, fmt):
+    db = Database(str(tmp_path / "sp.db"))
+    pid = _project(db, engine, fmt)
+    win = MainWindow(db, pid)
+    assert _avail(win, "Scenes") is True
+    assert _avail(win, "Chapters") is False
+    assert "Chapters" not in win._nav_labels
+
+
+def test_chapters_section_opens(tmp_path):
+    db = Database(str(tmp_path / "sp.db"))
+    pid = _project(db, "novel")
+    win = MainWindow(db, pid)
+    win.sidebar_buttons["Chapters"].click()
+    assert isinstance(win.content_area, ChaptersView)
+    assert win._current_section == "Chapters"
+
+
+# ==========================================================================
+# Project switching updates navigation
+# ==========================================================================
+
+
+def test_switch_novel_to_screenplay_updates_nav(tmp_path):
+    db = Database(str(tmp_path / "sp.db"))
+    nov = _project(db, "novel")
+    scr = _project(db, "screenplay", "screenplay")
+    win = MainWindow(db, nov)
+    assert _avail(win, "Chapters") is True and _avail(win, "Scenes") is False
+    win._switch_project(scr)
+    assert _avail(win, "Chapters") is False and _avail(win, "Scenes") is True
+    assert "Chapters" not in win._nav_labels
+
+
+def test_switch_screenplay_to_novel_updates_nav(tmp_path):
+    db = Database(str(tmp_path / "sp.db"))
+    scr = _project(db, "screenplay", "screenplay")
+    nov = _project(db, "novel")
+    win = MainWindow(db, scr)
+    assert _avail(win, "Scenes") is True and _avail(win, "Chapters") is False
+    win._switch_project(nov)
+    assert _avail(win, "Chapters") is True
+    assert "Chapters" in win._nav_labels
+
+
+def test_switch_does_not_leave_stale_section(tmp_path):
+    db = Database(str(tmp_path / "sp.db"))
+    nov = _project(db, "novel")
+    scr = _project(db, "screenplay", "screenplay")
+    win = MainWindow(db, nov)
+    win.sidebar_buttons["Chapters"].click()
+    assert win._current_section == "Chapters"
+    win._switch_project(scr)
+    # Chapters is not valid in screenplay → must not remain the active section.
+    assert win._current_section != "Chapters"
+
+
+# ==========================================================================
+# Clean new-project state
+# ==========================================================================
+
+
+def test_new_novel_project_clean_chapter_state(tmp_path):
+    db = Database(str(tmp_path / "sp.db"))
+    pid = _project(db, "novel")
+    MainWindow(db, pid)
+    assert db.get_chapters(pid) == []      # no chapters yet
+    assert db.get_all_scenes(pid) == []    # and no scenes
+
+
+def test_new_screenplay_project_clean_scene_state(tmp_path):
+    db = Database(str(tmp_path / "sp.db"))
+    pid = _project(db, "screenplay", "screenplay")
+    MainWindow(db, pid)
+    assert db.get_all_scenes(pid) == []
+    assert db.get_chapters(pid) == []
+
+
+# ==========================================================================
+# Legacy preservation
+# ==========================================================================
+
+
+def test_existing_scenes_preserved_when_switching_to_novel(tmp_path):
+    db = Database(str(tmp_path / "sp.db"))
+    nov = _project(db, "novel")
+    db.create_scene(nov, "Legacy scene", content="old prose")
+    scr = _project(db, "screenplay", "screenplay")
+    win = MainWindow(db, scr)
+    win._switch_project(nov)
+    # Scenes are NOT deleted, and remain reachable (Scenes section available).
+    assert len(db.get_all_scenes(nov)) == 1
+    assert _avail(win, "Scenes") is True       # legacy access kept in Novel
+    assert _avail(win, "Chapters") is True     # but Chapters is primary
+
+
+# ==========================================================================
+# Chapter store CRUD + isolation
+# ==========================================================================
+
+
+def test_chapter_crud_and_ordering():
+    db = Database()
+    pid = db.create_project("N", narrative_engine="novel").id
+    c1 = db.create_chapter(pid, title="One", summary="s1", content="b1")
+    db.create_chapter(pid, title="Two")
+    c3 = db.create_chapter(pid, title="Three")
+    assert [c.title for c in db.get_chapters(pid)] == ["One", "Two", "Three"]
+    db.update_chapter(c1.id, title="Chapter One", content="edited")
+    assert db.get_chapter_by_id(c1.id).title == "Chapter One"
+    db.reorder_chapter(c3.id, 0)
+    assert [c.title for c in db.get_chapters(pid)][0] == "Three"
+    db.delete_chapter(c1.id)
+    assert all(c.id != c1.id for c in db.get_chapters(pid))
+
+
+def test_chapters_project_scoped():
+    db = Database()
+    a = db.create_project("A", narrative_engine="novel").id
+    b = db.create_project("B", narrative_engine="novel").id
+    db.create_chapter(a, title="A-chap")
+    assert [c.title for c in db.get_chapters(a)] == ["A-chap"]
+    assert db.get_chapters(b) == []
+
+
+def test_chapters_view_crud_and_selection_reset(tmp_path):
+    db = Database(str(tmp_path / "sp.db"))
+    pid = _project(db, "novel")
+    view = ChaptersView(db, pid)
+    view._new_chapter()
+    view._new_chapter()
+    assert len(db.get_chapters(pid)) == 2
+    assert view._selected_id is not None
+    # A freshly built view (e.g. after a project switch) carries no selection.
+    view2 = ChaptersView(db, _project(db, "novel"))
+    assert view2._selected_id is None
+
+
+def test_selected_ids_cleared_on_switch(tmp_path):
+    db = Database(str(tmp_path / "sp.db"))
+    nov = _project(db, "novel")
+    db.create_chapter(nov, title="C1")
+    nov2 = _project(db, "novel")
+    win = MainWindow(db, nov)
+    win.sidebar_buttons["Chapters"].click()
+    win.content_area._select_id(db.get_chapters(nov)[0].id)
+    assert win.content_area._selected_id is not None
+    win._switch_project(nov2)
+    win.sidebar_buttons["Chapters"].click()
+    # New project's Chapters view has no carried-over selection.
+    assert win.content_area._selected_id is None

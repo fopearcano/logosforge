@@ -26,6 +26,7 @@ SIDEBAR_ICONS: dict[str, str] = {
     "Dashboard": "▤",         # ▤  horizontal-fill square (dashboard rows)
     "Notes": "✎" + _VS15,     # ✎  pencil
     "Manuscript": "≡",        # ≡  three lines (prose)
+    "Chapters": "❏" + _VS15,  # ❏  page/chapter card
     "Outline": "☰" + _VS15,   # ☰  trigram (hierarchy)
     "Scenes": "▣",            # ▣  square with centre (frame)
     "Timeline": "◷",          # ◷  clock-quadrant circle
@@ -68,6 +69,7 @@ SIDEBAR_ICON_COLORS: dict[str, str] = {
     "Dashboard": "#2fa898",    # teal
     "Notes": "#c79a3e",        # gold
     "Manuscript": "#3b82c4",   # blue
+    "Chapters": "#3b82c4",     # blue (same family as Manuscript)
     "Tags": "#caa83a",         # yellow
     "Graph": "#2f9ea8",        # cyan
     # Plan group — greens

@@ -406,7 +406,7 @@ class MainWindow(QMainWindow):
         # + visibility are toggled per the *current* project's writing mode via
         # _apply_pages_availability() — at startup and on every project switch.
         self._is_graphic_novel = self._project_is_graphic_novel()
-        _plan_members = ["Outline", "Scenes", "Timeline", "Plot", "Pages"]
+        _plan_members = ["Outline", "Chapters", "Scenes", "Timeline", "Plot", "Pages"]
 
         _SIDEBAR_LAYOUT: list = [
             "Projects", "Dashboard", "Notes", "Manuscript",
@@ -562,7 +562,21 @@ class MainWindow(QMainWindow):
         self._pages_btn.clicked.connect(
             lambda _: (self._set_active_section("Pages"), self._show_gn_pages())
         )
+
+        # The Chapters button (Novel primary unit) is wired once here for the
+        # same reason as Pages; visibility is toggled per writing mode by
+        # _apply_unit_section_availability().
+        self._chapters_btn = self.sidebar_buttons["Chapters"]
+        self._chapters_btn.setCheckable(True)
+        self._chapters_btn.clicked.connect(
+            lambda _: (self._set_active_section("Chapters"), self._show_chapters())
+        )
+        self._nav_section_handlers["Chapters"] = self._show_chapters
+        # Scenes is wired by the nav loop above; keep a handle for visibility.
+        self._scenes_nav_btn = self.sidebar_buttons.get("Scenes")
+
         self._apply_pages_availability()
+        self._apply_unit_section_availability()
 
         # -- Right content area ----------------------------------------------
         self.content_area = self._build_initial_content()
@@ -811,6 +825,19 @@ class MainWindow(QMainWindow):
                 self._project_id,
                 on_data_changed=self._on_data_changed,
                 on_link_clicked=self._on_link_navigated,
+            )
+        )
+
+    def _show_chapters(self) -> None:
+        from storyplanner.ui.chapters_view import ChaptersView
+        self._set_content(
+            ChaptersView(
+                self._db,
+                self._project_id,
+                on_data_changed=self._on_data_changed,
+                on_open_chapter=lambda _cid: (
+                    self._set_active_section("Manuscript"), self._show_manuscript()
+                ),
             )
         )
 
@@ -1238,6 +1265,45 @@ class MainWindow(QMainWindow):
             if getattr(self, "_current_section", None) == "Pages":
                 self._current_section = "Dashboard"
         # Re-apply Plan-group child visibility honoring availability.
+        plan = next((g for g in getattr(self, "_sidebar_groups", [])
+                     if g.label == "Plan"), None)
+        if plan is not None:
+            plan.refresh_child_visibility()
+
+    def _apply_unit_section_availability(self) -> None:
+        """Show the primary-writing-unit section for the current mode:
+        Novel → Chapters (Scenes shown only when legacy scenes exist, for
+        access); all other modes → Scenes (Chapters hidden). Idempotent; called
+        at startup and on every project switch so navigation never goes stale."""
+        from storyplanner.writing_modes import NOVEL, get_project_writing_mode_by_id
+        mode = get_project_writing_mode_by_id(self._db, self._project_id)
+        is_novel = (mode == NOVEL)
+        has_scenes = bool(self._db.get_all_scenes(self._project_id))
+
+        # Chapters — Novel only.
+        chap = getattr(self, "_chapters_btn", None)
+        if chap is not None:
+            chap.setProperty("nav_available", is_novel)
+            self._nav_section_handlers["Chapters"] = self._show_chapters
+            if is_novel:
+                self.sidebar_buttons["Chapters"] = chap
+                if "Chapters" not in self._nav_labels:
+                    self._nav_labels.append("Chapters")
+            else:
+                if "Chapters" in self._nav_labels:
+                    self._nav_labels.remove("Chapters")
+                if getattr(self, "_current_section", None) == "Chapters":
+                    self._current_section = "Dashboard"
+
+        # Scenes — primary for non-Novel; in Novel kept available only when the
+        # project already has (legacy) scenes so that data stays reachable.
+        scenes_available = (not is_novel) or has_scenes
+        sc = getattr(self, "_scenes_nav_btn", None) or self.sidebar_buttons.get("Scenes")
+        if sc is not None:
+            sc.setProperty("nav_available", scenes_available)
+            if not scenes_available and getattr(self, "_current_section", None) == "Scenes":
+                self._current_section = "Dashboard"
+
         plan = next((g for g in getattr(self, "_sidebar_groups", [])
                      if g.label == "Plan"), None)
         if plan is not None:
@@ -2833,6 +2899,9 @@ class MainWindow(QMainWindow):
         # Recompute the writing-mode-dependent sidebar nav (Graphic-Novel-only
         # Pages item) for the new project before the active section is rebuilt.
         self._apply_pages_availability()
+        # Show the right primary-unit section (Chapters for Novel / Scenes for
+        # the rest) for the new project's writing mode.
+        self._apply_unit_section_availability()
         # Re-bind the always-on PSYKE console to the new project: clears its
         # in-progress query + stale results and rebuilds the index eagerly.
         # (The PSYKE section view itself is rebuilt fresh in step 4, so its
