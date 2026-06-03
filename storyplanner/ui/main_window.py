@@ -885,17 +885,9 @@ class MainWindow(QMainWindow):
         )
 
     def _show_manuscript(self) -> None:
-        # Novel writes Chapters; other modes write Scenes (WritingCoreView).
-        if self._is_novel_mode():
-            from storyplanner.ui.chapter_manuscript_view import ChapterManuscriptView
-            self._set_content(
-                ChapterManuscriptView(
-                    self._db, self._project_id,
-                    on_data_changed=self._on_data_changed,
-                    on_content_saved=self._on_scene_content_saved,
-                )
-            )
-            return
+        # Manuscript always uses the scene-based editor (its internal unit model
+        # is unchanged). Only the add-button LABEL is mode-aware ("+ Chapter" in
+        # Novel, "+ Scene" otherwise) — handled inside WritingCoreView.
         self._set_content(
             WritingCoreView(
                 self._db,

@@ -23,7 +23,6 @@ from storyplanner.outline_actions import (
     repair_outline_ops,
     validate_mode_outline,
 )
-from storyplanner.ui.chapter_manuscript_view import ChapterManuscriptView
 from storyplanner.ui.chapter_outline_view import ChapterOutlineView
 from storyplanner.ui.main_window import MainWindow
 from storyplanner.ui.plan_view import PlanView
@@ -142,14 +141,14 @@ def test_chapter_outline_view_generation_does_not_touch_manuscript():
 
 
 # ==========================================================================
-# Manuscript — mode-aware add button + body store
+# Manuscript — scene-based (rolled back); only the add-button LABEL is mode-aware
 # ==========================================================================
 
 
 def test_novel_manuscript_add_button_is_chapter():
     db = Database()
     pid = _project(db, "novel")
-    view = ChapterManuscriptView(db, pid)
+    view = WritingCoreView(db, pid)
     assert view.add_button_text() == "+ Chapter"
 
 
@@ -160,39 +159,19 @@ def test_non_novel_manuscript_add_button_is_scene():
     assert view.add_button_text() == "+ Scene"
 
 
-def test_novel_manuscript_displays_and_persists_chapter_body():
-    db = Database()
-    pid = _project(db, "novel")
-    cid = db.create_chapter(pid, title="Ch1").id
-    view = ChapterManuscriptView(db, pid)
-    ed = view._editors[cid]
-    ed.setMarkdown("Once upon a time.")
-    assert db.get_chapter_by_id(cid).content.strip() == "Once upon a time."
-
-
-def test_empty_chapter_body_does_not_show_summary_as_body():
-    db = Database()
-    pid = _project(db, "novel")
-    cid = db.create_chapter(pid, title="Ch1", summary="planning note only").id
-    view = ChapterManuscriptView(db, pid)
-    ed = view._editors[cid]
-    # The body editor shows the empty chapter content, NOT the planning summary.
-    assert ed.toPlainText().strip() == ""
-    assert "planning note only" not in ed.toPlainText()
-    assert ed.placeholderText() == "Start writing…"
-
-
 # ==========================================================================
-# Section wiring per mode (via MainWindow)
+# Section wiring per mode (via MainWindow): Manuscript is always WritingCoreView;
+# Outline remains mode-aware (Novel ChapterOutlineView / others PlanView).
 # ==========================================================================
 
 
-def test_novel_uses_chapter_views(tmp_path):
+def test_novel_uses_scene_manuscript_and_chapter_outline(tmp_path):
     db = Database(str(tmp_path / "sp.db"))
     pid = _project(db, "novel")
     win = MainWindow(db, pid)
     win.sidebar_buttons["Manuscript"].click()
-    assert isinstance(win.content_area, ChapterManuscriptView)
+    assert isinstance(win.content_area, WritingCoreView)
+    assert win.content_area.add_button_text() == "+ Chapter"
     win.sidebar_buttons["Outline"].click()
     assert isinstance(win.content_area, ChapterOutlineView)
 
@@ -203,20 +182,22 @@ def test_screenplay_uses_scene_views(tmp_path):
     win = MainWindow(db, pid)
     win.sidebar_buttons["Manuscript"].click()
     assert isinstance(win.content_area, WritingCoreView)
+    assert win.content_area.add_button_text() == "+ Scene"
     win.sidebar_buttons["Outline"].click()
     assert isinstance(win.content_area, PlanView)
 
 
-def test_switch_updates_manuscript_and_outline_views(tmp_path):
+def test_switch_updates_manuscript_label_and_outline_view(tmp_path):
     db = Database(str(tmp_path / "sp.db"))
     nov = _project(db, "novel")
     scr = _project(db, "screenplay", "screenplay")
     win = MainWindow(db, nov)
     win.sidebar_buttons["Manuscript"].click()
-    assert isinstance(win.content_area, ChapterManuscriptView)
+    assert win.content_area.add_button_text() == "+ Chapter"
     win._switch_project(scr)
     win.sidebar_buttons["Manuscript"].click()
     assert isinstance(win.content_area, WritingCoreView)
+    assert win.content_area.add_button_text() == "+ Scene"
     win.sidebar_buttons["Outline"].click()
     assert isinstance(win.content_area, PlanView)
     win._switch_project(nov)

@@ -1718,8 +1718,20 @@ class WritingCoreView(QWidget):
         return None
 
     def add_button_text(self) -> str:
-        """The primary add-unit label for this (scene-based) manuscript."""
-        return "+ Scene"
+        """The primary add-unit label for the manuscript.
+
+        Label-only mode awareness: '+ Chapter' in Novel, '+ Scene' otherwise.
+        The add action and storage are unchanged (still scene-based).
+        """
+        return "+ " + self._unit_noun()
+
+    def _unit_noun(self) -> str:
+        from storyplanner.writing_modes import (
+            get_project_writing_mode_by_id,
+            primary_unit_label,
+        )
+        return primary_unit_label(
+            get_project_writing_mode_by_id(self._db, self._project_id))
 
     def refresh(self) -> None:
         # Never lose in-progress typing or steal focus when a rebuild is
@@ -1922,7 +1934,7 @@ class WritingCoreView(QWidget):
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setObjectName("writingEndAction")
         btn.setFixedHeight(28)
-        btn.setToolTip("New Scene")
+        btn.setToolTip("New " + self._unit_noun())
         btn.clicked.connect(
             lambda: self._create_scene_after(last_scene_id)
         )
@@ -1937,7 +1949,7 @@ class WritingCoreView(QWidget):
         self._inner_layout.addSpacing(80)
         self._inner_layout.addWidget(msg)
         self._inner_layout.addSpacing(16)
-        btn = QPushButton("+ Scene")
+        btn = QPushButton(self.add_button_text())
         btn.setFlat(True)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setObjectName("writingEndAction")
