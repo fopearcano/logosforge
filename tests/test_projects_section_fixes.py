@@ -203,6 +203,7 @@ def test_close_clean_project_no_prompt(tmp_path, monkeypatch):
 def test_close_dirty_cancel_aborts(tmp_path, monkeypatch):
     db, pid, win = _win(tmp_path)
     win._dirty = True
+    win._modified_since_save = True
     win._read_only = False
     monkeypatch.setattr(mw.QMessageBox, "warning",
                         staticmethod(lambda *a, **k: QMessageBox.StandardButton.Cancel))
@@ -214,6 +215,7 @@ def test_close_dirty_cancel_aborts(tmp_path, monkeypatch):
 def test_close_dirty_save_file_backed_saves_and_closes(tmp_path, monkeypatch):
     db, pid, win = _win(tmp_path)
     win._dirty = True
+    win._modified_since_save = True
     win._read_only = False
     win._current_file = str(tmp_path / "f.json")
     saved = []
@@ -229,6 +231,7 @@ def test_close_dirty_save_file_backed_saves_and_closes(tmp_path, monkeypatch):
 def test_close_dirty_dont_save_closes_without_saving(tmp_path, monkeypatch):
     db, pid, win = _win(tmp_path)
     win._dirty = True
+    win._modified_since_save = True
     win._read_only = False
     win._current_file = str(tmp_path / "f.json")
     saved = []
@@ -243,6 +246,7 @@ def test_close_dirty_dont_save_closes_without_saving(tmp_path, monkeypatch):
 def test_close_dirty_new_project_save_cancelled_aborts(tmp_path, monkeypatch):
     db, pid, win = _win(tmp_path)
     win._dirty = True
+    win._modified_since_save = True
     win._read_only = False
     win._current_file = None
     monkeypatch.setattr(mw.QMessageBox, "warning",

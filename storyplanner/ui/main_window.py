@@ -323,6 +323,13 @@ class MainWindow(QMainWindow):
         self._project_id = project_id
         self._current_file: str | None = None  # kept for backward compat; use _set_current_file
         self._dirty = False
+        # Tracks edits since the last EXPLICIT save / open / switch. Unlike
+        # ``_dirty`` (which autosave clears), this is NOT cleared by autosave, so
+        # the close prompt reflects "modified since you last saved/opened".
+        self._modified_since_save = False
+        # Last editable widget to hold focus — so Edit-menu Undo/Redo/Cut/…
+        # route to the right editor even though opening the menu steals focus.
+        self._last_edit_widget = None
         self._read_only = False
         self._external_change_warned = False
         self._current_section: str = "Projects"
@@ -339,6 +346,9 @@ class MainWindow(QMainWindow):
         self._update_title()
         self.resize(900, 600)
         self.setMinimumSize(640, 400)
+        _app = QApplication.instance()
+        if _app is not None:
+            _app.focusChanged.connect(self._on_focus_changed)
 
         from storyplanner.paths import get_assets_path
         assets = get_assets_path()
@@ -2178,6 +2188,11 @@ class MainWindow(QMainWindow):
         paste_action.triggered.connect(self._edit_paste)
         edit_menu.addAction(paste_action)
 
+        select_all_action = QAction("Select All", self)
+        select_all_action.setShortcut(QKeySequence.StandardKey.SelectAll)
+        select_all_action.triggered.connect(self._edit_select_all)
+        edit_menu.addAction(select_all_action)
+
         edit_menu.addSeparator()
 
         prefs_action = QAction("Preferences...", self)
@@ -2393,33 +2408,70 @@ class MainWindow(QMainWindow):
     def _on_save(self) -> None:
         if self._current_file:
             self._auto_save()
+            # Explicit save commits the working state: clear "modified since
+            # last save" (autosave alone does not clear this).
+            self._modified_since_save = False
+            self._update_title()
         else:
             self._on_save_as()
 
-    def _edit_undo(self) -> None:
+    # -- Focus-aware Edit actions (Undo/Redo/Cut/Copy/Paste/Select All) -------
+    #
+    # Route to the focused editable widget. Opening the Edit MENU steals focus,
+    # so we fall back to the last editable widget that held focus — this is what
+    # makes menu Undo/Redo work (keyboard shortcuts already hit the live focus).
+
+    _EDIT_OPS = ("undo", "redo", "cut", "copy", "paste", "selectAll")
+
+    def _is_editable_widget(self, w) -> bool:
+        if w is None:
+            return False
+        try:
+            if not w.isVisible():
+                return False
+            if hasattr(w, "isReadOnly") and w.isReadOnly():
+                return False
+        except RuntimeError:        # underlying C++ object was deleted
+            return False
+        return all(hasattr(w, op) for op in self._EDIT_OPS)
+
+    def _on_focus_changed(self, _old, now) -> None:
+        if self._is_editable_widget(now):
+            self._last_edit_widget = now
+
+    def _focused_editable(self):
         w = QApplication.focusWidget()
-        if hasattr(w, "undo"):
-            w.undo()
+        if self._is_editable_widget(w):
+            return w
+        if self._is_editable_widget(self._last_edit_widget):
+            return self._last_edit_widget
+        return None
+
+    def _run_edit_op(self, op: str) -> None:
+        w = self._focused_editable()
+        if w is not None:
+            try:
+                getattr(w, op)()
+            except RuntimeError:
+                pass
+
+    def _edit_undo(self) -> None:
+        self._run_edit_op("undo")
 
     def _edit_redo(self) -> None:
-        w = QApplication.focusWidget()
-        if hasattr(w, "redo"):
-            w.redo()
+        self._run_edit_op("redo")
 
     def _edit_cut(self) -> None:
-        w = QApplication.focusWidget()
-        if hasattr(w, "cut"):
-            w.cut()
+        self._run_edit_op("cut")
 
     def _edit_copy(self) -> None:
-        w = QApplication.focusWidget()
-        if hasattr(w, "copy"):
-            w.copy()
+        self._run_edit_op("copy")
 
     def _edit_paste(self) -> None:
-        w = QApplication.focusWidget()
-        if hasattr(w, "paste"):
-            w.paste()
+        self._run_edit_op("paste")
+
+    def _edit_select_all(self) -> None:
+        self._run_edit_op("selectAll")
 
     def _menu_toggle_focus(self) -> None:
         if (
@@ -2525,7 +2577,7 @@ class MainWindow(QMainWindow):
         )
 
     def _update_title(self) -> None:
-        dirty_mark = " *" if self._dirty else ""
+        dirty_mark = " *" if (self._dirty or self._modified_since_save) else ""
         ro_mark = " [read-only]" if self._read_only else ""
         if self._current_file:
             name = Path(self._current_file).name
@@ -2894,6 +2946,7 @@ class MainWindow(QMainWindow):
 
     def _on_data_changed(self) -> None:
         self._dirty = True
+        self._modified_since_save = True
         self._update_title()
         if not self._read_only:
             self._autosave.mark_dirty()
@@ -2914,6 +2967,7 @@ class MainWindow(QMainWindow):
         refresh prevents the editor from being destroyed mid-keystroke.
         """
         self._dirty = True
+        self._modified_since_save = True
         self._update_title()
         if not self._read_only:
             self._autosave.mark_dirty()
@@ -2953,6 +3007,7 @@ class MainWindow(QMainWindow):
 
     def _mark_clean(self) -> None:
         self._dirty = False
+        self._modified_since_save = False
         self._autosave.mark_clean()
         self._update_title()
 
@@ -3063,11 +3118,11 @@ class MainWindow(QMainWindow):
     # -- Close event ---------------------------------------------------------
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        # Ask to save when the open project has unsaved modifications. A clean
-        # project (incl. one a completed autosave already saved → _dirty False)
-        # closes without prompting. Side-effects (stop versions, save settings,
-        # release lock) only run once we actually commit to closing.
-        if self._dirty and not self._read_only:
+        # Ask to save when the project has modifications since the last explicit
+        # save/open. Autosave keeps the working copy safe but does NOT clear this
+        # flag, so the user still gets a say on close. A genuinely unmodified
+        # project (or one just explicitly saved) closes with no prompt.
+        if self._modified_since_save and not self._read_only:
             answer = QMessageBox.warning(
                 self,
                 "Unsaved Project",
@@ -3098,9 +3153,10 @@ class MainWindow(QMainWindow):
         cancelled the Save dialog (so the close should be aborted)."""
         if self._current_file:
             self._auto_save()
+            self._modified_since_save = False
             return True
         # Never saved yet → Save As (the user may cancel the file dialog).
-        self._on_save_as()
+        self._on_save_as()      # clears _modified_since_save via _mark_clean
         return self._current_file is not None
 
     # -- Theme switching -----------------------------------------------------
