@@ -215,6 +215,16 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
             for n in notes
         ],
         "scenes": scene_list,
+        "chapters": [
+            {
+                "act": ch.act,
+                "title": ch.title,
+                "summary": ch.summary,
+                "content": ch.content,
+                "order_index": ch.order_index,
+            }
+            for ch in db.get_chapters(project_id)
+        ],
         "psyke_entries": psyke_list,
         "outline": _build_outline_tree(None),
         "continuity": continuity_items,

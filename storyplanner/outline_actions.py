@@ -507,6 +507,116 @@ def apply_outline_as_scenes(
     return created
 
 
+# ---------------------------------------------------------------------------
+# Mode-aware outline: Novel = Act → Chapter, others = Act → Scene
+# ---------------------------------------------------------------------------
+
+
+def outline_unit_labels(mode: str) -> tuple[str, str]:
+    """Return (container_label, unit_label) for an outline in *mode*.
+
+    Novel → ("Act", "Chapter"); every other mode → ("Act", "Scene").
+    """
+    from storyplanner.writing_modes import NOVEL
+    return ("Act", "Chapter") if mode == NOVEL else ("Act", "Scene")
+
+
+def build_mode_outline_prompt(
+    mode: str, *, template_name: str = "", template_beats: list[str] | None = None,
+    psyke_context: str = "", instructions: str = "",
+) -> str:
+    """Two-level outline prompt for the mode's primary unit.
+
+    Novel asks for Acts → Chapters (no scene layer); other modes ask for
+    Acts → Scenes (no chapter layer). Each unit must carry a one-line
+    description; output is planning structure only (never prose/manuscript).
+    """
+    container, unit = outline_unit_labels(mode)
+    parts = [
+        f"Generate a complete story outline as a two-level hierarchy: "
+        f"{container} → {unit}. Do NOT add any other structural layer.",
+        f"Format as Markdown: '# {container} N: title' for each {container}, "
+        f"then '- {unit}: title — one-line description' for each {unit} under it.",
+        f"Every {unit} MUST have a concise one-line description stating its "
+        f"purpose / what happens. Output planning structure ONLY — no prose, no "
+        f"dialogue, no manuscript text, no commentary.",
+    ]
+    if template_name:
+        parts.append(f"Follow the '{template_name}' structure.")
+    if template_beats:
+        parts.append("Template beats to honour: " + "; ".join(template_beats))
+    if psyke_context:
+        parts.append(psyke_context)
+    if instructions:
+        parts.append(instructions)
+    return "\n\n".join(parts)
+
+
+def validate_mode_outline(mode: str, ops: list[OutlineOp]) -> tuple[bool, list[str]]:
+    """Validate a generated outline for *mode*.
+
+    Builds on :func:`validate_outline_ops` (rejects empty / prose) and requires
+    at least one applicable primary unit so we never silently apply an empty or
+    structureless result.
+    """
+    ok, errors = validate_outline_ops(ops)
+    if not ok:
+        return ok, errors
+    _, unit = outline_unit_labels(mode)
+    if mode_outline_rows(mode, ops):
+        return True, []
+    return False, [f"No {unit.lower()}s were found in the generated outline."]
+
+
+def outline_chapter_rows(ops: list[OutlineOp], act: str = "") -> list[dict]:
+    """Flatten a proposed outline into chapter rows ``{act, title, summary}``.
+
+    Acts propagate their label down; any leaf under an act (whatever the AI
+    labelled it) becomes a Chapter — so Novel generation is robust even if the
+    model emits scenes. Deeper nesting under a chapter is folded away (Novel has
+    no scene layer).
+    """
+    rows: list[dict] = []
+    for op in ops:
+        kind = _effective_kind(op)
+        if kind in ("act", "part"):
+            sub = outline_chapter_rows(op.children, act=op.title)
+            rows.extend(sub if sub else [
+                {"act": op.title, "title": op.title, "summary": op.description},
+            ])
+        else:
+            rows.append({"act": act, "title": op.title, "summary": op.description})
+    return rows
+
+
+def mode_outline_rows(mode: str, ops: list[OutlineOp]) -> list[dict]:
+    """Rows for the mode's primary unit (chapters for Novel, scenes otherwise)."""
+    from storyplanner.writing_modes import NOVEL
+    if mode == NOVEL:
+        return outline_chapter_rows(ops)
+    return outline_scene_rows(ops)
+
+
+def apply_outline_as_chapters(
+    db, project_id: int, ops: list[OutlineOp],
+) -> list[int]:
+    """Apply a proposed outline as Chapters (Act → Chapter) additively.
+
+    Writes ONLY to the Chapter planning store (title/summary/act) — never to any
+    manuscript body. Returns created chapter ids.
+    """
+    created: list[int] = []
+    for row in outline_chapter_rows(ops):
+        chapter = db.create_chapter(
+            project_id,
+            title=row["title"] or "(untitled)",
+            summary=row["summary"],
+            act=row["act"],
+        )
+        created.append(chapter.id)
+    return created
+
+
 def apply_outline_ops(
     db, project_id: int, ops: list[OutlineOp], parent_id: int | None = None,
 ) -> list[int]:

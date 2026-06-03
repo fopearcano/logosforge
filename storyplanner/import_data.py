@@ -278,6 +278,20 @@ def import_json(db: Database, data: dict) -> int:
             continue
         db.add_memory(project_id, sid, memory_type, target, value)
 
+    # Restore Chapters (Novel primary unit; optional, absent in older exports).
+    for ch in data.get("chapters", []):
+        title = (ch.get("title") or "").strip()
+        if not title and not (ch.get("content") or "").strip():
+            continue
+        db.create_chapter(
+            project_id,
+            title=title or "Untitled chapter",
+            summary=ch.get("summary", ""),
+            content=ch.get("content", ""),
+            act=ch.get("act", ""),
+            order_index=ch.get("order_index"),
+        )
+
     # Restore Timeline lanes + event links (optional; absent in older exports).
     # Note: a distinct "plot_timeline" key avoids colliding with the separate
     # Interchange exporter's "timeline" (a list of events).

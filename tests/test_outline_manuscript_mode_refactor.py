@@ -1,0 +1,254 @@
+"""Mode-aware Outline + Manuscript: Novel = Act→Chapter (chapters write body),
+non-Novel = Act→Scene. Generation never writes manuscript body."""
+
+from __future__ import annotations
+
+import json
+import warnings
+
+import pytest
+from PySide6.QtWidgets import QApplication
+
+warnings.filterwarnings("ignore")
+
+from storyplanner.db import Database
+from storyplanner.export import export_json
+from storyplanner.import_data import import_json
+from storyplanner.outline_actions import (
+    apply_outline_as_chapters,
+    apply_outline_as_scenes,
+    build_mode_outline_prompt,
+    outline_unit_labels,
+    parse_outline_response,
+    repair_outline_ops,
+    validate_mode_outline,
+)
+from storyplanner.ui.chapter_manuscript_view import ChapterManuscriptView
+from storyplanner.ui.chapter_outline_view import ChapterOutlineView
+from storyplanner.ui.main_window import MainWindow
+from storyplanner.ui.plan_view import PlanView
+from storyplanner.ui.writing_core_view import WritingCoreView
+from storyplanner.writing_modes import primary_unit_label
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _qapp():
+    app = QApplication.instance() or QApplication([])
+    yield app
+
+
+@pytest.fixture(autouse=True)
+def reset_settings(monkeypatch, tmp_path):
+    import storyplanner.settings as settings
+    settings._instance = None
+    monkeypatch.setattr(settings, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(settings, "SETTINGS_FILE", tmp_path / "settings.json")
+    import storyplanner.gomckee_bridge as gb
+    monkeypatch.setattr(gb, "is_gomckee_enabled", lambda: False, raising=False)
+    yield
+    settings._instance = None
+
+
+def _project(db, engine, fmt=""):
+    return db.create_project("P", narrative_engine=engine,
+                             default_writing_format=fmt or engine).id
+
+
+_NOVEL_RESP = """# Act 1: Beginning
+- Chapter: Dawn — the hero wakes to a strange light
+- Chapter: The Call — a summons arrives at the door
+# Act 2: Rising
+- Chapter: Threshold — leaving the old life behind
+"""
+_SCREEN_RESP = """# Act 1
+- Scene: INT. KITCHEN — the argument boils over
+- Scene: EXT. STREET — the chase begins
+"""
+
+
+# ==========================================================================
+# Outline generation — mode-aware structure + descriptions + no manuscript write
+# ==========================================================================
+
+
+def test_unit_labels():
+    assert outline_unit_labels("novel") == ("Act", "Chapter")
+    assert outline_unit_labels("screenplay") == ("Act", "Scene")
+    assert primary_unit_label("novel") == "Chapter"
+    assert primary_unit_label("screenplay") == "Scene"
+
+
+def test_novel_prompt_is_act_chapter():
+    p = build_mode_outline_prompt("novel")
+    assert "Act → Chapter" in p
+    s = build_mode_outline_prompt("screenplay")
+    assert "Act → Scene" in s
+
+
+def test_novel_outline_creates_act_chapter_with_descriptions():
+    db = Database()
+    pid = _project(db, "novel")
+    ops, _ = repair_outline_ops(parse_outline_response(_NOVEL_RESP))
+    ok, errors = validate_mode_outline("novel", ops)
+    assert ok, errors
+    created = apply_outline_as_chapters(db, pid, ops)
+    chapters = db.get_chapters(pid)
+    assert len(chapters) == len(created) == 3
+    assert {c.act for c in chapters} == {"Act 1", "Act 2"}
+    assert all(c.summary.strip() for c in chapters)     # descriptions present
+    # No scene layer required / created; manuscript body untouched.
+    assert db.get_all_scenes(pid) == []
+    assert all((c.content or "") == "" for c in chapters)
+
+
+def test_non_novel_outline_creates_act_scene_with_descriptions():
+    db = Database()
+    pid = _project(db, "screenplay", "screenplay")
+    ops, _ = repair_outline_ops(parse_outline_response(_SCREEN_RESP))
+    ok, errors = validate_mode_outline("screenplay", ops)
+    assert ok, errors
+    created = apply_outline_as_scenes(db, pid, ops)
+    scenes = db.get_all_scenes(pid)
+    assert len(scenes) == len(created) == 2
+    assert all(s.summary.strip() for s in scenes)       # descriptions present
+    assert db.get_chapters(pid) == []                   # no chapters in screenplay
+
+
+def test_screenplay_outline_does_not_create_chapters():
+    db = Database()
+    pid = _project(db, "screenplay", "screenplay")
+    ops, _ = repair_outline_ops(parse_outline_response(_SCREEN_RESP))
+    apply_outline_as_scenes(db, pid, ops)
+    assert db.get_chapters(pid) == []
+
+
+def test_invalid_generated_outline_rejected():
+    ops = parse_outline_response("")
+    ok, errors = validate_mode_outline("novel", ops)
+    assert ok is False and errors
+    prose = parse_outline_response("It was a dark and stormy night, " * 20)
+    ok2, errors2 = validate_mode_outline("novel", prose)
+    assert ok2 is False
+
+
+def test_chapter_outline_view_generation_does_not_touch_manuscript():
+    db = Database()
+    pid = _project(db, "novel")
+    view = ChapterOutlineView(db, pid)
+    created = view.apply_generated_outline(_NOVEL_RESP, confirm=False)
+    assert created
+    assert db.get_all_scenes(pid) == []                 # nothing written to scenes
+    assert all((c.content or "") == "" for c in db.get_chapters(pid))
+
+
+# ==========================================================================
+# Manuscript — mode-aware add button + body store
+# ==========================================================================
+
+
+def test_novel_manuscript_add_button_is_chapter():
+    db = Database()
+    pid = _project(db, "novel")
+    view = ChapterManuscriptView(db, pid)
+    assert view.add_button_text() == "+ Chapter"
+
+
+def test_non_novel_manuscript_add_button_is_scene():
+    db = Database()
+    pid = _project(db, "screenplay", "screenplay")
+    view = WritingCoreView(db, pid)
+    assert view.add_button_text() == "+ Scene"
+
+
+def test_novel_manuscript_displays_and_persists_chapter_body():
+    db = Database()
+    pid = _project(db, "novel")
+    cid = db.create_chapter(pid, title="Ch1").id
+    view = ChapterManuscriptView(db, pid)
+    ed = view._editors[cid]
+    ed.setMarkdown("Once upon a time.")
+    assert db.get_chapter_by_id(cid).content.strip() == "Once upon a time."
+
+
+def test_empty_chapter_body_does_not_show_summary_as_body():
+    db = Database()
+    pid = _project(db, "novel")
+    cid = db.create_chapter(pid, title="Ch1", summary="planning note only").id
+    view = ChapterManuscriptView(db, pid)
+    ed = view._editors[cid]
+    # The body editor shows the empty chapter content, NOT the planning summary.
+    assert ed.toPlainText().strip() == ""
+    assert "planning note only" not in ed.toPlainText()
+    assert ed.placeholderText() == "Start writing…"
+
+
+# ==========================================================================
+# Section wiring per mode (via MainWindow)
+# ==========================================================================
+
+
+def test_novel_uses_chapter_views(tmp_path):
+    db = Database(str(tmp_path / "sp.db"))
+    pid = _project(db, "novel")
+    win = MainWindow(db, pid)
+    win.sidebar_buttons["Manuscript"].click()
+    assert isinstance(win.content_area, ChapterManuscriptView)
+    win.sidebar_buttons["Outline"].click()
+    assert isinstance(win.content_area, ChapterOutlineView)
+
+
+def test_screenplay_uses_scene_views(tmp_path):
+    db = Database(str(tmp_path / "sp.db"))
+    pid = _project(db, "screenplay", "screenplay")
+    win = MainWindow(db, pid)
+    win.sidebar_buttons["Manuscript"].click()
+    assert isinstance(win.content_area, WritingCoreView)
+    win.sidebar_buttons["Outline"].click()
+    assert isinstance(win.content_area, PlanView)
+
+
+def test_switch_updates_manuscript_and_outline_views(tmp_path):
+    db = Database(str(tmp_path / "sp.db"))
+    nov = _project(db, "novel")
+    scr = _project(db, "screenplay", "screenplay")
+    win = MainWindow(db, nov)
+    win.sidebar_buttons["Manuscript"].click()
+    assert isinstance(win.content_area, ChapterManuscriptView)
+    win._switch_project(scr)
+    win.sidebar_buttons["Manuscript"].click()
+    assert isinstance(win.content_area, WritingCoreView)
+    win.sidebar_buttons["Outline"].click()
+    assert isinstance(win.content_area, PlanView)
+    win._switch_project(nov)
+    win.sidebar_buttons["Outline"].click()
+    assert isinstance(win.content_area, ChapterOutlineView)
+
+
+def test_outline_selection_clears_on_switch(tmp_path):
+    db = Database(str(tmp_path / "sp.db"))
+    nov = _project(db, "novel")
+    db.create_chapter(nov, title="C1")
+    nov2 = _project(db, "novel")
+    win = MainWindow(db, nov)
+    win.sidebar_buttons["Outline"].click()
+    win.content_area._select_id(db.get_chapters(nov)[0].id)
+    assert win.content_area._selected_id is not None
+    win._switch_project(nov2)
+    win.sidebar_buttons["Outline"].click()
+    assert win.content_area._selected_id is None
+
+
+# ==========================================================================
+# Export round-trip of chapters
+# ==========================================================================
+
+
+def test_export_import_chapters_roundtrip(tmp_path):
+    db = Database(str(tmp_path / "sp.db"))
+    pid = _project(db, "novel")
+    db.create_chapter(pid, title="Alpha", summary="s", content="body A", act="Act 1")
+    data = json.loads(export_json(db, pid))
+    assert [c["title"] for c in data["chapters"]] == ["Alpha"]
+    new_pid = import_json(db, data)
+    new = db.get_chapters(new_pid)
+    assert len(new) == 1 and new[0].content == "body A" and new[0].act == "Act 1"

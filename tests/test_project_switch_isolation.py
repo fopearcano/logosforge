@@ -59,9 +59,11 @@ def test_switch_rebuilds_active_section_for_new_project():
     win = MainWindow(db, a)
     win.sidebar_buttons["Manuscript"].click()
     win._switch_project(b)
-    # Active view was rebuilt against B without re-navigating.
+    # Active view was rebuilt against B without re-navigating (Novel uses the
+    # chapter manuscript view; non-Novel uses WritingCoreView).
+    from storyplanner.ui.chapter_manuscript_view import ChapterManuscriptView
     from storyplanner.ui.writing_core_view import WritingCoreView
-    assert isinstance(win.content_area, WritingCoreView)
+    assert isinstance(win.content_area, (WritingCoreView, ChapterManuscriptView))
     assert win._project_id == b
     # B has no scenes — A's scene must not be present in B's data.
     assert db.get_all_scenes(b) == []

@@ -152,6 +152,14 @@ def mode_context_block(mode: str | None) -> str:
     return "\n".join(lines)
 
 
+# -- Primary writing unit ----------------------------------------------------
+
+
+def primary_unit_label(mode: str | None) -> str:
+    """The primary writing-unit noun for a mode: 'Chapter' in Novel, else 'Scene'."""
+    return "Chapter" if normalize_mode(mode) == NOVEL else "Scene"
+
+
 # -- Project accessors -------------------------------------------------------
 
 

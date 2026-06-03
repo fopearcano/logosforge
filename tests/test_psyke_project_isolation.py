@@ -189,11 +189,14 @@ def test_assistant_psyke_context_follows_active_project():
 
 
 def test_manuscript_psyke_highlighter_term_map_is_project_bound():
+    # Scene-editor highlighter lives in the scene-based manuscript (non-Novel).
     db = Database()
-    a = db.create_project("A").id
+    a = db.create_project("A", narrative_engine="screenplay",
+                          default_writing_format="screenplay").id
     db.create_scene(a, "A-scene", content="text")
     db.create_psyke_entry(a, "Aragorn", "character")
-    b = db.create_project("B").id
+    b = db.create_project("B", narrative_engine="screenplay",
+                          default_writing_format="screenplay").id
     db.create_scene(b, "B-scene", content="text")
     win = MainWindow(db, a)
     win.sidebar_buttons["Manuscript"].click()

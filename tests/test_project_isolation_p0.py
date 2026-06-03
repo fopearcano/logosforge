@@ -46,7 +46,11 @@ def reset_settings(monkeypatch, tmp_path):
 
 
 def _seed_project_a(db) -> int:
-    pid = db.create_project(PROJECT_A_SENTINEL).id
+    # Screenplay (scene-based manuscript) so the manuscript sentinel — stored as
+    # scene content — is visible in the Manuscript section. (Novel manuscript now
+    # shows chapters; isolation is identical either way.)
+    pid = db.create_project(PROJECT_A_SENTINEL, narrative_engine="screenplay",
+                            default_writing_format="screenplay").id
     db.create_scene(pid, "A-scene", content=MANUSCRIPT_A_SENTINEL)
     db.create_psyke_entry(pid, PSYKE_A_SENTINEL, "character")
     db.create_note(pid, NOTE_A_SENTINEL, "body")

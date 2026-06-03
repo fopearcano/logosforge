@@ -222,12 +222,16 @@ def test_repair_is_project_scoped():
 
 
 def test_switch_manuscript_isolated_between_projects():
+    # Scene-based manuscript (screenplay) — Novel now uses the chapter view, so
+    # this exercises the scene-editor isolation path explicitly.
     from storyplanner.ui.main_window import MainWindow
     from storyplanner.ui.writing_core_view import WritingCoreView, _SceneEditor
     db = Database()
-    a = db.create_project("A").id
+    a = db.create_project("A", narrative_engine="screenplay",
+                          default_writing_format="screenplay").id
     db.create_scene(a, "A-scene", content="ALICE PROSE ALPHA")
-    b = db.create_project("B").id
+    b = db.create_project("B", narrative_engine="screenplay",
+                          default_writing_format="screenplay").id
     win = MainWindow(db, a)
     win.sidebar_buttons["Manuscript"].click()
     bodies_a = " ".join(ed.toPlainText()

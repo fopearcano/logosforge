@@ -37,7 +37,10 @@ def reset_settings(monkeypatch, tmp_path):
 
 def _win(tmp_path, with_scene=False):
     db = Database(str(tmp_path / "sp.db"))
-    pid = db.create_project("P").id
+    # Scene-based mode so the Manuscript uses the scene editor (undo/autosave
+    # behaviour under test). Novel manuscript now writes chapters.
+    pid = db.create_project("P", narrative_engine="screenplay",
+                            default_writing_format="screenplay").id
     if with_scene:
         db.create_scene(pid, "S1", content="hello")
     return db, pid, MainWindow(db, pid)
@@ -136,7 +139,7 @@ def test_project_switch_resets_dirty(tmp_path):
     db, pid, win = _win(tmp_path)
     win._on_data_changed()
     assert win._modified_since_save is True
-    p2 = db.create_project("P2").id
+    p2 = db.create_project("P2", narrative_engine="screenplay", default_writing_format="screenplay").id
     win._switch_project(p2)
     assert win._modified_since_save is False
 
@@ -229,7 +232,7 @@ def test_project_switch_clears_undo_stack_safely(tmp_path):
     ed_a = _editor(win)
     cur = ed_a.textCursor(); cur.movePosition(cur.MoveOperation.End); ed_a.setTextCursor(cur)
     ed_a.insertPlainText(" PROJECT_A_TEXT")
-    p2 = db.create_project("P2").id
+    p2 = db.create_project("P2", narrative_engine="screenplay", default_writing_format="screenplay").id
     db.create_scene(p2, "B1", content="bee")
     win._switch_project(p2)
     ed_b = _editor(win)

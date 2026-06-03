@@ -855,7 +855,25 @@ class MainWindow(QMainWindow):
             self._set_content(self._cached_scenes_view)
         self._cached_scenes_view.refresh()
 
+    def _is_novel_mode(self) -> bool:
+        from storyplanner.writing_modes import NOVEL, get_project_writing_mode_by_id
+        return get_project_writing_mode_by_id(self._db, self._project_id) == NOVEL
+
     def _show_plan(self) -> None:
+        # Novel → Act → Chapter outline; other modes → Act → Scene (PlanView).
+        if self._is_novel_mode():
+            from storyplanner.ui.chapter_outline_view import ChapterOutlineView
+            self._set_content(
+                ChapterOutlineView(
+                    self._db, self._project_id,
+                    on_data_changed=self._on_data_changed,
+                    on_open_chapter=lambda _cid: (
+                        self._set_active_section("Manuscript"),
+                        self._show_manuscript(),
+                    ),
+                )
+            )
+            return
         self._set_content(
             PlanView(
                 self._db,
@@ -867,6 +885,17 @@ class MainWindow(QMainWindow):
         )
 
     def _show_manuscript(self) -> None:
+        # Novel writes Chapters; other modes write Scenes (WritingCoreView).
+        if self._is_novel_mode():
+            from storyplanner.ui.chapter_manuscript_view import ChapterManuscriptView
+            self._set_content(
+                ChapterManuscriptView(
+                    self._db, self._project_id,
+                    on_data_changed=self._on_data_changed,
+                    on_content_saved=self._on_scene_content_saved,
+                )
+            )
+            return
         self._set_content(
             WritingCoreView(
                 self._db,
@@ -1484,10 +1513,14 @@ class MainWindow(QMainWindow):
                     et = getter() or ""
                     if is_valid_element(et):
                         block_type = et
+            from storyplanner.ui.chapter_outline_view import ChapterOutlineView
             from storyplanner.ui.plan_view import PlanView
             if isinstance(view, PlanView):
                 block_type = "outline_node"
                 outline_template = view._template_combo.currentData() or ""
+            elif isinstance(view, ChapterOutlineView):
+                # Novel outline (Act → Chapter) is still an outline surface.
+                block_type = "outline_node"
             elif section == "PSYKE":
                 entry_id = getattr(view, "_selected_id", None)
                 if entry_id is not None:

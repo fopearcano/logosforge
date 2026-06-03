@@ -1717,6 +1717,10 @@ class WritingCoreView(QWidget):
                     return scene_id, 0
         return None
 
+    def add_button_text(self) -> str:
+        """The primary add-unit label for this (scene-based) manuscript."""
+        return "+ Scene"
+
     def refresh(self) -> None:
         # Never lose in-progress typing or steal focus when a rebuild is
         # triggered (e.g. by an Assistant/Logos apply) while the editor is in
@@ -1933,7 +1937,7 @@ class WritingCoreView(QWidget):
         self._inner_layout.addSpacing(80)
         self._inner_layout.addWidget(msg)
         self._inner_layout.addSpacing(16)
-        btn = QPushButton("+ New Scene")
+        btn = QPushButton("+ Scene")
         btn.setFlat(True)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setObjectName("writingEndAction")
