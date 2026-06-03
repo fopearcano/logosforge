@@ -761,6 +761,7 @@ class MainWindow(QMainWindow):
             ProjectsView(
                 on_open_file=self._open_file,
                 on_save_as=self._on_save_as,
+                on_new_project=self._on_new_project,
             )
         )
 
@@ -2548,13 +2549,21 @@ class MainWindow(QMainWindow):
         if not self._handle_existing_lock(path):
             return
 
-        new_project_id = import_json(self._db, data)
+        resolved = str(Path(path).resolve())
+        existing = self._db.get_project_by_source_path(resolved)
+        if existing is not None:
+            # Already imported once — activate that project instead of importing
+            # a duplicate (prevents project bloat + stale duplicates).
+            new_project_id = existing
+        else:
+            new_project_id = import_json(self._db, data)
+            self._db.set_project_source_path(new_project_id, resolved)
         # Land on the Dashboard so the user sees the new project's summary.
         self._set_active_section("Dashboard")
         self._switch_project(new_project_id, file_path=path)
         recent_projects.add(path)
         self._refresh_recent_menu()
-        get_settings().set("last_project_path", str(Path(path).resolve()))
+        get_settings().set("last_project_path", resolved)
 
     def load_file_quiet(self, path: str) -> bool:
         """Load a project file without showing dialogs on failure."""
@@ -2575,7 +2584,14 @@ class MainWindow(QMainWindow):
         else:
             self._read_only = False
 
-        new_id = import_json(self._db, data)
+        resolved = str(Path(path).resolve())
+        existing_project = self._db.get_project_by_source_path(resolved)
+        if existing_project is not None:
+            # Don't re-import on every launch — activate the existing project.
+            new_id = existing_project
+        else:
+            new_id = import_json(self._db, data)
+            self._db.set_project_source_path(new_id, resolved)
         self._set_active_section("Dashboard")
         self._switch_project(new_id, file_path=path)
         recent_projects.add(path)
@@ -2814,6 +2830,28 @@ class MainWindow(QMainWindow):
         # they were rebuilt above.
         from storyplanner.project_events import emit_project_loaded
         emit_project_loaded(new_id)
+
+        self._debug_log_switch(old_id, new_id, file_path)
+
+    def _debug_log_switch(self, old_id, new_id, file_path) -> None:
+        """Optional project-switch diagnostics (set STORYPLANNER_DEBUG_PROJECT=1)."""
+        import os
+        if not os.environ.get("STORYPLANNER_DEBUG_PROJECT"):
+            return
+        try:
+            import logging
+            logging.getLogger("storyplanner.project").info(
+                "project switch %s -> %s file=%s scenes=%d psyke=%d outline=%d "
+                "notes=%d assistant_pid=%s",
+                old_id, new_id, file_path,
+                len(self._db.get_all_scenes(new_id)),
+                len(self._db.get_all_psyke_entries(new_id)),
+                len(self._db.get_outline_nodes(new_id)),
+                len(self._db.get_all_notes(new_id)),
+                getattr(self._assistant_panel, "_project_id", None),
+            )
+        except Exception:
+            pass
 
     def _rebuild_active_section(self) -> None:
         """Re-invoke the handler for the currently active sidebar section.

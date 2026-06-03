@@ -30,10 +30,12 @@ class ProjectsView(QWidget):
         self,
         on_open_file: Callable[[str], None],
         on_save_as: Callable[[], None],
+        on_new_project: Callable[[], None] | None = None,
     ) -> None:
         super().__init__()
         self._on_open_file = on_open_file
         self._on_save_as = on_save_as
+        self._on_new_project = on_new_project
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -72,14 +74,21 @@ class ProjectsView(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
+        new_btn = QPushButton("Create New Project")
+        new_btn.setStyleSheet(theme.primary_btn())
+        # Create a clean, empty project. (Previously this was wired to
+        # Save-As/Export, so it never created a project \u2014 the active project
+        # stayed, and "opening" the exported copy duplicated the old data.)
+        new_btn.clicked.connect(self._create_new_project)
+        btn_row.addWidget(new_btn)
+
         open_btn = QPushButton("Open Project\u2026")
-        open_btn.setStyleSheet(theme.primary_btn())
         open_btn.clicked.connect(self._on_browse)
         btn_row.addWidget(open_btn)
 
-        new_btn = QPushButton("Create New Project")
-        new_btn.clicked.connect(self._on_save_as)
-        btn_row.addWidget(new_btn)
+        save_as_btn = QPushButton("Save As / Export\u2026")
+        save_as_btn.clicked.connect(self._on_save_as)
+        btn_row.addWidget(save_as_btn)
 
         refresh_btn = QPushButton("Refresh")
         refresh_btn.clicked.connect(self._build)
@@ -191,19 +200,27 @@ class ProjectsView(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
+        new_btn = QPushButton("Create New Project")
+        new_btn.setStyleSheet(theme.primary_btn())
+        new_btn.clicked.connect(self._create_new_project)
+        btn_row.addWidget(new_btn)
+
         open_btn = QPushButton("Open Project\u2026")
-        open_btn.setStyleSheet(theme.primary_btn())
         open_btn.clicked.connect(self._on_browse)
         btn_row.addWidget(open_btn)
-
-        new_btn = QPushButton("Create New Project")
-        new_btn.clicked.connect(self._on_save_as)
-        btn_row.addWidget(new_btn)
 
         btn_row.addStretch()
         inner.addLayout(btn_row)
 
         self._layout.addWidget(card)
+
+    def _create_new_project(self) -> None:
+        # Prefer the real "new blank project" callback; fall back to Save-As
+        # only if a host didn't provide one (keeps older callers working).
+        if self._on_new_project is not None:
+            self._on_new_project()
+        else:
+            self._on_save_as()
 
     def _on_browse(self) -> None:
         path, _ = QFileDialog.getOpenFileName(

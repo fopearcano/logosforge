@@ -392,6 +392,32 @@ class Database:
                 project.settings_json = json.dumps(settings)
                 session.commit()
 
+    def get_project_by_source_path(self, source_path: str) -> int | None:
+        """Return the id of the project imported from *source_path*, if any.
+
+        Used to AVOID re-importing a project file as a duplicate every time it
+        is opened (or on each app launch). The source path is tagged into the
+        project's settings when it is first imported."""
+        import json
+        target = str(source_path)
+        with Session(self._engine) as session:
+            for project in session.exec(select(Project)).all():
+                if not project.settings_json:
+                    continue
+                try:
+                    settings = json.loads(project.settings_json)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                if settings.get("source_path") == target:
+                    return project.id
+            return None
+
+    def set_project_source_path(self, project_id: int, source_path: str) -> None:
+        """Tag the file a project was imported from (for open de-duplication)."""
+        settings = self.get_project_settings(project_id)
+        settings["source_path"] = str(source_path)
+        self.save_project_settings(project_id, settings)
+
     def get_scoring_weights(self, project_id: int) -> dict[str, float]:
         from storyplanner.quantum_outliner.scoring import DEFAULT_WEIGHTS
         settings = self.get_project_settings(project_id)
