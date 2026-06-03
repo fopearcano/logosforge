@@ -1148,3 +1148,39 @@ class CanvasPlotNode(SQLModel, table=True):
     scene_id: Optional[int] = Field(default=None, foreign_key="scene.id")
     sort_order: int = 0
     created_at: datetime = Field(default_factory=_now)
+
+
+class CanvasPlotLink(SQLModel, table=True):
+    """A connection line between two Canvas Plot blocks.
+
+    Independent of Timeline links. Removing a link deletes only this row; it is
+    also removed automatically when either endpoint block is deleted.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id")
+    source_node_id: int = Field(foreign_key="canvasplotnode.id")
+    target_node_id: int = Field(foreign_key="canvasplotnode.id")
+    label: str = ""
+    color_label: str = "gray"       # key into color_labels palette
+    link_type: str = ""             # optional free type tag
+    created_at: datetime = Field(default_factory=_now)
+
+
+class CanvasPlotFrame(SQLModel, table=True):
+    """A lightweight visual frame/group area on the Canvas Plot board.
+
+    Purely visual: a titled, coloured, movable rectangle drawn behind the
+    blocks. Blocks are *visually* inside it (no hard parent/child binding), so
+    frames are safe and never move or delete blocks.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id")
+    title: str = ""
+    color_label: str = ""           # key into color_labels palette
+    x: float = 0.0
+    y: float = 0.0
+    width: float = 360.0
+    height: float = 260.0
+    created_at: datetime = Field(default_factory=_now)

@@ -60,6 +60,8 @@ from storyplanner.models import (
     TimelineLane,
     TimelineLink,
     CanvasPlotNode,
+    CanvasPlotLink,
+    CanvasPlotFrame,
     Stage,
     StageBranch,
     StageSnapshot,
@@ -1544,6 +1546,7 @@ class Database:
         x: float | None = None, y: float | None = None,
         width: float | None = None, height: float | None = None,
         color_label: str | None = None, group_label: str | None = None,
+        sort_order: int | None = None,
     ) -> None:
         with Session(self._engine) as session:
             node = session.get(CanvasPlotNode, node_id)
@@ -1565,13 +1568,143 @@ class Database:
                 node.color_label = color_label
             if group_label is not None:
                 node.group_label = group_label
+            if sort_order is not None:
+                node.sort_order = sort_order
             session.commit()
 
     def delete_canvas_plot_node(self, node_id: int) -> None:
+        """Delete a block and any connection lines touching it (no orphans)."""
         with Session(self._engine) as session:
             node = session.get(CanvasPlotNode, node_id)
-            if node is not None:
-                session.delete(node)
+            if node is None:
+                return
+            links = session.exec(
+                select(CanvasPlotLink).where(
+                    (CanvasPlotLink.source_node_id == node_id)
+                    | (CanvasPlotLink.target_node_id == node_id)
+                )
+            ).all()
+            for link in links:
+                session.delete(link)
+            session.delete(node)
+            session.commit()
+
+    # -- Canvas Plot connection lines ---------------------------------------
+
+    def get_canvas_plot_links(self, project_id: int) -> list["CanvasPlotLink"]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(CanvasPlotLink)
+                .where(CanvasPlotLink.project_id == project_id)
+                .order_by(CanvasPlotLink.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def add_canvas_plot_link(
+        self, project_id: int, source_node_id: int, target_node_id: int,
+        color_label: str = "gray", label: str = "", link_type: str = "",
+    ) -> "CanvasPlotLink | None":
+        """Connect two blocks. No-op (returns existing) if the pair already
+        exists in either direction; rejects self-links."""
+        if source_node_id == target_node_id:
+            return None
+        with Session(self._engine) as session:
+            existing = session.exec(
+                select(CanvasPlotLink)
+                .where(CanvasPlotLink.project_id == project_id)
+                .where(CanvasPlotLink.source_node_id.in_(
+                    [source_node_id, target_node_id]))
+                .where(CanvasPlotLink.target_node_id.in_(
+                    [source_node_id, target_node_id]))
+            ).first()
+            if existing is not None:
+                return existing
+            link = CanvasPlotLink(
+                project_id=project_id, source_node_id=source_node_id,
+                target_node_id=target_node_id, color_label=color_label or "gray",
+                label=label or "", link_type=link_type or "",
+            )
+            session.add(link)
+            session.commit()
+            session.refresh(link)
+            return link
+
+    def set_canvas_plot_link_color(self, link_id: int, color_label: str) -> None:
+        with Session(self._engine) as session:
+            link = session.get(CanvasPlotLink, link_id)
+            if link is not None:
+                link.color_label = color_label or "gray"
+                session.commit()
+
+    def set_canvas_plot_link_label(self, link_id: int, label: str) -> None:
+        with Session(self._engine) as session:
+            link = session.get(CanvasPlotLink, link_id)
+            if link is not None:
+                link.label = label or ""
+                session.commit()
+
+    def remove_canvas_plot_link(self, link_id: int) -> None:
+        """Delete a connection line only — never the blocks it joined."""
+        with Session(self._engine) as session:
+            link = session.get(CanvasPlotLink, link_id)
+            if link is not None:
+                session.delete(link)
+                session.commit()
+
+    # -- Canvas Plot frames (lightweight visual groups) ---------------------
+
+    def get_canvas_plot_frames(self, project_id: int) -> list["CanvasPlotFrame"]:
+        with Session(self._engine) as session:
+            stmt = (
+                select(CanvasPlotFrame)
+                .where(CanvasPlotFrame.project_id == project_id)
+                .order_by(CanvasPlotFrame.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def create_canvas_plot_frame(
+        self, project_id: int, title: str = "", color_label: str = "",
+        x: float = 0.0, y: float = 0.0, width: float = 360.0, height: float = 260.0,
+    ) -> "CanvasPlotFrame":
+        with Session(self._engine) as session:
+            frame = CanvasPlotFrame(
+                project_id=project_id, title=title, color_label=color_label or "",
+                x=x, y=y, width=width, height=height,
+            )
+            session.add(frame)
+            session.commit()
+            session.refresh(frame)
+            return frame
+
+    def update_canvas_plot_frame(
+        self, frame_id: int, *, title: str | None = None,
+        color_label: str | None = None, x: float | None = None,
+        y: float | None = None, width: float | None = None,
+        height: float | None = None,
+    ) -> None:
+        with Session(self._engine) as session:
+            frame = session.get(CanvasPlotFrame, frame_id)
+            if frame is None:
+                return
+            if title is not None:
+                frame.title = title
+            if color_label is not None:
+                frame.color_label = color_label
+            if x is not None:
+                frame.x = x
+            if y is not None:
+                frame.y = y
+            if width is not None:
+                frame.width = width
+            if height is not None:
+                frame.height = height
+            session.commit()
+
+    def delete_canvas_plot_frame(self, frame_id: int) -> None:
+        with Session(self._engine) as session:
+            frame = session.get(CanvasPlotFrame, frame_id)
+            if frame is not None:
+                session.delete(frame)
                 session.commit()
 
     def clear_canvas_plot(self, project_id: int) -> None:
