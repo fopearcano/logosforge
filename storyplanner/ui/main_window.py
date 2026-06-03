@@ -2352,6 +2352,9 @@ class MainWindow(QMainWindow):
 
     def _on_new_project(self) -> None:
         from storyplanner.ui.new_project_dialog import NewProjectDialog
+        # The dialog is window-modal (a sheet on macOS) so creating a project
+        # never forces the window out of fullscreen / onto another Space — the
+        # cause of the multi-view slide + minimize glitch in fullscreen.
         dlg = NewProjectDialog(parent=self)
         if not dlg.exec():
             return
@@ -2361,14 +2364,21 @@ class MainWindow(QMainWindow):
             narrative_engine=dlg.get_engine(),
             default_writing_format=dlg.get_format(),
         )
+        was_fullscreen = self.isFullScreen()
         # New projects land on the Dashboard so the user sees the empty
-        # state for the new project rather than (say) an empty Plot view.
+        # state for the new project. One clean switch (no extra navigation).
         self._set_active_section("Dashboard")
         self._switch_project(project.id)
         # _switch_project already emitted project_loaded; additionally
         # announce that this project is brand new.
         from storyplanner.project_events import get_event_bus
         get_event_bus().project_created.emit(project.id)
+        # Refresh the Projects list if it happens to be the visible section.
+        self._refresh_projects_view()
+        # Safety net: if a modal dialog dropped fullscreen on this platform,
+        # restore it (only when it actually changed — never minimise/showNormal).
+        if was_fullscreen and not self.isFullScreen():
+            self.showFullScreen()
 
     def _on_project_settings(self) -> None:
         if not self._project_id:
@@ -2563,6 +2573,7 @@ class MainWindow(QMainWindow):
         self._switch_project(new_project_id, file_path=path)
         recent_projects.add(path)
         self._refresh_recent_menu()
+        self._refresh_projects_view()
         get_settings().set("last_project_path", resolved)
 
     def load_file_quiet(self, path: str) -> bool:
@@ -2629,11 +2640,24 @@ class MainWindow(QMainWindow):
             acquire_lock(path)
         except OSError:
             pass
+        resolved = str(Path(path).resolve())
+        # Tag this project's source file so re-opening it activates THIS project
+        # instead of importing a duplicate (consistent with open de-dup).
+        self._db.set_project_source_path(self._project_id, resolved)
         recent_projects.add(path)
         self._refresh_recent_menu()
-        get_settings().set("last_project_path", str(Path(path).resolve()))
+        get_settings().set("last_project_path", resolved)
         self._update_storage_indicator()
+        # The saved project now has a file → refresh the Projects list so its
+        # card appears immediately (no section switch / restart needed).
+        self._refresh_projects_view()
         QMessageBox.information(self, "Save As", f"Project saved to {path}")
+
+    def _refresh_projects_view(self) -> None:
+        """Reload the Projects list if it is the currently visible section."""
+        view = self.content_area
+        if isinstance(view, ProjectsView) and hasattr(view, "refresh"):
+            view.refresh()
 
     def _on_move_project(self) -> None:
         """Copy the current project to a chosen folder and switch to it.
@@ -3039,9 +3063,11 @@ class MainWindow(QMainWindow):
     # -- Close event ---------------------------------------------------------
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        self._versions.stop()
-        self._assistant_panel.save_settings()
-        if self._dirty and not self._current_file:
+        # Ask to save when the open project has unsaved modifications. A clean
+        # project (incl. one a completed autosave already saved → _dirty False)
+        # closes without prompting. Side-effects (stop versions, save settings,
+        # release lock) only run once we actually commit to closing.
+        if self._dirty and not self._read_only:
             answer = QMessageBox.warning(
                 self,
                 "Unsaved Project",
@@ -3052,19 +3078,30 @@ class MainWindow(QMainWindow):
                 | QMessageBox.StandardButton.Cancel,
                 QMessageBox.StandardButton.Save,
             )
-            if answer == QMessageBox.StandardButton.Save:
-                self._on_save_as()
-                if self._dirty:
-                    event.ignore()
-                    return
-            elif answer == QMessageBox.StandardButton.Cancel:
+            if answer == QMessageBox.StandardButton.Cancel:
                 event.ignore()
                 return
-        elif self._dirty and self._current_file and not self._read_only:
-            self._auto_save()
+            if answer == QMessageBox.StandardButton.Save:
+                if not self._save_for_close():
+                    event.ignore()   # Save was cancelled → abort the close.
+                    return
+            # Discard → fall through and close without saving.
+
+        self._versions.stop()
+        self._assistant_panel.save_settings()
         if self._current_file:
             release_lock(self._current_file)
         event.accept()
+
+    def _save_for_close(self) -> bool:
+        """Save the project as part of closing. Return False only if the user
+        cancelled the Save dialog (so the close should be aborted)."""
+        if self._current_file:
+            self._auto_save()
+            return True
+        # Never saved yet → Save As (the user may cancel the file dialog).
+        self._on_save_as()
+        return self._current_file is not None
 
     # -- Theme switching -----------------------------------------------------
 

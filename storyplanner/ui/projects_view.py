@@ -86,7 +86,8 @@ class ProjectsView(QWidget):
         open_btn.clicked.connect(self._on_browse)
         btn_row.addWidget(open_btn)
 
-        save_as_btn = QPushButton("Save As / Export\u2026")
+        save_as_btn = QPushButton("Save As")
+        save_as_btn.setToolTip("Save the current project to a file")
         save_as_btn.clicked.connect(self._on_save_as)
         btn_row.addWidget(save_as_btn)
 

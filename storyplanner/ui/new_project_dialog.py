@@ -31,6 +31,9 @@ class NewProjectDialog(QDialog):
         self._format_manually_changed = False
         self.setWindowTitle("New Project")
         self.setMinimumWidth(420)
+        # Window-modal (a sheet on macOS) so creating a project never forces the
+        # main window out of fullscreen / onto another Space.
+        self.setWindowModality(Qt.WindowModality.WindowModal)
         self._build_ui()
 
     def _build_ui(self) -> None:
