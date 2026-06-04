@@ -1720,18 +1720,17 @@ class WritingCoreView(QWidget):
     def add_button_text(self) -> str:
         """The primary add-unit label for the manuscript.
 
-        Label-only mode awareness: '+ Chapter' in Novel, '+ Scene' otherwise.
-        The add action and storage are unchanged (still scene-based).
+        Label-only mode awareness via the shared writing-mode adapter:
+        '+ Chapter' in Novel, '+ Scene' otherwise. The add action and storage
+        are unchanged (still scene-based).
         """
-        return "+ " + self._unit_noun()
+        from storyplanner.writing_modes import current_add_button_label
+        return current_add_button_label(self._db.get_project_by_id(self._project_id))
 
     def _unit_noun(self) -> str:
-        from storyplanner.writing_modes import (
-            get_project_writing_mode_by_id,
-            primary_unit_label,
-        )
-        return primary_unit_label(
-            get_project_writing_mode_by_id(self._db, self._project_id))
+        from storyplanner.writing_modes import current_primary_unit_label
+        return current_primary_unit_label(
+            self._db.get_project_by_id(self._project_id))
 
     def refresh(self) -> None:
         # Never lose in-progress typing or steal focus when a rebuild is

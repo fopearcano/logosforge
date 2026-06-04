@@ -160,6 +160,25 @@ def primary_unit_label(mode: str | None) -> str:
     return "Chapter" if normalize_mode(mode) == NOVEL else "Scene"
 
 
+# -- Project-level primary-unit adapter (single source of truth for the UI) ---
+# Small, testable helpers so views never branch on writing_mode themselves.
+
+
+def current_primary_unit_type(project: "Project | None") -> str:
+    """'chapter' for Novel projects, 'scene' otherwise (lowercase type key)."""
+    return "chapter" if get_project_writing_mode(project) == NOVEL else "scene"
+
+
+def current_primary_unit_label(project: "Project | None") -> str:
+    """'Chapter' for Novel projects, 'Scene' otherwise (display noun)."""
+    return primary_unit_label(get_project_writing_mode(project))
+
+
+def current_add_button_label(project: "Project | None") -> str:
+    """'+ Chapter' for Novel projects, '+ Scene' otherwise."""
+    return "+ " + current_primary_unit_label(project)
+
+
 # -- Project accessors -------------------------------------------------------
 
 
