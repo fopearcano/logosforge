@@ -165,15 +165,16 @@ def test_non_novel_manuscript_add_button_is_scene():
 # ==========================================================================
 
 
-def test_novel_uses_scene_manuscript_and_chapter_outline(tmp_path):
+def test_novel_uses_scene_manuscript_and_unified_outline(tmp_path):
     db = Database(str(tmp_path / "sp.db"))
     pid = _project(db, "novel")
     win = MainWindow(db, pid)
     win.sidebar_buttons["Manuscript"].click()
     assert isinstance(win.content_area, WritingCoreView)
     assert win.content_area.add_button_text() == "+ Chapter"
+    # Outline is the single structural section (PlanView) for all modes.
     win.sidebar_buttons["Outline"].click()
-    assert isinstance(win.content_area, ChapterOutlineView)
+    assert isinstance(win.content_area, PlanView)
 
 
 def test_screenplay_uses_scene_views(tmp_path):
@@ -202,21 +203,23 @@ def test_switch_updates_manuscript_label_and_outline_view(tmp_path):
     assert isinstance(win.content_area, PlanView)
     win._switch_project(nov)
     win.sidebar_buttons["Outline"].click()
-    assert isinstance(win.content_area, ChapterOutlineView)
+    assert isinstance(win.content_area, PlanView)
 
 
-def test_outline_selection_clears_on_switch(tmp_path):
+def test_outline_rebuilds_fresh_on_switch(tmp_path):
     db = Database(str(tmp_path / "sp.db"))
-    nov = _project(db, "novel")
-    db.create_chapter(nov, title="C1")
-    nov2 = _project(db, "novel")
-    win = MainWindow(db, nov)
+    a = _project(db, "novel")
+    db.create_scene(a, "A-scene", act="Act I", chapter="Ch1")
+    b = _project(db, "novel")
+    win = MainWindow(db, a)
     win.sidebar_buttons["Outline"].click()
-    win.content_area._select_id(db.get_chapters(nov)[0].id)
-    assert win.content_area._selected_id is not None
-    win._switch_project(nov2)
+    view_a = win.content_area
+    win._switch_project(b)
     win.sidebar_buttons["Outline"].click()
-    assert win.content_area._selected_id is None
+    # Rebuilt fresh for the new (empty) project — no stale acts/chapters/scenes.
+    assert win.content_area is not view_a
+    from storyplanner.ui.plan_view import build_plan_tree
+    assert build_plan_tree(db, b) == []
 
 
 # ==========================================================================

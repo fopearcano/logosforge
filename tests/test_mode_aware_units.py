@@ -52,76 +52,55 @@ def _avail(win, name):
 # ==========================================================================
 
 
-def test_novel_shows_chapters_hides_scenes_when_clean(tmp_path):
-    db = Database(str(tmp_path / "sp.db"))
-    pid = _project(db, "novel")
-    win = MainWindow(db, pid)
-    assert _avail(win, "Chapters") is True
-    assert _avail(win, "Scenes") is False
-    assert "Chapters" in win._nav_labels
-
-
 @pytest.mark.parametrize("engine,fmt", [
+    ("novel", "novel"),
     ("screenplay", "screenplay"),
     ("graphic_novel", "graphic_novel"),
     ("stage_script", "stage_script"),
     ("series", "series"),
 ])
-def test_non_novel_shows_scenes_hides_chapters(tmp_path, engine, fmt):
+def test_chapters_and_scenes_hidden_from_nav(tmp_path, engine, fmt):
+    # Structure is consolidated into Outline: neither Chapters nor Scenes is a
+    # visible main section in any mode.
     db = Database(str(tmp_path / "sp.db"))
     pid = _project(db, engine, fmt)
     win = MainWindow(db, pid)
-    assert _avail(win, "Scenes") is True
     assert _avail(win, "Chapters") is False
+    assert _avail(win, "Scenes") is False
     assert "Chapters" not in win._nav_labels
+    assert "Scenes" not in win._nav_labels
+    # Outline is the structural section.
+    win.sidebar_buttons["Outline"].click()
+    from storyplanner.ui.plan_view import PlanView
+    assert isinstance(win.content_area, PlanView)
 
 
-def test_chapters_section_opens(tmp_path):
+def test_chapters_handler_kept_as_legacy(tmp_path):
+    # The handler/button are preserved (data reachable) but not in the nav.
     db = Database(str(tmp_path / "sp.db"))
     pid = _project(db, "novel")
     win = MainWindow(db, pid)
-    win.sidebar_buttons["Chapters"].click()
+    assert "Chapters" in win._nav_section_handlers   # legacy/debug handler kept
+    win.sidebar_buttons["Chapters"].click()           # still builds if invoked
     assert isinstance(win.content_area, ChaptersView)
-    assert win._current_section == "Chapters"
 
 
 # ==========================================================================
-# Project switching updates navigation
+# Project switching keeps the sections hidden (no stale restoration)
 # ==========================================================================
 
 
-def test_switch_novel_to_screenplay_updates_nav(tmp_path):
+def test_switch_keeps_sections_hidden(tmp_path):
     db = Database(str(tmp_path / "sp.db"))
     nov = _project(db, "novel")
     scr = _project(db, "screenplay", "screenplay")
     win = MainWindow(db, nov)
-    assert _avail(win, "Chapters") is True and _avail(win, "Scenes") is False
+    assert _avail(win, "Chapters") is False and _avail(win, "Scenes") is False
     win._switch_project(scr)
-    assert _avail(win, "Chapters") is False and _avail(win, "Scenes") is True
-    assert "Chapters" not in win._nav_labels
-
-
-def test_switch_screenplay_to_novel_updates_nav(tmp_path):
-    db = Database(str(tmp_path / "sp.db"))
-    scr = _project(db, "screenplay", "screenplay")
-    nov = _project(db, "novel")
-    win = MainWindow(db, scr)
-    assert _avail(win, "Scenes") is True and _avail(win, "Chapters") is False
+    assert _avail(win, "Chapters") is False and _avail(win, "Scenes") is False
     win._switch_project(nov)
-    assert _avail(win, "Chapters") is True
-    assert "Chapters" in win._nav_labels
-
-
-def test_switch_does_not_leave_stale_section(tmp_path):
-    db = Database(str(tmp_path / "sp.db"))
-    nov = _project(db, "novel")
-    scr = _project(db, "screenplay", "screenplay")
-    win = MainWindow(db, nov)
-    win.sidebar_buttons["Chapters"].click()
-    assert win._current_section == "Chapters"
-    win._switch_project(scr)
-    # Chapters is not valid in screenplay → must not remain the active section.
-    assert win._current_section != "Chapters"
+    assert _avail(win, "Chapters") is False and _avail(win, "Scenes") is False
+    assert "Chapters" not in win._nav_labels and "Scenes" not in win._nav_labels
 
 
 # ==========================================================================
@@ -157,10 +136,12 @@ def test_existing_scenes_preserved_when_switching_to_novel(tmp_path):
     scr = _project(db, "screenplay", "screenplay")
     win = MainWindow(db, scr)
     win._switch_project(nov)
-    # Scenes are NOT deleted, and remain reachable (Scenes section available).
+    # Scenes are NOT deleted; they surface inside the Outline (PlanView) tree.
     assert len(db.get_all_scenes(nov)) == 1
-    assert _avail(win, "Scenes") is True       # legacy access kept in Novel
-    assert _avail(win, "Chapters") is True     # but Chapters is primary
+    from storyplanner.ui.plan_view import build_plan_tree
+    assert build_plan_tree(db, nov) != []      # reachable via Outline
+    assert _avail(win, "Scenes") is False       # no separate Scenes section
+    assert _avail(win, "Chapters") is False     # no separate Chapters section
 
 
 # ==========================================================================

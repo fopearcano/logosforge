@@ -860,20 +860,9 @@ class MainWindow(QMainWindow):
         return get_project_writing_mode_by_id(self._db, self._project_id) == NOVEL
 
     def _show_plan(self) -> None:
-        # Novel → Act → Chapter outline; other modes → Act → Scene (PlanView).
-        if self._is_novel_mode():
-            from storyplanner.ui.chapter_outline_view import ChapterOutlineView
-            self._set_content(
-                ChapterOutlineView(
-                    self._db, self._project_id,
-                    on_data_changed=self._on_data_changed,
-                    on_open_chapter=lambda _cid: (
-                        self._set_active_section("Manuscript"),
-                        self._show_manuscript(),
-                    ),
-                )
-            )
-            return
+        # Outline is the single structural section for ALL modes: a unified
+        # Act → Chapter → Scene(optional) tree (PlanView). Separate Chapters/
+        # Scenes sections are hidden from navigation.
         self._set_content(
             PlanView(
                 self._db,
@@ -1292,38 +1281,30 @@ class MainWindow(QMainWindow):
             plan.refresh_child_visibility()
 
     def _apply_unit_section_availability(self) -> None:
-        """Show the primary-writing-unit section for the current mode:
-        Novel → Chapters (Scenes shown only when legacy scenes exist, for
-        access); all other modes → Scenes (Chapters hidden). Idempotent; called
-        at startup and on every project switch so navigation never goes stale."""
-        from storyplanner.writing_modes import NOVEL, get_project_writing_mode_by_id
-        mode = get_project_writing_mode_by_id(self._db, self._project_id)
-        is_novel = (mode == NOVEL)
-        has_scenes = bool(self._db.get_all_scenes(self._project_id))
-
-        # Chapters — Novel only.
+        """Consolidate structure into Outline: the separate Chapters and Scenes
+        main sections are hidden from navigation (Outline manages Acts/Chapters/
+        Scenes). The section handlers + button widgets are kept registered as
+        legacy/debug so their data stays reachable and nothing crashes; only the
+        visible nav entries are removed. Idempotent; called at startup and on
+        every project switch."""
+        # Hide Chapters from the nav.
         chap = getattr(self, "_chapters_btn", None)
         if chap is not None:
-            chap.setProperty("nav_available", is_novel)
+            chap.setProperty("nav_available", False)
             self._nav_section_handlers["Chapters"] = self._show_chapters
-            if is_novel:
-                self.sidebar_buttons["Chapters"] = chap
-                if "Chapters" not in self._nav_labels:
-                    self._nav_labels.append("Chapters")
-            else:
-                if "Chapters" in self._nav_labels:
-                    self._nav_labels.remove("Chapters")
-                if getattr(self, "_current_section", None) == "Chapters":
-                    self._current_section = "Dashboard"
+            if "Chapters" in self._nav_labels:
+                self._nav_labels.remove("Chapters")
+            if getattr(self, "_current_section", None) == "Chapters":
+                self._current_section = "Outline"
 
-        # Scenes — primary for non-Novel; in Novel kept available only when the
-        # project already has (legacy) scenes so that data stays reachable.
-        scenes_available = (not is_novel) or has_scenes
+        # Hide Scenes from the nav (data + handler preserved for legacy access).
         sc = getattr(self, "_scenes_nav_btn", None) or self.sidebar_buttons.get("Scenes")
         if sc is not None:
-            sc.setProperty("nav_available", scenes_available)
-            if not scenes_available and getattr(self, "_current_section", None) == "Scenes":
-                self._current_section = "Dashboard"
+            sc.setProperty("nav_available", False)
+            if "Scenes" in self._nav_labels:
+                self._nav_labels.remove("Scenes")
+            if getattr(self, "_current_section", None) == "Scenes":
+                self._current_section = "Outline"
 
         plan = next((g for g in getattr(self, "_sidebar_groups", [])
                      if g.label == "Plan"), None)

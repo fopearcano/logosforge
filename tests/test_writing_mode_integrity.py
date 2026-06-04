@@ -114,14 +114,14 @@ def test_project_switch_updates_section_view_mode():
     db = Database()
     novel = db.create_project("Novel", narrative_engine="novel").id
     sp = db.create_project("Script", narrative_engine="screenplay").id
-    from storyplanner.ui.chapter_outline_view import ChapterOutlineView
     from storyplanner.ui.plan_view import PlanView
     win = MainWindow(db, novel)
     win.sidebar_buttons["Outline"].click()
-    # Novel outline = Act → Chapter (ChapterOutlineView).
-    assert isinstance(win.content_area, ChapterOutlineView)
+    # Outline is the single structural section (PlanView) for all modes; its
+    # engine reflects the active project.
+    assert isinstance(win.content_area, PlanView)
+    assert win.content_area._engine == "novel"
     win._switch_project(sp)
-    # active section rebuilt against the new project -> scene-based PlanView.
     win.sidebar_buttons["Outline"].click()
     assert isinstance(win.content_area, PlanView)
     assert win.content_area._engine == "screenplay"
