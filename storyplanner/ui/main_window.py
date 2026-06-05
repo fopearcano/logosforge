@@ -577,6 +577,7 @@ class MainWindow(QMainWindow):
 
         self._apply_pages_availability()
         self._apply_unit_section_availability()
+        self._apply_canvas_plot_availability()
 
         # -- Right content area ----------------------------------------------
         self.content_area = self._build_initial_content()
@@ -874,9 +875,11 @@ class MainWindow(QMainWindow):
         )
 
     def _show_manuscript(self) -> None:
-        # Manuscript always uses the scene-based editor (its internal unit model
-        # is unchanged). Only the add-button LABEL is mode-aware ("+ Chapter" in
-        # Novel, "+ Scene" otherwise) — handled inside WritingCoreView.
+        # Manuscript is a focused writing surface: a compact selectable structure
+        # list on the left, and the editor on the right opens ONLY the selected
+        # writing unit (no inline whole-project structure). Storage is unchanged
+        # (Scene-based); the add-button LABEL is mode-aware ("+ Chapter" in Novel,
+        # "+ Scene" otherwise) via the primary-unit adapter inside WritingCoreView.
         self._set_content(
             WritingCoreView(
                 self._db,
@@ -885,6 +888,7 @@ class MainWindow(QMainWindow):
                 on_focus_mode_changed=self._on_focus_mode_changed,
                 on_open_psyke_entry=self._open_psyke_entry,
                 on_content_saved=self._on_scene_content_saved,
+                structured_list=True,
             )
         )
 
@@ -1306,6 +1310,28 @@ class MainWindow(QMainWindow):
             if getattr(self, "_current_section", None) == "Scenes":
                 self._current_section = "Outline"
 
+        plan = next((g for g in getattr(self, "_sidebar_groups", [])
+                     if g.label == "Plan"), None)
+        if plan is not None:
+            plan.refresh_child_visibility()
+
+    def _apply_canvas_plot_availability(self) -> None:
+        """Defer Canvas Plot: hide the 'Plot' (Canvas Plot) item from normal
+        navigation. The block-based Outline is now the planning board, and
+        Canvas Plot overlaps it without a distinct purpose yet.
+
+        Non-destructive: the handler + button widget + click wiring are kept
+        registered (so any CanvasPlot data stays reachable and existing
+        invocations still work); only the visible nav entry is removed. Canvas
+        Plot data (nodes/links/frames) is never touched. Idempotent."""
+        btn = self.sidebar_buttons.get("Plot")
+        if btn is not None:
+            btn.setProperty("nav_available", False)
+            if "Plot" in self._nav_labels:
+                self._nav_labels.remove("Plot")
+            # Never leave the app sitting on a now-hidden Canvas Plot section.
+            if getattr(self, "_current_section", None) == "Plot":
+                self._current_section = "Outline"
         plan = next((g for g in getattr(self, "_sidebar_groups", [])
                      if g.label == "Plan"), None)
         if plan is not None:
@@ -2911,6 +2937,7 @@ class MainWindow(QMainWindow):
         # Show the right primary-unit section (Chapters for Novel / Scenes for
         # the rest) for the new project's writing mode.
         self._apply_unit_section_availability()
+        self._apply_canvas_plot_availability()
         # Re-bind the always-on PSYKE console to the new project: clears its
         # in-progress query + stale results and rebuilds the index eagerly.
         # (The PSYKE section view itself is rebuilt fresh in step 4, so its

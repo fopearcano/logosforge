@@ -526,6 +526,26 @@ class PlanView(QWidget):
 
         self._content_layout.addStretch()
 
+    # -- Block type badges ----------------------------------------------------
+
+    _BADGE_COLORS = {
+        "ACT": theme.ACCENT,
+        "CHAPTER": theme.TEXT_PRIMARY,
+        "SCENE": theme.TEXT_MUTED,
+    }
+
+    def _type_badge(self, kind: str) -> QLabel:
+        """A small pill badge labelling a block's type: Act / Chapter / Scene."""
+        badge = QLabel(kind)
+        badge.setObjectName("planTypeBadge")
+        color = self._BADGE_COLORS.get(kind, theme.TEXT_MUTED)
+        badge.setStyleSheet(
+            f"color: {color}; font-size: 9px; font-weight: bold;"
+            f" border: 1px solid {theme.BORDER};"
+            f" border-radius: 3px; padding: 1px 5px; background: transparent;"
+        )
+        return badge
+
     # -- Act section ----------------------------------------------------------
 
     def _build_act_section(
@@ -548,7 +568,8 @@ class PlanView(QWidget):
 
         head_row = QHBoxLayout()
         head_row.setSpacing(6)
-        act_label = QLabel(f"Act — {act_name}")
+        head_row.addWidget(self._type_badge("ACT"))
+        act_label = QLabel(act_name)
         act_label.setStyleSheet(
             f"font-size: 14px; font-weight: bold; color: {theme.TEXT_PRIMARY};"
         )
@@ -608,7 +629,8 @@ class PlanView(QWidget):
 
         head_row = QHBoxLayout()
         head_row.setSpacing(6)
-        ch_label = QLabel(f"Chapter — {chapter_name}")
+        head_row.addWidget(self._type_badge("CHAPTER"))
+        ch_label = QLabel(chapter_name)
         ch_label.setStyleSheet(
             f"font-size: 12px; font-weight: bold; color: {theme.TEXT_PRIMARY};"
         )
@@ -658,6 +680,7 @@ class PlanView(QWidget):
 
         head_row = QHBoxLayout()
         head_row.setSpacing(6)
+        head_row.addWidget(self._type_badge("SCENE"))
         title = QLabel(scene.title or "Untitled Scene")
         title.setStyleSheet(
             f"font-size: 11px; color: {theme.TEXT_PRIMARY};"

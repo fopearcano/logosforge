@@ -37,6 +37,9 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSplitter,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -1308,28 +1311,6 @@ class _EnergyGutter(QWidget):
         return super().event(ev)
 
 
-class _FoldHeader(QLabel):
-    """A structural Act/Chapter header that toggles collapse on click.
-
-    It is a plain QLabel (so existing ``#writingActHeader`` / ``#writingChapter
-    Header`` styling applies) plus a click handler and a pointing-hand cursor.
-    The fold arrow + hierarchical number are rendered as part of the text; the
-    body editor is untouched, so prose never mixes with structural metadata.
-    """
-
-    def __init__(self, text: str, on_toggle, parent: QWidget | None = None) -> None:
-        super().__init__(text, parent)
-        self._on_toggle = on_toggle
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-    def mousePressEvent(self, event) -> None:
-        if event.button() == Qt.MouseButton.LeftButton and self._on_toggle:
-            self._on_toggle()
-            event.accept()
-            return
-        super().mousePressEvent(event)
-
-
 class WritingCoreView(QWidget):
     """Immersive continuous manuscript writing view."""
 
@@ -1343,9 +1324,16 @@ class WritingCoreView(QWidget):
         on_focus_mode_changed: Callable[[bool], None] | None = None,
         on_open_psyke_entry: Callable[[int], None] | None = None,
         on_content_saved: Callable[[], None] | None = None,
+        structured_list: bool = False,
     ) -> None:
         super().__init__()
         self.setMinimumWidth(0)
+        # When True, Manuscript shows a compact selectable structure list on the
+        # left and renders ONLY the selected writing unit in the editor on the
+        # right. When False (default), the stable continuous view is used — this
+        # keeps every direct-construction caller/test on the original behavior.
+        self._structured_list = structured_list
+        self._selected_scene_id: int | None = None
         self._db = db
         self._project_id = project_id
         self._on_data_changed = on_data_changed
@@ -1391,10 +1379,6 @@ class WritingCoreView(QWidget):
         self._editors: dict[int, _SceneEditor] = {}
         self._save_timers: dict[int, QTimer] = {}
         self._scene_widgets: list[QWidget] = []
-        # Collapsed structural blocks (Act/Chapter) keyed by a stable group id
-        # (e.g. "act::Act I" / "chap::Act I::Chapter 1"). A freshly built view —
-        # including after a project switch — starts fully expanded.
-        self._collapsed: set[str] = set()
         self._highlighters: dict[int, PsykeHighlighter] = {}
         self._click_handlers: dict[int, PsykeClickHandler] = {}
         self._hover_handlers: dict[int, EntityHoverHandler] = {}
@@ -1637,7 +1621,17 @@ class WritingCoreView(QWidget):
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
         self._scroll.setObjectName("writingScroll")
-        outer.addWidget(self._scroll)
+        if self._structured_list:
+            split = QSplitter(Qt.Orientation.Horizontal)
+            split.addWidget(self._build_structure_panel())
+            split.addWidget(self._scroll)
+            split.setStretchFactor(0, 0)
+            split.setStretchFactor(1, 1)
+            split.setSizes([240, 880])
+            split.setChildrenCollapsible(False)
+            outer.addWidget(split)
+        else:
+            outer.addWidget(self._scroll)
 
         self._canvas = QWidget()
         self._canvas.setObjectName("writingCanvas")
@@ -1771,68 +1765,10 @@ class WritingCoreView(QWidget):
         self._scene_sort_orders = {s.id: s.sort_order for s in scenes}
         self._temporal_graph = TemporalGraph(self._db, self._project_id)
 
-        # Structural summaries (Act/Chapter live in project settings; Scene on
-        # the row) are shown as visually-distinct, read-only metadata — never as
-        # body prose.
-        _settings = self._db.get_project_settings(self._project_id)
-        self._act_summaries = _settings.get("act_summaries", {}) or {}
-        self._chapter_summaries = _settings.get("chapter_summaries", {}) or {}
-
-        current_act = None
-        current_chapter = None
-        first_scene = True
-        # Hierarchical numbering (Act = 1, Chapter = 1.1, Scene = 1.1.1).
-        act_idx = 0
-        chapter_idx = 0
-        scene_idx = 0
-        act_collapsed = False
-        chapter_collapsed = False
-
-        for scene in scenes:
-            act = (scene.act or "").strip()
-            chapter = (scene.chapter or "").strip()
-
-            if act and act != current_act:
-                current_act = act
-                current_chapter = None
-                act_idx += 1
-                chapter_idx = 0
-                scene_idx = 0
-                act_collapsed = f"act::{act}" in self._collapsed
-                self._add_act_header(act, act_idx, act_collapsed)
-
-            # A collapsed Act hides all of its Chapters and Scenes.
-            if act and act_collapsed:
-                continue
-
-            if chapter and chapter != current_chapter:
-                current_chapter = chapter
-                chapter_idx += 1
-                scene_idx = 0
-                chapter_collapsed = (
-                    f"chap::{act}::{chapter}" in self._collapsed
-                )
-                self._add_chapter_header(
-                    act, chapter, act_idx, chapter_idx, chapter_collapsed,
-                )
-
-            # A collapsed Chapter hides its Scenes (header stays visible).
-            if chapter and chapter_collapsed:
-                continue
-
-            scene_idx += 1
-            number = self._scene_number(
-                act_idx if act else 0,
-                chapter_idx if chapter else 0,
-                scene_idx,
-            )
-            self._add_scene_block(scene, number=number, is_first=first_scene)
-            first_scene = False
-
-        if scenes:
-            self._add_end_action(scenes[-1].id)
+        if self._structured_list:
+            self._render_selected_unit(scenes)
         else:
-            self._add_empty_state()
+            self._render_continuous(scenes)
 
         self._update_word_count()
         self._apply_typography()
@@ -1854,6 +1790,29 @@ class WritingCoreView(QWidget):
                     pass
                 editor.setFocus()
 
+    def _render_continuous(self, scenes) -> None:
+        """Stable continuous manuscript: every scene rendered in order with
+        plain Act/Chapter headers. Body is scene.content only — no numbered
+        gutter, no foldable blocks, no outline descriptions as prose."""
+        current_act = None
+        current_chapter = None
+        first_scene = True
+        for scene in scenes:
+            act = (scene.act or "").strip()
+            chapter = (scene.chapter or "").strip()
+            if act and act != current_act:
+                current_act = act
+                self._add_act_header(act)
+            if chapter and chapter != current_chapter:
+                current_chapter = chapter
+                self._add_chapter_header(chapter)
+            self._add_scene_block(scene, is_first=first_scene)
+            first_scene = False
+        if scenes:
+            self._add_end_action(scenes[-1].id)
+        else:
+            self._add_empty_state()
+
     def _clear_canvas(self) -> None:
         self._format_toolbar.untrack_all()
         self._entity_hover_panel.hide()
@@ -1872,109 +1831,156 @@ class WritingCoreView(QWidget):
             if w:
                 w.deleteLater()
 
-    # -- Structural numbering + folding ---------------------------------------
+    # -- Selectable structure list (structured_list mode) ---------------------
 
-    @staticmethod
-    def _scene_number(act_idx: int, chapter_idx: int, scene_idx: int) -> str:
-        """Hierarchical scene number using whatever levels are present:
-        Act+Chapter → "1.1.1"; Act only → "1.1"; neither → "1"."""
-        parts: list[str] = []
-        if act_idx:
-            parts.append(str(act_idx))
-        if chapter_idx:
-            parts.append(str(chapter_idx))
-        parts.append(str(scene_idx))
-        return ".".join(parts)
+    def _build_structure_panel(self) -> QWidget:
+        """Compact left-hand outliner: a tree of the project structure plus an
+        adapter-labelled add button and a small read-only metadata line."""
+        panel = QWidget()
+        panel.setObjectName("writingStructurePanel")
+        panel.setMaximumWidth(320)
+        panel.setMinimumWidth(180)
+        lay = QVBoxLayout(panel)
+        lay.setContentsMargins(8, 8, 8, 8)
+        lay.setSpacing(6)
 
-    def _toggle_fold(self, key: str) -> None:
-        if key in self._collapsed:
-            self._collapsed.discard(key)
+        header = QHBoxLayout()
+        title = QLabel("Structure")
+        title.setObjectName("writingStructureTitle")
+        header.addWidget(title)
+        header.addStretch()
+        self._structure_add_btn = QPushButton(self.add_button_text())
+        self._structure_add_btn.setObjectName("writingStructureAdd")
+        self._structure_add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._structure_add_btn.clicked.connect(self._add_unit_from_list)
+        header.addWidget(self._structure_add_btn)
+        lay.addLayout(header)
+
+        self._structure_tree = QTreeWidget()
+        self._structure_tree.setObjectName("writingStructureTree")
+        self._structure_tree.setHeaderHidden(True)
+        self._structure_tree.setIndentation(12)
+        self._structure_tree.itemClicked.connect(self._on_structure_item_clicked)
+        lay.addWidget(self._structure_tree, stretch=1)
+
+        self._structure_meta = QLabel("")
+        self._structure_meta.setObjectName("writingStructureMeta")
+        self._structure_meta.setWordWrap(True)
+        self._structure_meta.setVisible(False)
+        lay.addWidget(self._structure_meta)
+        return panel
+
+    def _render_selected_unit(self, scenes) -> None:
+        """Compact-list mode: rebuild the left structure list and render ONLY
+        the selected unit's body on the right. The whole project structure is
+        never rendered inline as prose."""
+        self._rebuild_structure_list(scenes)
+        target = next(
+            (s for s in scenes if s.id == self._selected_scene_id), None,
+        )
+        if target is not None:
+            self._add_scene_block(target, is_first=True)
         else:
-            self._collapsed.add(key)
+            self._add_empty_state()
+
+    def _rebuild_structure_list(self, scenes) -> None:
+        from storyplanner.ui.plan_view import (
+            _UNTITLED_ACT,
+            _UNTITLED_CHAPTER,
+            build_plan_tree,
+        )
+        tree = self._structure_tree
+        tree.blockSignals(True)
+        tree.clear()
+
+        valid_ids = {s.id for s in scenes}
+        if self._selected_scene_id not in valid_ids:
+            self._selected_scene_id = scenes[0].id if scenes else None
+
+        selected_item = None
+        for act_name, chapters in build_plan_tree(self._db, self._project_id):
+            act_item = QTreeWidgetItem([
+                act_name if act_name != _UNTITLED_ACT else "Unsorted",
+            ])
+            act_item.setFlags(Qt.ItemFlag.ItemIsEnabled)  # group header
+            tree.addTopLevelItem(act_item)
+            for chapter_name, ch_scenes in chapters:
+                ch_label = (
+                    chapter_name if chapter_name != _UNTITLED_CHAPTER else "—"
+                )
+                ch_item = QTreeWidgetItem([ch_label])
+                ch_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+                act_item.addChild(ch_item)
+                for scene in ch_scenes:
+                    leaf = QTreeWidgetItem([
+                        (scene.title or "").strip() or "Untitled",
+                    ])
+                    leaf.setData(0, Qt.ItemDataRole.UserRole, scene.id)
+                    ch_item.addChild(leaf)
+                    if scene.id == self._selected_scene_id:
+                        selected_item = leaf
+        tree.expandAll()
+        if selected_item is not None:
+            tree.setCurrentItem(selected_item)
+        tree.blockSignals(False)
+
+        # Selected unit's planning summary as small read-only metadata — never
+        # placed in the body editor, so outline descriptions can't become prose.
+        summary = ""
+        sel = next(
+            (s for s in scenes if s.id == self._selected_scene_id), None,
+        )
+        if sel is not None:
+            summary = (sel.summary or "").strip()
+        self._structure_meta.setText(summary)
+        self._structure_meta.setVisible(bool(summary))
+
+    def _on_structure_item_clicked(self, item, _col) -> None:
+        sid = item.data(0, Qt.ItemDataRole.UserRole)
+        if sid is None or sid == self._selected_scene_id:
+            return
+        self._flush_pending_saves()
+        self._selected_scene_id = sid
         self.refresh()
 
-    def _add_structural_description(self, text: str, object_name: str) -> None:
-        """Render a read-only, visually-distinct structural summary. Never a
-        body editor — so descriptions can never be edited as manuscript prose."""
-        text = (text or "").strip()
-        if not text:
-            return
-        label = QLabel(text)
-        label.setObjectName(object_name)
-        label.setWordWrap(True)
-        label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
-        self._inner_layout.addWidget(label)
-        self._inner_layout.addSpacing(4)
-        self._scene_widgets.append(label)
+    def _add_unit_from_list(self) -> None:
+        """The left-panel add button creates a new writing unit (Scene row;
+        labelled '+ Chapter'/'+ Scene' by the primary-unit adapter) and selects
+        it. Storage is unchanged — always a Scene."""
+        self._create_scene_after(self._selected_scene_id)
 
     # -- Canvas building blocks -----------------------------------------------
 
-    def _add_act_header(self, act: str, number: int, collapsed: bool) -> None:
-        arrow = "▸" if collapsed else "▾"
-        label = _FoldHeader(
-            f"{arrow}  {number}  {act.upper()}",
-            on_toggle=lambda a=act: self._toggle_fold(f"act::{a}"),
-        )
+    def _add_act_header(self, act: str) -> None:
+        label = QLabel(act.upper())
         label.setObjectName("writingActHeader")
         label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self._inner_layout.addSpacing(40)
         self._inner_layout.addWidget(label)
         self._inner_layout.addSpacing(12)
         self._scene_widgets.append(label)
-        if not collapsed:
-            self._add_structural_description(
-                self._act_summaries.get(act, ""), "writingActDescription",
-            )
 
-    def _add_chapter_header(
-        self, act: str, chapter: str, act_number: int, chapter_number: int,
-        collapsed: bool,
-    ) -> None:
-        arrow = "▸" if collapsed else "▾"
-        num = f"{act_number}.{chapter_number}" if act_number else str(chapter_number)
-        label = _FoldHeader(
-            f"{arrow}  {num}  {chapter}",
-            on_toggle=lambda a=act, c=chapter: self._toggle_fold(
-                f"chap::{a}::{c}",
-            ),
-        )
+    def _add_chapter_header(self, chapter: str) -> None:
+        label = QLabel(chapter)
         label.setObjectName("writingChapterHeader")
         label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self._inner_layout.addSpacing(32)
         self._inner_layout.addWidget(label)
         self._inner_layout.addSpacing(16)
         self._scene_widgets.append(label)
-        if not collapsed:
-            self._add_structural_description(
-                self._chapter_summaries.get(chapter, ""),
-                "writingChapterDescription",
-            )
 
-    def _add_scene_block(
-        self, scene, *, number: str = "", is_first: bool = False,
-    ) -> None:
+    def _add_scene_block(self, scene, *, is_first: bool = False) -> None:
         if not is_first:
             self._inner_layout.addSpacing(56)
 
         title_text = (scene.title or "").strip()
-        has_title = bool(
-            title_text and title_text.lower() not in ("untitled", "untitled scene")
-        )
-        # Always show a structural marker so numbering is visible even for
-        # untitled scenes; the title (if any) follows the number.
-        marker = f"{number}  {title_text}".strip() if has_title else number
-        if marker:
-            title = QLabel(marker)
+        if title_text and title_text.lower() not in ("untitled", "untitled scene"):
+            title = QLabel(title_text)
             title.setObjectName("writingSceneTitle")
             title.setAlignment(Qt.AlignmentFlag.AlignLeft)
             self._inner_layout.addWidget(title)
             self._inner_layout.addSpacing(2)
             self._scene_widgets.append(title)
-
-        # Scene planning summary as distinct, read-only metadata (not body).
-        self._add_structural_description(
-            scene.summary or "", "writingSceneDescription",
-        )
 
         editor = _SceneEditor()
         editor._scene_id = scene.id
@@ -2507,6 +2513,10 @@ class WritingCoreView(QWidget):
 
         if self._on_content_saved:
             self._on_content_saved()
+        # In compact-list mode, select the freshly created unit so the editor
+        # opens it for typing immediately.
+        if self._structured_list:
+            self._selected_scene_id = new_scene.id
         self.refresh()
 
         if new_scene.id in self._editors:
@@ -2666,18 +2676,18 @@ class WritingCoreView(QWidget):
             f"}}"
         )
 
-        # Structural descriptions/summaries: italic, muted, with a left accent
-        # rule so they read as planning metadata — clearly NOT manuscript body.
-        description_style = (
-            f"#writingActDescription, #writingChapterDescription,"
-            f" #writingSceneDescription {{"
-            f"  color: {theme.TEXT_MUTED};"
-            f"  font-size: 11px;"
-            f"  font-style: italic;"
-            f"  background: transparent;"
-            f"  border-left: 2px solid {theme.BORDER};"
-            f"  padding: 2px 8px;"
-            f"}}"
+        # Compact structure panel (structured_list mode): tree + add button +
+        # small read-only metadata line (italic, muted) — never a body editor.
+        structure_style = (
+            f"#writingStructurePanel {{ background: {theme.BG_PANEL};"
+            f" border-right: 1px solid {theme.BORDER}; }}"
+            f"#writingStructureTitle {{ color: {theme.TEXT_MUTED};"
+            f" font-size: 11px; font-weight: bold; }}"
+            f"#writingStructureTree {{ background: transparent; border: none;"
+            f" color: {theme.TEXT_PRIMARY}; font-size: 12px; }}"
+            f"#writingStructureMeta {{ color: {theme.TEXT_MUTED};"
+            f" font-size: 11px; font-style: italic; padding: 4px 2px;"
+            f" border-top: 1px solid {theme.BORDER}; }}"
         )
 
         end_action_style = (
@@ -2862,7 +2872,7 @@ class WritingCoreView(QWidget):
 
         full_style = (
             editor_style + act_style + chapter_style + scene_title_style
-            + description_style
+            + structure_style
             + end_action_style
             + canvas_style + scroll_style + empty_style + focus_dim
             + review_style

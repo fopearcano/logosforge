@@ -49,12 +49,16 @@ def test_sidebar_shows_canvas_plot_label():
     db = Database()
     pid = db.create_project("P").id
     win = _win(db, pid)
-    # Internal key stays "Plot" (handlers/highlight/tests rely on it)...
+    # Internal key stays "Plot" (handlers/highlight/tests rely on it); the
+    # button + handler are preserved...
     assert "Plot" in win.sidebar_buttons
-    assert "Plot" in win._nav_labels
     assert win._nav_section_handlers["Plot"].__name__ == "_show_plot"
-    # ...but the visible label is "Canvas Plot".
+    # ...the visible label is still "Canvas Plot"...
     assert win.sidebar_buttons["Plot"].text() == "Canvas Plot"
+    # ...but Canvas Plot is now DEFERRED: removed from the visible navigation in
+    # favor of the block-based Outline (non-destructive; data untouched).
+    assert "Plot" not in win._nav_labels
+    assert win.sidebar_buttons["Plot"].property("nav_available") is False
 
 
 def test_display_name_map():
