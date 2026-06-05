@@ -315,6 +315,9 @@ class PlanView(QWidget):
         on_logos_action: Callable[[dict, str], None] | None = None,
     ) -> None:
         super().__init__()
+        # Diagnostic marker: confirms the running app uses the block/card
+        # Outline planner (Acts/Chapters/Scenes cards with type badges).
+        self.setObjectName("outline_block_card_planner_view")
         self._db = db
         self._project_id = project_id
         self._on_data_changed = on_data_changed

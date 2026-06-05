@@ -332,6 +332,9 @@ class PlotTimelineView(QWidget):
         on_data_changed: Callable[[], None] | None = None,
     ) -> None:
         super().__init__()
+        # Diagnostic marker: confirms the running app uses the improved Timeline
+        # (coloured lanes + event/structure linking), not an old plain view.
+        self.setObjectName("timeline_colored_lane_link_view")
         self._db = db
         self._project_id = project_id
         self._on_scene_selected = on_scene_selected

@@ -1333,6 +1333,11 @@ class WritingCoreView(QWidget):
         # right. When False (default), the stable continuous view is used — this
         # keeps every direct-construction caller/test on the original behavior.
         self._structured_list = structured_list
+        # Diagnostic marker so routing tests / manual inspection can confirm the
+        # running app uses the simplified selected-unit Manuscript (not an old
+        # heavy inline view). Set only in the structured (Manuscript) mode.
+        if structured_list:
+            self.setObjectName("manuscript_selected_unit_editor_view")
         self._selected_scene_id: int | None = None
         self._db = db
         self._project_id = project_id
