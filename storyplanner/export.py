@@ -35,7 +35,17 @@ def _build_timeline_section(db: Database, project_id: int, scenes: list) -> dict
         }
         for ln in db.get_timeline_links(project_id)
     ]
-    return {"lanes": lanes, "links": links}
+    structure_links = [
+        {
+            "source_order": order_by_sid.get(sl.source_scene_id),
+            "source_title": title_by_sid.get(sl.source_scene_id, ""),
+            "target_type": sl.target_type,
+            "target_ref": sl.target_ref,
+        }
+        for sl in db.get_all_timeline_structure_links(project_id)
+    ]
+    return {"lanes": lanes, "links": links,
+            "structure_links": structure_links}
 
 
 def _gather_project_data(db: Database, project_id: int) -> dict:

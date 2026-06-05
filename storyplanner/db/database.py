@@ -60,6 +60,7 @@ from storyplanner.models import (
     EpisodePlotline,
     TimelineLane,
     TimelineLink,
+    TimelineStructureLink,
     CanvasPlotNode,
     CanvasPlotLink,
     CanvasPlotFrame,
@@ -1347,6 +1348,21 @@ class Database:
                 )
             ).all():
                 session.delete(nsl)
+            # Timeline links that reference this event (either direction) and any
+            # Act/Chapter structure links from it — never leave orphan links.
+            for tl in session.exec(
+                select(TimelineLink).where(
+                    (TimelineLink.source_scene_id == scene_id)
+                    | (TimelineLink.target_scene_id == scene_id)
+                )
+            ).all():
+                session.delete(tl)
+            for tsl in session.exec(
+                select(TimelineStructureLink).where(
+                    TimelineStructureLink.source_scene_id == scene_id,
+                )
+            ).all():
+                session.delete(tsl)
 
             # Delete the scene
             scene = session.get(Scene, scene_id)
@@ -1605,6 +1621,59 @@ class Database:
             if link is not None:
                 session.delete(link)
                 session.commit()
+
+    # -- Timeline event ↔ structure (Act / Chapter) links --------------------
+
+    def add_timeline_structure_link(
+        self, project_id: int, source_scene_id: int,
+        target_type: str, target_ref: str,
+    ) -> "TimelineStructureLink | None":
+        """Link a Timeline event (scene) to an Act/Chapter (by name). Idempotent."""
+        if target_type not in ("act", "chapter") or not (target_ref or "").strip():
+            return None
+        with Session(self._engine) as session:
+            existing = session.exec(
+                select(TimelineStructureLink).where(
+                    TimelineStructureLink.source_scene_id == source_scene_id,
+                    TimelineStructureLink.target_type == target_type,
+                    TimelineStructureLink.target_ref == target_ref,
+                )
+            ).first()
+            if existing is not None:
+                return existing
+            link = TimelineStructureLink(
+                project_id=project_id, source_scene_id=source_scene_id,
+                target_type=target_type, target_ref=target_ref,
+            )
+            session.add(link)
+            session.commit()
+            session.refresh(link)
+            return link
+
+    def remove_timeline_structure_link(self, link_id: int) -> None:
+        with Session(self._engine) as session:
+            link = session.get(TimelineStructureLink, link_id)
+            if link is not None:
+                session.delete(link)
+                session.commit()
+
+    def get_timeline_structure_links(
+        self, source_scene_id: int,
+    ) -> list["TimelineStructureLink"]:
+        with Session(self._engine) as session:
+            stmt = select(TimelineStructureLink).where(
+                TimelineStructureLink.source_scene_id == source_scene_id,
+            ).order_by(TimelineStructureLink.id)
+            return list(session.exec(stmt).all())
+
+    def get_all_timeline_structure_links(
+        self, project_id: int,
+    ) -> list["TimelineStructureLink"]:
+        with Session(self._engine) as session:
+            stmt = select(TimelineStructureLink).where(
+                TimelineStructureLink.project_id == project_id,
+            ).order_by(TimelineStructureLink.id)
+            return list(session.exec(stmt).all())
 
     # -- Canvas Plot (free visual board; project-owned, not scene-derived) ---
 

@@ -107,6 +107,22 @@ class _EventCard(QFrame):
                 )
             )
             lay.addWidget(sub_lbl)
+
+        # Compact "linked Outline target" indicator (Act/Chapter structure links).
+        struct = self._view._struct_by_scene.get(self.scene_id, [])
+        if struct:
+            refs = ", ".join(s.target_ref for s in struct)
+            link_lbl = QLabel(f"🔗 {refs}")
+            link_lbl.setStyleSheet(
+                f"color: {theme.ACCENT}; font-size: 9px;"
+            )
+            link_lbl.setText(
+                QFontMetrics(link_lbl.font()).elidedText(
+                    f"🔗 {refs}", Qt.TextElideMode.ElideRight, CARD_W - 18
+                )
+            )
+            link_lbl.setToolTip("Linked to: " + refs)
+            lay.addWidget(link_lbl)
         lay.addStretch()
 
     def _apply_style(self) -> None:
@@ -164,8 +180,11 @@ class _LaneHeader(QFrame):
         self.setFixedHeight(height)
         self.setObjectName("timelineLaneHeader")
         dot = color_hex(getattr(lane, "color_label", "")) if lane else None
+        # Subtle lane-colour accent: a coloured left edge on the header.
+        left = dot or theme.BORDER
         self.setStyleSheet(
             f"QFrame#timelineLaneHeader {{ background: {theme.BG_PANEL};"
+            f" border-left: 3px solid {left};"
             f" border-bottom: 1px solid {theme.BORDER}; }}"
         )
         lay = QHBoxLayout(self)
@@ -238,6 +257,21 @@ class _TimelineCanvas(QWidget):
         super().paintEvent(event)
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        width = self.width()
+        # Per-lane coloured band + centre line (subtle), behind cards & links, so
+        # each lane reads in its own colour without neon chaos.
+        for y, h, chex in self._view._lane_bands:
+            if chex:
+                fill = QColor(chex)
+                fill.setAlpha(22)
+                p.fillRect(QRect(0, y, width, h), fill)
+                line = QColor(chex)
+                line.setAlpha(150)
+                p.setPen(QPen(line, 1))
+            else:
+                p.setPen(QPen(QColor(theme.BORDER), 1))
+            mid = y + h // 2
+            p.drawLine(LEFT_PAD, mid, width - LEFT_PAD, mid)
         # Ruler ticks / order numbers along the top.
         p.setPen(QPen(QColor(theme.TEXT_MUTED), 1))
         for col in range(self._view._n_cols):
@@ -311,6 +345,10 @@ class PlotTimelineView(QWidget):
         self._card_by_scene: dict[int, _EventCard] = {}
         self._n_cols = 0
         self._pending_link_source: int | None = None
+        # Event → Act/Chapter structure links, grouped by event scene id.
+        self._struct_by_scene: dict[int, list] = {}
+        # Per-lane coloured bands: (y, height, color_hex|None) for paintEvent.
+        self._lane_bands: list[tuple[int, int, str | None]] = []
 
         self._build_chrome()
         self.refresh()
@@ -398,6 +436,12 @@ class PlotTimelineView(QWidget):
         # Ensure lanes exist for any pre-existing plotline strings.
         self._lanes = self._db.ensure_timeline_lanes(self._project_id)
         self._links = self._db.get_timeline_links(self._project_id)
+        # Group event→Act/Chapter structure links by source event for the cards.
+        self._struct_by_scene = {}
+        for sl in self._db.get_all_timeline_structure_links(self._project_id):
+            self._struct_by_scene.setdefault(sl.source_scene_id, []).append(sl)
+        self._cur_acts = set(self._db.get_scene_acts(self._project_id))
+        self._cur_chapters = set(self._db.get_scene_chapters(self._project_id))
         scenes = self._db.get_all_scenes(self._project_id)
         # Global time rank = position in the project's sort order.
         self._time_index = {s.id: i for i, s in enumerate(scenes)}
@@ -450,10 +494,13 @@ class PlotTimelineView(QWidget):
             card.deleteLater()
         self._card_by_scene.clear()
         self._card_rects.clear()
+        self._lane_bands = []
 
         y = RULER_H
         for lane, name, scenes in self._rows:
             h = self._row_height(lane)
+            band_color = color_hex(getattr(lane, "color_label", "")) if lane else None
+            self._lane_bands.append((y, h, band_color))
             if not (lane is not None and lane.collapsed):
                 for s in scenes:
                     col = self._time_index.get(s.id, 0)
@@ -565,6 +612,49 @@ class PlotTimelineView(QWidget):
         menu.addMenu(lane_menu)
         menu.addSeparator()
 
+        # Link this event to Outline structure (Act / Chapter) or directly to
+        # another scene/event from a list.
+        struct_menu = QMenu("Link to…", menu)
+        act_sub = struct_menu.addMenu("Act")
+        acts = self._db.get_scene_acts(self._project_id)
+        act_sub.setEnabled(bool(acts))
+        for a in acts:
+            act_sub.addAction(
+                a, lambda _a=a, sid=card.scene_id:
+                    self._add_structure_link(sid, "act", _a),
+            )
+        chap_sub = struct_menu.addMenu("Chapter")
+        chapters = self._db.get_scene_chapters(self._project_id)
+        chap_sub.setEnabled(bool(chapters))
+        for c in chapters:
+            chap_sub.addAction(
+                c, lambda _c=c, sid=card.scene_id:
+                    self._add_structure_link(sid, "chapter", _c),
+            )
+        scene_sub = struct_menu.addMenu("Scene (event)")
+        others = [s for s in self._db.get_all_scenes(self._project_id)
+                  if s.id != card.scene_id]
+        scene_sub.setEnabled(bool(others))
+        for s in others:
+            scene_sub.addAction(
+                (s.title or "Untitled"),
+                lambda _sid=s.id, src=card.scene_id:
+                    self._link_to_scene_direct(src, _sid),
+            )
+        menu.addMenu(struct_menu)
+
+        # Remove existing Act/Chapter links on this event.
+        struct_links = self._struct_by_scene.get(card.scene_id, [])
+        if struct_links:
+            rm2 = QMenu("Remove Outline link", menu)
+            for sl in struct_links:
+                rm2.addAction(
+                    f"{sl.target_type.title()}: {sl.target_ref}",
+                    lambda lid=sl.id: self._remove_structure_link(lid),
+                )
+            menu.addMenu(rm2)
+        menu.addSeparator()
+
         # Linking.
         if self._pending_link_source is None:
             menu.addAction(
@@ -649,6 +739,26 @@ class PlotTimelineView(QWidget):
 
     def _remove_link(self, link_id: int) -> None:
         self._db.remove_timeline_link(link_id)
+        self._notify()
+
+    # -- interactions: structure links (event → Act / Chapter / Scene) -------
+
+    def _add_structure_link(self, scene_id: int, ttype: str, ref: str) -> None:
+        self._db.add_timeline_structure_link(
+            self._project_id, scene_id, ttype, ref,
+        )
+        self._notify()
+
+    def _remove_structure_link(self, link_id: int) -> None:
+        self._db.remove_timeline_structure_link(link_id)
+        self._notify()
+
+    def _link_to_scene_direct(self, source_id: int, target_id: int) -> None:
+        """Direct 'Link to Scene' (event↔event) chosen from a list."""
+        self._db.add_timeline_link(
+            self._project_id, source_id, target_id,
+            color_label="gray", link_type="custom",
+        )
         self._notify()
 
     # -- notify / refresh ---------------------------------------------------

@@ -1137,6 +1137,22 @@ class TimelineLink(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
 
 
+class TimelineStructureLink(SQLModel, table=True):
+    """Links a Timeline event (scene) to an Outline Act/Chapter.
+
+    Acts/Chapters are string labels (no stable id), so the target is name-keyed;
+    Scenes are linked event↔event via :class:`TimelineLink`. Project-scoped;
+    removing a link never deletes the event or any Outline structure.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id")
+    source_scene_id: int = Field(foreign_key="scene.id", index=True)
+    target_type: str = ""        # "act" | "chapter"
+    target_ref: str = ""          # act / chapter name
+    created_at: datetime = Field(default_factory=_now)
+
+
 class CanvasPlotNode(SQLModel, table=True):
     """A free-form block on the Canvas Plot board (Miro-style thinking canvas).
 
