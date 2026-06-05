@@ -1624,10 +1624,10 @@ class WritingCoreView(QWidget):
         if self._structured_list:
             split = QSplitter(Qt.Orientation.Horizontal)
             split.addWidget(self._build_structure_panel())
-            split.addWidget(self._scroll)
+            split.addWidget(self._build_editor_panel())
             split.setStretchFactor(0, 0)
             split.setStretchFactor(1, 1)
-            split.setSizes([240, 880])
+            split.setSizes([220, 900])
             split.setChildrenCollapsible(False)
             outer.addWidget(split)
         else:
@@ -1862,24 +1862,44 @@ class WritingCoreView(QWidget):
         self._structure_tree.setIndentation(12)
         self._structure_tree.itemClicked.connect(self._on_structure_item_clicked)
         lay.addWidget(self._structure_tree, stretch=1)
+        return panel
 
+    def _build_editor_panel(self) -> QWidget:
+        """Right side: a thin context-header (breadcrumb + summary) above the
+        text editor. The writing canvas itself stays editor-only — no inline
+        Act/Chapter/Scene blocks — so Manuscript reads as a writing space."""
+        panel = QWidget()
+        v = QVBoxLayout(panel)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(0)
+
+        self._context_header = QWidget()
+        self._context_header.setObjectName("writingContextHeader")
+        hl = QVBoxLayout(self._context_header)
+        hl.setContentsMargins(28, 10, 28, 8)
+        hl.setSpacing(2)
+        self._context_crumb = QLabel("")
+        self._context_crumb.setObjectName("writingContextCrumb")
         self._structure_meta = QLabel("")
         self._structure_meta.setObjectName("writingStructureMeta")
         self._structure_meta.setWordWrap(True)
         self._structure_meta.setVisible(False)
-        lay.addWidget(self._structure_meta)
+        hl.addWidget(self._context_crumb)
+        hl.addWidget(self._structure_meta)
+        v.addWidget(self._context_header)
+        v.addWidget(self._scroll, stretch=1)
         return panel
 
     def _render_selected_unit(self, scenes) -> None:
         """Compact-list mode: rebuild the left structure list and render ONLY
         the selected unit's body on the right. The whole project structure is
-        never rendered inline as prose."""
+        never rendered inline as prose; the editor canvas is body-only."""
         self._rebuild_structure_list(scenes)
         target = next(
             (s for s in scenes if s.id == self._selected_scene_id), None,
         )
         if target is not None:
-            self._add_scene_block(target, is_first=True)
+            self._add_scene_block(target, is_first=True, with_title=False)
         else:
             self._add_empty_state()
 
@@ -1924,16 +1944,38 @@ class WritingCoreView(QWidget):
             tree.setCurrentItem(selected_item)
         tree.blockSignals(False)
 
-        # Selected unit's planning summary as small read-only metadata — never
-        # placed in the body editor, so outline descriptions can't become prose.
-        summary = ""
+        # Lightweight context header: a breadcrumb of where the user is writing
+        # (Act · Chapter · Unit) plus the unit's planning summary as small
+        # read-only metadata. Never placed in the body editor, so outline
+        # descriptions can't become prose.
         sel = next(
             (s for s in scenes if s.id == self._selected_scene_id), None,
         )
-        if sel is not None:
-            summary = (sel.summary or "").strip()
-        self._structure_meta.setText(summary)
-        self._structure_meta.setVisible(bool(summary))
+        self._update_context_header(sel)
+
+    def _update_context_header(self, scene) -> None:
+        crumb = getattr(self, "_context_crumb", None)
+        meta = getattr(self, "_structure_meta", None)
+        if crumb is None or meta is None:
+            return
+        if scene is None:
+            crumb.setText("")
+            meta.setText("")
+            meta.setVisible(False)
+            return
+        parts: list[str] = []
+        act = (scene.act or "").strip()
+        chapter = (scene.chapter or "").strip()
+        if act:
+            parts.append(act.upper())
+        if chapter:
+            parts.append(chapter)
+        title = (scene.title or "").strip() or "Untitled"
+        parts.append(title)
+        crumb.setText("  ·  ".join(parts))
+        summary = (scene.summary or "").strip()
+        meta.setText(summary)
+        meta.setVisible(bool(summary))
 
     def _on_structure_item_clicked(self, item, _col) -> None:
         sid = item.data(0, Qt.ItemDataRole.UserRole)
@@ -1969,12 +2011,19 @@ class WritingCoreView(QWidget):
         self._inner_layout.addSpacing(16)
         self._scene_widgets.append(label)
 
-    def _add_scene_block(self, scene, *, is_first: bool = False) -> None:
+    def _add_scene_block(
+        self, scene, *, is_first: bool = False, with_title: bool = True,
+    ) -> None:
         if not is_first:
             self._inner_layout.addSpacing(56)
 
+        # The single-unit (structured) Manuscript keeps the canvas body-only and
+        # shows the title in the context header instead; the continuous view
+        # keeps the inline scene title.
         title_text = (scene.title or "").strip()
-        if title_text and title_text.lower() not in ("untitled", "untitled scene"):
+        if with_title and title_text and title_text.lower() not in (
+            "untitled", "untitled scene",
+        ):
             title = QLabel(title_text)
             title.setObjectName("writingSceneTitle")
             title.setAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -2676,8 +2725,9 @@ class WritingCoreView(QWidget):
             f"}}"
         )
 
-        # Compact structure panel (structured_list mode): tree + add button +
-        # small read-only metadata line (italic, muted) — never a body editor.
+        # Compact structure panel (structured_list mode): tree + add button on
+        # the left; a thin context header (breadcrumb + muted summary) above the
+        # editor on the right. The writing canvas itself stays body-only.
         structure_style = (
             f"#writingStructurePanel {{ background: {theme.BG_PANEL};"
             f" border-right: 1px solid {theme.BORDER}; }}"
@@ -2685,9 +2735,12 @@ class WritingCoreView(QWidget):
             f" font-size: 11px; font-weight: bold; }}"
             f"#writingStructureTree {{ background: transparent; border: none;"
             f" color: {theme.TEXT_PRIMARY}; font-size: 12px; }}"
+            f"#writingContextHeader {{ background: transparent;"
+            f" border-bottom: 1px solid {theme.BORDER}; }}"
+            f"#writingContextCrumb {{ color: {theme.TEXT_MUTED};"
+            f" font-size: 11px; font-weight: bold; }}"
             f"#writingStructureMeta {{ color: {theme.TEXT_MUTED};"
-            f" font-size: 11px; font-style: italic; padding: 4px 2px;"
-            f" border-top: 1px solid {theme.BORDER}; }}"
+            f" font-size: 11px; font-style: italic; }}"
         )
 
         end_action_style = (

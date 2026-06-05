@@ -136,6 +136,57 @@ def test_outline_generation_writes_only_to_outline_not_manuscript():
         assert (s.summary or "").strip() or s.title
 
 
+# ==========================================================================
+# Mode-aware hierarchy: Novel = Act→Chapter→Scene; others = Act→Scene
+# ==========================================================================
+
+
+def _block_objs(view):
+    from PySide6.QtWidgets import QWidget
+    return [w.objectName() for w in view.findChildren(QWidget)
+            if w.objectName() in ("planAct", "planChapter", "planScene")]
+
+
+def test_novel_outline_is_act_chapter_scene():
+    db = Database()
+    pid = db.create_project("N", narrative_engine="novel").id
+    db.create_scene(pid, "S1", act="Act I", chapter="Chapter One", content="x")
+    objs = _block_objs(PlanView(db, pid))
+    assert "planAct" in objs and "planChapter" in objs and "planScene" in objs
+
+
+def test_non_novel_outline_is_act_scene_flattened():
+    # Screenplay scenes with no chapter render directly under the Act — the
+    # empty Chapter layer is flattened away (Act → Scene).
+    db = Database()
+    pid = db.create_project("S", narrative_engine="screenplay",
+                            default_writing_format="screenplay").id
+    db.create_scene(pid, "S1", act="Act I", content="x")   # no chapter
+    objs = _block_objs(PlanView(db, pid))
+    assert "planAct" in objs and "planScene" in objs
+    assert "planChapter" not in objs                       # flattened
+
+
+def test_non_novel_named_chapter_still_shown():
+    # If a non-Novel project DOES use a named chapter, it is preserved.
+    db = Database()
+    pid = db.create_project("S", narrative_engine="screenplay",
+                            default_writing_format="screenplay").id
+    db.create_scene(pid, "S1", act="Act I", chapter="Sequence A", content="x")
+    objs = _block_objs(PlanView(db, pid))
+    assert "planChapter" in objs
+
+
+def test_non_novel_act_has_add_scene_button():
+    db = Database()
+    pid = db.create_project("S", narrative_engine="screenplay",
+                            default_writing_format="screenplay").id
+    db.create_scene(pid, "S1", act="Act I", content="x")
+    from PySide6.QtWidgets import QPushButton
+    texts = " ".join(b.text() for b in PlanView(db, pid).findChildren(QPushButton))
+    assert "Add Scene" in texts
+
+
 def test_outline_changes_refresh_manuscript_structure_list():
     db = Database()
     pid = db.create_project("S", narrative_engine="screenplay",

@@ -534,6 +534,11 @@ class PlanView(QWidget):
         "SCENE": theme.TEXT_MUTED,
     }
 
+    def _is_novel(self) -> bool:
+        """Novel uses Act → Chapter → Scene; other modes use Act → Scene
+        (the empty Chapter layer is flattened so scenes sit directly in the Act)."""
+        return (self._engine or "novel") == "novel"
+
     def _type_badge(self, kind: str) -> QLabel:
         """A small pill badge labelling a block's type: Act / Chapter / Scene."""
         badge = QLabel(kind)
@@ -576,9 +581,18 @@ class PlanView(QWidget):
         head_row.addWidget(act_label)
         head_row.addStretch()
 
-        add_chap = QPushButton("+ Add Chapter")
-        add_chap.clicked.connect(lambda: self._add_chapter(act_name))
-        head_row.addWidget(add_chap)
+        # Mode-aware primary action: Novel adds Chapters, other modes add Scenes
+        # directly under the Act.
+        if self._is_novel():
+            add_chap = QPushButton("+ Add Chapter")
+            add_chap.clicked.connect(lambda: self._add_chapter(act_name))
+            head_row.addWidget(add_chap)
+        else:
+            add_scene = QPushButton("+ Add Scene")
+            add_scene.clicked.connect(
+                lambda: self._add_scene(act_name, _UNTITLED_CHAPTER),
+            )
+            head_row.addWidget(add_scene)
 
         more = QPushButton("⋯")
         more.setFixedWidth(28)
@@ -596,6 +610,13 @@ class PlanView(QWidget):
         layout.addWidget(summary_box)
 
         for chapter_name, scenes in chapters:
+            # Non-Novel modes flatten the empty Chapter layer: scenes appear as
+            # cards directly inside the Act (Act → Scene). Named chapters (if a
+            # project actually uses them) still render as Chapter cards.
+            if not self._is_novel() and chapter_name == _UNTITLED_CHAPTER:
+                for scene in scenes:
+                    layout.addWidget(self._build_scene_row(scene))
+                continue
             layout.addWidget(
                 self._build_chapter_section(
                     act_name,
@@ -668,10 +689,13 @@ class PlanView(QWidget):
     # -- Scene row ------------------------------------------------------------
 
     def _build_scene_row(self, scene) -> QWidget:
+        from storyplanner.ui.color_labels import color_hex
+        # Compact label/tag marker: a scene's colour label tints its left edge.
+        accent = color_hex(getattr(scene, "color_label", "")) or theme.BORDER
         row = QWidget()
         row.setStyleSheet(
             "QWidget#planScene { background: transparent; "
-            f"border-left: 2px solid {theme.BORDER}; }}"
+            f"border-left: 3px solid {accent}; }}"
         )
         row.setObjectName("planScene")
         layout = QVBoxLayout(row)

@@ -221,3 +221,42 @@ def test_manuscript_via_mainwindow_is_structured():
     assert isinstance(win.content_area, WritingCoreView)
     assert win.content_area._structured_list is True
     assert hasattr(win.content_area, "_structure_tree")
+
+
+# ==========================================================================
+# Writing-first: editor-only canvas + lightweight context header
+# ==========================================================================
+
+
+def test_canvas_is_editor_only_no_inline_title():
+    db = Database()
+    pid = _screenplay(db)
+    db.create_scene(pid, "My Scene", act="Act I", chapter="Ch1", content="body")
+    view = _manuscript(db, pid)
+    # No big inline scene-title block sits in the writing canvas.
+    titles = [w.text() for w in view.findChildren(QLabel)
+              if w.objectName() == "writingSceneTitle"]
+    assert titles == []
+
+
+def test_context_header_shows_breadcrumb_and_summary():
+    db = Database()
+    pid = _screenplay(db)
+    db.create_scene(pid, "Opening", act="Act I", chapter="Ch1",
+                    summary="hero wakes", content="body")
+    view = _manuscript(db, pid)
+    crumb = view._context_crumb.text()
+    assert "ACT I" in crumb and "Ch1" in crumb and "Opening" in crumb
+    assert view._structure_meta.text() == "hero wakes"      # summary, not body
+
+
+def test_context_header_updates_on_selection():
+    db = Database()
+    pid = _screenplay(db)
+    db.create_scene(pid, "First", act="Act I", chapter="Ch1", content="a")
+    s2 = db.create_scene(pid, "Second", act="Act II", chapter="Ch2",
+                         content="b").id
+    view = _manuscript(db, pid)
+    view._on_structure_item_clicked(_leaf_for(view, s2), 0)
+    crumb = view._context_crumb.text()
+    assert "ACT II" in crumb and "Second" in crumb
