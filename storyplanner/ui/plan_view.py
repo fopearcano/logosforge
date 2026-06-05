@@ -317,7 +317,7 @@ class PlanView(QWidget):
         super().__init__()
         # Diagnostic marker: confirms the running app uses the block/card
         # Outline planner (Acts/Chapters/Scenes cards with type badges).
-        self.setObjectName("outline_block_card_planner_view")
+        self.setObjectName("outline_target_block_card_planner_view")
         from storyplanner.diagnostics import attach_dev_marker
         attach_dev_marker(self, "NEW OUTLINE VIEW")
         self._db = db
@@ -610,11 +610,13 @@ class PlanView(QWidget):
         # Mode-aware primary action: Novel adds Chapters, other modes add Scenes
         # directly under the Act.
         if self._is_novel():
-            add_chap = QPushButton("+ Add Chapter")
+            add_chap = QPushButton("+ New Chapter")
+            add_chap.setObjectName("planAddChild")
             add_chap.clicked.connect(lambda: self._add_chapter(act_name))
             head_row.addWidget(add_chap)
         else:
-            add_scene = QPushButton("+ Add Scene")
+            add_scene = QPushButton("+ New Scene")
+            add_scene.setObjectName("planAddChild")
             add_scene.clicked.connect(
                 lambda: self._add_scene(act_name, _UNTITLED_CHAPTER),
             )
@@ -635,137 +637,199 @@ class PlanView(QWidget):
         )
         layout.addWidget(summary_box)
 
+        # Word-count / chapter-count summary under the Act header.
+        n_ch = sum(1 for c, _ in chapters if c != _UNTITLED_CHAPTER)
+        n_words = sum(self._word_count(s.content)
+                      for _, scs in chapters for s in scs)
+        meta = QLabel(f"{n_ch} chapters · {n_words:,} words"
+                      if self._is_novel() else f"{n_words:,} words")
+        meta.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 11px;")
+        layout.addWidget(meta)
+
+        # Horizontal board: Chapters as columns (Novel) or Scene cards directly
+        # inside the Act (non-Novel). Scrolls horizontally when wide.
+        board_scroll = QScrollArea()
+        board_scroll.setWidgetResizable(False)
+        board_scroll.setFixedHeight(460)
+        board_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        board_scroll.setStyleSheet("QScrollArea { border: none; }")
+        board = QWidget()
+        hbox = QHBoxLayout(board)
+        hbox.setContentsMargins(0, 0, 0, 0)
+        hbox.setSpacing(12)
+        hbox.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        hbox.setSizeConstraint(hbox.SizeConstraint.SetMinAndMaxSize)
         for chapter_name, scenes in chapters:
-            # Non-Novel modes flatten the empty Chapter layer: scenes appear as
-            # cards directly inside the Act (Act → Scene). Named chapters (if a
-            # project actually uses them) still render as Chapter cards.
             if not self._is_novel() and chapter_name == _UNTITLED_CHAPTER:
                 for scene in scenes:
-                    layout.addWidget(self._build_scene_row(scene))
+                    hbox.addWidget(self._build_scene_card(scene))
                 continue
-            layout.addWidget(
-                self._build_chapter_section(
-                    act_name,
-                    chapter_name,
-                    chapter_summaries.get(_chapter_key(chapter_name), ""),
-                    scenes,
-                )
-            )
-
+            hbox.addWidget(self._build_chapter_column(
+                act_name, chapter_name,
+                chapter_summaries.get(_chapter_key(chapter_name), ""), scenes,
+            ))
+        board_scroll.setWidget(board)
+        layout.addWidget(board_scroll)
         return section
 
-    # -- Chapter section ------------------------------------------------------
+    # -- Helpers --------------------------------------------------------------
 
-    def _build_chapter_section(
+    @staticmethod
+    def _word_count(text: str | None) -> int:
+        return len((text or "").split())
+
+    def _scene_chips(self, scene) -> list[QLabel]:
+        """Compact chips: tags + linked character/PSYKE names (Codex)."""
+        chips: list[QLabel] = []
+        for tag in (scene.tags or "").split(","):
+            tag = tag.strip()
+            if tag:
+                chips.append(self._chip(tag, accent=tag.lower().startswith("status")))
+        try:
+            for cid in self._db.get_scene_character_ids(scene.id):
+                ch = self._db.get_character_by_id(cid)
+                if ch:
+                    chips.append(self._chip(ch.name))
+        except Exception:
+            pass
+        return chips
+
+    def _chip(self, text: str, accent: bool = False) -> QLabel:
+        chip = QLabel(text)
+        chip.setObjectName("planChip")
+        border = theme.ACCENT if accent else theme.BORDER
+        col = theme.ACCENT if accent else theme.TEXT_SECONDARY
+        chip.setStyleSheet(
+            f"color: {col}; font-size: 10px; border: 1px solid {border};"
+            f" border-radius: 8px; padding: 1px 7px; background: transparent;"
+        )
+        return chip
+
+    # -- Chapter column -------------------------------------------------------
+
+    def _build_chapter_column(
         self,
         act_name: str,
         chapter_name: str,
         chapter_summary: str,
         scenes: list,
     ) -> QWidget:
-        section = QWidget()
-        section.setStyleSheet(
-            f"QWidget#planChapter {{ background: {theme.BG_DARK}; "
-            f"border: 1px solid {theme.BORDER}; border-radius: 4px; }}"
+        column = QWidget()
+        column.setObjectName("planChapter")
+        column.setFixedWidth(300)
+        column.setStyleSheet(
+            f"QWidget#planChapter {{ background: {theme.BG_DARK};"
+            f" border: 1px solid {theme.BORDER}; border-radius: 6px; }}"
         )
-        section.setObjectName("planChapter")
-
-        layout = QVBoxLayout(section)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(4)
+        layout = QVBoxLayout(column)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
 
         head_row = QHBoxLayout()
         head_row.setSpacing(6)
         head_row.addWidget(self._type_badge("CHAPTER"))
         ch_label = QLabel(chapter_name)
         ch_label.setStyleSheet(
-            f"font-size: 12px; font-weight: bold; color: {theme.TEXT_PRIMARY};"
-        )
+            f"font-size: 13px; font-weight: bold; color: {theme.TEXT_PRIMARY};")
         head_row.addWidget(ch_label)
-        ch_notes = self._note_indicator(
-            self._db.get_structure_note_count(
-                self._project_id, "chapter", _chapter_key(chapter_name),
-            )
-        )
+        head_row.addStretch()
+        wc = QLabel(f"{sum(self._word_count(s.content) for s in scenes):,} Words")
+        wc.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 10px;")
+        head_row.addWidget(wc)
+        ch_notes = self._note_indicator(self._db.get_structure_note_count(
+            self._project_id, "chapter", _chapter_key(chapter_name)))
         if ch_notes is not None:
             head_row.addWidget(ch_notes)
-        head_row.addStretch()
-
-        add_scene = QPushButton("+ Add Scene")
-        add_scene.clicked.connect(
-            lambda: self._add_scene(act_name, chapter_name)
-        )
-        head_row.addWidget(add_scene)
-
         more = QPushButton("⋯")
-        more.setFixedWidth(28)
+        more.setFixedWidth(22)
         more.setToolTip("Edit Chapter")
         more.clicked.connect(
-            lambda: self._show_chapter_menu(more, act_name, chapter_name)
-        )
+            lambda: self._show_chapter_menu(more, act_name, chapter_name))
         head_row.addWidget(more)
-
         layout.addLayout(head_row)
 
-        summary_box = _SummaryEditor(
-            chapter_summary,
-            lambda text, c=chapter_name: self._save_chapter_summary(c, text),
-            placeholder="Chapter summary…",
-        )
-        layout.addWidget(summary_box)
+        # Scene cards scroll vertically inside the column.
+        cards_scroll = QScrollArea()
+        cards_scroll.setWidgetResizable(True)
+        cards_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        cards_scroll.setStyleSheet("QScrollArea { border: none; }")
+        holder = QWidget()
+        vbox = QVBoxLayout(holder)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(8)
+        for i, scene in enumerate(scenes):
+            vbox.addWidget(self._build_scene_card(scene, i + 1))
+        vbox.addStretch()
+        cards_scroll.setWidget(holder)
+        layout.addWidget(cards_scroll, stretch=1)
 
-        for scene in scenes:
-            layout.addWidget(self._build_scene_row(scene))
+        add_scene = QPushButton("+ New Scene")
+        add_scene.setObjectName("planAddChild")
+        add_scene.setFlat(True)
+        add_scene.clicked.connect(
+            lambda: self._add_scene(act_name, chapter_name))
+        layout.addWidget(add_scene)
+        return column
 
-        return section
+    # -- Scene card -----------------------------------------------------------
 
-    # -- Scene row ------------------------------------------------------------
-
-    def _build_scene_row(self, scene) -> QWidget:
+    def _build_scene_card(self, scene, number: int = 0) -> QWidget:
         from storyplanner.ui.color_labels import color_hex
-        # Compact label/tag marker: a scene's colour label tints its left edge.
         accent = color_hex(getattr(scene, "color_label", "")) or theme.BORDER
-        row = QWidget()
-        row.setStyleSheet(
-            "QWidget#planScene { background: transparent; "
-            f"border-left: 3px solid {accent}; }}"
+        card = QWidget()
+        card.setObjectName("planScene")
+        card.setStyleSheet(
+            f"QWidget#planScene {{ background: {theme.BG_PANEL};"
+            f" border: 1px solid {theme.BORDER};"
+            f" border-left: 3px solid {accent}; border-radius: 5px; }}"
         )
-        row.setObjectName("planScene")
-        layout = QVBoxLayout(row)
-        layout.setContentsMargins(8, 4, 4, 4)
-        layout.setSpacing(2)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(4)
 
         head_row = QHBoxLayout()
         head_row.setSpacing(6)
         head_row.addWidget(self._type_badge("SCENE"))
-        title = QLabel(scene.title or "Untitled Scene")
-        title.setStyleSheet(
-            f"font-size: 11px; color: {theme.TEXT_PRIMARY};"
-        )
+        wcount = self._word_count(scene.content)
+        title_txt = scene.title or "Untitled Scene"
+        if number:
+            title_txt = f"{title_txt}"
+        title = QLabel(f"{title_txt} — {wcount:,} Words")
+        title.setStyleSheet(f"font-size: 11px; color: {theme.TEXT_PRIMARY};")
         head_row.addWidget(title)
-        scene_notes = self._note_indicator(
-            len(self._db.get_scene_note_links(scene.id))
-        )
-        if scene_notes is not None:
-            head_row.addWidget(scene_notes)
+        sc_notes = self._note_indicator(len(self._db.get_scene_note_links(scene.id)))
+        if sc_notes is not None:
+            head_row.addWidget(sc_notes)
         head_row.addStretch()
-
         more = QPushButton("⋯")
-        more.setFixedWidth(24)
+        more.setFixedWidth(22)
         more.setToolTip("Edit Scene")
         more.clicked.connect(lambda: self._show_scene_menu(more, scene.id))
         head_row.addWidget(more)
-
         layout.addLayout(head_row)
 
         summary_box = _SummaryEditor(
             scene.summary or "",
             lambda text, sid=scene.id: self._save_scene_summary(sid, text),
-            placeholder="Scene summary…",
+            placeholder="Add summary…",
         )
         layout.addWidget(summary_box)
 
-        return row
+        # Compact chips: status/tags + character (Codex) chips.
+        chips = self._scene_chips(scene)
+        if chips:
+            chip_row = QHBoxLayout()
+            chip_row.setSpacing(4)
+            chip_row.setContentsMargins(0, 0, 0, 0)
+            for c in chips[:6]:
+                chip_row.addWidget(c)
+            chip_row.addStretch()
+            wrap = QWidget()
+            wrap.setLayout(chip_row)
+            layout.addWidget(wrap)
+        return card
 
     # -- Add operations -------------------------------------------------------
 

@@ -130,7 +130,7 @@ def test_manuscript_body_is_scene_content_only_not_summary():
     assert editor is not None
     assert editor.toPlainText().strip() == ""             # not the summary
     assert "hero wakes" not in editor.toPlainText()
-    assert editor.placeholderText() == "Start writing…"   # neutral placeholder
+    assert editor.placeholderText() == "Start writing, or type '/' for commands…"
 
 
 def test_manuscript_displays_real_body_text():

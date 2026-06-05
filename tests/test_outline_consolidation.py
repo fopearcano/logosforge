@@ -101,8 +101,8 @@ def test_outline_view_has_add_act_chapter_scene_and_generate():
     from PySide6.QtWidgets import QPushButton
     texts = " ".join(b.text() for b in view.findChildren(QPushButton))
     assert "Add Act" in texts
-    assert "Add Chapter" in texts
-    assert "Add Scene" in texts
+    assert "New Chapter" in texts
+    assert "New Scene" in texts
     assert "Generate Outline" in texts
 
 

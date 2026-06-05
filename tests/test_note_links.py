@@ -238,7 +238,10 @@ def test_manuscript_note_indicator_in_context_header():
     n = db.create_note(pid, "N", "b").id
     db.link_note_to_scene(n, s)
     view = WritingCoreView(db, pid, structured_list=True)
-    assert "📝" in view._context_crumb.text()
+    from PySide6.QtWidgets import QLabel
+    notes = [w.text() for w in view.findChildren(QLabel)
+             if w.objectName() == "writingSceneNotes"]
+    assert any("📝" in t for t in notes)
 
 
 # ==========================================================================

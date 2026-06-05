@@ -72,9 +72,9 @@ def test_click_manuscript_opens_new_selected_unit_view():
     view = win.content_area
     assert isinstance(view, WritingCoreView)
     assert view._structured_list is True                 # simplified mode
-    assert view.objectName() == "manuscript_selected_unit_editor_view"
-    assert hasattr(view, "_structure_tree")              # compact unit list
-    assert hasattr(view, "_context_crumb")               # writing-first header
+    assert view.objectName() == "manuscript_target_writing_page_view"
+    assert hasattr(view, "_render_writing_page")           # continuous writing page
+    assert not hasattr(view, "_structure_tree")            # no left outliner tree
     assert not hasattr(view, "_scene_number")            # no numbered gutter
 
 
@@ -85,7 +85,7 @@ def test_click_outline_opens_block_card_planner():
     win.sidebar_buttons["Outline"].click()
     view = win.content_area
     assert isinstance(view, PlanView)
-    assert view.objectName() == "outline_block_card_planner_view"
+    assert view.objectName() == "outline_target_block_card_planner_view"
     assert hasattr(view, "_type_badge")                  # card type badges
     from PySide6.QtWidgets import QLabel
     badges = [w.text() for w in view.findChildren(QLabel)
@@ -101,7 +101,7 @@ def test_click_timeline_opens_colored_lane_link_view():
     win.sidebar_buttons["Timeline"].click()
     view = win.content_area
     assert isinstance(view, PlotTimelineView)
-    assert view.objectName() == "timeline_colored_lane_link_view"
+    assert view.objectName() == "timeline_target_colored_lane_link_view"
     assert hasattr(view, "_lane_bands")                  # coloured lane bands
     assert hasattr(view, "_add_structure_link")          # event→Act/Chapter links
     assert any(chex for _, _, chex in view._lane_bands)  # a lane carries colour
@@ -184,9 +184,9 @@ def test_project_switch_keeps_new_views():
     b = db.create_project("B", narrative_engine="novel").id
     win = MainWindow(db, a)
     for section, cls, marker in (
-        ("Manuscript", WritingCoreView, "manuscript_selected_unit_editor_view"),
-        ("Outline", PlanView, "outline_block_card_planner_view"),
-        ("Timeline", PlotTimelineView, "timeline_colored_lane_link_view"),
+        ("Manuscript", WritingCoreView, "manuscript_target_writing_page_view"),
+        ("Outline", PlanView, "outline_target_block_card_planner_view"),
+        ("Timeline", PlotTimelineView, "timeline_target_colored_lane_link_view"),
     ):
         win.sidebar_buttons[section].click()
         assert isinstance(win.content_area, cls)

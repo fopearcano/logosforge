@@ -184,7 +184,7 @@ def test_non_novel_act_has_add_scene_button():
     db.create_scene(pid, "S1", act="Act I", content="x")
     from PySide6.QtWidgets import QPushButton
     texts = " ".join(b.text() for b in PlanView(db, pid).findChildren(QPushButton))
-    assert "Add Scene" in texts
+    assert "New Scene" in texts
 
 
 def test_outline_changes_refresh_manuscript_structure_list():
@@ -193,8 +193,8 @@ def test_outline_changes_refresh_manuscript_structure_list():
                             default_writing_format="screenplay").id
     db.create_scene(pid, "S1", act="Act I", chapter="Ch1", content="a")
     view = WritingCoreView(db, pid, structured_list=True)
-    assert view._structure_tree.topLevelItemCount() == 1
-    # Add a new act via the outline data, then refresh the manuscript list.
+    assert len(view._editors) == 1
+    # Add a scene via the outline data, then refresh the manuscript page.
     db.create_scene(pid, "S2", act="Act II", chapter="Ch2", content="b")
     view.refresh()
-    assert view._structure_tree.topLevelItemCount() == 2
+    assert len(view._editors) == 2
