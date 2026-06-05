@@ -161,16 +161,20 @@ def test_new_project_dialog_is_window_modal():
     assert dlg.windowModality() == Qt.WindowModality.WindowModal
 
 
-def test_new_project_restores_fullscreen_only_if_dropped(tmp_path, monkeypatch):
+def test_new_project_makes_no_window_state_calls(tmp_path, monkeypatch):
+    # New contract: the create flow NEVER mutates window state. The window-modal
+    # sheet keeps the window in its current Space (fullscreen preserved), and
+    # calling showFullScreen mid-teardown was the cause of the macOS slide /
+    # minimise — so it is gone entirely, even when fullscreen looks "dropped".
     db, pid, win = _win(tmp_path)
     _fake_new_dialog(monkeypatch)
-    # Simulate: fullscreen before, dropped to non-fullscreen after the switch.
-    states = iter([True, False])  # was_fullscreen=True, then isFullScreen()=False
-    monkeypatch.setattr(win, "isFullScreen", lambda: next(states, False))
-    restored = []
-    monkeypatch.setattr(win, "showFullScreen", lambda: restored.append(1))
+    monkeypatch.setattr(win, "isFullScreen", lambda: False)  # even if it reports dropped
+    calls = []
+    monkeypatch.setattr(win, "showFullScreen", lambda: calls.append("fullscreen"))
+    monkeypatch.setattr(win, "showNormal", lambda: calls.append("normal"))
+    monkeypatch.setattr(win, "showMinimized", lambda: calls.append("minimized"))
     win._on_new_project()
-    assert restored == [1]   # restored exactly once
+    assert calls == []        # zero window-state mutations
 
 
 def test_new_project_no_restore_when_fullscreen_kept(tmp_path, monkeypatch):

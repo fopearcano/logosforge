@@ -2464,16 +2464,27 @@ class MainWindow(QMainWindow):
     # -- Menu action handlers ---------------------------------------------------
 
     def _on_new_project(self) -> None:
+        # Reentrancy guard: never open a second dialog / run a second creation
+        # while one is in progress (double-clicks, menu+button, re-fired action).
+        if getattr(self, "_creating_project", False):
+            return
+        self._creating_project = True
+        try:
+            self._do_new_project()
+        finally:
+            self._creating_project = False
+
+    def _do_new_project(self) -> None:
         from storyplanner.ui.new_project_dialog import NewProjectDialog
-        # The dialog is window-modal (a sheet on macOS) so creating a project
-        # never forces the window out of fullscreen / onto another Space — the
-        # cause of the multi-view slide + minimize glitch in fullscreen.
-        # Capture the window state BEFORE the (window-modal) dialog so the
-        # safety net below compares against the true pre-creation state — never
-        # a transient state the OS may have applied while the sheet was open.
-        was_fullscreen = self.isFullScreen()
+        self._debug_new_project("before-dialog")
+        # The dialog is window-modal AND parented to the main window, so on
+        # macOS it is presented as a sheet that keeps the window in its current
+        # (e.g. fullscreen) Space. We deliberately make NO window-state calls in
+        # this flow — no showNormal/showMinimized/showFullScreen — so creating a
+        # project can never slide the window between Spaces or minimise it.
         dlg = NewProjectDialog(parent=self)
         if not dlg.exec():
+            self._debug_new_project("cancelled")
             return
         self._read_only = False
         project = self._db.create_project(
@@ -2481,20 +2492,39 @@ class MainWindow(QMainWindow):
             narrative_engine=dlg.get_engine(),
             default_writing_format=dlg.get_format(),
         )
-        # New projects land on the Dashboard so the user sees the empty
-        # state for the new project. One clean switch (no extra navigation).
+        # ONE clean transition: set the target section, then run the canonical
+        # switch pipeline exactly once — but suppress its project_loaded so the
+        # only lifecycle signal is the project_created emitted below. Without
+        # this, self-subscribed views (Dashboard / Character Arc listen to BOTH
+        # lifecycle signals) recompute twice → the rapid multi-view flashing.
         self._set_active_section("Dashboard")
-        self._switch_project(project.id)
-        # _switch_project already emitted project_loaded; additionally
-        # announce that this project is brand new.
+        self._switch_project(project.id, announce=False)
         from storyplanner.project_events import get_event_bus
         get_event_bus().project_created.emit(project.id)
-        # Refresh the Projects list if it happens to be the visible section.
+        # No-op unless the Projects list is the visible section (it is not after
+        # the switch to Dashboard); kept so creating from Projects stays fresh.
         self._refresh_projects_view()
-        # Safety net: if a modal dialog dropped fullscreen on this platform,
-        # restore it (only when it actually changed — never minimise/showNormal).
-        if was_fullscreen and not self.isFullScreen():
-            self.showFullScreen()
+        self._debug_new_project("after-create")
+
+    def _debug_new_project(self, stage: str) -> None:
+        """Optional Create-New diagnostics (set STORYPLANNER_DEBUG_PROJECT=1).
+
+        Records the window state + active section at each stage so the real
+        sequence — and the absence of any window-state mutation — is visible."""
+        import os
+        if not os.environ.get("STORYPLANNER_DEBUG_PROJECT"):
+            return
+        try:
+            import logging
+            logging.getLogger("storyplanner.project").info(
+                "new-project[%s]: fullscreen=%s minimized=%s visible=%s "
+                "active=%s section=%s",
+                stage, self.isFullScreen(), self.isMinimized(),
+                self.isVisible(), self.isActiveWindow(),
+                getattr(self, "_current_section", None),
+            )
+        except Exception:
+            pass
 
     def _on_project_settings(self) -> None:
         if not self._project_id:
@@ -2911,12 +2941,21 @@ class MainWindow(QMainWindow):
         if view is not None and hasattr(view, 'refresh'):
             view.refresh()
 
-    def _switch_project(self, new_id: int, file_path: str | None = None) -> None:
+    def _switch_project(
+        self, new_id: int, file_path: str | None = None,
+        *, announce: bool = True,
+    ) -> None:
         """Update all subsystems to point at *new_id*.
 
         Clears project-scoped caches, swaps sub-systems, and rebuilds the
         currently-active content view so it shows the new project's data
         — no caller-side navigation needed.
+
+        When *announce* is False the closing ``project_loaded`` signal is
+        suppressed so the caller can emit a single, more specific lifecycle
+        signal instead (e.g. the new-project flow fires ``project_created``
+        only). This prevents self-subscribed views (Dashboard / Character Arc,
+        which listen to *both* lifecycle signals) from recomputing twice.
         """
         old_id = self._project_id
         # Release the lock on whatever project we were on before switching.
@@ -3008,9 +3047,11 @@ class MainWindow(QMainWindow):
 
         # 5. Announce the load so self-subscribed views (e.g. Dashboard)
         # re-point at the new project and recompute, regardless of whether
-        # they were rebuilt above.
-        from storyplanner.project_events import emit_project_loaded
-        emit_project_loaded(new_id)
+        # they were rebuilt above. Suppressed when the caller will emit its own
+        # single lifecycle signal (see *announce*).
+        if announce:
+            from storyplanner.project_events import emit_project_loaded
+            emit_project_loaded(new_id)
 
         self._debug_log_switch(old_id, new_id, file_path)
 
