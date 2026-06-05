@@ -1308,6 +1308,28 @@ class _EnergyGutter(QWidget):
         return super().event(ev)
 
 
+class _FoldHeader(QLabel):
+    """A structural Act/Chapter header that toggles collapse on click.
+
+    It is a plain QLabel (so existing ``#writingActHeader`` / ``#writingChapter
+    Header`` styling applies) plus a click handler and a pointing-hand cursor.
+    The fold arrow + hierarchical number are rendered as part of the text; the
+    body editor is untouched, so prose never mixes with structural metadata.
+    """
+
+    def __init__(self, text: str, on_toggle, parent: QWidget | None = None) -> None:
+        super().__init__(text, parent)
+        self._on_toggle = on_toggle
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self._on_toggle:
+            self._on_toggle()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+
 class WritingCoreView(QWidget):
     """Immersive continuous manuscript writing view."""
 
@@ -1369,6 +1391,10 @@ class WritingCoreView(QWidget):
         self._editors: dict[int, _SceneEditor] = {}
         self._save_timers: dict[int, QTimer] = {}
         self._scene_widgets: list[QWidget] = []
+        # Collapsed structural blocks (Act/Chapter) keyed by a stable group id
+        # (e.g. "act::Act I" / "chap::Act I::Chapter 1"). A freshly built view —
+        # including after a project switch — starts fully expanded.
+        self._collapsed: set[str] = set()
         self._highlighters: dict[int, PsykeHighlighter] = {}
         self._click_handlers: dict[int, PsykeClickHandler] = {}
         self._hover_handlers: dict[int, EntityHoverHandler] = {}
@@ -1745,9 +1771,22 @@ class WritingCoreView(QWidget):
         self._scene_sort_orders = {s.id: s.sort_order for s in scenes}
         self._temporal_graph = TemporalGraph(self._db, self._project_id)
 
+        # Structural summaries (Act/Chapter live in project settings; Scene on
+        # the row) are shown as visually-distinct, read-only metadata — never as
+        # body prose.
+        _settings = self._db.get_project_settings(self._project_id)
+        self._act_summaries = _settings.get("act_summaries", {}) or {}
+        self._chapter_summaries = _settings.get("chapter_summaries", {}) or {}
+
         current_act = None
         current_chapter = None
         first_scene = True
+        # Hierarchical numbering (Act = 1, Chapter = 1.1, Scene = 1.1.1).
+        act_idx = 0
+        chapter_idx = 0
+        scene_idx = 0
+        act_collapsed = False
+        chapter_collapsed = False
 
         for scene in scenes:
             act = (scene.act or "").strip()
@@ -1755,13 +1794,39 @@ class WritingCoreView(QWidget):
 
             if act and act != current_act:
                 current_act = act
-                self._add_act_header(act)
+                current_chapter = None
+                act_idx += 1
+                chapter_idx = 0
+                scene_idx = 0
+                act_collapsed = f"act::{act}" in self._collapsed
+                self._add_act_header(act, act_idx, act_collapsed)
+
+            # A collapsed Act hides all of its Chapters and Scenes.
+            if act and act_collapsed:
+                continue
 
             if chapter and chapter != current_chapter:
                 current_chapter = chapter
-                self._add_chapter_header(chapter)
+                chapter_idx += 1
+                scene_idx = 0
+                chapter_collapsed = (
+                    f"chap::{act}::{chapter}" in self._collapsed
+                )
+                self._add_chapter_header(
+                    act, chapter, act_idx, chapter_idx, chapter_collapsed,
+                )
 
-            self._add_scene_block(scene, is_first=first_scene)
+            # A collapsed Chapter hides its Scenes (header stays visible).
+            if chapter and chapter_collapsed:
+                continue
+
+            scene_idx += 1
+            number = self._scene_number(
+                act_idx if act else 0,
+                chapter_idx if chapter else 0,
+                scene_idx,
+            )
+            self._add_scene_block(scene, number=number, is_first=first_scene)
             first_scene = False
 
         if scenes:
@@ -1807,38 +1872,109 @@ class WritingCoreView(QWidget):
             if w:
                 w.deleteLater()
 
+    # -- Structural numbering + folding ---------------------------------------
+
+    @staticmethod
+    def _scene_number(act_idx: int, chapter_idx: int, scene_idx: int) -> str:
+        """Hierarchical scene number using whatever levels are present:
+        Act+Chapter → "1.1.1"; Act only → "1.1"; neither → "1"."""
+        parts: list[str] = []
+        if act_idx:
+            parts.append(str(act_idx))
+        if chapter_idx:
+            parts.append(str(chapter_idx))
+        parts.append(str(scene_idx))
+        return ".".join(parts)
+
+    def _toggle_fold(self, key: str) -> None:
+        if key in self._collapsed:
+            self._collapsed.discard(key)
+        else:
+            self._collapsed.add(key)
+        self.refresh()
+
+    def _add_structural_description(self, text: str, object_name: str) -> None:
+        """Render a read-only, visually-distinct structural summary. Never a
+        body editor — so descriptions can never be edited as manuscript prose."""
+        text = (text or "").strip()
+        if not text:
+            return
+        label = QLabel(text)
+        label.setObjectName(object_name)
+        label.setWordWrap(True)
+        label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self._inner_layout.addWidget(label)
+        self._inner_layout.addSpacing(4)
+        self._scene_widgets.append(label)
+
     # -- Canvas building blocks -----------------------------------------------
 
-    def _add_act_header(self, act: str) -> None:
-        label = QLabel(act.upper())
+    def _add_act_header(self, act: str, number: int, collapsed: bool) -> None:
+        arrow = "▸" if collapsed else "▾"
+        label = _FoldHeader(
+            f"{arrow}  {number}  {act.upper()}",
+            on_toggle=lambda a=act: self._toggle_fold(f"act::{a}"),
+        )
         label.setObjectName("writingActHeader")
         label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self._inner_layout.addSpacing(40)
         self._inner_layout.addWidget(label)
         self._inner_layout.addSpacing(12)
         self._scene_widgets.append(label)
+        if not collapsed:
+            self._add_structural_description(
+                self._act_summaries.get(act, ""), "writingActDescription",
+            )
 
-    def _add_chapter_header(self, chapter: str) -> None:
-        label = QLabel(chapter)
+    def _add_chapter_header(
+        self, act: str, chapter: str, act_number: int, chapter_number: int,
+        collapsed: bool,
+    ) -> None:
+        arrow = "▸" if collapsed else "▾"
+        num = f"{act_number}.{chapter_number}" if act_number else str(chapter_number)
+        label = _FoldHeader(
+            f"{arrow}  {num}  {chapter}",
+            on_toggle=lambda a=act, c=chapter: self._toggle_fold(
+                f"chap::{a}::{c}",
+            ),
+        )
         label.setObjectName("writingChapterHeader")
         label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self._inner_layout.addSpacing(32)
         self._inner_layout.addWidget(label)
         self._inner_layout.addSpacing(16)
         self._scene_widgets.append(label)
+        if not collapsed:
+            self._add_structural_description(
+                self._chapter_summaries.get(chapter, ""),
+                "writingChapterDescription",
+            )
 
-    def _add_scene_block(self, scene, *, is_first: bool = False) -> None:
+    def _add_scene_block(
+        self, scene, *, number: str = "", is_first: bool = False,
+    ) -> None:
         if not is_first:
             self._inner_layout.addSpacing(56)
 
         title_text = (scene.title or "").strip()
-        if title_text and title_text.lower() not in ("untitled", "untitled scene"):
-            title = QLabel(title_text)
+        has_title = bool(
+            title_text and title_text.lower() not in ("untitled", "untitled scene")
+        )
+        # Always show a structural marker so numbering is visible even for
+        # untitled scenes; the title (if any) follows the number.
+        marker = f"{number}  {title_text}".strip() if has_title else number
+        if marker:
+            title = QLabel(marker)
             title.setObjectName("writingSceneTitle")
             title.setAlignment(Qt.AlignmentFlag.AlignLeft)
             self._inner_layout.addWidget(title)
             self._inner_layout.addSpacing(2)
             self._scene_widgets.append(title)
+
+        # Scene planning summary as distinct, read-only metadata (not body).
+        self._add_structural_description(
+            scene.summary or "", "writingSceneDescription",
+        )
 
         editor = _SceneEditor()
         editor._scene_id = scene.id
@@ -2530,6 +2666,20 @@ class WritingCoreView(QWidget):
             f"}}"
         )
 
+        # Structural descriptions/summaries: italic, muted, with a left accent
+        # rule so they read as planning metadata — clearly NOT manuscript body.
+        description_style = (
+            f"#writingActDescription, #writingChapterDescription,"
+            f" #writingSceneDescription {{"
+            f"  color: {theme.TEXT_MUTED};"
+            f"  font-size: 11px;"
+            f"  font-style: italic;"
+            f"  background: transparent;"
+            f"  border-left: 2px solid {theme.BORDER};"
+            f"  padding: 2px 8px;"
+            f"}}"
+        )
+
         end_action_style = (
             f"#writingEndAction {{"
             f"  color: {theme.TEXT_MUTED};"
@@ -2712,6 +2862,7 @@ class WritingCoreView(QWidget):
 
         full_style = (
             editor_style + act_style + chapter_style + scene_title_style
+            + description_style
             + end_action_style
             + canvas_style + scroll_style + empty_style + focus_dim
             + review_style

@@ -2442,6 +2442,10 @@ class MainWindow(QMainWindow):
         # The dialog is window-modal (a sheet on macOS) so creating a project
         # never forces the window out of fullscreen / onto another Space — the
         # cause of the multi-view slide + minimize glitch in fullscreen.
+        # Capture the window state BEFORE the (window-modal) dialog so the
+        # safety net below compares against the true pre-creation state — never
+        # a transient state the OS may have applied while the sheet was open.
+        was_fullscreen = self.isFullScreen()
         dlg = NewProjectDialog(parent=self)
         if not dlg.exec():
             return
@@ -2451,7 +2455,6 @@ class MainWindow(QMainWindow):
             narrative_engine=dlg.get_engine(),
             default_writing_format=dlg.get_format(),
         )
-        was_fullscreen = self.isFullScreen()
         # New projects land on the Dashboard so the user sees the empty
         # state for the new project. One clean switch (no extra navigation).
         self._set_active_section("Dashboard")

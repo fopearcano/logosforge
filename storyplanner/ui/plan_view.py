@@ -186,6 +186,59 @@ def _delete_chapter(db: Database, project_id: int, chapter: str) -> None:
     db.save_project_settings(project_id, settings)
 
 
+def _is_placeholder_scene(scene) -> bool:
+    """A scene is a *pure structural placeholder* when it has no written body,
+    no planning summary, and only a default/empty title. Such scenes are safe to
+    remove when clearing the outline; anything else is preserved."""
+    has_body = bool((scene.content or "").strip())
+    has_summary = bool((scene.summary or "").strip())
+    title = (scene.title or "").strip().lower()
+    is_default_title = title in ("", "untitled", "untitled scene")
+    return not has_body and not has_summary and is_default_title
+
+
+def clear_outline_structure(db: Database, project_id: int) -> dict:
+    """Clear the whole Outline structure *safely*.
+
+    - Pure structural placeholder scenes (no body, no summary, default title)
+      are deleted — they only existed to scaffold Acts/Chapters.
+    - Scenes that contain written text **or** a planning summary are PRESERVED;
+      their Act/Chapter labels are cleared (detached to Unsorted) so no prose or
+      planning is ever lost.
+    - All Act/Chapter summaries are removed.
+
+    Manuscript body text is never deleted. Returns ``{"deleted", "detached"}``.
+    """
+    deleted = 0
+    detached = 0
+    for scene in db.get_all_scenes(project_id):
+        if _is_placeholder_scene(scene):
+            db.delete_scene(scene.id)
+            deleted += 1
+        elif (scene.act or "") or (scene.chapter or ""):
+            db.update_scene(
+                scene_id=scene.id,
+                title=scene.title,
+                summary=scene.summary,
+                synopsis=scene.synopsis,
+                goal=scene.goal,
+                conflict=scene.conflict,
+                outcome=scene.outcome,
+                beat=scene.beat,
+                tags=scene.tags,
+                act="",
+                content=scene.content,
+                chapter="",
+                plotline=scene.plotline,
+            )
+            detached += 1
+    settings = db.get_project_settings(project_id)
+    settings["act_summaries"] = {}
+    settings["chapter_summaries"] = {}
+    db.save_project_settings(project_id, settings)
+    return {"deleted": deleted, "detached": detached}
+
+
 def build_plan_tree(
     db: Database, project_id: int,
 ) -> list[tuple[str, list[tuple[str, list]]]]:
@@ -343,6 +396,13 @@ class PlanView(QWidget):
         add_act_btn = QPushButton("+ Add Act")
         add_act_btn.clicked.connect(self._add_act)
         header_row.addWidget(add_act_btn)
+
+        clear_btn = QPushButton("Clear Outline")
+        clear_btn.setToolTip(
+            "Remove the Act/Chapter structure. Written text is preserved.",
+        )
+        clear_btn.clicked.connect(self._clear_outline_dialog)
+        header_row.addWidget(clear_btn)
         root.addLayout(header_row)
         self._refresh_mode_badge()
 
@@ -848,8 +908,9 @@ class PlanView(QWidget):
         confirm = QMessageBox.question(
             self,
             "Delete Act",
-            f"Remove the act label '{act_name}' from all its scenes?\n"
-            "Scenes will not be deleted.",
+            f"Remove the act '{act_name}'?\n\n"
+            "Its child Chapters and Scenes are NOT deleted — they are detached "
+            "(the act label is cleared) and their written text is preserved.",
         )
         if confirm != QMessageBox.StandardButton.Yes:
             return
@@ -861,12 +922,42 @@ class PlanView(QWidget):
         confirm = QMessageBox.question(
             self,
             "Delete Chapter",
-            f"Remove the chapter label '{chapter_name}' from all its scenes?\n"
-            "Scenes will not be deleted.",
+            f"Remove the chapter '{chapter_name}'?\n\n"
+            "Its child Scenes are NOT deleted — they are detached (the chapter "
+            "label is cleared) and their written text is preserved.",
         )
         if confirm != QMessageBox.StandardButton.Yes:
             return
         _delete_chapter(self._db, self._project_id, _chapter_key(chapter_name))
+        self._notify()
+        self.refresh()
+
+    def _clear_outline_dialog(self) -> None:
+        if not build_plan_tree(self._db, self._project_id):
+            QMessageBox.information(
+                self, "Clear Outline", "The Outline is already empty.",
+            )
+            return
+        confirm = QMessageBox.warning(
+            self,
+            "Clear Outline",
+            "Clear the entire Outline structure?\n\n"
+            "• Acts and Chapters are removed.\n"
+            "• Empty placeholder scenes are deleted.\n"
+            "• Scenes with written text or a summary are kept (moved to "
+            "Unsorted) — Manuscript text is never deleted.\n\n"
+            "This cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        clear_outline_structure(self._db, self._project_id)
+        from storyplanner.project_events import get_event_bus
+        bus = get_event_bus()
+        bus.scenes_changed.emit()
+        bus.outline_changed.emit()
+        bus.project_data_changed.emit()
         self._notify()
         self.refresh()
 
