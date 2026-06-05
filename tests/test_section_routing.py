@@ -132,6 +132,51 @@ def test_outline_view_module_not_default_outline():
 # ==========================================================================
 
 
+# ==========================================================================
+# Runtime diagnostics + visible dev markers (runtime proof, not just imports)
+# ==========================================================================
+
+
+def test_runtime_report_points_at_local_view_modules():
+    from storyplanner.diagnostics import runtime_report
+    r = runtime_report()
+    assert "writing_core_view" in r["manuscript_view"]
+    assert "plan_view" in r["outline_view"]
+    assert "plot_timeline_view" in r["timeline_view"]
+    assert r["storyplanner_pkg"].endswith("storyplanner/__init__.py")
+    assert r["commit"]                       # some commit string resolved
+
+
+def test_dev_marker_off_by_default(monkeypatch):
+    monkeypatch.delenv("STORYPLANNER_DEV_MARKERS", raising=False)
+    db = Database()
+    win, pid = _win(db)
+    win.sidebar_buttons["Outline"].click()
+    from PySide6.QtWidgets import QLabel
+    marks = [w for w in win.content_area.findChildren(QLabel)
+             if w.objectName() == "devRuntimeMarker"]
+    assert marks == []                       # never in normal UX
+
+
+def test_dev_marker_visible_when_enabled_via_routing(monkeypatch):
+    monkeypatch.setenv("STORYPLANNER_DEV_MARKERS", "1")
+    db = Database()
+    a = db.create_project("A", narrative_engine="screenplay",
+                          default_writing_format="screenplay").id
+    db.create_scene(a, "S", plotline="Main", content="x")
+    win = MainWindow(db, a)
+    from PySide6.QtWidgets import QLabel
+    for section, expect in (
+        ("Manuscript", "NEW MANUSCRIPT VIEW"),
+        ("Outline", "NEW OUTLINE VIEW"),
+        ("Timeline", "NEW TIMELINE VIEW"),
+    ):
+        win.sidebar_buttons[section].click()
+        texts = [w.text() for w in win.content_area.findChildren(QLabel)
+                 if w.objectName() == "devRuntimeMarker"]
+        assert any(expect in t for t in texts), f"{section}: {texts}"
+
+
 def test_project_switch_keeps_new_views():
     db = Database()
     a = db.create_project("A", narrative_engine="screenplay",

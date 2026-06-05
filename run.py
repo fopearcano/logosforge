@@ -8,6 +8,11 @@ from storyplanner.app import create_app
 
 
 def main() -> int:
+    # Runtime proof: print which source files / widget classes back this launch
+    # (commit, package path, Manuscript/Outline/Timeline view modules) to stderr.
+    from storyplanner.diagnostics import print_runtime_report
+    print_runtime_report()
+
     app, window = create_app()
     window.show()
 

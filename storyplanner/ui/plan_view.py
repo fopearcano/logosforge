@@ -318,6 +318,8 @@ class PlanView(QWidget):
         # Diagnostic marker: confirms the running app uses the block/card
         # Outline planner (Acts/Chapters/Scenes cards with type badges).
         self.setObjectName("outline_block_card_planner_view")
+        from storyplanner.diagnostics import attach_dev_marker
+        attach_dev_marker(self, "NEW OUTLINE VIEW")
         self._db = db
         self._project_id = project_id
         self._on_data_changed = on_data_changed

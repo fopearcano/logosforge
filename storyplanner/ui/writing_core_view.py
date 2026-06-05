@@ -1338,6 +1338,8 @@ class WritingCoreView(QWidget):
         # heavy inline view). Set only in the structured (Manuscript) mode.
         if structured_list:
             self.setObjectName("manuscript_selected_unit_editor_view")
+            from storyplanner.diagnostics import attach_dev_marker
+            attach_dev_marker(self, "NEW MANUSCRIPT VIEW")
         self._selected_scene_id: int | None = None
         self._db = db
         self._project_id = project_id

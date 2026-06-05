@@ -335,6 +335,8 @@ class PlotTimelineView(QWidget):
         # Diagnostic marker: confirms the running app uses the improved Timeline
         # (coloured lanes + event/structure linking), not an old plain view.
         self.setObjectName("timeline_colored_lane_link_view")
+        from storyplanner.diagnostics import attach_dev_marker
+        attach_dev_marker(self, "NEW TIMELINE VIEW")
         self._db = db
         self._project_id = project_id
         self._on_scene_selected = on_scene_selected
