@@ -534,6 +534,20 @@ class PlanView(QWidget):
         "SCENE": theme.TEXT_MUTED,
     }
 
+    def _note_indicator(self, count: int) -> QLabel | None:
+        """Compact '📝 N' marker shown on a block that has linked notes."""
+        if count <= 0:
+            return None
+        lbl = QLabel(f"📝 {count}")
+        lbl.setObjectName("planNoteIndicator")
+        lbl.setToolTip(f"{count} linked note(s)")
+        lbl.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: 10px;"
+            f" border: 1px solid {theme.BORDER}; border-radius: 3px;"
+            f" padding: 0px 4px; background: transparent;"
+        )
+        return lbl
+
     def _is_novel(self) -> bool:
         """Novel uses Act → Chapter → Scene; other modes use Act → Scene
         (the empty Chapter layer is flattened so scenes sit directly in the Act)."""
@@ -579,6 +593,13 @@ class PlanView(QWidget):
             f"font-size: 14px; font-weight: bold; color: {theme.TEXT_PRIMARY};"
         )
         head_row.addWidget(act_label)
+        act_notes = self._note_indicator(
+            self._db.get_structure_note_count(
+                self._project_id, "act", _act_key(act_name),
+            )
+        )
+        if act_notes is not None:
+            head_row.addWidget(act_notes)
         head_row.addStretch()
 
         # Mode-aware primary action: Novel adds Chapters, other modes add Scenes
@@ -656,6 +677,13 @@ class PlanView(QWidget):
             f"font-size: 12px; font-weight: bold; color: {theme.TEXT_PRIMARY};"
         )
         head_row.addWidget(ch_label)
+        ch_notes = self._note_indicator(
+            self._db.get_structure_note_count(
+                self._project_id, "chapter", _chapter_key(chapter_name),
+            )
+        )
+        if ch_notes is not None:
+            head_row.addWidget(ch_notes)
         head_row.addStretch()
 
         add_scene = QPushButton("+ Add Scene")
@@ -710,6 +738,11 @@ class PlanView(QWidget):
             f"font-size: 11px; color: {theme.TEXT_PRIMARY};"
         )
         head_row.addWidget(title)
+        scene_notes = self._note_indicator(
+            len(self._db.get_scene_note_links(scene.id))
+        )
+        if scene_notes is not None:
+            head_row.addWidget(scene_notes)
         head_row.addStretch()
 
         more = QPushButton("⋯")

@@ -1,17 +1,24 @@
-"""Notes management view — list, create, edit, delete."""
+"""Notes management view — a simple note list + editor with a compact
+"Linked to" section that links each note to Outline structure (Act / Chapter /
+Scene) and, optionally, PSYKE entries.
+
+Acts/Chapters are string labels (NoteStructureLink, keyed by name); Scenes use
+NoteSceneLink; PSYKE uses NotePsykeLink. All are shown together as removable
+chips. Everything is project-bound and reloads on project switch.
+"""
 
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMenu,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -19,7 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner.db import Database
-from storyplanner.ui.link_preview import BacklinksWidget, create_link_browser, render_linked_text
+from storyplanner.ui import theme
 
 USER_ROLE = Qt.ItemDataRole.UserRole
 
@@ -41,18 +48,23 @@ class NotesView(QWidget):
 
         root = QHBoxLayout(self)
 
-        # -- Left: note list -------------------------------------------------
+        # -- Left: compact note list -----------------------------------------
         left = QVBoxLayout()
         left.addWidget(QLabel("Notes"))
         self._list = QListWidget()
+        self._list.setMaximumWidth(240)
         self._list.currentItemChanged.connect(self._on_selected)
         left.addWidget(self._list)
+        new_btn = QPushButton("+ New Note")
+        new_btn.clicked.connect(self._clear_form)
+        left.addWidget(new_btn)
         root.addLayout(left)
 
-        # -- Right: form -----------------------------------------------------
+        # -- Right: editor + compact link area -------------------------------
         right = QVBoxLayout()
 
         self._form_label = QLabel("New Note")
+        self._form_label.setStyleSheet("font-weight: bold;")
         right.addWidget(self._form_label)
 
         right.addWidget(QLabel("Title"))
@@ -61,98 +73,65 @@ class NotesView(QWidget):
 
         right.addWidget(QLabel("Content"))
         self._content_input = QPlainTextEdit()
-        right.addWidget(self._content_input)
+        right.addWidget(self._content_input, stretch=1)
 
         right.addWidget(QLabel("Tags (comma-separated)"))
         self._tags_input = QLineEdit()
         self._tags_input.setPlaceholderText("e.g. worldbuilding, magic, backstory")
         right.addWidget(self._tags_input)
 
-        self._pinned_check = QCheckBox("Pinned (always include in Assistant context)")
+        self._pinned_check = QCheckBox(
+            "Pinned (always include in Assistant context)"
+        )
         right.addWidget(self._pinned_check)
 
-        # -- PSYKE linking ---------------------------------------------------
-        psyke_frame = QFrame()
-        psyke_frame.setObjectName("noteLinkFrame")
-        psyke_layout = QVBoxLayout(psyke_frame)
-        psyke_layout.setContentsMargins(4, 4, 4, 4)
-        psyke_layout.setSpacing(4)
+        # -- "Linked to" — compact, removable chips --------------------------
+        link_header = QHBoxLayout()
+        lk = QLabel("Linked to")
+        lk.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-weight: bold;")
+        link_header.addWidget(lk)
+        link_header.addStretch()
+        self._link_btn = QPushButton("Link to…")
+        self._link_btn.clicked.connect(self._on_link_to)
+        link_header.addWidget(self._link_btn)
+        right.addLayout(link_header)
 
-        psyke_header = QHBoxLayout()
-        psyke_header.addWidget(QLabel("Linked PSYKE Entries"))
-        self._psyke_combo = QComboBox()
-        self._psyke_combo.setMinimumWidth(120)
-        psyke_header.addWidget(self._psyke_combo)
-        link_psyke_btn = QPushButton("Link")
-        link_psyke_btn.clicked.connect(self._on_link_psyke)
-        psyke_header.addWidget(link_psyke_btn)
-        psyke_header.addStretch()
-        psyke_layout.addLayout(psyke_header)
+        self._links_list = QListWidget()
+        self._links_list.setObjectName("noteLinksList")
+        self._links_list.setFlow(QListWidget.Flow.LeftToRight)
+        self._links_list.setWrapping(True)
+        self._links_list.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self._links_list.setSpacing(4)
+        self._links_list.setMaximumHeight(96)
+        self._links_list.setSelectionMode(
+            QListWidget.SelectionMode.NoSelection,
+        )
+        self._links_list.setStyleSheet(
+            "QListWidget#noteLinksList { background: transparent; border: none; }"
+        )
+        self._empty_links = QLabel("No links yet — use “Link to…”.")
+        self._empty_links.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-style: italic; font-size: 11px;"
+        )
+        right.addWidget(self._empty_links)
+        right.addWidget(self._links_list)
 
-        self._psyke_links_list = QListWidget()
-        self._psyke_links_list.setMaximumHeight(80)
-        psyke_layout.addWidget(self._psyke_links_list)
-
-        unlink_psyke_btn = QPushButton("Unlink Selected")
-        unlink_psyke_btn.clicked.connect(self._on_unlink_psyke)
-        psyke_layout.addWidget(unlink_psyke_btn)
-        right.addWidget(psyke_frame)
-
-        # -- Scene linking ---------------------------------------------------
-        scene_frame = QFrame()
-        scene_frame.setObjectName("noteLinkFrame")
-        scene_layout = QVBoxLayout(scene_frame)
-        scene_layout.setContentsMargins(4, 4, 4, 4)
-        scene_layout.setSpacing(4)
-
-        scene_header = QHBoxLayout()
-        scene_header.addWidget(QLabel("Linked Scenes"))
-        self._scene_combo = QComboBox()
-        self._scene_combo.setMinimumWidth(120)
-        scene_header.addWidget(self._scene_combo)
-        link_scene_btn = QPushButton("Link")
-        link_scene_btn.clicked.connect(self._on_link_scene)
-        scene_header.addWidget(link_scene_btn)
-        scene_header.addStretch()
-        scene_layout.addLayout(scene_header)
-
-        self._scene_links_list = QListWidget()
-        self._scene_links_list.setMaximumHeight(80)
-        scene_layout.addWidget(self._scene_links_list)
-
-        unlink_scene_btn = QPushButton("Unlink Selected")
-        unlink_scene_btn.clicked.connect(self._on_unlink_scene)
-        scene_layout.addWidget(unlink_scene_btn)
-        right.addWidget(scene_frame)
-
-        # -- Link preview / actions ------------------------------------------
-        right.addWidget(QLabel("Link Preview"))
-        self._link_preview = create_link_browser(self._on_link_name_clicked)
-        right.addWidget(self._link_preview)
-
+        # -- Controls --------------------------------------------------------
+        controls = QHBoxLayout()
         save_btn = QPushButton("Save")
         save_btn.clicked.connect(self._on_save)
-        right.addWidget(save_btn)
-
+        controls.addWidget(save_btn)
         self._delete_btn = QPushButton("Delete")
         self._delete_btn.setEnabled(False)
         self._delete_btn.clicked.connect(self._on_delete)
-        right.addWidget(self._delete_btn)
+        controls.addWidget(self._delete_btn)
+        controls.addStretch()
+        right.addLayout(controls)
 
-        new_btn = QPushButton("New Note")
-        new_btn.clicked.connect(self._clear_form)
-        right.addWidget(new_btn)
-
-        self._backlinks = BacklinksWidget(
-            db, project_id, on_backlink_clicked=on_link_clicked,
-        )
-        right.addWidget(self._backlinks)
-
-        right.addStretch()
-        root.addLayout(right)
+        root.addLayout(right, stretch=1)
 
         self._refresh_list()
-        self._refresh_combos()
+        self._refresh_links()
 
     # -- List ----------------------------------------------------------------
 
@@ -160,28 +139,17 @@ class NotesView(QWidget):
         self._list.blockSignals(True)
         self._list.clear()
         for note in self._db.get_all_notes(self._project_id):
-            label = note.title
+            label = note.title or "Untitled"
             if note.pinned:
-                label = f"[pinned] {label}"
+                label = f"📌 {label}"
             item = QListWidgetItem(label)
             item.setData(USER_ROLE, note.id)
             self._list.addItem(item)
         self._list.blockSignals(False)
 
-    def _refresh_combos(self) -> None:
-        self._psyke_combo.clear()
-        self._psyke_combo.addItem("-- select --", userData=None)
-        for entry in self._db.get_all_psyke_entries(self._project_id):
-            self._psyke_combo.addItem(f"{entry.name} ({entry.entry_type})", userData=entry.id)
-
-        self._scene_combo.clear()
-        self._scene_combo.addItem("-- select --", userData=None)
-        for scene in self._db.get_all_scenes(self._project_id):
-            self._scene_combo.addItem(scene.title, userData=scene.id)
-
     def refresh(self) -> None:
         self._refresh_list()
-        self._refresh_combos()
+        self._refresh_links()
 
     # -- Selection -----------------------------------------------------------
 
@@ -198,10 +166,7 @@ class NotesView(QWidget):
         self._content_input.setPlainText(note.content)
         self._tags_input.setText(note.tags)
         self._pinned_check.setChecked(note.pinned)
-        self._link_preview.setHtml(render_linked_text(note.content))
-        self._backlinks.load(note.title)
-        self._refresh_psyke_links()
-        self._refresh_scene_links()
+        self._refresh_links()
 
     # -- Save / Delete -------------------------------------------------------
 
@@ -214,18 +179,31 @@ class NotesView(QWidget):
         pinned = self._pinned_check.isChecked()
 
         if self._selected_id is not None:
-            self._db.update_note(self._selected_id, title, content, tags=tags, pinned=pinned)
+            self._db.update_note(
+                self._selected_id, title, content, tags=tags, pinned=pinned,
+            )
         else:
-            note = self._db.create_note(self._project_id, title, content, tags=tags, pinned=pinned)
+            note = self._db.create_note(
+                self._project_id, title, content, tags=tags, pinned=pinned,
+            )
             self._selected_id = note.id
 
-        self._clear_form()
+        # Keep the saved note selected so it can be linked immediately.
+        self._form_label.setText("Edit Note")
+        self._delete_btn.setEnabled(True)
         self._refresh_list()
+        self.select_note(self._selected_id)
         if self._on_data_changed:
             self._on_data_changed()
 
     def _on_delete(self) -> None:
         if self._selected_id is None:
+            return
+        note = self._db.get_note_by_id(self._selected_id)
+        name = note.title if note else "this note"
+        if QMessageBox.question(
+            self, "Delete Note", f"Delete “{name}”? This cannot be undone.",
+        ) != QMessageBox.StandardButton.Yes:
             return
         self._db.delete_note(self._selected_id)
         self._clear_form()
@@ -247,92 +225,150 @@ class NotesView(QWidget):
         self._content_input.clear()
         self._tags_input.clear()
         self._pinned_check.setChecked(False)
-        self._link_preview.clear()
-        self._backlinks.clear_backlinks()
-        self._psyke_links_list.clear()
-        self._scene_links_list.clear()
         self._list.clearSelection()
+        self._refresh_links()
 
-    # -- PSYKE linking -------------------------------------------------------
+    # -- Linked-to chips -----------------------------------------------------
 
-    def _refresh_psyke_links(self) -> None:
-        self._psyke_links_list.clear()
+    def _collect_links(self) -> list[dict]:
+        """Aggregate a note's links (act/chapter/scene/psyke) into uniform chip
+        descriptors; targets that no longer exist are flagged ``missing``."""
         if self._selected_id is None:
-            return
-        linked_ids = self._db.get_note_psyke_links(self._selected_id)
-        for eid in linked_ids:
-            entry = self._db.get_psyke_entry_by_id(eid)
-            if entry:
-                item = QListWidgetItem(f"{entry.name} ({entry.entry_type})")
-                item.setData(USER_ROLE, entry.id)
-                self._psyke_links_list.addItem(item)
-
-    def _on_link_psyke(self) -> None:
-        if self._selected_id is None:
-            return
-        entry_id = self._psyke_combo.currentData()
-        if entry_id is None:
-            return
-        self._db.link_note_to_psyke(self._selected_id, entry_id)
-        self._refresh_psyke_links()
-        if self._on_data_changed:
-            self._on_data_changed()
-
-    def _on_unlink_psyke(self) -> None:
-        if self._selected_id is None:
-            return
-        current = self._psyke_links_list.currentItem()
-        if current is None:
-            return
-        entry_id = current.data(USER_ROLE)
-        self._db.unlink_note_from_psyke(self._selected_id, entry_id)
-        self._refresh_psyke_links()
-        if self._on_data_changed:
-            self._on_data_changed()
-
-    # -- Scene linking -------------------------------------------------------
-
-    def _refresh_scene_links(self) -> None:
-        self._scene_links_list.clear()
-        if self._selected_id is None:
-            return
-        linked_ids = self._db.get_note_scene_links(self._selected_id)
-        for sid in linked_ids:
+            return []
+        out: list[dict] = []
+        acts = set(self._db.get_scene_acts(self._project_id))
+        chapters = set(self._db.get_scene_chapters(self._project_id))
+        for ttype, ref in self._db.get_note_structure_links(self._selected_id):
+            present = ref in acts if ttype == "act" else ref in chapters
+            out.append({
+                "kind": ttype, "ref": ref,
+                "label": f"{ttype.title()}: {ref}", "missing": not present,
+            })
+        for sid in self._db.get_note_scene_links(self._selected_id):
             scene = self._db.get_scene_by_id(sid)
-            if scene:
-                item = QListWidgetItem(scene.title)
-                item.setData(USER_ROLE, scene.id)
-                self._scene_links_list.addItem(item)
+            out.append({
+                "kind": "scene", "ref": sid,
+                "label": f"Scene: {scene.title}" if scene else "Scene: (missing)",
+                "missing": scene is None,
+            })
+        for eid in self._db.get_note_psyke_links(self._selected_id):
+            entry = self._db.get_psyke_entry_by_id(eid)
+            out.append({
+                "kind": "psyke", "ref": eid,
+                "label": f"PSYKE: {entry.name}" if entry else "PSYKE: (missing)",
+                "missing": entry is None,
+            })
+        return out
 
-    def _on_link_scene(self) -> None:
+    def _refresh_links(self) -> None:
+        self._links_list.clear()
+        links = self._collect_links()
+        has = bool(links)
+        self._empty_links.setVisible(not has and self._selected_id is not None)
+        self._link_btn.setEnabled(self._selected_id is not None)
+        for link in links:
+            text = link["label"] + ("  (missing)" if link["missing"] else "")
+            chip = QPushButton(f"{text}   ✕")
+            chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip.setToolTip("Remove link")
+            border = theme.TEXT_MUTED if link["missing"] else theme.BORDER
+            chip.setStyleSheet(
+                f"QPushButton {{ color: {theme.TEXT_PRIMARY}; font-size: 11px;"
+                f" border: 1px solid {border}; border-radius: 10px;"
+                f" padding: 2px 8px; background: {theme.BG_PANEL}; }}"
+                f"QPushButton:hover {{ border-color: {theme.ACCENT}; }}"
+            )
+            chip.clicked.connect(
+                lambda _=False, ln=link: self._remove_link(ln),
+            )
+            item = QListWidgetItem()
+            item.setSizeHint(chip.sizeHint())
+            self._links_list.addItem(item)
+            self._links_list.setItemWidget(item, chip)
+
+    def _remove_link(self, link: dict) -> None:
         if self._selected_id is None:
             return
-        scene_id = self._scene_combo.currentData()
-        if scene_id is None:
+        kind, ref = link["kind"], link["ref"]
+        if kind in ("act", "chapter"):
+            self._db.remove_note_structure_link(self._selected_id, kind, ref)
+        elif kind == "scene":
+            self._db.unlink_note_from_scene(self._selected_id, ref)
+        elif kind == "psyke":
+            self._db.unlink_note_from_psyke(self._selected_id, ref)
+        self._refresh_links()
+        if self._on_data_changed:
+            self._on_data_changed()
+
+    # -- "Link to…" menu -----------------------------------------------------
+
+    def _on_link_to(self) -> None:
+        if self._selected_id is None:
+            QMessageBox.information(
+                self, "Link to…", "Save the note first, then add links.",
+            )
+            return
+        menu = QMenu(self)
+
+        acts = self._db.get_scene_acts(self._project_id)
+        act_menu = menu.addMenu("Act")
+        act_menu.setEnabled(bool(acts))
+        for act in acts:
+            act_menu.addAction(
+                act, lambda a=act: self._add_structure("act", a),
+            )
+
+        chapters = self._db.get_scene_chapters(self._project_id)
+        chap_menu = menu.addMenu("Chapter")
+        chap_menu.setEnabled(bool(chapters))
+        for ch in chapters:
+            chap_menu.addAction(
+                ch, lambda c=ch: self._add_structure("chapter", c),
+            )
+
+        scenes = self._db.get_all_scenes(self._project_id)
+        scene_menu = menu.addMenu("Scene")
+        scene_menu.setEnabled(bool(scenes))
+        for scene in scenes:
+            scene_menu.addAction(
+                scene.title or "Untitled",
+                lambda s=scene.id: self._add_scene(s),
+            )
+
+        entries = self._db.get_all_psyke_entries(self._project_id)
+        psyke_menu = menu.addMenu("PSYKE")
+        psyke_menu.setEnabled(bool(entries))
+        for entry in entries:
+            psyke_menu.addAction(
+                f"{entry.name} ({entry.entry_type})",
+                lambda e=entry.id: self._add_psyke(e),
+            )
+
+        menu.exec(self._link_btn.mapToGlobal(
+            self._link_btn.rect().bottomLeft(),
+        ))
+
+    def _add_structure(self, ttype: str, ref: str) -> None:
+        if self._selected_id is None:
+            return
+        self._db.add_note_structure_link(
+            self._selected_id, self._project_id, ttype, ref,
+        )
+        self._after_link()
+
+    def _add_scene(self, scene_id: int) -> None:
+        if self._selected_id is None:
             return
         self._db.link_note_to_scene(self._selected_id, scene_id)
-        self._refresh_scene_links()
-        if self._on_data_changed:
-            self._on_data_changed()
+        self._after_link()
 
-    def _on_unlink_scene(self) -> None:
+    def _add_psyke(self, entry_id: int) -> None:
         if self._selected_id is None:
             return
-        current = self._scene_links_list.currentItem()
-        if current is None:
-            return
-        scene_id = current.data(USER_ROLE)
-        self._db.unlink_note_from_scene(self._selected_id, scene_id)
-        self._refresh_scene_links()
+        self._db.link_note_to_psyke(self._selected_id, entry_id)
+        self._after_link()
+
+    def _after_link(self) -> None:
+        self._refresh_links()
         if self._on_data_changed:
             self._on_data_changed()
-
-    # -- Wiki link click -----------------------------------------------------
-
-    def _on_link_name_clicked(self, name: str) -> None:
-        result = self._db.resolve_link(self._project_id, name)
-        if result is None:
-            return
-        entity_type, entity_id = result
-        if self._on_link_clicked:
-            self._on_link_clicked(entity_type, entity_id)

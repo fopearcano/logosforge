@@ -75,6 +75,21 @@ class NoteSceneLink(SQLModel, table=True):
     scene_id: int = Field(foreign_key="scene.id", primary_key=True)
 
 
+class NoteStructureLink(SQLModel, table=True):
+    """Links a note to an Outline structural target (Act or Chapter).
+
+    Acts and Chapters are string labels on scenes (no stable entity id), so the
+    target is keyed by *name* rather than id; Scenes keep using NoteSceneLink.
+    ``project_id`` scopes the link for isolation and safe cleanup.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    note_id: int = Field(foreign_key="note.id", index=True)
+    target_type: str = ""        # "act" | "chapter"
+    target_ref: str = ""          # act / chapter name
+    project_id: int = Field(default=0, index=True)
+
+
 class Scene(SQLModel, table=True):
     """A scene/beat in the story. Will be placed on a timeline later."""
 

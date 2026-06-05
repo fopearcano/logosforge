@@ -211,6 +211,10 @@ def _gather_project_data(db: Database, project_id: int) -> dict:
                     for sid in db.get_note_scene_links(n.id)
                     if sid in scene_title_by_id
                 ],
+                "structure_links": [
+                    {"type": ttype, "ref": ref}
+                    for ttype, ref in db.get_note_structure_links(n.id)
+                ],
             }
             for n in notes
         ],

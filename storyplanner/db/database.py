@@ -26,6 +26,7 @@ from storyplanner.models import (
     Note,
     NotePsykeLink,
     NoteSceneLink,
+    NoteStructureLink,
     OutlineNode,
     Place,
     Project,
@@ -833,6 +834,11 @@ class Database:
                 stmt = select(NoteSceneLink).where(NoteSceneLink.note_id == note_id)
                 for link in session.exec(stmt).all():
                     session.delete(link)
+                stmt = select(NoteStructureLink).where(
+                    NoteStructureLink.note_id == note_id,
+                )
+                for link in session.exec(stmt).all():
+                    session.delete(link)
                 session.delete(note)
             session.commit()
 
@@ -895,6 +901,73 @@ class Database:
                 NoteSceneLink.scene_id == scene_id,
             )
             return list(session.exec(stmt).all())
+
+    # -- Note ↔ structure (Act / Chapter) links --------------------------------
+
+    def add_note_structure_link(
+        self, note_id: int, project_id: int, target_type: str, target_ref: str,
+    ) -> None:
+        """Link a note to an Act/Chapter (keyed by name). Idempotent."""
+        if target_type not in ("act", "chapter") or not (target_ref or "").strip():
+            return
+        with Session(self._engine) as session:
+            existing = session.exec(
+                select(NoteStructureLink).where(
+                    NoteStructureLink.note_id == note_id,
+                    NoteStructureLink.target_type == target_type,
+                    NoteStructureLink.target_ref == target_ref,
+                )
+            ).first()
+            if existing:
+                return
+            session.add(NoteStructureLink(
+                note_id=note_id, target_type=target_type,
+                target_ref=target_ref, project_id=project_id,
+            ))
+            session.commit()
+
+    def remove_note_structure_link(
+        self, note_id: int, target_type: str, target_ref: str,
+    ) -> None:
+        with Session(self._engine) as session:
+            for link in session.exec(
+                select(NoteStructureLink).where(
+                    NoteStructureLink.note_id == note_id,
+                    NoteStructureLink.target_type == target_type,
+                    NoteStructureLink.target_ref == target_ref,
+                )
+            ).all():
+                session.delete(link)
+            session.commit()
+
+    def get_note_structure_links(self, note_id: int) -> list[tuple[str, str]]:
+        """Return [(target_type, target_ref), ...] for a note (act/chapter)."""
+        with Session(self._engine) as session:
+            stmt = select(
+                NoteStructureLink.target_type, NoteStructureLink.target_ref,
+            ).where(NoteStructureLink.note_id == note_id)
+            return [(t, r) for t, r in session.exec(stmt).all()]
+
+    def get_structure_note_count(
+        self, project_id: int, target_type: str, target_ref: str,
+    ) -> int:
+        """How many notes are linked to a given Act/Chapter in this project."""
+        with Session(self._engine) as session:
+            stmt = select(NoteStructureLink.note_id).where(
+                NoteStructureLink.project_id == project_id,
+                NoteStructureLink.target_type == target_type,
+                NoteStructureLink.target_ref == target_ref,
+            )
+            return len(list(session.exec(stmt).all()))
+
+    def get_scene_acts(self, project_id: int) -> list[str]:
+        """Distinct non-empty Act labels for the project, in first-seen order."""
+        seen: list[str] = []
+        for scene in self.get_all_scenes(project_id):
+            act = (scene.act or "").strip()
+            if act and act not in seen:
+                seen.append(act)
+        return seen
 
     # -- Scenes --------------------------------------------------------------
 

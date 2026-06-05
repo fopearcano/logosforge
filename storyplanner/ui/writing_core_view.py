@@ -1972,10 +1972,30 @@ class WritingCoreView(QWidget):
             parts.append(chapter)
         title = (scene.title or "").strip() or "Untitled"
         parts.append(title)
+        # Lightweight "Notes: N" indicator for the current unit (scene + its
+        # act/chapter), so the writer can see related notes exist at a glance.
+        note_count = self._unit_note_count(scene, act, chapter)
+        if note_count:
+            parts.append(f"📝 {note_count}")
         crumb.setText("  ·  ".join(parts))
         summary = (scene.summary or "").strip()
         meta.setText(summary)
         meta.setVisible(bool(summary))
+
+    def _unit_note_count(self, scene, act: str, chapter: str) -> int:
+        try:
+            total = len(self._db.get_scene_note_links(scene.id))
+            if act:
+                total += self._db.get_structure_note_count(
+                    self._project_id, "act", act,
+                )
+            if chapter:
+                total += self._db.get_structure_note_count(
+                    self._project_id, "chapter", chapter,
+                )
+            return total
+        except Exception:
+            return 0
 
     def _on_structure_item_clicked(self, item, _col) -> None:
         sid = item.data(0, Qt.ItemDataRole.UserRole)
