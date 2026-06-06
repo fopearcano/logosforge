@@ -2014,6 +2014,15 @@ class Database:
             scene.title = title
             session.commit()
 
+    def update_scene_tags(self, scene_id: int, tags: str) -> None:
+        """Targeted tags update that preserves links (unlike full update_scene)."""
+        with Session(self._engine) as session:
+            scene = session.get(Scene, scene_id)
+            if scene is None:
+                return
+            scene.tags = tags or ""
+            session.commit()
+
     def reorder_scene(self, scene_id: int, new_index: int) -> None:
         """Move a scene to a new position (0-based) among all project scenes."""
         with Session(self._engine) as session:
@@ -2039,6 +2048,54 @@ class Database:
             all_scenes.insert(new_index, moved)
 
             for i, s in enumerate(all_scenes):
+                s.sort_order = i
+            session.commit()
+
+    def set_scene_structure(
+        self, scene_id: int, act: str, chapter: str,
+    ) -> None:
+        """Set a scene's Act/Chapter labels only.
+
+        Touches structural labels exclusively — never the manuscript body,
+        summary, tags, plotline, links, or sort order. Used by the Outline
+        planner when a card is moved between Acts/Chapters.
+        """
+        with Session(self._engine) as session:
+            scene = session.get(Scene, scene_id)
+            if scene is None:
+                return
+            scene.act = act or ""
+            scene.chapter = chapter or ""
+            session.commit()
+
+    def reorder_scenes(
+        self, project_id: int, ordered_scene_ids: list[int],
+    ) -> None:
+        """Assign ``sort_order`` from the position of each id in
+        *ordered_scene_ids*. Any project scene not listed keeps its relative
+        order *after* the listed ones (defensive against partial input). Only
+        ``sort_order`` is written — ids, bodies and labels are untouched.
+        """
+        with Session(self._engine) as session:
+            stmt = (
+                select(Scene)
+                .where(Scene.project_id == project_id)
+                .order_by(Scene.sort_order, Scene.id)
+            )
+            all_scenes = list(session.exec(stmt).all())
+            by_id = {s.id: s for s in all_scenes}
+            ordered: list[Scene] = []
+            seen: set[int] = set()
+            for sid in ordered_scene_ids:
+                s = by_id.get(sid)
+                if s is not None and s.id not in seen:
+                    ordered.append(s)
+                    seen.add(s.id)
+            # Append any scenes the caller did not mention, preserving order.
+            for s in all_scenes:
+                if s.id not in seen:
+                    ordered.append(s)
+            for i, s in enumerate(ordered):
                 s.sort_order = i
             session.commit()
 

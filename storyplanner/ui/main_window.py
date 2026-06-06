@@ -871,8 +871,24 @@ class MainWindow(QMainWindow):
                 on_data_changed=self._on_data_changed,
                 on_open_scene=self._open_scene_in_editor,
                 on_logos_action=self._run_logos_outline,
+                on_open_in_manuscript=self._open_unit_in_manuscript,
             )
         )
+
+    def _open_unit_in_manuscript(self, scene_id: int) -> None:
+        """Open the Manuscript writing surface focused on a specific unit.
+
+        Used by the Outline planner (double-click a Chapter/Scene card or its
+        "Open in Manuscript" action). Keeps Manuscript as the selected-unit
+        editor — it does not create a separate Chapters/Scenes section.
+        """
+        self._set_active_section("Manuscript")
+        self._show_manuscript()
+        view = self.content_area
+        from storyplanner.ui.writing_core_view import WritingCoreView
+        if isinstance(view, WritingCoreView):
+            view.scroll_to_scene(scene_id)
+        self._assistant_panel.set_active_scene(scene_id)
 
     def _show_manuscript(self) -> None:
         # Manuscript is a focused writing surface: a compact selectable structure
