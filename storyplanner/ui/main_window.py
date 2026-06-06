@@ -915,7 +915,9 @@ class MainWindow(QMainWindow):
             PlotTimelineView(
                 self._db,
                 self._project_id,
-                on_scene_selected=self._open_scene_in_editor,
+                # Double-click / "Open in Manuscript" opens the linked unit in
+                # the Manuscript writing surface (not the hidden Scenes view).
+                on_scene_selected=self._open_unit_in_manuscript,
                 on_data_changed=self._on_data_changed,
             )
         )

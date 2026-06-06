@@ -1614,6 +1614,14 @@ class Database:
             link.link_type = link_type or "custom"
             session.commit()
 
+    def set_timeline_link_label(self, link_id: int, label: str) -> None:
+        with Session(self._engine) as session:
+            link = session.get(TimelineLink, link_id)
+            if link is None:
+                return
+            link.label = label or ""
+            session.commit()
+
     def remove_timeline_link(self, link_id: int) -> None:
         """Delete a link row only — never the linked scenes."""
         with Session(self._engine) as session:

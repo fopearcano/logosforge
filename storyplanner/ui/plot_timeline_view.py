@@ -108,6 +108,16 @@ class _EventCard(QFrame):
             )
             lay.addWidget(sub_lbl)
 
+        # Compact planning status chip (reuses the Outline `status:` tag), if set.
+        from storyplanner.ui.plan_view import scene_status
+        status = scene_status(self._scene)
+        if status:
+            st_lbl = QLabel(f"● {status}")
+            st_lbl.setObjectName("timelineStatusChip")
+            st_lbl.setStyleSheet(
+                f"color: {theme.TEXT_SECONDARY}; font-size: 9px;")
+            lay.addWidget(st_lbl)
+
         # Compact "linked Outline target" indicator (Act/Chapter structure links).
         struct = self._view._struct_by_scene.get(self.scene_id, [])
         if struct:
@@ -294,6 +304,14 @@ class _TimelineCanvas(QWidget):
             p.setBrush(color)
             p.drawEllipse(a.center(), 3, 3)
             p.drawEllipse(b.center(), 3, 3)
+            # Optional link label, drawn just above the line's midpoint so it
+            # stays legible and never sits on top of a card's text.
+            label = (getattr(link, "label", "") or "").strip()
+            if label:
+                mid = (a.center() + b.center()) / 2
+                p.setPen(QPen(color, 1))
+                p.drawText(QRect(mid.x() - 60, mid.y() - 16, 120, 14),
+                           Qt.AlignmentFlag.AlignCenter, label)
         p.end()
 
     def dragEnterEvent(self, event) -> None:
@@ -542,6 +560,8 @@ class PlotTimelineView(QWidget):
 
     def _show_lane_menu(self, lane, global_pos) -> None:
         menu = QMenu(self)
+        menu.addAction(
+            "Add event…", lambda nm=lane.name: self._add_event_to_lane(nm))
         menu.addAction("Rename…", lambda: self._rename_lane(lane))
         build_color_menu(
             menu, lane.color_label,
@@ -553,6 +573,18 @@ class PlotTimelineView(QWidget):
             lambda lid=lane.id: self._delete_lane(lid),
         )
         menu.exec(global_pos)
+
+    def _add_event_to_lane(self, lane_name: str) -> None:
+        """Create a new Timeline event (a scene) directly in this lane. The
+        scene is created with only a title + plotline — Timeline never writes
+        manuscript body or Outline structure."""
+        title, ok = QInputDialog.getText(
+            self, "New event", "Event title:", text="New event")
+        if not ok or not title.strip():
+            return
+        self._db.create_scene(
+            self._project_id, title.strip(), plotline=lane_name or "")
+        self._notify()
 
     def _rename_lane(self, lane) -> None:
         name, ok = QInputDialog.getText(
@@ -597,12 +629,21 @@ class PlotTimelineView(QWidget):
 
     def _show_card_menu(self, card: _EventCard, global_pos) -> None:
         menu = QMenu(self)
-        menu.addAction("Open scene", lambda: self._open_scene(card.scene_id))
+        menu.addAction(
+            "Open in Manuscript", lambda: self._open_scene(card.scene_id))
         menu.addAction("Rename…", lambda: self._rename_event(card.scene_id))
         build_color_menu(
             menu, getattr(card._scene, "color_label", ""),
             lambda key, sid=card.scene_id: self._set_event_color(sid, key),
         )
+        menu.addSeparator()
+
+        # Move along the story-time axis (drag works too; these are the precise,
+        # always-available controls).
+        menu.addAction(
+            "Move ◀ (earlier)", lambda sid=card.scene_id: self._move_event(sid, -1))
+        menu.addAction(
+            "Move ▶ (later)", lambda sid=card.scene_id: self._move_event(sid, +1))
         # Assign to lane.
         lane_menu = QMenu("Move to lane", menu)
         for lane in self._lanes:
@@ -680,24 +721,52 @@ class PlotTimelineView(QWidget):
             menu.addMenu(link_menu)
             menu.addAction("Cancel link", self._cancel_link)
 
-        # Remove existing links on this event.
+        # Edit existing links on this event: label / colour / relation type /
+        # remove. (Removing a link never deletes the linked events.)
         related = [
             ln for ln in self._links
             if card.scene_id in (ln.source_scene_id, ln.target_scene_id)
         ]
         if related:
-            rm = QMenu("Remove link", menu)
+            edit = QMenu("Edit links", menu)
             for ln in related:
                 other_id = (ln.target_scene_id if ln.source_scene_id == card.scene_id
                             else ln.source_scene_id)
                 other = self._db.get_scene_by_id(other_id)
-                label = (other.title if other else f"scene {other_id}") or "?"
-                rm.addAction(
-                    f"{TIMELINE_LINK_TYPES.get(ln.link_type, ln.link_type)} ↔ {label}",
-                    lambda lid=ln.id: self._remove_link(lid),
+                other_t = (other.title if other else f"scene {other_id}") or "?"
+                tlabel = TIMELINE_LINK_TYPES.get(ln.link_type, ln.link_type)
+                tag = f' “{ln.label}”' if (ln.label or "").strip() else ""
+                sub = QMenu(f"{tlabel} ↔ {other_t}{tag}", edit)
+                sub.addAction(
+                    "Set label…", lambda lid=ln.id: self._set_link_label(lid))
+                ctype = QMenu("Relation type", sub)
+                for key, name in TIMELINE_LINK_TYPES.items():
+                    ctype.addAction(
+                        (f"● {name}" if key == ln.link_type else name),
+                        lambda _k=key, lid=ln.id: self._set_link_type(lid, _k))
+                sub.addMenu(ctype)
+                build_color_menu(
+                    sub, ln.color_label,
+                    lambda key, lid=ln.id: self._set_link_color(lid, key),
+                    title="Colour",
                 )
-            menu.addMenu(rm)
+                sub.addSeparator()
+                sub.addAction(
+                    "Remove link", lambda lid=ln.id: self._remove_link(lid))
+                edit.addMenu(sub)
+            menu.addMenu(edit)
         menu.exec(global_pos)
+
+    def _move_event(self, scene_id: int, delta: int) -> None:
+        """Move an event one column earlier/later along the story-time axis."""
+        ids = [s.id for s in self._db.get_all_scenes(self._project_id)]
+        if scene_id not in ids:
+            return
+        i = ids.index(scene_id)
+        j = max(0, min(i + delta, len(ids) - 1))
+        if j != i:
+            self._db.reorder_scene(scene_id, j)
+            self._notify()
 
     def _rename_event(self, scene_id: int) -> None:
         scene = self._db.get_scene_by_id(scene_id)
@@ -744,6 +813,23 @@ class PlotTimelineView(QWidget):
 
     def _remove_link(self, link_id: int) -> None:
         self._db.remove_timeline_link(link_id)
+        self._notify()
+
+    def _set_link_label(self, link_id: int) -> None:
+        link = next((ln for ln in self._links if ln.id == link_id), None)
+        cur = (link.label if link else "") or ""
+        text, ok = QInputDialog.getText(
+            self, "Link label", "Label (relation note):", text=cur)
+        if ok:
+            self._db.set_timeline_link_label(link_id, text.strip())
+            self._notify()
+
+    def _set_link_color(self, link_id: int, key: str) -> None:
+        self._db.set_timeline_link_color(link_id, key)
+        self._notify()
+
+    def _set_link_type(self, link_id: int, link_type: str) -> None:
+        self._db.set_timeline_link_type(link_id, link_type)
         self._notify()
 
     # -- interactions: structure links (event → Act / Chapter / Scene) -------
