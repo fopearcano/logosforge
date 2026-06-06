@@ -1834,62 +1834,65 @@ class WritingCoreView(QWidget):
 
     # -- Writing page (structured_list mode) ----------------------------------
 
-    def _group_scenes(self, scenes) -> list:
-        """Group scenes in story order into [(act, [(chapter, [scene,...])])]."""
-        acts: list = []
-        for s in scenes:
-            act = (s.act or "").strip()
-            ch = (s.chapter or "").strip()
-            if not acts or acts[-1][0] != act:
-                acts.append((act, []))
-            chapters = acts[-1][1]
-            if not chapters or chapters[-1][0] != ch:
-                chapters.append((ch, []))
-            chapters[-1][1].append(s)
-        return acts
-
     def _render_writing_page(self, scenes) -> None:
-        """Focused continuous WRITING PAGE: centered Act header, large Chapter
-        heading, a per-scene context line, the dominant editor, and inline
-        + New Scene / + New Chapter. Body is scene.content only."""
+        """Focused continuous WRITING PAGE rendered from the *canonical* story
+        structure (shared with Outline & Timeline): one agreed Act → Chapter →
+        Scene order with canonical numbers. Orphan scenes collect under
+        "Unassigned Scenes" and always render LAST, so a Scene never precedes a
+        real Act. Body is scene.content only — no numbered gutter, no fabricated
+        Act headers."""
         if not scenes:
             self._add_empty_state()
             return
+        from storyplanner.story_structure import (
+            UNASSIGNED_ACT,
+            UNASSIGNED_CHAPTER,
+            act_key,
+            build_structure_tree,
+            chapter_key,
+            compute_structural_numbers,
+        )
         is_novel = self._unit_noun() == "Chapter"
-        act_num = 0
+        tree = build_structure_tree(self._db, self._project_id)
+        numbers = compute_structural_numbers(tree, is_novel)
         first = True
-        for act_name, chapters in self._group_scenes(scenes):
-            act_num += 1
-            self._add_page_act_header(act_name or f"Act {act_num}")
-            chap_num = 0
+        for act_name, chapters in tree:
+            a_key = act_key(act_name)
+            if act_name == UNASSIGNED_ACT:
+                self._add_page_act_header("Unassigned Scenes", a_key)
+            else:
+                an = numbers["acts"].get(act_name, "")
+                self._add_page_act_header(
+                    f"Act {an} · {act_name}" if an else act_name, a_key)
             for ch_name, ch_scenes in chapters:
-                chap_num += 1
-                if ch_name:
-                    self._add_page_chapter_header(ch_name)
-                scene_num = 0
+                c_key = chapter_key(ch_name)
+                if ch_name != UNASSIGNED_CHAPTER:
+                    cn = numbers["chapters"].get((act_name, ch_name), "")
+                    self._add_page_chapter_header(
+                        f"Chapter {cn} · {ch_name}" if cn else ch_name, ch_name)
                 for s in ch_scenes:
-                    scene_num += 1
-                    self._add_scene_context_row(s, ch_name, chap_num, scene_num)
+                    self._add_scene_context_row(
+                        s, numbers["scenes"].get(s.id, ""))
                     self._add_scene_block(s, is_first=first, with_title=False)
                     first = False
                 last_id = ch_scenes[-1].id if ch_scenes else None
                 self._add_inline_add(
                     "+ New Scene",
-                    lambda c=ch_name, a=act_name, lid=last_id:
+                    lambda c=c_key, a=a_key, lid=last_id:
                         self._page_new_scene(a, c, lid),
                 )
-            if is_novel:
+            if is_novel and act_name != UNASSIGNED_ACT:
                 self._add_inline_add(
                     "+ New Chapter",
-                    lambda a=act_name: self._page_new_chapter(a),
+                    lambda a=a_key: self._page_new_chapter(a),
                 )
 
-    def _add_page_act_header(self, act: str) -> None:
+    def _add_page_act_header(self, display: str, act_name: str = "") -> None:
         row = QWidget()
         h = QHBoxLayout(row)
         h.setContentsMargins(0, 0, 0, 0)
         h.addStretch()
-        label = QLabel(act.upper())
+        label = QLabel(display.upper())
         label.setObjectName("writingActHeader")
         h.addWidget(label)
         h.addStretch()
@@ -1897,18 +1900,18 @@ class WritingCoreView(QWidget):
         actions.setObjectName("writingActionsBtn")
         actions.setFlat(True)
         actions.clicked.connect(
-            lambda _=False, a=act, b=actions: self._page_act_actions(a, b))
+            lambda _=False, a=act_name, b=actions: self._page_act_actions(a, b))
         h.addWidget(actions)
         self._inner_layout.addSpacing(36)
         self._inner_layout.addWidget(row)
         self._inner_layout.addSpacing(10)
         self._scene_widgets.append(row)
 
-    def _add_page_chapter_header(self, chapter: str) -> None:
+    def _add_page_chapter_header(self, display: str, chapter_name: str = "") -> None:
         row = QWidget()
         h = QHBoxLayout(row)
         h.setContentsMargins(0, 0, 0, 0)
-        label = QLabel(chapter)
+        label = QLabel(display)
         label.setObjectName("writingChapterHeader")
         h.addWidget(label)
         h.addStretch()
@@ -1916,25 +1919,22 @@ class WritingCoreView(QWidget):
         actions.setObjectName("writingActionsBtn")
         actions.setFlat(True)
         actions.clicked.connect(
-            lambda _=False, c=chapter, b=actions: self._page_chapter_actions(c, b))
+            lambda _=False, c=chapter_name, b=actions: self._page_chapter_actions(c, b))
         h.addWidget(actions)
         self._inner_layout.addSpacing(28)
         self._inner_layout.addWidget(row)
         self._inner_layout.addSpacing(12)
         self._scene_widgets.append(row)
 
-    def _add_scene_context_row(self, scene, chapter, chap_num, scene_num) -> None:
-        """Compact 'CHAPTER x · SCENE y' context + summary + note count above the
-        editor. Read-only metadata — never the manuscript body."""
+    def _add_scene_context_row(self, scene, scene_number: str = "") -> None:
+        """Compact canonical 'SCENE 1.2.1' context + summary + note count above
+        the editor. The number comes from the shared structure adapter so it
+        matches Outline/Timeline. Read-only metadata — never the body."""
         row = QWidget()
         h = QHBoxLayout(row)
         h.setContentsMargins(0, 6, 0, 0)
         h.setSpacing(8)
-        ctx_bits = []
-        if chapter:
-            ctx_bits.append(f"CHAPTER {chap_num}")
-        ctx_bits.append(f"SCENE {scene_num}")
-        ctx = QLabel(" · ".join(ctx_bits))
+        ctx = QLabel(f"SCENE {scene_number}" if scene_number else "SCENE")
         ctx.setObjectName("writingSceneContext")
         h.addWidget(ctx)
         notes = self._unit_note_count(

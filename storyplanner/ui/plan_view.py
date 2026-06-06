@@ -28,20 +28,17 @@ from PySide6.QtWidgets import (
 
 from storyplanner.db import Database
 from storyplanner.quantum_outliner.state import OutlineMode, get_outline_mode
+from storyplanner.story_structure import (
+    UNASSIGNED_ACT as _UNTITLED_ACT,
+    UNASSIGNED_CHAPTER as _UNTITLED_CHAPTER,
+    act_key as _act_key,
+    build_structure_tree as build_plan_tree,
+    chapter_key as _chapter_key,
+    compute_structural_numbers as compute_outline_numbering,
+    flatten_tree_to_order as _flatten_tree_to_order,
+)
 from storyplanner.ui import theme
 from storyplanner.ui.outline_ai import OutlineGenWorker, build_provider, outline_messages
-
-
-_UNTITLED_ACT = "Untitled Act"
-_UNTITLED_CHAPTER = "Untitled Chapter"
-
-
-def _act_key(name: str) -> str:
-    return "" if name == _UNTITLED_ACT else name
-
-
-def _chapter_key(name: str) -> str:
-    return "" if name == _UNTITLED_CHAPTER else name
 
 
 def _act_summaries(db: Database, project_id: int) -> dict[str, str]:
@@ -240,40 +237,6 @@ def clear_outline_structure(db: Database, project_id: int) -> dict:
     return {"deleted": deleted, "detached": detached}
 
 
-def build_plan_tree(
-    db: Database, project_id: int,
-) -> list[tuple[str, list[tuple[str, list]]]]:
-    """Return [(act_name, [(chapter_name, [scene, ...]), ...]), ...].
-
-    Acts and chapters preserve their first-seen order in scene sort_order.
-    Scenes without an act fall under _UNTITLED_ACT, similarly for chapter.
-    """
-    scenes = db.get_all_scenes(project_id)
-    act_order: list[str] = []
-    chapter_order: dict[str, list[str]] = {}
-    grouped: dict[str, dict[str, list]] = {}
-
-    for scene in scenes:
-        act = scene.act or _UNTITLED_ACT
-        chapter = scene.chapter or _UNTITLED_CHAPTER
-        if act not in grouped:
-            grouped[act] = {}
-            act_order.append(act)
-            chapter_order[act] = []
-        if chapter not in grouped[act]:
-            grouped[act][chapter] = []
-            chapter_order[act].append(chapter)
-        grouped[act][chapter].append(scene)
-
-    return [
-        (
-            act,
-            [(ch, grouped[act][ch]) for ch in chapter_order[act]],
-        )
-        for act in act_order
-    ]
-
-
 # ---------------------------------------------------------------------------
 # Status (stored as a ``status:<value>`` tag — no schema change)
 # ---------------------------------------------------------------------------
@@ -307,57 +270,6 @@ def set_scene_status(db: Database, scene, value: str) -> None:
     if value:
         tags.append(f"{_STATUS_PREFIX}{value}")
     db.update_scene_tags(scene.id, ", ".join(tags))
-
-
-# ---------------------------------------------------------------------------
-# Structural numbering (Act 1 · Chapter 1.2 · Scene 1.2.3)
-# ---------------------------------------------------------------------------
-
-
-def compute_outline_numbering(
-    tree: list[tuple[str, list[tuple[str, list]]]], is_novel: bool,
-) -> dict:
-    """Compute display numbers from a plan tree.
-
-    Returns ``{"acts": {act_name: "1"}, "chapters": {(act, ch): "1.2"},
-    "scenes": {scene_id: "1.2.3"}}``. Novel uses Act→Chapter→Scene; other
-    modes flatten the chapter layer so scenes are numbered ``act.scene``.
-    Numbers are derived purely from position, so a reorder retracks them with
-    no duplicates and no stale values.
-    """
-    acts: dict[str, str] = {}
-    chapters: dict[tuple[str, str], str] = {}
-    scenes: dict[int, str] = {}
-    for ai, (act_name, ch_list) in enumerate(tree, start=1):
-        acts[act_name] = str(ai)
-        flat_scene = 0
-        for ci, (ch_name, ch_scenes) in enumerate(ch_list, start=1):
-            chapters[(act_name, ch_name)] = f"{ai}.{ci}"
-            for si, scene in enumerate(ch_scenes, start=1):
-                if is_novel:
-                    scenes[scene.id] = f"{ai}.{ci}.{si}"
-                else:
-                    flat_scene += 1
-                    scenes[scene.id] = f"{ai}.{flat_scene}"
-    return {"acts": acts, "chapters": chapters, "scenes": scenes}
-
-
-def _flatten_tree_to_order(
-    tree: list[tuple[str, list[tuple[str, list]]]],
-) -> tuple[list[int], dict[int, tuple[str, str]]]:
-    """Flatten a (possibly reordered) plan tree into a global scene order plus
-    the Act/Chapter label each scene should carry. Display placeholders
-    (_UNTITLED_*) are converted back to empty strings."""
-    order: list[int] = []
-    structure: dict[int, tuple[str, str]] = {}
-    for act_name, ch_list in tree:
-        a = _act_key(act_name)
-        for ch_name, ch_scenes in ch_list:
-            c = _chapter_key(ch_name)
-            for scene in ch_scenes:
-                order.append(scene.id)
-                structure[scene.id] = (a, c)
-    return order, structure
 
 
 class _SummaryEditor(QPlainTextEdit):

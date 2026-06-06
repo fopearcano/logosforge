@@ -135,10 +135,12 @@ def test_event_move_within_lane_persists():
     s1 = db.create_scene(pid, "First", plotline="Main").id
     s2 = db.create_scene(pid, "Second", plotline="Main").id
     view = PlotTimelineView(db, pid)
-    # Drop s2 at column 0 (front of the shared time axis).
+    # Drop s2 at column 0 (front of the timeline axis).
     view._handle_drop(s2, 14, _row_y(view, "Main") + 10)
-    order = [s.id for s in db.get_all_scenes(pid)]  # ordered by sort_order
-    assert order[0] == s2
+    # Timeline order is now timeline-specific: s2 moves to the front WITHOUT
+    # touching Scene.sort_order (the Outline/Manuscript order is preserved).
+    assert db.get_timeline_order(pid)[0] == s2
+    assert [s.id for s in db.get_all_scenes(pid)] == [s1, s2]   # Outline intact
 
 
 def test_event_move_between_lanes_persists():

@@ -167,8 +167,11 @@ def test_move_block_horizontally(tmp_path):
     b = db.create_scene(pid, "B", plotline="Main", content="y").id
     view = PlotTimelineView(db, pid)
     assert [s.id for s in db.get_all_scenes(pid)] == [a, b]
-    view._move_event(b, -1)                    # B earlier than A
-    assert [s.id for s in Database(path).get_all_scenes(pid)] == [b, a]
+    view._move_event(b, -1)                    # B earlier than A on the timeline
+    # Timeline order persists and is timeline-specific; the Outline order
+    # (Scene.sort_order) is deliberately left unchanged.
+    assert Database(path).get_timeline_order(pid) == [b, a]
+    assert [s.id for s in Database(path).get_all_scenes(pid)] == [a, b]
 
 
 def test_move_block_to_another_lane_persists(tmp_path):

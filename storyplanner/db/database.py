@@ -1555,6 +1555,29 @@ class Database:
             session.delete(lane)
             session.commit()
 
+    # -- Timeline event order (timeline-specific; independent of Outline) -----
+
+    def get_timeline_order(self, project_id: int) -> list[int]:
+        """Timeline-specific event order (scene ids). Stored in project settings
+        so it is project-scoped and never touches Scene.sort_order — moving a
+        Timeline block must NOT reorder the Outline/Manuscript."""
+        settings = self.get_project_settings(project_id)
+        raw = settings.get("timeline_order", [])
+        if not isinstance(raw, list):
+            return []
+        out: list[int] = []
+        for x in raw:
+            try:
+                out.append(int(x))
+            except (TypeError, ValueError):
+                continue
+        return out
+
+    def set_timeline_order(self, project_id: int, ordered_ids: list[int]) -> None:
+        settings = self.get_project_settings(project_id)
+        settings["timeline_order"] = [int(x) for x in ordered_ids]
+        self.save_project_settings(project_id, settings)
+
     # -- Timeline links (event ↔ event) -------------------------------------
 
     def get_timeline_links(self, project_id: int) -> list["TimelineLink"]:

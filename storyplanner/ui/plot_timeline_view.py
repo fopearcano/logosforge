@@ -36,6 +36,11 @@ from PySide6.QtWidgets import (
 
 from storyplanner.db import Database
 from storyplanner.models import TIMELINE_LINK_TYPES
+from storyplanner.story_structure import (
+    build_structure_tree,
+    compute_structural_numbers,
+    is_novel_project,
+)
 from storyplanner.ui import theme
 from storyplanner.ui.color_labels import build_color_menu, color_hex
 
@@ -118,10 +123,11 @@ class _EventCard(QFrame):
                 f"color: {theme.TEXT_SECONDARY}; font-size: 9px;")
             lay.addWidget(st_lbl)
 
-        # Compact "linked Outline target" indicator (Act/Chapter structure links).
+        # Compact "linked Outline target" indicator showing the canonical number
+        # (Act 1 / Ch 1.2) from the shared structure adapter.
         struct = self._view._struct_by_scene.get(self.scene_id, [])
         if struct:
-            refs = ", ".join(s.target_ref for s in struct)
+            refs = ", ".join(self._view._struct_ref_label(s) for s in struct)
             link_lbl = QLabel(f"🔗 {refs}")
             link_lbl.setStyleSheet(
                 f"color: {theme.ACCENT}; font-size: 9px;"
@@ -367,6 +373,9 @@ class PlotTimelineView(QWidget):
         self._card_rects: dict[int, QRect] = {}    # scene_id -> rect in canvas
         self._card_by_scene: dict[int, _EventCard] = {}
         self._n_cols = 0
+        # Timeline-specific event order (scene ids) — independent of Outline's
+        # Scene.sort_order, so moving a block here never reorders the Outline.
+        self._event_order: list[int] = []
         self._pending_link_source: int | None = None
         # Event → Act/Chapter structure links, grouped by event scene id.
         self._struct_by_scene: dict[int, list] = {}
@@ -455,6 +464,20 @@ class PlotTimelineView(QWidget):
 
     # -- data load / layout -------------------------------------------------
 
+    def _effective_order(self, scenes) -> list[int]:
+        """Resolve the timeline column order: the saved timeline order first
+        (filtered to scenes that still exist), then any newer scenes appended in
+        canonical sort_order. Never mutates Scene.sort_order."""
+        stored = self._db.get_timeline_order(self._project_id)
+        existing = {s.id for s in scenes}
+        order = [sid for sid in stored if sid in existing]
+        seen = set(order)
+        for s in scenes:                      # scenes arrive in sort_order
+            if s.id not in seen:
+                order.append(s.id)
+                seen.add(s.id)
+        return order
+
     def refresh(self) -> None:
         # Ensure lanes exist for any pre-existing plotline strings.
         self._lanes = self._db.ensure_timeline_lanes(self._project_id)
@@ -463,12 +486,22 @@ class PlotTimelineView(QWidget):
         self._struct_by_scene = {}
         for sl in self._db.get_all_timeline_structure_links(self._project_id):
             self._struct_by_scene.setdefault(sl.source_scene_id, []).append(sl)
+        # Canonical structural numbers for linked Act/Chapter chips — shared with
+        # Outline & Manuscript so a chip's path always matches the real number.
+        self._structure_numbers = compute_structural_numbers(
+            build_structure_tree(self._db, self._project_id),
+            is_novel_project(self._db, self._project_id),
+        )
         self._cur_acts = set(self._db.get_scene_acts(self._project_id))
         self._cur_chapters = set(self._db.get_scene_chapters(self._project_id))
         scenes = self._db.get_all_scenes(self._project_id)
-        # Global time rank = position in the project's sort order.
-        self._time_index = {s.id: i for i, s in enumerate(scenes)}
-        self._n_cols = len(scenes)
+        # Horizontal position = the TIMELINE-specific order (falls back to the
+        # canonical sort_order for events with no explicit timeline position).
+        # This is deliberately separate from Scene.sort_order so a Timeline move
+        # never reorders the Outline/Manuscript.
+        self._event_order = self._effective_order(scenes)
+        self._time_index = {sid: i for i, sid in enumerate(self._event_order)}
+        self._n_cols = len(self._event_order)
 
         lane_names = {ln.name for ln in self._lanes}
         by_lane: dict[str, list] = {ln.name: [] for ln in self._lanes}
@@ -617,10 +650,14 @@ class PlotTimelineView(QWidget):
         scene = self._db.get_scene_by_id(scene_id)
         if scene is not None and (scene.plotline or "") != target_lane_name:
             self._db.update_scene_plotline(scene_id, target_lane_name)
-        # Reorder along the shared story-time axis from the drop column.
+        # Reorder along the TIMELINE-specific axis from the drop column — this
+        # writes the timeline order only, never Scene.sort_order, so the Outline
+        # and Manuscript order are left intact.
         col = round((x - LEFT_PAD) / SLOT_W)
         col = max(0, min(col, max(self._n_cols - 1, 0)))
-        self._db.reorder_scene(scene_id, col)
+        order = [sid for sid in self._event_order if sid != scene_id]
+        order.insert(min(col, len(order)), scene_id)
+        self._db.set_timeline_order(self._project_id, order)
         self._notify()
 
     def _open_scene(self, scene_id: int) -> None:
@@ -758,14 +795,17 @@ class PlotTimelineView(QWidget):
         menu.exec(global_pos)
 
     def _move_event(self, scene_id: int, delta: int) -> None:
-        """Move an event one column earlier/later along the story-time axis."""
-        ids = [s.id for s in self._db.get_all_scenes(self._project_id)]
-        if scene_id not in ids:
+        """Move an event one column earlier/later along the TIMELINE axis only.
+        Writes the timeline-specific order, never Scene.sort_order, so the
+        Outline/Manuscript order is unaffected."""
+        order = list(self._event_order)
+        if scene_id not in order:
             return
-        i = ids.index(scene_id)
-        j = max(0, min(i + delta, len(ids) - 1))
+        i = order.index(scene_id)
+        j = max(0, min(i + delta, len(order) - 1))
         if j != i:
-            self._db.reorder_scene(scene_id, j)
+            order.insert(j, order.pop(i))
+            self._db.set_timeline_order(self._project_id, order)
             self._notify()
 
     def _rename_event(self, scene_id: int) -> None:
@@ -833,6 +873,21 @@ class PlotTimelineView(QWidget):
         self._notify()
 
     # -- interactions: structure links (event → Act / Chapter / Scene) -------
+
+    def _struct_ref_label(self, sl) -> str:
+        """Canonical chip label for a structure link: 'Act 1' / 'Ch 1.2'.
+
+        Falls back to the raw target name if the Act/Chapter no longer exists
+        (a renamed/deleted target shows safely, never crashes)."""
+        nums = getattr(self, "_structure_numbers", {})
+        if sl.target_type == "act":
+            n = nums.get("acts", {}).get(sl.target_ref, "")
+            return f"Act {n}" if n else sl.target_ref
+        if sl.target_type == "chapter":
+            for (_a, c), v in nums.get("chapters", {}).items():
+                if c == sl.target_ref:
+                    return f"Ch {v}" if v else sl.target_ref
+        return sl.target_ref
 
     def _add_structure_link(self, scene_id: int, ttype: str, ref: str) -> None:
         self._db.add_timeline_structure_link(

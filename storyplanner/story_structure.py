@@ -1,0 +1,252 @@
+"""Canonical story-structure adapter — the single ordered source of Acts /
+Chapters / Scenes shared by Outline, Manuscript, Timeline, Assistant and Export.
+
+There are **no Act/Chapter tables**: a project's structure is derived from the
+``Scene`` rows — ``Scene.act`` / ``Scene.chapter`` are string labels and
+``Scene.sort_order`` is the single global order. This module is the ONE place
+that turns those rows into an ordered tree and the structural numbers
+(Act ``1`` · Chapter ``1.2`` · Scene ``1.2.1``). Every view must read order and
+numbering from here instead of re-deriving it locally, so Outline, Manuscript
+and Timeline always agree.
+
+Ordering rule: named Acts/Chapters keep their first-seen (``sort_order``) order;
+scenes with no Act (or no Chapter) collect in an "Unassigned" bucket that always
+sorts **last** — so a Scene never appears before a real Act. The Unassigned
+bucket is intentionally left unnumbered.
+"""
+
+from __future__ import annotations
+
+from storyplanner.db import Database
+
+# Display label for the bucket holding scenes with no Act / no Chapter. Kept in
+# sync with the rest of the app's "Unassigned" vocabulary (e.g. Story Grid).
+UNASSIGNED_ACT = "Unassigned"
+UNASSIGNED_CHAPTER = "Unassigned"
+
+
+def act_key(name: str) -> str:
+    """Map the Unassigned display label back to the stored empty string."""
+    return "" if name == UNASSIGNED_ACT else name
+
+
+def chapter_key(name: str) -> str:
+    return "" if name == UNASSIGNED_CHAPTER else name
+
+
+def is_novel_project(db: Database, project_id: int) -> bool:
+    """Novel uses Act→Chapter→Scene; other modes use Act→Scene."""
+    try:
+        from storyplanner.project_compat import get_project_narrative_engine
+        project = db.get_project_by_id(project_id)
+        return (get_project_narrative_engine(project) or "novel") == "novel"
+    except Exception:
+        return True
+
+
+def _ordered(names: list[str], unassigned: str) -> list[str]:
+    """Named entries in first-seen order, the Unassigned bucket (if any) last."""
+    named = [n for n in names if n != unassigned]
+    return named + ([unassigned] if unassigned in names else [])
+
+
+def build_structure_tree(
+    db: Database, project_id: int,
+) -> list[tuple[str, list[tuple[str, list]]]]:
+    """Canonical ``[(act, [(chapter, [scene, ...]), ...]), ...]``.
+
+    Acts/Chapters are grouped by label (deduped) in first-seen ``sort_order``;
+    the "Unassigned" bucket for label-less scenes always sorts last.
+    """
+    scenes = db.get_all_scenes(project_id)
+    act_order: list[str] = []
+    chapter_order: dict[str, list[str]] = {}
+    grouped: dict[str, dict[str, list]] = {}
+
+    for scene in scenes:
+        act = (scene.act or "").strip() or UNASSIGNED_ACT
+        chapter = (scene.chapter or "").strip() or UNASSIGNED_CHAPTER
+        if act not in grouped:
+            grouped[act] = {}
+            act_order.append(act)
+            chapter_order[act] = []
+        if chapter not in grouped[act]:
+            grouped[act][chapter] = []
+            chapter_order[act].append(chapter)
+        grouped[act][chapter].append(scene)
+
+    tree: list[tuple[str, list[tuple[str, list]]]] = []
+    for act in _ordered(act_order, UNASSIGNED_ACT):
+        chapters = _ordered(chapter_order[act], UNASSIGNED_CHAPTER)
+        tree.append((act, [(ch, grouped[act][ch]) for ch in chapters]))
+    return tree
+
+
+# Back-compat alias: the Outline planner historically called this build_plan_tree.
+build_plan_tree = build_structure_tree
+
+
+def compute_structural_numbers(
+    tree: list[tuple[str, list[tuple[str, list]]]], is_novel: bool,
+) -> dict:
+    """Structural numbers from a tree.
+
+    Returns ``{"acts": {act: "1"}, "chapters": {(act, ch): "1.2"},
+    "scenes": {scene_id: "1.2.3"}}``. Novel → Act.Chapter.Scene (scenes with no
+    chapter become Act.Scene); other modes flatten to Act.Scene. The Unassigned
+    bucket is left blank ("") so orphans read as unnumbered, never as a fake Act.
+    """
+    acts: dict[str, str] = {}
+    chapters: dict[tuple[str, str], str] = {}
+    scenes: dict[int, str] = {}
+    act_no = 0
+    for act_name, ch_list in tree:
+        if act_name == UNASSIGNED_ACT:
+            acts[act_name] = ""
+            for ch_name, ch_scenes in ch_list:
+                chapters[(act_name, ch_name)] = ""
+                for s in ch_scenes:
+                    scenes[s.id] = ""
+            continue
+        act_no += 1
+        acts[act_name] = str(act_no)
+        chap_no = 0
+        flat_scene = 0
+        for ch_name, ch_scenes in ch_list:
+            if ch_name == UNASSIGNED_CHAPTER:
+                chapters[(act_name, ch_name)] = ""
+            else:
+                chap_no += 1
+                chapters[(act_name, ch_name)] = f"{act_no}.{chap_no}"
+            for si, scene in enumerate(ch_scenes, start=1):
+                if is_novel:
+                    if ch_name == UNASSIGNED_CHAPTER:
+                        scenes[scene.id] = f"{act_no}.{si}"
+                    else:
+                        scenes[scene.id] = f"{act_no}.{chap_no}.{si}"
+                else:
+                    flat_scene += 1
+                    scenes[scene.id] = f"{act_no}.{flat_scene}"
+    return {"acts": acts, "chapters": chapters, "scenes": scenes}
+
+
+# Back-compat alias used by the Outline planner.
+compute_outline_numbering = compute_structural_numbers
+
+
+def flatten_tree_to_order(
+    tree: list[tuple[str, list[tuple[str, list]]]],
+) -> tuple[list[int], dict[int, tuple[str, str]]]:
+    """Flatten a (possibly reordered) tree into a global scene order plus the
+    Act/Chapter label each scene should carry. "Unassigned" placeholders are
+    converted back to empty strings so a move never persists the display label.
+    """
+    order: list[int] = []
+    structure: dict[int, tuple[str, str]] = {}
+    for act_name, ch_list in tree:
+        a = act_key(act_name)
+        for ch_name, ch_scenes in ch_list:
+            c = chapter_key(ch_name)
+            for scene in ch_scenes:
+                order.append(scene.id)
+                structure[scene.id] = (a, c)
+    return order, structure
+
+
+# ---------------------------------------------------------------------------
+# Canonical read API (used by Outline / Manuscript / Timeline / Export)
+# ---------------------------------------------------------------------------
+
+
+def get_ordered_structure(db: Database, project_id: int):
+    """The canonical ordered Act→Chapter→Scene tree for a project."""
+    return build_structure_tree(db, project_id)
+
+
+def list_acts(db: Database, project_id: int) -> list[str]:
+    return [a for a, _ in build_structure_tree(db, project_id)]
+
+
+def list_chapters(
+    db: Database, project_id: int, act: str | None = None,
+) -> list[str]:
+    out: list[str] = []
+    for a, chs in build_structure_tree(db, project_id):
+        if act is not None and a != act:
+            continue
+        out.extend(c for c, _ in chs if c != UNASSIGNED_CHAPTER)
+    return out
+
+
+def list_scenes(
+    db: Database, project_id: int,
+    act: str | None = None, chapter: str | None = None,
+) -> list:
+    out: list = []
+    for a, chs in build_structure_tree(db, project_id):
+        if act is not None and a != act:
+            continue
+        for c, scs in chs:
+            if chapter is not None and c != chapter:
+                continue
+            out.extend(scs)
+    return out
+
+
+def get_primary_writing_units(db: Database, project_id: int) -> list:
+    """Mode-aware primary writing units in canonical order.
+
+    Novel → one entry per (act, chapter) group; other modes → scenes.
+    """
+    tree = build_structure_tree(db, project_id)
+    if is_novel_project(db, project_id):
+        units = []
+        for a, chs in tree:
+            for c, scs in chs:
+                if c != UNASSIGNED_CHAPTER:
+                    units.append((a, c, scs))
+        return units
+    return list_scenes(db, project_id)
+
+
+def get_unit_path(db: Database, project_id: int, scene_id: int) -> str:
+    """Readable canonical path, e.g. ``Act 1 · Chapter 1.2 · Scene 1.2.1``.
+
+    Returns "" if the scene is not found. Safe against missing/renamed nodes.
+    """
+    tree = build_structure_tree(db, project_id)
+    numbers = compute_structural_numbers(tree, is_novel_project(db, project_id))
+    for act_name, ch_list in tree:
+        for ch_name, ch_scenes in ch_list:
+            for s in ch_scenes:
+                if s.id != scene_id:
+                    continue
+                parts: list[str] = []
+                an = numbers["acts"].get(act_name, "")
+                parts.append(f"Act {an}" if an else act_name)
+                if ch_name != UNASSIGNED_CHAPTER:
+                    cn = numbers["chapters"].get((act_name, ch_name), "")
+                    parts.append(f"Chapter {cn}" if cn else ch_name)
+                sn = numbers["scenes"].get(scene_id, "")
+                parts.append(f"Scene {sn}" if sn else (s.title or "Scene"))
+                return " · ".join(parts)
+    return ""
+
+
+def structure_ref_number(
+    db: Database, project_id: int, target_type: str, target_ref: str,
+) -> str:
+    """Canonical number for a Timeline structure link target.
+
+    ``("act", "Act I") → "1"`` · ``("chapter", "Ch1") → "1.2"``. Returns "" if
+    the target no longer exists (safe for stale links).
+    """
+    tree = build_structure_tree(db, project_id)
+    numbers = compute_structural_numbers(tree, is_novel_project(db, project_id))
+    if target_type == "act":
+        return numbers["acts"].get(target_ref, "")
+    if target_type == "chapter":
+        for (act_name, ch_name), num in numbers["chapters"].items():
+            if ch_name == target_ref:
+                return num
+    return ""
