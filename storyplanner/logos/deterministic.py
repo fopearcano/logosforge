@@ -442,11 +442,11 @@ register("gn_review_dashboard", _gn_review_dashboard)
 
 
 def _stage_check(db, context: LogosContext) -> LogosResult:
-    """Deterministic Stage Script scene-body check (Phase 1).
+    """Deterministic Stage Script scene intelligence check (Phase 3).
 
-    Report-only — never mutates, never generates. Validates the current Stage
-    Script scene's blocks (stage action, character/dialogue balance, entrances/
-    exits, lighting/sound cues)."""
+    Report-only — never mutates, never generates, never calls the LLM. Groups every
+    finding by category (format / blocking / playability / dialogue / cues /
+    dramatic function / plan alignment / continuity) with transparent metrics."""
     action = "stage_check"
     scene_id = context.current_scene_id
     if scene_id is None:
@@ -456,22 +456,38 @@ def _stage_check(db, context: LogosContext) -> LogosResult:
             suggestions=[], proposed_operations=[],
         )
     try:
-        from storyplanner.stage_script_blocks import (
-            load_scene_script, validate_stage_script,
+        from storyplanner.stage_script_diagnostics import (
+            analyze_scene_by_id, group_issues_by_category,
         )
-        script = load_scene_script(db, scene_id)
-        report = validate_stage_script(script)
+        report = analyze_scene_by_id(db, context.project_id, scene_id)
     except Exception as exc:  # never crash the UI
         return LogosResult.failure(action, f"Stage Script check failed: {exc}")
 
-    head = f"{len(script.blocks)} block(s)."
-    if not report.warnings:
-        msg = head + "\n\nNo stage-script issues detected."
-    else:
-        msg = head + "\n\nWarnings:\n" + "\n".join(f"- {w}" for w in report.warnings)
+    lines = [report.summary, ""]
+    lines.append(
+        f"Metrics — Blocks: {report.total_blocks} · Character: "
+        f"{report.character_count} · Dialogue: {report.dialogue_count} · Stage "
+        f"directions: {report.stage_direction_count} · Entrances/Exits: "
+        f"{report.entrance_count}/{report.exit_count} · Cues (L/S): "
+        f"{report.lighting_count}/{report.sound_count} · Dialogue:action ratio: "
+        f"{report.dialogue_stage_ratio}")
+    suggestions: list[str] = []
+    for category, items in group_issues_by_category(report).items():
+        ordered = sorted(items, key=lambda i: i.severity_rank, reverse=True)
+        lines.append("")
+        lines.append(f"{category}:")
+        for i in ordered:
+            where = f" (block {i.block_number})" if i.block_number else ""
+            lines.append(f"- [{i.severity}] {i.label}{where} — {i.evidence}")
+            if i.suggested_action:
+                suggestions.append(f"{i.label}: {i.suggested_action}")
+    if report.strengths:
+        lines.append("")
+        lines.append("Strengths: " + "; ".join(report.strengths))
     return LogosResult(
         ok=True, action=action, title="Stage Script Check",
-        message=msg, suggestions=list(report.warnings), proposed_operations=[])
+        message="\n".join(lines).strip(), suggestions=suggestions,
+        proposed_operations=[])  # report only — no mutation
 
 
 register("stage_check", _stage_check)
