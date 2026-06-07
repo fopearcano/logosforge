@@ -1087,14 +1087,10 @@ class PlanView(QWidget):
         )
         if not ok or not name.strip():
             return
-        name = name.strip()
-        # Acts are created implicitly by adding a scene under them.
-        # Create a placeholder scene so the act becomes visible.
-        self._db.create_scene(
-            self._project_id,
-            title="Untitled Scene",
-            act=name,
-        )
+        # An Act always seeds a valid Act → Chapter 1 → Scene chain (the
+        # structure service guarantees no orphan Chapter is created).
+        from storyplanner import story_structure
+        story_structure.create_act(self._db, self._project_id, name.strip())
         self._notify()
         self.refresh()
 
@@ -1104,13 +1100,10 @@ class PlanView(QWidget):
         )
         if not ok or not name.strip():
             return
-        actual_act = "" if act_name == _UNTITLED_ACT else act_name
-        self._db.create_scene(
-            self._project_id,
-            title="Untitled Scene",
-            act=actual_act,
-            chapter=name.strip(),
-        )
+        # A Chapter always lands under a valid Act (auto-created if needed).
+        from storyplanner import story_structure
+        story_structure.create_chapter(
+            self._db, self._project_id, _act_key(act_name), name.strip())
         self._notify()
         self.refresh()
 
@@ -1121,13 +1114,13 @@ class PlanView(QWidget):
         if not ok:
             return
         title = title.strip() or "Untitled Scene"
-        actual_act = "" if act_name == _UNTITLED_ACT else act_name
-        actual_chapter = "" if chapter_name == _UNTITLED_CHAPTER else chapter_name
-        self._db.create_scene(
-            self._project_id,
+        # A Scene always lands under a valid Act + Chapter (the service fills a
+        # default parent when the act-level "+ New Scene" passes no chapter).
+        from storyplanner import story_structure
+        story_structure.create_scene(
+            self._db, self._project_id,
+            act=_act_key(act_name), chapter=_chapter_key(chapter_name),
             title=title,
-            act=actual_act,
-            chapter=actual_chapter,
         )
         self._notify()
         self.refresh()

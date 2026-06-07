@@ -87,6 +87,12 @@ class _EventCard(QFrame):
         lay.setContentsMargins(8, 5, 6, 5)
         lay.setSpacing(1)
         title = (self._scene.title or "Untitled").strip() or "Untitled"
+        # Prefix the canonical structural number (e.g. "1.1.1") so the event
+        # reads as a clear Act→Chapter→Scene path, never a bare "Untitled".
+        snum = (self._view._structure_numbers.get("scenes", {})
+                .get(self.scene_id, "")) if hasattr(self._view, "_structure_numbers") else ""
+        if snum:
+            title = f"{snum}  {title}"
         self._title_lbl = QLabel(title)
         self._title_lbl.setStyleSheet(
             f"color: {theme.TEXT_PRIMARY}; font-size: 11px; font-weight: 600;"
@@ -594,7 +600,8 @@ class PlotTimelineView(QWidget):
     def _show_lane_menu(self, lane, global_pos) -> None:
         menu = QMenu(self)
         menu.addAction(
-            "Add event…", lambda nm=lane.name: self._add_event_to_lane(nm))
+            "Create linked scene…",
+            lambda nm=lane.name: self._add_event_to_lane(nm))
         menu.addAction("Rename…", lambda: self._rename_lane(lane))
         build_color_menu(
             menu, lane.color_label,
@@ -608,15 +615,17 @@ class PlotTimelineView(QWidget):
         menu.exec(global_pos)
 
     def _add_event_to_lane(self, lane_name: str) -> None:
-        """Create a new Timeline event (a scene) directly in this lane. The
-        scene is created with only a title + plotline — Timeline never writes
-        manuscript body or Outline structure."""
+        """Explicitly create a linked Scene in this lane. The Scene is parented
+        under a valid Act → Chapter (structure service) so Timeline never makes
+        an orphan Scene; it sets only title + plotline, never body."""
         title, ok = QInputDialog.getText(
-            self, "New event", "Event title:", text="New event")
+            self, "Create linked scene", "Scene title:", text="New scene")
         if not ok or not title.strip():
             return
-        self._db.create_scene(
-            self._project_id, title.strip(), plotline=lane_name or "")
+        from storyplanner import story_structure
+        story_structure.create_scene(
+            self._db, self._project_id, title=title.strip(),
+            plotline=lane_name or "")
         self._notify()
 
     def _rename_lane(self, lane) -> None:

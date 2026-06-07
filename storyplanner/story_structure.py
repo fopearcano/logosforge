@@ -24,6 +24,14 @@ from storyplanner.db import Database
 UNASSIGNED_ACT = "Unassigned"
 UNASSIGNED_CHAPTER = "Unassigned"
 
+# Defaults used when CREATING new structure with no explicit parent.
+DEFAULT_ACT = "Act 1"
+DEFAULT_CHAPTER = "Chapter 1"
+
+# Labels used when REPAIRING pre-existing orphan data from earlier bugs.
+RECOVERED_ACT = "Recovered Act"
+RECOVERED_CHAPTER = "Recovered Chapter"
+
 
 def act_key(name: str) -> str:
     """Map the Unassigned display label back to the stored empty string."""
@@ -250,3 +258,104 @@ def structure_ref_number(
             if ch_name == target_ref:
                 return num
     return ""
+
+
+# ---------------------------------------------------------------------------
+# Structural invariant: every Scene under a Chapter, every Chapter under an Act
+# ---------------------------------------------------------------------------
+
+
+def is_orphan_scene(scene) -> bool:
+    """A scene is orphan if it has no Act or no Chapter label."""
+    return (not (getattr(scene, "act", "") or "").strip()
+            or not (getattr(scene, "chapter", "") or "").strip())
+
+
+def validate_structure(db: Database, project_id: int) -> list[int]:
+    """Ids of scenes that violate the Act → Chapter → Scene invariant."""
+    return [s.id for s in db.get_all_scenes(project_id) if is_orphan_scene(s)]
+
+
+def ensure_valid_structure(db: Database, project_id: int) -> dict:
+    """Repair orphan structure in place so every Scene has a Chapter and every
+    Chapter an Act. Empty labels are filled with "Recovered Act"/"Recovered
+    Chapter"; any existing valid label is preserved. Only act/chapter labels are
+    touched — never body, summary, tags, links, sort order or ids. Idempotent.
+    Returns ``{"repaired": n}``.
+    """
+    repaired = 0
+    for s in db.get_all_scenes(project_id):
+        act = (s.act or "").strip()
+        chapter = (s.chapter or "").strip()
+        if act and chapter:
+            continue
+        db.set_scene_structure(
+            s.id, act or RECOVERED_ACT, chapter or RECOVERED_CHAPTER)
+        repaired += 1
+    return {"repaired": repaired}
+
+
+def _named_acts(db: Database, project_id: int) -> list[str]:
+    return [a for a in list_acts(db, project_id) if a != UNASSIGNED_ACT]
+
+
+def default_parent(db: Database, project_id: int) -> tuple[str, str]:
+    """The (act, chapter) a parent-less new Scene should adopt: the first valid
+    Act/Chapter if any exist, else the project's starter Act 1 / Chapter 1."""
+    for act_name, chs in build_structure_tree(db, project_id):
+        if act_name == UNASSIGNED_ACT:
+            continue
+        for ch_name, _scenes in chs:
+            if ch_name != UNASSIGNED_CHAPTER:
+                return (act_name, ch_name)
+        return (act_name, DEFAULT_CHAPTER)
+    return (DEFAULT_ACT, DEFAULT_CHAPTER)
+
+
+def _next_name(existing: set[str], prefix: str) -> str:
+    i = 1
+    while f"{prefix} {i}" in existing:
+        i += 1
+    return f"{prefix} {i}"
+
+
+def create_act(db: Database, project_id: int, name: str | None = None):
+    """Create an Act. Because Acts are scene-derived, this seeds a valid starter
+    scene (Act → Chapter 1 → Scene) — never an orphan. Returns the seed Scene."""
+    act = (name or "").strip() or _next_name(
+        set(list_acts(db, project_id)), "Act")
+    return db.create_scene(
+        project_id, title="Untitled Scene", act=act, chapter=DEFAULT_CHAPTER)
+
+
+def create_chapter(
+    db: Database, project_id: int, act: str | None = None,
+    name: str | None = None,
+):
+    """Create a Chapter under an Act (auto-selecting/creating an Act if none is
+    given), seeding a valid placeholder Scene. Returns the seed Scene."""
+    act_name = (act or "").strip()
+    if not act_name:
+        acts = _named_acts(db, project_id)
+        act_name = acts[0] if acts else DEFAULT_ACT
+    chapter = (name or "").strip() or _next_name(
+        set(list_chapters(db, project_id, act_name)), "Chapter")
+    return db.create_scene(
+        project_id, title="Untitled Scene", act=act_name, chapter=chapter)
+
+
+def create_scene(
+    db: Database, project_id: int,
+    act: str | None = None, chapter: str | None = None,
+    title: str = "Untitled Scene", **kwargs,
+):
+    """Create a Scene, guaranteeing an Act + Chapter parent. A missing parent is
+    filled from :func:`default_parent` — a Scene is never created orphan."""
+    a = (act or "").strip()
+    c = (chapter or "").strip()
+    if not a or not c:
+        da, dc = default_parent(db, project_id)
+        a = a or da
+        c = c or dc
+    return db.create_scene(project_id, title=title, act=a, chapter=c, **kwargs)
+

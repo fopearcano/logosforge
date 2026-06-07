@@ -776,10 +776,31 @@ class MainWindow(QMainWindow):
         return placeholder
 
     def _on_welcome_create_scene(self) -> None:
-        scene = self._db.create_scene(self._project_id, "Untitled Scene")
+        # Seed a valid Act 1 → Chapter 1 → Scene chain (never an orphan Scene).
+        from storyplanner import story_structure
+        scene = story_structure.create_scene(
+            self._db, self._project_id, title="Untitled Scene")
         preferences.set_flag("has_seen_onboarding", True)
         self._on_data_changed()
         self._open_scene_in_editor(scene.id)
+
+    def _repair_structure(self, project_id: int) -> None:
+        """Enforce Act → Chapter → Scene for a project on load/switch: repair
+        any legacy orphan scenes in place (data preserved; persisted to the DB)
+        and log the count. Keeps every section free of orphan/"Unassigned"
+        structure as normal UX."""
+        try:
+            from storyplanner.story_structure import ensure_valid_structure
+            result = ensure_valid_structure(self._db, project_id)
+            if result.get("repaired"):
+                import logging
+                logging.getLogger("storyplanner.structure").info(
+                    "Structure repair: moved %d orphan scene(s) into "
+                    "Recovered Act/Chapter (project %s).",
+                    result["repaired"], project_id,
+                )
+        except Exception:
+            pass
 
     def _show_projects(self) -> None:
         self._set_content(
@@ -2988,6 +3009,9 @@ class MainWindow(QMainWindow):
         # 2. Swap the active project id and hand it to long-lived
         # sub-systems.
         self._project_id = new_id
+        # Repair any legacy orphan structure for the project we're entering so
+        # no section ever shows scenes outside the Act → Chapter → Scene chain.
+        self._repair_structure(new_id)
         # Recompute the writing-mode-dependent sidebar nav (Graphic-Novel-only
         # Pages item) for the new project before the active section is rebuilt.
         self._apply_pages_availability()

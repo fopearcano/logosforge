@@ -67,6 +67,10 @@ def create_app() -> tuple[QApplication, MainWindow]:
     pm.load_enabled()
 
     window = MainWindow(db, project.id)
+    # Repair any legacy orphan structure on the initial project so no section
+    # ever opens on scenes outside the Act → Chapter → Scene chain. (Opening a
+    # different last_project below goes through _switch_project, which repairs.)
+    window._repair_structure(project.id)
 
     last_path = str(mgr.get("last_project_path") or "")
     if last_path:

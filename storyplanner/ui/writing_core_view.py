@@ -1761,6 +1761,12 @@ class WritingCoreView(QWidget):
         focus_state = self._focused_editor_state()
 
         self._clear_canvas()
+        # Manuscript is a writing surface, never a repair bay: enforce the
+        # Act → Chapter → Scene invariant before display so it never shows
+        # orphan "Unassigned" scenes (legacy data is repaired in place).
+        if self._structured_list:
+            from storyplanner.story_structure import ensure_valid_structure
+            ensure_valid_structure(self._db, self._project_id)
         scenes = self._db.get_all_scenes(self._project_id)
 
         self._scene_sort_orders = {s.id: s.sort_order for s in scenes}
@@ -1979,13 +1985,12 @@ class WritingCoreView(QWidget):
             return 0
 
     def _page_new_scene(self, act: str, chapter: str, after_id) -> None:
-        self._create_scene_after(after_id, chapter=chapter)
+        self._create_scene_after(after_id, act=act, chapter=chapter)
 
     def _page_new_chapter(self, act: str) -> None:
-        scene = self._db.create_scene(
-            self._project_id, "Untitled",
-            act=act or None, chapter="New Chapter",
-        )
+        from storyplanner import story_structure
+        scene = story_structure.create_chapter(
+            self._db, self._project_id, act, "New Chapter")
         if self._on_content_saved:
             self._on_content_saved()
         self.refresh()
@@ -2557,11 +2562,13 @@ class WritingCoreView(QWidget):
     # -- Scene CRUD -----------------------------------------------------------
 
     def _create_scene_after(
-        self, after_scene_id: int | None, chapter: str = "",
+        self, after_scene_id: int | None, chapter: str = "", act: str = "",
     ) -> None:
-        new_scene = self._db.create_scene(
-            self._project_id, "Untitled",
-            chapter=chapter if chapter else None,
+        # Always create under a valid Act + Chapter (service fills a default
+        # parent when none is supplied) — Manuscript never makes an orphan Scene.
+        from storyplanner import story_structure
+        new_scene = story_structure.create_scene(
+            self._db, self._project_id, act=act, chapter=chapter, title="Untitled",
         )
 
         if after_scene_id is not None:

@@ -137,7 +137,7 @@ def test_unit_path_is_canonical():
 # ==========================================================================
 
 
-def test_manuscript_uses_canonical_order_no_scenes_before_acts(tmp_path):
+def test_manuscript_repairs_orphans_no_unassigned(tmp_path):
     db = Database(str(tmp_path / "sp.db"))
     pid = _novel(db)
     db.create_scene(pid, "Loose", content="orphan body")   # orphan FIRST
@@ -146,10 +146,14 @@ def test_manuscript_uses_canonical_order_no_scenes_before_acts(tmp_path):
     win.sidebar_buttons["Manuscript"].click()
     headers = _act_headers(win.content_area)
     assert headers, "expected Act headers"
-    assert headers[0] == "ACT 1 · ACT I"               # real Act first
-    assert headers[-1] == "UNASSIGNED SCENES"          # orphan group last
-    # No fabricated "Act 1" for the orphan group, and it never precedes Act I.
-    assert headers.index("ACT 1 · ACT I") < headers.index("UNASSIGNED SCENES")
+    # The invariant is enforced before display: the orphan is recovered into a
+    # real Act → Chapter, so there is NO "Unassigned" surface and no floating
+    # scene. Every header is a real Act.
+    assert not any("UNASSIGNED" in h for h in headers)
+    assert any("RECOVERED ACT" in h for h in headers)
+    assert any("ACT I" in h for h in headers)
+    from storyplanner.story_structure import validate_structure
+    assert validate_structure(db, pid) == []          # no orphans remain
 
 
 def test_manuscript_scene_context_uses_canonical_number(tmp_path):
