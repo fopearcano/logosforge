@@ -80,6 +80,8 @@ _PROFILES: dict[str, MediumProfile] = {
             "sp_diagnose_scene_economy",
             # Phase 3 — unified scene health + beat-plan alignment near the top.
             "sp_scene_health", "sp_beat_plan_alignment",
+            # Phase 5 — Counterpart two-stance reflection.
+            "sp_counterpart_reflection",
             "sp_detect_setup_payoff",
             "sp_check_subtext", "sp_show_story_links", "sp_explain_link",
             "sp_revision_impact", "sp_check_impacted_scenes", "sp_check_psyke_impact",

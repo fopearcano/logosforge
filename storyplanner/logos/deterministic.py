@@ -193,8 +193,38 @@ def _beat_plan_alignment(db, context: LogosContext) -> LogosResult:
     )
 
 
+def _counterpart_reflection(db, context: LogosContext) -> LogosResult:
+    """Deterministic two-stance scene reflection (Phase 5).
+
+    Re-projects the Phase 3 diagnostics + Phase 2 beat plan + PSYKE into an
+    internal-character / external-audience reflection with revision questions.
+    Diagnostic only — never rewrites or mutates."""
+    action = "sp_counterpart_reflection"
+    scene_id = context.current_scene_id
+    if scene_id is None:
+        return LogosResult(
+            ok=True, action=action, title="Counterpart Reflection",
+            message="Open a scene in the Manuscript to reflect on it.",
+            suggestions=[], proposed_operations=[],
+        )
+    try:
+        from storyplanner.screenplay_reflection import build_scene_reflection
+        report = build_scene_reflection(db, context.project_id, scene_id)
+    except Exception as exc:  # never crash the UI
+        return LogosResult.failure(action, f"Reflection failed: {exc}")
+
+    suggestions = list(report.revision_suggestions) + [
+        f"Q: {q}" for q in report.questions]
+    return LogosResult(
+        ok=True, action=action, title="Counterpart Reflection",
+        message=report.to_text(), suggestions=suggestions,
+        proposed_operations=[],  # reflection only — no mutation
+    )
+
+
 register("sp_scene_health", _scene_health)
 register("sp_beat_plan_alignment", _beat_plan_alignment)
+register("sp_counterpart_reflection", _counterpart_reflection)
 
 
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:

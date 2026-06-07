@@ -554,6 +554,16 @@ register(LogosAction(
     category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
     prompt="", modes=_SP, deterministic=True,
 ))
+# Manuscript + Screenplay — Phase 5 (Counterpart / Reflection).
+# Deterministic two-stance scene reflection (internal character + external
+# audience), full-scene, preview-only — never rewrites or auto-applies.
+register(LogosAction(
+    name="sp_counterpart_reflection", label="Counterpart Reflection",
+    description="Reflect on this scene from the inside (each character) and the "
+                "outside (audience/story): feedback and questions, never a rewrite.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=_SP, deterministic=True,
+))
 # Generative rewrite/suggestion actions (LLM only on explicit invocation):
 for _name, _label, _desc, _prompt in [
     ("sp_tighten_dialogue", "Tighten Dialogue Economy",
