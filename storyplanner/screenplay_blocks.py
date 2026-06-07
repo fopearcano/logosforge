@@ -206,14 +206,36 @@ def _format_block_text(block: ScreenplayBlock, *, uppercase: bool) -> str:
 def serialize_blocks(
     blocks: list[ScreenplayBlock], *, uppercase: bool = True,
 ) -> str:
-    """Render blocks back to plain screenplay text (blank-line separated).
+    """Render blocks back to plain screenplay text.
 
-    Round-trip safe: no text loss, order preserved; only caps elements are
-    uppercased and parentheticals are normalized.
+    Round-trip safe: no text loss, order preserved; caps elements are uppercased
+    and parentheticals normalized. A character cue and its following
+    parentheticals/dialogue are kept together as ONE blank-line-separated
+    paragraph (single newlines within the group) so that re-parsing the output
+    reconstructs the same character/dialogue blocks rather than degrading the cue
+    to an action line.
     """
-    return "\n\n".join(
-        _format_block_text(b, uppercase=uppercase) for b in blocks
-    )
+    paras: list[str] = []
+    group: list[str] | None = None   # an open character/dialogue group
+
+    def flush() -> None:
+        nonlocal group
+        if group:
+            paras.append("\n".join(group))
+        group = None
+
+    for b in blocks:
+        text = _format_block_text(b, uppercase=uppercase)
+        if b.element_type == "character":
+            flush()
+            group = [text]
+        elif b.element_type in ("parenthetical", "dialogue") and group is not None:
+            group.append(text)
+        else:
+            flush()
+            paras.append(text)
+    flush()
+    return "\n\n".join(paras)
 
 
 def to_fountain(blocks: list[ScreenplayBlock]) -> str:
