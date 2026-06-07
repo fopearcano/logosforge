@@ -744,6 +744,9 @@ class _SceneEditor(QTextEdit):
     _on_new_block = None
     _on_tab_cycle = None
     _on_psyke_context_action = None
+    # Screenplay Phase 2: host-set hook + flag for "Draft from Beat Plan…".
+    _on_draft_from_beat_plan = None
+    _screenplay_mode = False
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -977,6 +980,15 @@ class _SceneEditor(QTextEdit):
                 voice_act.triggered.connect(
                     lambda: self._show_voice_rewrites(event.globalPos()),
                 )
+        # Screenplay Phase 2: draft this scene's body from its saved beat plan.
+        if (self._screenplay_mode and self._on_draft_from_beat_plan is not None
+                and self._scene_id is not None):
+            menu.addSeparator()
+            draft_act = menu.addAction("Draft from Beat Plan…")
+            draft_act.triggered.connect(
+                lambda _=False, sid=self._scene_id:
+                    self._on_draft_from_beat_plan(sid),
+            )
         menu.exec(event.globalPos())
         menu.deleteLater()
 
@@ -2085,6 +2097,8 @@ class WritingCoreView(QWidget):
         editor._on_new_block = self._on_new_block_created
         editor._on_tab_cycle = self._on_tab_cycle_element
         editor._on_psyke_context_action = self._handle_psyke_context
+        editor._on_draft_from_beat_plan = self._handle_draft_from_beat_plan
+        editor._screenplay_mode = self._is_screenplay_mode()
         editor._smart_quotes = self._smart_quotes
         editor._grammar_enabled = self._grammar_checking
         editor._style_hints_enabled = self._style_hints_checking
@@ -3834,6 +3848,91 @@ class WritingCoreView(QWidget):
             entry_id = args[0]
             self._on_psyke_jump(entry_id)
         return None
+
+    # -- Draft from Beat Plan (Phase 2; screenplay-only, preview→confirm) -----
+
+    def _is_screenplay_mode(self) -> bool:
+        try:
+            from storyplanner.writing_modes import (
+                get_project_writing_mode_by_id, SCREENPLAY,
+            )
+            return get_project_writing_mode_by_id(
+                self._db, self._project_id) == SCREENPLAY
+        except Exception:
+            return False
+
+    def _handle_draft_from_beat_plan(self, scene_id: int) -> None:
+        """Draft this scene's body from its saved beat plan, off the UI thread.
+
+        Strictly preview→confirm: generation produces a *draft*, the author
+        reviews it in :class:`DraftPreviewDialog`, and only an explicit choice
+        routes it through Controlled Apply. The AI never writes the body itself.
+        """
+        from PySide6.QtWidgets import QMessageBox
+        from storyplanner import screenplay_pipeline as spp
+
+        plan = spp.get_beat_plan(self._db, self._project_id, scene_id)
+        if plan is None or plan.is_empty():
+            QMessageBox.information(
+                self, "Draft from Beat Plan",
+                "This scene has no beat plan yet.\n\nOpen the scene's ⋯ menu in "
+                "Outline and choose “Generate Beat Plan” first.")
+            return
+        if getattr(self, "_beat_draft_worker", None) is not None:
+            return
+        from storyplanner.ui.outline_ai import OutlineGenWorker, build_provider
+        provider = build_provider()
+        if provider is None:
+            QMessageBox.information(
+                self, "Draft from Beat Plan",
+                "No AI provider is configured. Set one in Settings first.")
+            return
+        prompt = spp.build_draft_prompt(self._db, self._project_id, scene_id, plan)
+        self._beat_draft_scene_id = scene_id
+        self._beat_draft_worker = OutlineGenWorker(
+            spp.draft_messages(prompt), provider)
+        self._beat_draft_worker.completed.connect(self._on_draft_from_beat_plan_done)
+        self._beat_draft_worker.failed.connect(self._on_draft_from_beat_plan_failed)
+        self._beat_draft_worker.start()
+
+    def _on_draft_from_beat_plan_failed(self, error: str) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        self._beat_draft_worker = None
+        QMessageBox.warning(self, "Draft from Beat Plan",
+                            f"Generation failed:\n\n{error}")
+
+    def _on_draft_from_beat_plan_done(self, text: str) -> None:
+        self._beat_draft_worker = None
+        scene_id = getattr(self, "_beat_draft_scene_id", None)
+        if scene_id is None:
+            return
+        from PySide6.QtWidgets import QMessageBox
+        from storyplanner import screenplay_pipeline as spp
+        from storyplanner.screenplay_blocks import serialize_blocks
+        from storyplanner.ui.screenplay_pipeline_dialogs import DraftPreviewDialog
+
+        blocks = spp.parse_draft_blocks(text or "", scene_id=scene_id)
+        validation = spp.validate_draft_blocks(blocks)
+        scene = self._db.get_scene_by_id(scene_id)
+        body_is_empty = not (getattr(scene, "content", "") or "").strip()
+        title = (getattr(scene, "title", "") or "") if scene else ""
+
+        choice = DraftPreviewDialog.get_choice(
+            serialize_blocks(blocks), validation, body_is_empty=body_is_empty,
+            parent=self, title=title)
+        if choice is None:
+            return  # cancelled — no mutation
+        mode, edited_text = choice
+        final_blocks = spp.parse_draft_blocks(edited_text, scene_id=scene_id)
+        result = spp.apply_draft(
+            self._db, self._project_id, scene_id, final_blocks,
+            mode=mode, confirmed=True)
+        if not result.get("ok"):
+            QMessageBox.warning(self, "Draft from Beat Plan",
+                                result.get("error", "Could not apply the draft."))
+            return
+        self.refresh()
+        self.scroll_to_scene(scene_id)
 
     def _resolve_term_at(self, text: str, col: int) -> int | None:
         hl = next(iter(self._highlighters.values()), None)

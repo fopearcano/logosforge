@@ -77,6 +77,7 @@ def gather_scene_context(
     position_section = _build_position_section(all_scenes, current_idx)
     continuity_section = _build_continuity_section(db, scene_id)
     screenplay_section = _build_screenplay_context(db, project_id, scene_id)
+    beat_plan_section = _build_beat_plan_section(db, project_id, scene_id)
 
     sections: list[str] = []
     if scene_section:
@@ -91,10 +92,23 @@ def gather_scene_context(
         sections.append(f"[Continuity]\n{continuity_section}")
     if screenplay_section:
         sections.append(f"[Screenplay Analysis]\n{screenplay_section}")
+    if beat_plan_section:
+        # Already self-labelled "[Beat Plan]"; empty for non-screenplay/unplanned.
+        sections.append(beat_plan_section)
     if position_section:
         sections.append(f"[Story Position]\n{position_section}")
 
     return "\n\n".join(sections)
+
+
+def _build_beat_plan_section(db: Database, project_id: int, scene_id: int) -> str:
+    """Screenplay scene beat plan (Phase 2), if one exists. Read-only; empty for
+    Novel projects or scenes without a plan."""
+    try:
+        from storyplanner.screenplay_pipeline import beat_plan_context
+        return beat_plan_context(db, project_id, scene_id)
+    except Exception:
+        return ""
 
 
 def _build_continuity_section(db: Database, scene_id: int) -> str:

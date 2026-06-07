@@ -499,6 +499,9 @@ class PlanView(QWidget):
         self._on_logos_action = on_logos_action
         self._gen_worker: OutlineGenWorker | None = None
         self._pending_gen: tuple[str, str, str] = ("full", "", "")
+        # Separate worker so beat-plan generation never collides with outline gen.
+        self._beat_worker: OutlineGenWorker | None = None
+        self._beat_scene_id: int | None = None
 
         # The Outline section must stay usable when the Assistant panel is open
         # — keep a sensible minimum so the act cards never collapse to a sliver.
@@ -1265,6 +1268,14 @@ class PlanView(QWidget):
         open_act.triggered.connect(lambda: self._open_in_manuscript(scene_id))
         menu.addAction(open_act)
 
+        # Screenplay-only: generate a beat plan from this scene's summary (Phase 2).
+        if self._is_screenplay_mode():
+            beat_plan = QAction("✨ Generate Beat Plan", menu)
+            beat_plan.setToolTip("Plan this scene's beats from its summary "
+                                 "(separate from the Manuscript body).")
+            beat_plan.triggered.connect(lambda: self._generate_beat_plan(scene_id))
+            menu.addAction(beat_plan)
+
         ai_expand = QAction("✨ AI Expand (add beats/scenes)", menu)
         ai_expand.triggered.connect(lambda: self._ai_expand_scene(scene_id))
         menu.addAction(ai_expand)
@@ -1342,6 +1353,69 @@ class PlanView(QWidget):
         if scene is None:
             return
         self._run_ai("scene", act=scene.act or "", chapter=scene.chapter or "")
+
+    # -- Beat plan (Phase 2; screenplay-only, non-destructive) ---------------
+
+    def _is_screenplay_mode(self) -> bool:
+        try:
+            from storyplanner.writing_modes import (
+                get_project_writing_mode_by_id, SCREENPLAY,
+            )
+            return get_project_writing_mode_by_id(
+                self._db, self._project_id) == SCREENPLAY
+        except Exception:
+            return (self._engine or "") == "screenplay"
+
+    def _generate_beat_plan(self, scene_id: int) -> None:
+        """Generate a beat plan from the scene summary, off the UI thread.
+
+        Generation is non-destructive: the result is shown for review and only
+        saved (as a separate beat-plan artifact) if the author confirms. It never
+        writes the Manuscript body or the Outline summary.
+        """
+        if self._beat_worker is not None:
+            return
+        provider = build_provider()
+        if provider is None:
+            QMessageBox.information(
+                self, "Generate Beat Plan",
+                "No AI provider is configured. Set one in Settings first.")
+            return
+        from storyplanner import screenplay_pipeline as spp
+        prompt = spp.build_beat_plan_prompt(self._db, self._project_id, scene_id)
+        self._beat_scene_id = scene_id
+        self._set_ai_busy(True)
+        self._beat_worker = OutlineGenWorker(spp.beat_plan_messages(prompt), provider)
+        self._beat_worker.completed.connect(self._on_beat_plan_done)
+        self._beat_worker.failed.connect(self._on_beat_plan_failed)
+        self._beat_worker.start()
+
+    def _on_beat_plan_failed(self, error: str) -> None:
+        self._beat_worker = None
+        self._set_ai_busy(False)
+        QMessageBox.warning(self, "Generate Beat Plan",
+                            f"Generation failed:\n\n{error}")
+
+    def _on_beat_plan_done(self, text: str) -> None:
+        self._beat_worker = None
+        self._set_ai_busy(False)
+        scene_id = self._beat_scene_id
+        if scene_id is None:
+            return
+        from storyplanner import screenplay_pipeline as spp
+        from storyplanner.ui.screenplay_pipeline_dialogs import BeatPlanPreviewDialog
+        plan = spp.parse_beat_plan_response(text or "", scene_id=scene_id)
+        scene = self._db.get_scene_by_id(scene_id)
+        title = (getattr(scene, "title", "") or "") if scene else ""
+        edited = BeatPlanPreviewDialog.get_text(
+            plan.to_text(), parent=self, title=title)
+        if edited is None:
+            return  # cancelled — nothing saved
+        final = spp.parse_beat_plan_response(edited, scene_id=scene_id)
+        if final.is_empty():
+            return
+        spp.save_beat_plan(self._db, self._project_id, final)
+        self._notify()
 
     def _rename_act_dialog(self, act_name: str) -> None:
         new, ok = QInputDialog.getText(
