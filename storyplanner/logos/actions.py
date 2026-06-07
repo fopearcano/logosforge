@@ -1159,6 +1159,20 @@ register(LogosAction(
     sections=(SECTION_MANUSCRIPT, SECTION_TIMELINE, SECTION_OUTLINE),
     prompt="", modes=("graphic_novel",), deterministic=True,
 ))
+# Graphic Novel — Phase 7 (Review Dashboard). Deterministic, project-level
+# (no selection / current scene needed); read-only roll-up of page breakdown /
+# panel plan / body / health / flow / continuity / Timeline / PSYKE / export
+# status per scene, rendered as Markdown. Offered in Manuscript/Timeline/Outline.
+register(LogosAction(
+    name="gn_review_dashboard", label="Graphic Novel Review Dashboard",
+    description="Project overview of the Graphic Novel script: which scenes have "
+                "page breakdowns, panel plans, scripted panels, missing visuals, "
+                "dialogue/caption or flow/continuity warnings, Timeline links — "
+                "plus a recommended next action per scene.",
+    category=CATEGORY_DIAGNOSTIC,
+    sections=(SECTION_MANUSCRIPT, SECTION_TIMELINE, SECTION_OUTLINE),
+    prompt="", modes=("graphic_novel",), deterministic=True,
+))
 
 
 # ---------------------------------------------------------------------------

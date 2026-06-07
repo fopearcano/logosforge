@@ -417,6 +417,30 @@ def _gn_continuity_check(db, context: LogosContext) -> LogosResult:
 register("gn_continuity_check", _gn_continuity_check)
 
 
+def _gn_review_dashboard(db, context: LogosContext) -> LogosResult:
+    """Deterministic project-level Graphic Novel Review Dashboard (Phase 7).
+
+    Read-only roll-up rendered as Markdown in the result area: per-scene page
+    breakdown / panel plan / body / health / flow / continuity / Timeline / PSYKE
+    / export status, with a recommended next action. Never mutates, never auto-
+    applies, and has no image-generation surface."""
+    action = "gn_review_dashboard"
+    try:
+        from storyplanner.graphic_novel_dashboard import build_graphic_novel_review
+        report = build_graphic_novel_review(db, context.project_id)
+    except Exception as exc:  # never crash the UI
+        return LogosResult.failure(action, f"Review failed: {exc}")
+    suggestions = [f"{r.title or 'Scene'}: {r.next_action}"
+                   for r in report.rows if r.overall_status != "OK"][:10]
+    return LogosResult(
+        ok=True, action=action, title="Graphic Novel Review Dashboard",
+        message=report.to_markdown(), suggestions=suggestions,
+        proposed_operations=[])  # report only — no mutation
+
+
+register("gn_review_dashboard", _gn_review_dashboard)
+
+
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
     action = "sp_detect_setup_payoff"
     try:
