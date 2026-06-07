@@ -95,6 +95,10 @@ def gather_scene_context(
     if beat_plan_section:
         # Already self-labelled "[Beat Plan]"; empty for non-screenplay/unplanned.
         sections.append(beat_plan_section)
+    gn_section = _build_graphic_novel_section(db, project_id, scene_id)
+    if gn_section:
+        # Already self-labelled "[Graphic Novel Script]"; empty for other modes.
+        sections.append(gn_section)
     if position_section:
         sections.append(f"[Story Position]\n{position_section}")
 
@@ -107,6 +111,16 @@ def _build_beat_plan_section(db: Database, project_id: int, scene_id: int) -> st
     try:
         from storyplanner.screenplay_pipeline import beat_plan_context
         return beat_plan_context(db, project_id, scene_id)
+    except Exception:
+        return ""
+
+
+def _build_graphic_novel_section(db: Database, project_id: int, scene_id: int) -> str:
+    """Graphic Novel page/panel script summary (Phase 1), if any. Read-only; empty
+    for non-graphic-novel projects or scenes without page/panel content."""
+    try:
+        from storyplanner.graphic_novel_blocks import graphic_novel_context
+        return graphic_novel_context(db, project_id, scene_id)
     except Exception:
         return ""
 

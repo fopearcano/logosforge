@@ -1049,6 +1049,21 @@ for _name, _label, _desc, _cat, _prompt in [
 
 
 # ---------------------------------------------------------------------------
+# Graphic Novel mode (Phase 1). Restricted to writing_mode="graphic_novel".
+# Deterministic, full-scene, preview/report-only — runs the page/panel validator.
+# ---------------------------------------------------------------------------
+
+register(LogosAction(
+    name="gn_panel_check", label="Panel Check",
+    description="Deterministic page/panel checks for this Graphic Novel scene: "
+                "empty pages/panels, missing visual description, dialogue-heavy "
+                "panels, long SFX/captions.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("graphic_novel",), deterministic=True,
+))
+
+
+# ---------------------------------------------------------------------------
 # Deferred to later phases (NOT registered — TODO only).
 # These will require explicit preview + confirmation before any mutation.
 # ---------------------------------------------------------------------------

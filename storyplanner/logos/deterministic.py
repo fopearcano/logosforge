@@ -275,6 +275,39 @@ def _review_dashboard(db, context: LogosContext) -> LogosResult:
 register("sp_review_dashboard", _review_dashboard)
 
 
+def _gn_panel_check(db, context: LogosContext) -> LogosResult:
+    """Deterministic Graphic Novel page/panel check for the current scene (Phase 1).
+    Report-only — never mutates or auto-applies."""
+    action = "gn_panel_check"
+    scene_id = context.current_scene_id
+    if scene_id is None:
+        return LogosResult(
+            ok=True, action=action, title="Panel Check",
+            message="Open a Graphic Novel scene in the Manuscript to check its panels.",
+            suggestions=[], proposed_operations=[],
+        )
+    try:
+        from storyplanner.graphic_novel_blocks import (
+            load_scene_script, validate_graphic_novel_script,
+        )
+        script = load_scene_script(db, scene_id)
+        report = validate_graphic_novel_script(script)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Panel check failed: {exc}")
+
+    head = (f"{len(script.pages)} page(s), {script.panel_count()} panel(s).")
+    if not report.warnings:
+        msg = head + "\n\nNo panel issues detected."
+    else:
+        msg = head + "\n\nWarnings:\n" + "\n".join(f"- {w}" for w in report.warnings)
+    return LogosResult(
+        ok=True, action=action, title="Panel Check",
+        message=msg, suggestions=list(report.warnings), proposed_operations=[])
+
+
+register("gn_panel_check", _gn_panel_check)
+
+
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
     action = "sp_detect_setup_payoff"
     try:
