@@ -86,6 +86,8 @@ _PROFILES: dict[str, MediumProfile] = {
             "sp_rewrite_from_counterpart",
             # Phase 7 — multi-scene continuity / coherence.
             "sp_continuity_check",
+            # Phase 8 — project-level Screenplay Review Dashboard.
+            "sp_review_dashboard",
             "sp_detect_setup_payoff",
             "sp_check_subtext", "sp_show_story_links", "sp_explain_link",
             "sp_revision_impact", "sp_check_impacted_scenes", "sp_check_psyke_impact",

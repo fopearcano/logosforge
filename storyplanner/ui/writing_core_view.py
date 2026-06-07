@@ -751,6 +751,8 @@ class _SceneEditor(QTextEdit):
     _on_export_scene_fountain = None
     # Screenplay Phase 6: host-set hook for "Rewrite Scene…" (controlled).
     _on_rewrite_scene = None
+    # Screenplay Phase 8: host-set hook for "Screenplay Review…" (project dashboard).
+    _on_open_review = None
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1010,6 +1012,10 @@ class _SceneEditor(QTextEdit):
                 lambda _=False, sid=self._scene_id:
                     self._on_export_scene_fountain(sid),
             )
+        # Screenplay Phase 8: open the project-level review dashboard.
+        if self._screenplay_mode and self._on_open_review is not None:
+            review_act = menu.addAction("Screenplay Review…")
+            review_act.triggered.connect(lambda _=False: self._on_open_review())
         menu.exec(event.globalPos())
         menu.deleteLater()
 
@@ -2121,6 +2127,7 @@ class WritingCoreView(QWidget):
         editor._on_draft_from_beat_plan = self._handle_draft_from_beat_plan
         editor._on_export_scene_fountain = self._handle_export_scene_fountain
         editor._on_rewrite_scene = self._handle_rewrite_scene
+        editor._on_open_review = self._handle_open_review
         editor._screenplay_mode = self._is_screenplay_mode()
         editor._smart_quotes = self._smart_quotes
         editor._grammar_enabled = self._grammar_checking
@@ -4073,6 +4080,12 @@ class WritingCoreView(QWidget):
         if result.get("mutated") is not False:
             self.refresh()
             self.scroll_to_scene(scene_id)
+
+    def _handle_open_review(self) -> None:
+        """Open the project-level Screenplay Review Dashboard via the host (Phase 8)."""
+        cb = getattr(self, "on_open_review", None)
+        if cb is not None:
+            cb()
 
     def _resolve_term_at(self, text: str, col: int) -> int | None:
         hl = next(iter(self._highlighters.values()), None)

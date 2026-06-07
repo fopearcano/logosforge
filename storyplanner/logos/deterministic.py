@@ -253,6 +253,28 @@ def _continuity_check(db, context: LogosContext) -> LogosResult:
 register("sp_continuity_check", _continuity_check)
 
 
+def _review_dashboard(db, context: LogosContext) -> LogosResult:
+    """Deterministic project-level Screenplay Review Dashboard (Phase 8).
+
+    Read-only roll-up rendered as a Markdown report in the result area. Never
+    mutates and never auto-applies."""
+    action = "sp_review_dashboard"
+    try:
+        from storyplanner.screenplay_review import build_screenplay_review
+        report = build_screenplay_review(db, context.project_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Review failed: {exc}")
+    suggestions = [f"{r.title or 'Scene'}: {r.next_action}"
+                   for r in report.rows if r.overall_status != "OK"][:10]
+    return LogosResult(
+        ok=True, action=action, title="Screenplay Review Dashboard",
+        message=report.to_markdown(), suggestions=suggestions,
+        proposed_operations=[])  # report only — no mutation
+
+
+register("sp_review_dashboard", _review_dashboard)
+
+
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
     action = "sp_detect_setup_payoff"
     try:

@@ -917,17 +917,39 @@ class MainWindow(QMainWindow):
         # writing unit (no inline whole-project structure). Storage is unchanged
         # (Scene-based); the add-button LABEL is mode-aware ("+ Chapter" in Novel,
         # "+ Scene" otherwise) via the primary-unit adapter inside WritingCoreView.
-        self._set_content(
-            WritingCoreView(
-                self._db,
-                self._project_id,
-                on_data_changed=self._on_data_changed,
-                on_focus_mode_changed=self._on_focus_mode_changed,
-                on_open_psyke_entry=self._open_psyke_entry,
-                on_content_saved=self._on_scene_content_saved,
-                structured_list=True,
-            )
+        view = WritingCoreView(
+            self._db,
+            self._project_id,
+            on_data_changed=self._on_data_changed,
+            on_focus_mode_changed=self._on_focus_mode_changed,
+            on_open_psyke_entry=self._open_psyke_entry,
+            on_content_saved=self._on_scene_content_saved,
+            structured_list=True,
         )
+        # Phase 8: the Manuscript scene menu can open the project review (screenplay).
+        view.on_open_review = self._show_screenplay_review
+        self._set_content(view)
+
+    def _show_screenplay_review(self) -> None:
+        """Open the project-level Screenplay Review Dashboard (Phase 8). Read-only;
+        rows navigate to Manuscript/Outline/Timeline without mutating data."""
+        from storyplanner.ui.screenplay_review_view import ScreenplayReviewView
+        self._set_content(ScreenplayReviewView(
+            self._db, self._project_id,
+            on_open_manuscript=self._open_unit_in_manuscript,
+            on_open_outline=self._open_outline_scene,
+            on_open_timeline=self._open_timeline_scene,
+        ))
+
+    def _open_outline_scene(self, scene_id: int) -> None:
+        """Navigate to the Outline (read-only)."""
+        self._set_active_section("Outline")
+        self._show_plan()
+
+    def _open_timeline_scene(self, scene_id: int) -> None:
+        """Navigate to the Timeline (read-only)."""
+        self._set_active_section("Timeline")
+        self._show_timeline()
 
     def _show_timeline(self) -> None:
         preferences.set_flag("has_seen_timeline_hint", True)

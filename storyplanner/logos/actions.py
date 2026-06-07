@@ -593,6 +593,17 @@ register(LogosAction(
     sections=(SECTION_MANUSCRIPT, SECTION_TIMELINE, SECTION_OUTLINE),
     prompt="", modes=_SP, deterministic=True,
 ))
+# Phase 8 — project-level Screenplay Review Dashboard. Deterministic, read-only
+# roll-up of plan/body/health/continuity/Timeline/PSYKE/export status per scene.
+register(LogosAction(
+    name="sp_review_dashboard", label="Screenplay Review Dashboard",
+    description="Project overview: which scenes are planned, written, weak, lack "
+                "headings, have continuity/export warnings, or aren't linked to "
+                "the Timeline — plus a recommended next action per scene.",
+    category=CATEGORY_DIAGNOSTIC,
+    sections=(SECTION_MANUSCRIPT, SECTION_TIMELINE, SECTION_OUTLINE),
+    prompt="", modes=_SP, deterministic=True,
+))
 # Generative rewrite/suggestion actions (LLM only on explicit invocation):
 for _name, _label, _desc, _prompt in [
     ("sp_tighten_dialogue", "Tighten Dialogue Economy",
