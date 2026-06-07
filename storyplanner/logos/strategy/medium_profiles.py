@@ -82,6 +82,8 @@ _PROFILES: dict[str, MediumProfile] = {
             "sp_scene_health", "sp_beat_plan_alignment",
             # Phase 5 — Counterpart two-stance reflection.
             "sp_counterpart_reflection",
+            # Phase 6 — controlled rewrite from Counterpart notes (preview-first).
+            "sp_rewrite_from_counterpart",
             "sp_detect_setup_payoff",
             "sp_check_subtext", "sp_show_story_links", "sp_explain_link",
             "sp_revision_impact", "sp_check_impacted_scenes", "sp_check_psyke_impact",

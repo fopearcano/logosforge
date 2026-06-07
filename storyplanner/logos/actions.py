@@ -564,6 +564,23 @@ register(LogosAction(
     category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
     prompt="", modes=_SP, deterministic=True,
 ))
+# Manuscript + Screenplay — Phase 6 (Controlled Rewrite). Generative, full-scene
+# (no selection needed); shows a preview/diff before any confirmed apply — never
+# auto-applies. The grounded preview→apply path lives in screenplay_rewrite.
+register(LogosAction(
+    name="sp_rewrite_from_counterpart", label="Rewrite from Counterpart Notes",
+    description="Propose a revision that addresses the Counterpart reflection — "
+                "shown as a preview to review and confirm, never auto-applied.",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+    prompt=(
+        "Using the scene's diagnostics and beat plan in context, propose a "
+        "revised version of this screenplay scene that addresses its most "
+        "important internal-character and external-audience gaps. Return "
+        "screenplay text only — no commentary or markdown. This is a preview "
+        "for the writer to review; do not claim it is applied."
+    ),
+    modes=_SP,
+))
 # Generative rewrite/suggestion actions (LLM only on explicit invocation):
 for _name, _label, _desc, _prompt in [
     ("sp_tighten_dialogue", "Tighten Dialogue Economy",

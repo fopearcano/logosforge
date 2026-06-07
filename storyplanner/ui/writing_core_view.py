@@ -749,6 +749,8 @@ class _SceneEditor(QTextEdit):
     _screenplay_mode = False
     # Screenplay Phase 4: host-set hook for "Export Scene to Fountain…".
     _on_export_scene_fountain = None
+    # Screenplay Phase 6: host-set hook for "Rewrite Scene…" (controlled).
+    _on_rewrite_scene = None
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -991,11 +993,18 @@ class _SceneEditor(QTextEdit):
                 lambda _=False, sid=self._scene_id:
                     self._on_draft_from_beat_plan(sid),
             )
+        # Screenplay Phase 6: controlled rewrite of the current scene.
+        if (self._screenplay_mode and self._on_rewrite_scene is not None
+                and self._scene_id is not None):
+            menu.addSeparator()
+            rewrite_act = menu.addAction("Rewrite Scene…")
+            rewrite_act.triggered.connect(
+                lambda _=False, sid=self._scene_id: self._on_rewrite_scene(sid),
+            )
         # Screenplay Phase 4: export this scene to a .fountain file.
         if (self._screenplay_mode and self._on_export_scene_fountain is not None
                 and self._scene_id is not None):
-            if not (self._screenplay_mode and self._on_draft_from_beat_plan):
-                menu.addSeparator()
+            menu.addSeparator()
             export_act = menu.addAction("Export Scene to Fountain…")
             export_act.triggered.connect(
                 lambda _=False, sid=self._scene_id:
@@ -2111,6 +2120,7 @@ class WritingCoreView(QWidget):
         editor._on_psyke_context_action = self._handle_psyke_context
         editor._on_draft_from_beat_plan = self._handle_draft_from_beat_plan
         editor._on_export_scene_fountain = self._handle_export_scene_fountain
+        editor._on_rewrite_scene = self._handle_rewrite_scene
         editor._screenplay_mode = self._is_screenplay_mode()
         editor._smart_quotes = self._smart_quotes
         editor._grammar_enabled = self._grammar_checking
@@ -3980,6 +3990,89 @@ class WritingCoreView(QWidget):
                                 res.get("error", "Could not export the scene."))
             return
         QMessageBox.information(self, "Export", f"Exported to {res['path']}")
+
+    # -- Controlled rewrite (Phase 6; screenplay-only, preview→confirm) -------
+
+    def _handle_rewrite_scene(self, scene_id: int) -> None:
+        """Request a controlled rewrite of the current scene (full-scene target).
+
+        Strictly preview→confirm: generation produces a *proposal*, the author
+        reviews the diff in RewritePreviewDialog, and only an explicit choice
+        routes it through Controlled Apply. The AI never overwrites the body."""
+        from PySide6.QtWidgets import QInputDialog, QMessageBox
+        from storyplanner import screenplay_rewrite as srw
+
+        if getattr(self, "_rewrite_worker", None) is not None:
+            return
+        # Pick the revision goal (readable list — never a tiny button row).
+        keys = list(srw.INSTRUCTIONS.keys())
+        labels = [srw.INSTRUCTIONS[k][0] for k in keys]
+        label, ok = QInputDialog.getItem(
+            self, "Rewrite Scene", "Revision goal:", labels, 0, False)
+        if not ok:
+            return
+        instruction = keys[labels.index(label)]
+        user_text = ""
+        if instruction == "custom":
+            user_text, ok = QInputDialog.getText(
+                self, "Rewrite Scene", "Describe the revision:")
+            if not ok or not user_text.strip():
+                return
+
+        from storyplanner.ui.outline_ai import OutlineGenWorker, build_provider
+        provider = build_provider()
+        if provider is None:
+            QMessageBox.information(
+                self, "Rewrite Scene",
+                "No AI provider is configured. Set one in Settings first.")
+            return
+        request = srw.build_rewrite_request(
+            self._db, self._project_id, scene_id,
+            instruction=instruction, user_instruction=user_text,
+            target=srw.TARGET_SCENE)
+        self._rewrite_scene_id = scene_id
+        self._rewrite_worker = OutlineGenWorker(
+            srw.rewrite_messages(srw.build_rewrite_prompt(request)), provider)
+        self._rewrite_worker.completed.connect(self._on_rewrite_done)
+        self._rewrite_worker.failed.connect(self._on_rewrite_failed)
+        self._rewrite_worker.start()
+
+    def _on_rewrite_failed(self, error: str) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        self._rewrite_worker = None
+        QMessageBox.warning(self, "Rewrite Scene", f"Generation failed:\n\n{error}")
+
+    def _on_rewrite_done(self, text: str) -> None:
+        self._rewrite_worker = None
+        scene_id = getattr(self, "_rewrite_scene_id", None)
+        if scene_id is None:
+            return
+        from PySide6.QtWidgets import QMessageBox
+        from storyplanner import screenplay_rewrite as srw
+        from storyplanner.ui.screenplay_rewrite_dialog import RewritePreviewDialog
+
+        blocks = srw.parse_rewrite_output(text or "", scene_id=scene_id)
+        preview = srw.build_rewrite_preview(
+            self._db, self._project_id, scene_id, blocks,
+            target=srw.TARGET_SCENE, mode=srw.MODE_REPLACE)
+        scene = self._db.get_scene_by_id(scene_id)
+        title = (getattr(scene, "title", "") or "") if scene else ""
+        choice = RewritePreviewDialog.get_choice(preview, parent=self, title=title)
+        if choice is None:
+            return  # cancelled — no mutation
+        mode, edited = choice
+        final_blocks = srw.parse_rewrite_output(edited, scene_id=scene_id)
+        result = srw.apply_rewrite(
+            self._db, self._project_id, scene_id, final_blocks,
+            target=srw.TARGET_SCENE, mode=mode, confirmed=True,
+            label=srw.instruction_label(getattr(self, "_rewrite_instruction", "")))
+        if not result.get("ok") and not result.get("copied"):
+            QMessageBox.warning(self, "Rewrite Scene",
+                                result.get("error", "Could not apply the rewrite."))
+            return
+        if result.get("mutated") is not False:
+            self.refresh()
+            self.scroll_to_scene(scene_id)
 
     def _resolve_term_at(self, text: str, col: int) -> int | None:
         hl = next(iter(self._highlighters.values()), None)
