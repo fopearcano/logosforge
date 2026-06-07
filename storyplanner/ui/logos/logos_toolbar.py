@@ -20,6 +20,7 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
@@ -90,9 +91,16 @@ class LogosToolbar(QWidget):
             f"color: {theme.ACCENT}; font-weight: bold; font-size: 11px;"
         )
         self._row.addWidget(self._title)
-        self._buttons_host = QHBoxLayout()
-        self._buttons_host.setSpacing(4)
-        self._row.addLayout(self._buttons_host)
+        # Readable dropdown of actions instead of a row of tiny, clipping
+        # buttons. Selecting an item runs that action; the global stylesheet
+        # themes the combo (Dark / Green / Warm).
+        self._action_combo = QComboBox()
+        self._action_combo.setObjectName("logosActionCombo")
+        self._action_combo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._action_combo.setMinimumWidth(160)
+        self._action_combo.setToolTip("Choose a Logos action to run")
+        self._action_combo.activated.connect(self._on_action_selected)
+        self._row.addWidget(self._action_combo)
         self._row.addStretch()
         self._status = QLabel("")
         self._status.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 10px;")
@@ -119,8 +127,6 @@ class LogosToolbar(QWidget):
         self._result.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         outer.addWidget(self._result)
 
-        self._action_buttons: list[QPushButton] = []
-
     # -- Small helpers -------------------------------------------------------
 
     def _tool_button(self, label: str, slot: Callable[[], None]) -> QPushButton:
@@ -144,11 +150,6 @@ class LogosToolbar(QWidget):
         self.refresh_actions()
 
     def refresh_actions(self) -> None:
-        for btn in self._action_buttons:
-            self._buttons_host.removeWidget(btn)
-            btn.deleteLater()
-        self._action_buttons = []
-
         # Mode-aware: pull the live LogosContext so screenplay-only actions
         # show (and order first) in screenplay projects, and stay hidden in
         # Novel. Falls back to unfiltered if the mode can't be resolved.
@@ -161,25 +162,36 @@ class LogosToolbar(QWidget):
         actions = self._controller.available_actions(
             self._section, writing_mode=writing_mode,
         )
+        self._action_combo.blockSignals(True)
+        self._action_combo.clear()
+        self._action_combo.addItem("Choose action…", userData="")
         for action in actions:
-            btn = QPushButton(action.label)
-            btn.setFlat(True)
-            btn.setToolTip(action.description)
-            btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            btn.setStyleSheet(
-                f"QPushButton {{ color: {theme.TEXT_SECONDARY}; border: 1px solid "
-                f"{theme.BORDER}; border-radius: 4px; padding: 2px 8px; "
-                f"font-size: 11px; }}"
-                f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
-            )
-            btn.clicked.connect(lambda _=False, n=action.name: self.run_action(n))
-            self._buttons_host.addWidget(btn)
-            self._action_buttons.append(btn)
+            self._action_combo.addItem(action.label, userData=action.name)
+            idx = self._action_combo.count() - 1
+            if action.description:
+                self._action_combo.setItemData(
+                    idx, action.description, Qt.ItemDataRole.ToolTipRole)
+        self._action_combo.setCurrentIndex(0)
+        self._action_combo.blockSignals(False)
+        self._action_combo.setEnabled(bool(actions))
 
         if not actions:
             self._status.setText("No Logos actions for this section yet.")
         else:
             self._status.setText("")
+
+    def _on_action_selected(self, index: int) -> None:
+        """Run the action chosen from the dropdown (index 0 is the placeholder)."""
+        if index <= 0:
+            return
+        name = self._action_combo.itemData(index)
+        if name:
+            self.run_action(name)
+
+    def available_action_names(self) -> list[str]:
+        """Action names currently offered in the dropdown (excludes placeholder)."""
+        return [self._action_combo.itemData(i)
+                for i in range(1, self._action_combo.count())]
 
     # -- Run -----------------------------------------------------------------
 
@@ -212,8 +224,7 @@ class LogosToolbar(QWidget):
 
     def _set_busy(self, busy: bool) -> None:
         self._status.setText("Logos thinking…" if busy else "")
-        for btn in self._action_buttons:
-            btn.setEnabled(not busy)
+        self._action_combo.setEnabled(not busy)
 
     # -- Result display ------------------------------------------------------
 

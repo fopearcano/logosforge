@@ -1396,6 +1396,7 @@ class WritingCoreView(QWidget):
         self._review_mode = False
         self._review_overlay: QWidget | None = None
         self._active_editor: _SceneEditor | None = None
+        self._navigator = None   # right-side Manuscript outline navigator
 
         self._psyke_term_map: dict[str, int] = {}
         self._psyke_entry_cache: dict[int, object] = {}
@@ -1632,7 +1633,22 @@ class WritingCoreView(QWidget):
         # centered Act header, large Chapter heading, a dominant editor, a per-
         # scene context line, and inline "+ New Scene" / "+ New Chapter". No left
         # tree, no numbered gutter, no foldable blocks.
-        outer.addWidget(self._scroll)
+        if self._structured_list:
+            # Compact IDE-style outline navigator on the right (read/navigate
+            # only — replaces the old per-header "Actions" as the right-side
+            # structural surface).
+            from storyplanner.ui.manuscript_navigator import ManuscriptNavigator
+            body = QHBoxLayout()
+            body.setContentsMargins(0, 0, 0, 0)
+            body.setSpacing(0)
+            body.addWidget(self._scroll, stretch=1)
+            self._navigator = ManuscriptNavigator(
+                self._db, self._project_id, on_select=self._navigate_to_scene)
+            body.addWidget(self._navigator, stretch=0)
+            outer.addLayout(body)
+        else:
+            self._navigator = None
+            outer.addWidget(self._scroll)
 
         self._canvas = QWidget()
         self._canvas.setObjectName("writingCanvas")
@@ -1797,6 +1813,11 @@ class WritingCoreView(QWidget):
                     pass
                 editor.setFocus()
 
+        # Keep the right-side Navigator in sync with the (repaired, canonical)
+        # structure on every rebuild — incl. Outline changes and project switch.
+        if self._navigator is not None:
+            self._navigator.refresh(self._selected_scene_id)
+
     def _render_continuous(self, scenes) -> None:
         """Stable continuous manuscript: every scene rendered in order with
         plain Act/Chapter headers. Body is scene.content only — no numbered
@@ -1894,6 +1915,8 @@ class WritingCoreView(QWidget):
                 )
 
     def _add_page_act_header(self, display: str, act_name: str = "") -> None:
+        # Centered Act heading. Structural editing lives in Outline + the
+        # right-side Navigator handles navigation, so no inline "Actions" menu.
         row = QWidget()
         h = QHBoxLayout(row)
         h.setContentsMargins(0, 0, 0, 0)
@@ -1902,12 +1925,6 @@ class WritingCoreView(QWidget):
         label.setObjectName("writingActHeader")
         h.addWidget(label)
         h.addStretch()
-        actions = QPushButton("⋮ Actions")
-        actions.setObjectName("writingActionsBtn")
-        actions.setFlat(True)
-        actions.clicked.connect(
-            lambda _=False, a=act_name, b=actions: self._page_act_actions(a, b))
-        h.addWidget(actions)
         self._inner_layout.addSpacing(36)
         self._inner_layout.addWidget(row)
         self._inner_layout.addSpacing(10)
@@ -1921,12 +1938,6 @@ class WritingCoreView(QWidget):
         label.setObjectName("writingChapterHeader")
         h.addWidget(label)
         h.addStretch()
-        actions = QPushButton("⋮ Actions")
-        actions.setObjectName("writingActionsBtn")
-        actions.setFlat(True)
-        actions.clicked.connect(
-            lambda _=False, c=chapter_name, b=actions: self._page_chapter_actions(c, b))
-        h.addWidget(actions)
         self._inner_layout.addSpacing(28)
         self._inner_layout.addWidget(row)
         self._inner_layout.addSpacing(12)
@@ -4025,3 +4036,11 @@ class WritingCoreView(QWidget):
         if editor:
             self._scroll.ensureWidgetVisible(editor, 50, 50)
             editor.setFocus()
+        if self._navigator is not None:
+            self._navigator.set_current(scene_id)
+
+    def _navigate_to_scene(self, scene_id: int) -> None:
+        """Open + focus a unit chosen from the right-side Navigator. Selection
+        only — never edits structure or body."""
+        self._selected_scene_id = scene_id
+        self.scroll_to_scene(scene_id)
