@@ -79,6 +79,124 @@ def _diagnose_scene_economy(db, context: LogosContext) -> LogosResult:
 register("sp_diagnose_scene_economy", _diagnose_scene_economy)
 
 
+def _scene_health(db, context: LogosContext) -> LogosResult:
+    """Unified deterministic screenplay scene health (Phase 3).
+
+    Groups every deterministic finding by category (Format / Visual Writing /
+    Dialogue Economy / Dramatic Function / Beat Plan Alignment / Continuity) and
+    reports transparent metrics. Diagnostic only — never mutates."""
+    action = "sp_scene_health"
+    scene_id = context.current_scene_id
+    if scene_id is None:
+        return LogosResult(
+            ok=True, action=action, title="Screenplay Check",
+            message="Open a scene in the Manuscript to run a screenplay check.",
+            suggestions=[], proposed_operations=[],
+        )
+    try:
+        from storyplanner.screenplay_diagnostics import (
+            analyze_scene_by_id, group_issues_by_category,
+        )
+        report = analyze_scene_by_id(db, context.project_id, scene_id)
+    except Exception as exc:  # never crash the UI
+        return LogosResult.failure(action, f"Screenplay check failed: {exc}")
+
+    lines = [report.summary, ""]
+    lines.append(
+        f"Metrics — Blocks: {report.block_count} · Action: {report.action_block_count}"
+        f" · Dialogue: {report.dialogue_block_count} · Parentheticals: "
+        f"{report.parenthetical_block_count} · Empty: {report.empty_block_count}"
+    )
+    lines.append(
+        f"Characters: {', '.join(report.unique_characters) or '—'} · "
+        f"Action/Dialogue ratio: {report.action_dialogue_ratio} · "
+        f"Dialogue avg/longest: {report.average_dialogue_words}/"
+        f"{report.longest_dialogue_words} w · Internal-state phrases: "
+        f"{report.internal_state_phrase_count}"
+    )
+    if report.estimated_minutes:
+        lines.append(f"Approx. length: ~{report.estimated_minutes} min (rough).")
+    if report.beat_plan_aligned is not None:
+        lines.append("Beat plan: "
+                     + ("reflected in the body."
+                        if report.beat_plan_aligned
+                        else "some planned elements are not yet evident."))
+
+    suggestions: list[str] = []
+    for category, items in group_issues_by_category(report).items():
+        ordered = sorted(items, key=lambda i: (i.severity_rank, i.confidence),
+                         reverse=True)
+        lines.append("")
+        lines.append(f"{category}:")
+        for i in ordered:
+            target = (f" (block {i.target_block_index + 1})"
+                      if i.target_block_index is not None else "")
+            lines.append(f"- [{i.severity}] {i.label}{target} — {i.evidence}")
+            if i.suggested_action:
+                suggestions.append(f"{i.label}: {i.suggested_action}")
+    if report.strengths:
+        lines.append("")
+        lines.append("Strengths: " + "; ".join(report.strengths))
+
+    return LogosResult(
+        ok=True, action=action, title="Screenplay Check",
+        message="\n".join(lines).strip(), suggestions=suggestions,
+        proposed_operations=[],  # diagnostic only — no mutation
+    )
+
+
+def _beat_plan_alignment(db, context: LogosContext) -> LogosResult:
+    """Deterministic beat-plan ↔ body alignment for the current scene (Phase 3)."""
+    action = "sp_beat_plan_alignment"
+    scene_id = context.current_scene_id
+    if scene_id is None:
+        return LogosResult(
+            ok=True, action=action, title="Beat Plan Alignment",
+            message="Open a scene in the Manuscript to check beat-plan alignment.",
+            suggestions=[], proposed_operations=[],
+        )
+    try:
+        from storyplanner import screenplay_pipeline as spp
+        from storyplanner.screenplay_blocks import parse_screenplay_text
+        from storyplanner.screenplay_diagnostics import analyze_beat_plan_alignment
+        plan = spp.get_beat_plan(db, context.project_id, scene_id)
+        if plan is None or plan.is_empty():
+            return LogosResult(
+                ok=True, action=action, title="Beat Plan Alignment",
+                message=("This scene has no beat plan yet. In Outline, open the "
+                         "scene's ⋯ menu and choose “Generate Beat Plan” first."),
+                suggestions=[], proposed_operations=[],
+            )
+        scene = db.get_scene_by_id(scene_id)
+        blocks = parse_screenplay_text(getattr(scene, "content", "") or "",
+                                       scene_id=scene_id)
+        issues = analyze_beat_plan_alignment(blocks, plan)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Alignment check failed: {exc}")
+
+    if not issues:
+        return LogosResult(
+            ok=True, action=action, title="Beat Plan Alignment",
+            message=("The scene body reflects its beat plan "
+                     "(deterministic keyword check)."),
+            suggestions=[], proposed_operations=[],
+        )
+    lines = ["Some planned elements are not yet evident in the scene body:", ""]
+    suggestions: list[str] = []
+    for i in issues:
+        lines.append(f"- [{i.severity}] {i.label} — {i.evidence}")
+        if i.suggested_action:
+            suggestions.append(f"{i.label}: {i.suggested_action}")
+    return LogosResult(
+        ok=True, action=action, title="Beat Plan Alignment",
+        message="\n".join(lines), suggestions=suggestions, proposed_operations=[],
+    )
+
+
+register("sp_scene_health", _scene_health)
+register("sp_beat_plan_alignment", _beat_plan_alignment)
+
+
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
     action = "sp_detect_setup_payoff"
     try:

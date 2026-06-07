@@ -538,6 +538,22 @@ register(LogosAction(
     category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
     prompt="", modes=_SP, deterministic=True,
 ))
+# Manuscript + Screenplay — Phase 3 (unified scene health + beat-plan alignment).
+# Both deterministic, full-scene (no selection needed), preview-only.
+register(LogosAction(
+    name="sp_scene_health", label="Screenplay Check",
+    description="Full deterministic scene health: format, visual writing, dialogue "
+                "economy, dramatic function, beat-plan alignment, and continuity.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=_SP, deterministic=True,
+))
+register(LogosAction(
+    name="sp_beat_plan_alignment", label="Beat Plan Alignment",
+    description="Check whether the scene body reflects its beat plan (conflict, "
+                "turning point, emotional shift, objective).",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=_SP, deterministic=True,
+))
 # Generative rewrite/suggestion actions (LLM only on explicit invocation):
 for _name, _label, _desc, _prompt in [
     ("sp_tighten_dialogue", "Tighten Dialogue Economy",

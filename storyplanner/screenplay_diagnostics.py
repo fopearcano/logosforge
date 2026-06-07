@@ -109,6 +109,16 @@ class ScreenplaySceneReport:
     warnings: list[str] = field(default_factory=list)
     confidence: float = 0.0
     summary: str = ""
+    # Phase 3 — extended, transparent metrics.
+    parenthetical_block_count: int = 0
+    empty_block_count: int = 0
+    average_dialogue_words: float = 0.0
+    longest_dialogue_words: int = 0
+    action_dialogue_ratio: float = 0.0
+    internal_state_phrase_count: int = 0
+    repeated_character_turns: int = 0
+    # Phase 3 — beat-plan alignment: True/False when a plan exists, else None.
+    beat_plan_aligned: bool | None = None
 
     def top_issues(self, n: int = 3) -> list[ScreenplayDiagnosticIssue]:
         return sorted(
@@ -133,6 +143,14 @@ class ScreenplaySceneReport:
             "warnings": list(self.warnings),
             "confidence": round(self.confidence, 2),
             "summary": self.summary,
+            "parenthetical_block_count": self.parenthetical_block_count,
+            "empty_block_count": self.empty_block_count,
+            "average_dialogue_words": self.average_dialogue_words,
+            "longest_dialogue_words": self.longest_dialogue_words,
+            "action_dialogue_ratio": self.action_dialogue_ratio,
+            "internal_state_phrase_count": self.internal_state_phrase_count,
+            "repeated_character_turns": self.repeated_character_turns,
+            "beat_plan_aligned": self.beat_plan_aligned,
         }
 
 
@@ -147,12 +165,18 @@ def analyze_scene(
     scene_id: int | None = None,
     scene_heading: str = "",
     psyke_characters: dict[str, bool] | None = None,
+    beat_plan: Any | None = None,
 ) -> ScreenplaySceneReport:
     """Deterministically analyze one scene's blocks.
 
     *psyke_characters* maps uppercased character name -> has-objective-data, used
     only to raise/lower the character-objective confidence. Absent data lowers
     confidence; it never hard-fails.
+
+    *beat_plan* (Phase 3) is an optional :class:`screenplay_pipeline.ScreenplayBeatPlan`.
+    When given, the report adds deterministic beat-plan *alignment* issues (does
+    the body reflect the planned conflict / turn / emotional shift / objective?)
+    and sets ``beat_plan_aligned``. It is read-only — the plan is never mutated.
     """
     report = ScreenplaySceneReport(scene_id=scene_id, scene_heading=scene_heading)
     psyke_characters = psyke_characters or {}
@@ -227,11 +251,13 @@ def analyze_scene(
         report.economy_label = "balanced"
 
     # --- Visual action: internal-state language ---
+    internal_total = 0
     for idx, b in enumerate(blocks):
         if b.element_type != "action":
             continue
         low = b.text.lower()
         hits = sum(1 for w in INTERNAL_STATE_WORDS if re.search(rf"\b{re.escape(w)}\b", low))
+        internal_total += hits
         if hits >= INTERNAL_WORDS_PER_BLOCK:
             issues.append(ScreenplayDiagnosticIssue(
                 id=f"internal_action_{idx}", label="Action may read as internal prose",
@@ -346,6 +372,76 @@ def analyze_scene(
                 logos_action_id="sp_track_setup_payoff",
             ))
 
+    # --- Format: block-sequence integrity (Phase 3) ---
+    in_dialogue = False
+    for idx, b in enumerate(blocks):
+        et = b.element_type
+        if et == "character":
+            in_dialogue = True
+            continue
+        if et in ("scene_heading", "action", "transition", "shot", "note"):
+            in_dialogue = False
+            continue
+        if et == "dialogue" and not in_dialogue:
+            issues.append(ScreenplayDiagnosticIssue(
+                id=f"dialogue_without_character_{idx}",
+                label="Dialogue without a character cue", severity=SEV_WEAK,
+                confidence=0.7, target_block_index=idx,
+                evidence="A dialogue block has no preceding character cue.",
+                suggested_action="Add the speaking character's cue above this line.",
+            ))
+        elif et == "parenthetical" and not in_dialogue:
+            issues.append(ScreenplayDiagnosticIssue(
+                id=f"parenthetical_without_dialogue_{idx}",
+                label="Parenthetical out of place", severity=SEV_WATCH,
+                confidence=0.65, target_block_index=idx,
+                evidence="A parenthetical appears without a character/dialogue context.",
+                suggested_action="Place parentheticals between a character cue and "
+                                 "their dialogue.",
+            ))
+
+    # --- Format: empty blocks (Phase 3) ---
+    empty_count = sum(1 for b in blocks if not (b.text or "").strip())
+    if empty_count:
+        issues.append(ScreenplayDiagnosticIssue(
+            id="empty_blocks", label="Empty blocks present", severity=SEV_INFO,
+            confidence=0.8,
+            evidence=f"{empty_count} empty block(s) with no text.",
+            suggested_action="Remove empty blocks or add their content.",
+        ))
+
+    # --- Continuity: characters not linked in PSYKE (Phase 3, warning-only) ---
+    # Only when a PSYKE map exists to compare against — never assert "missing"
+    # when the project simply has no Story Bible yet.
+    if psyke_characters:
+        for name in report.unique_characters:
+            if name not in psyke_characters:
+                issues.append(ScreenplayDiagnosticIssue(
+                    id=f"character_not_in_psyke_{name}",
+                    label=f"{name} not in Story Bible", severity=SEV_INFO,
+                    confidence=0.4,
+                    evidence=f"Character '{name}' has no PSYKE entry for continuity.",
+                    suggested_action=f"Add {name} to PSYKE to track continuity.",
+                ))
+
+    # --- Beat-plan alignment (Phase 3): does the body reflect the plan? ---
+    if beat_plan is not None:
+        alignment = analyze_beat_plan_alignment(blocks, beat_plan)
+        issues.extend(alignment)
+        report.beat_plan_aligned = not any(
+            i.severity_rank >= _SEV_RANK[SEV_WATCH] for i in alignment)
+
+    # --- Extended metrics (Phase 3) ---
+    report.parenthetical_block_count = counts.get("parenthetical", 0)
+    report.empty_block_count = empty_count
+    report.internal_state_phrase_count = internal_total
+    dlg_words = [_words(b.text) for b in blocks if b.element_type == "dialogue"]
+    report.longest_dialogue_words = max(dlg_words) if dlg_words else 0
+    report.average_dialogue_words = (
+        round(sum(dlg_words) / len(dlg_words), 1) if dlg_words else 0.0)
+    report.action_dialogue_ratio = round(a / d, 2) if d else float(a)
+    report.repeated_character_turns = _repeated_character_turns(blocks)
+
     # --- Strengths ---
     if report.economy_label == "balanced":
         report.strengths.append("Action/dialogue balance looks healthy.")
@@ -370,6 +466,131 @@ def _summary(report: ScreenplaySceneReport) -> str:
         return head + " No notable screenplay issues detected."
     bullets = "; ".join(f"{i.label}" for i in top)
     return f"{head} Top issues: {bullets}."
+
+
+def _repeated_character_turns(blocks: list[sb.ScreenplayBlock]) -> int:
+    """Count back-to-back turns by the same speaker (a weak rhythm signal)."""
+    last = None
+    repeats = 0
+    for b in blocks:
+        if b.element_type != "character":
+            continue
+        name = re.sub(r"\(.*?\)", "", b.text).strip().upper()
+        if name and name == last:
+            repeats += 1
+        last = name
+    return repeats
+
+
+# -- Beat-plan alignment (Phase 3) -------------------------------------------
+# A transparent keyword-overlap heuristic: if NONE of a plan field's content
+# words appear in the scene body, the body likely doesn't dramatize that intent.
+# Low confidence on purpose — it flags for review, never asserts certainty.
+_ALIGN_STOPWORDS = frozenset((
+    "the", "and", "but", "for", "with", "that", "this", "from", "into", "onto",
+    "their", "they", "them", "then", "than", "what", "when", "where", "which",
+    "who", "whom", "will", "wont", "want", "wants", "have", "has", "had", "his",
+    "her", "hers", "him", "she", "out", "are", "was", "were", "not", "your",
+    "you", "about", "over", "under", "between", "scene", "character", "shift",
+    "emotional", "objective", "conflict", "turning", "point", "goal", "needs",
+))
+
+
+def _content_words(text: str) -> set[str]:
+    return {
+        w for w in re.findall(r"[a-z']+", (text or "").lower())
+        if len(w) > 3 and w not in _ALIGN_STOPWORDS
+    }
+
+
+def analyze_beat_plan_alignment(
+    blocks: list[sb.ScreenplayBlock], beat_plan: Any,
+) -> list[ScreenplayDiagnosticIssue]:
+    """Deterministic alignment between a beat plan and the scene body.
+
+    Read-only. Returns issues for planned conflict / turning point / emotional
+    shift / objective (and individual visual beats) that the body doesn't appear
+    to reflect. Empty plan or empty body -> no issues.
+    """
+    issues: list[ScreenplayDiagnosticIssue] = []
+    if beat_plan is None or getattr(beat_plan, "is_empty", lambda: True)():
+        return issues
+    body = " ".join(
+        b.text for b in blocks
+        if b.element_type in ("action", "dialogue", "character",
+                              "parenthetical", "scene_heading")
+    )
+    body_words = set(re.findall(r"[a-z']+", body.lower()))
+    if not body_words:
+        return issues
+
+    def _check(value: str, fid: str, label: str, what: str, sev: str = SEV_WATCH,
+               conf: float = 0.35) -> None:
+        cw = _content_words(value or "")
+        if cw and not (cw & body_words):
+            issues.append(ScreenplayDiagnosticIssue(
+                id=fid, label=label, severity=sev, confidence=conf,
+                evidence=(f'The beat plan\'s {what} ("{(value or "").strip()[:60]}") '
+                          "is not reflected in the scene body."),
+                suggested_action=f"Make sure the scene dramatizes the planned {what}.",
+                logos_action_id="sp_beat_plan_alignment",
+            ))
+
+    _check(getattr(beat_plan, "conflict", ""), "align_conflict_missing",
+           "Planned conflict not evident", "conflict")
+    _check(getattr(beat_plan, "turning_point", ""), "align_turn_missing",
+           "Planned turning point not evident", "turning point")
+    _check(getattr(beat_plan, "emotional_shift", ""), "align_emotional_shift_missing",
+           "Planned emotional shift not evident", "emotional shift")
+    _check(getattr(beat_plan, "objective", ""), "align_objective_missing",
+           "Planned objective not evident", "objective")
+    for i, beat in enumerate(getattr(beat_plan, "visual_beats", []) or []):
+        cw = _content_words(beat)
+        if cw and not (cw & body_words):
+            issues.append(ScreenplayDiagnosticIssue(
+                id=f"align_visual_beat_{i}", label="Planned visual beat not evident",
+                severity=SEV_INFO, confidence=0.3,
+                evidence=f'Planned beat ("{beat.strip()[:50]}") not found in the body.',
+                suggested_action="Add or revise the scene to include this beat.",
+                logos_action_id="sp_beat_plan_alignment",
+            ))
+    return issues
+
+
+# -- Issue categorization (Phase 3, for readable grouped reports) ------------
+_CATEGORY_PREFIXES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Format", ("missing_scene_heading", "only_notes", "dialogue_without_character",
+                "parenthetical_without_dialogue", "empty_blocks", "transition_overuse",
+                "shot_overuse")),
+    ("Visual Writing", ("internal_action", "overwritten_action")),
+    ("Dialogue Economy", ("dialogue_heavy", "no_dialogue", "long_dialogue",
+                          "parenthetical_overuse", "single_voice")),
+    ("Dramatic Function", ("scene_turn_unclear", "objective_unclear",
+                           "no_active_character")),
+    ("Beat Plan Alignment", ("align_",)),
+    ("Continuity", ("character_not_in_psyke",)),
+    ("Setup & Payoff", ("setup_candidate",)),
+)
+
+
+def issue_category(issue: ScreenplayDiagnosticIssue) -> str:
+    """Map an issue to a human-readable Phase 3 category (for grouped output)."""
+    for label, prefixes in _CATEGORY_PREFIXES:
+        if any(issue.id.startswith(p) for p in prefixes):
+            return label
+    return "Other"
+
+
+def group_issues_by_category(
+    report: ScreenplaySceneReport,
+) -> dict[str, list[ScreenplayDiagnosticIssue]]:
+    """Group a report's issues by category, in canonical category order."""
+    grouped: dict[str, list[ScreenplayDiagnosticIssue]] = {}
+    for issue in report.issues:
+        grouped.setdefault(issue_category(issue), []).append(issue)
+    # Stable canonical ordering.
+    order = [label for label, _ in _CATEGORY_PREFIXES] + ["Other"]
+    return {k: grouped[k] for k in order if k in grouped}
 
 
 # ---------------------------------------------------------------------------
@@ -722,8 +943,14 @@ def screenplay_health_metrics(db, project_id: int) -> list:
     return metrics
 
 
-def analyze_scene_by_id(db, project_id: int, scene_id: int) -> ScreenplaySceneReport:
-    """Analyze a single scene by id (read-only)."""
+def analyze_scene_by_id(
+    db, project_id: int, scene_id: int, *, include_beat_plan: bool = True,
+) -> ScreenplaySceneReport:
+    """Analyze a single scene by id (read-only).
+
+    When ``include_beat_plan`` is set (default) and a Phase 2 beat plan exists for
+    the scene, the report adds beat-plan alignment checks. Read-only throughout.
+    """
     scene = None
     try:
         scene = db.get_scene_by_id(scene_id)
@@ -732,7 +959,15 @@ def analyze_scene_by_id(db, project_id: int, scene_id: int) -> ScreenplaySceneRe
     if scene is None:
         return ScreenplaySceneReport(scene_id=scene_id, summary="Scene not found.")
     blocks = sb.parse_screenplay_text(getattr(scene, "content", "") or "", scene_id=scene_id)
+    beat_plan = None
+    if include_beat_plan:
+        try:
+            from storyplanner.screenplay_pipeline import get_beat_plan
+            beat_plan = get_beat_plan(db, project_id, scene_id)
+        except Exception:
+            beat_plan = None
     return analyze_scene(
         blocks, scene_id=scene_id, scene_heading=_scene_heading(scene),
         psyke_characters=_psyke_character_map(db, project_id),
+        beat_plan=beat_plan,
     )
