@@ -227,6 +227,32 @@ register("sp_beat_plan_alignment", _beat_plan_alignment)
 register("sp_counterpart_reflection", _counterpart_reflection)
 
 
+def _continuity_check(db, context: LogosContext) -> LogosResult:
+    """Deterministic multi-scene screenplay continuity report (Phase 7).
+
+    Project-level (no selection / current scene needed). Read-only — consolidates
+    the existing continuity, setup/payoff, story-link, Timeline and PSYKE engines
+    into one cross-scene report. Never mutates or rewrites."""
+    action = "sp_continuity_check"
+    try:
+        from storyplanner.screenplay_continuity import (
+            build_screenplay_continuity_report,
+        )
+        report = build_screenplay_continuity_report(db, context.project_id)
+    except Exception as exc:  # never crash the UI
+        return LogosResult.failure(action, f"Continuity check failed: {exc}")
+
+    suggestions = list(report.recommended_fixes)
+    return LogosResult(
+        ok=True, action=action, title="Screenplay Continuity Check",
+        message=report.to_text(), suggestions=suggestions,
+        proposed_operations=[],  # report only — no mutation
+    )
+
+
+register("sp_continuity_check", _continuity_check)
+
+
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
     action = "sp_detect_setup_payoff"
     try:

@@ -581,6 +581,18 @@ register(LogosAction(
     ),
     modes=_SP,
 ))
+# Phase 7 — multi-scene continuity / coherence. Deterministic, project-level
+# (no selection or current scene needed); read-only report. Offered in the
+# Manuscript, Timeline, and Outline sections so it's reachable as "Screenplay
+# Continuity Check" / "Check Timeline Alignment" / "Check Scene Chain".
+register(LogosAction(
+    name="sp_continuity_check", label="Screenplay Continuity Check",
+    description="Analyze how the scenes work together: causal flow, setup/payoff, "
+                "character continuity, Timeline alignment, and PSYKE consistency.",
+    category=CATEGORY_DIAGNOSTIC,
+    sections=(SECTION_MANUSCRIPT, SECTION_TIMELINE, SECTION_OUTLINE),
+    prompt="", modes=_SP, deterministic=True,
+))
 # Generative rewrite/suggestion actions (LLM only on explicit invocation):
 for _name, _label, _desc, _prompt in [
     ("sp_tighten_dialogue", "Tighten Dialogue Economy",

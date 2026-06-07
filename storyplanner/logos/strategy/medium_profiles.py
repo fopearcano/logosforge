@@ -84,6 +84,8 @@ _PROFILES: dict[str, MediumProfile] = {
             "sp_counterpart_reflection",
             # Phase 6 — controlled rewrite from Counterpart notes (preview-first).
             "sp_rewrite_from_counterpart",
+            # Phase 7 — multi-scene continuity / coherence.
+            "sp_continuity_check",
             "sp_detect_setup_payoff",
             "sp_check_subtext", "sp_show_story_links", "sp_explain_link",
             "sp_revision_impact", "sp_check_impacted_scenes", "sp_check_psyke_impact",
