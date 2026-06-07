@@ -162,15 +162,28 @@ class LogosToolbar(QWidget):
         actions = self._controller.available_actions(
             self._section, writing_mode=writing_mode,
         )
+        # Group actions by readable UX category (Planning / Checks / Reflection /
+        # Rewrite / Export). Separators only appear *between* groups, so index 1
+        # remains a real action and the dropdown stays readable at small widths.
+        from storyplanner.logos.actions import group_actions
+        grouped = group_actions(actions)
         self._action_combo.blockSignals(True)
         self._action_combo.clear()
         self._action_combo.addItem("Choose action…", userData="")
-        for action in actions:
-            self._action_combo.addItem(action.label, userData=action.name)
-            idx = self._action_combo.count() - 1
-            if action.description:
+        for gi, (group_label, group_actions_) in enumerate(grouped):
+            if gi > 0:
+                self._action_combo.insertSeparator(self._action_combo.count())
+            for action in group_actions_:
+                self._action_combo.addItem(action.label, userData=action.name)
+                idx = self._action_combo.count() - 1
+                tip = action.description or ""
+                if action.needs_selection:
+                    tip = (tip + " " if tip else "") + "(needs selected text)"
                 self._action_combo.setItemData(
-                    idx, action.description, Qt.ItemDataRole.ToolTipRole)
+                    idx, f"{group_label}: {action.label}", Qt.ItemDataRole.AccessibleTextRole)
+                if tip:
+                    self._action_combo.setItemData(
+                        idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._action_combo.setCurrentIndex(0)
         self._action_combo.blockSignals(False)
         self._action_combo.setEnabled(bool(actions))
@@ -189,9 +202,10 @@ class LogosToolbar(QWidget):
             self.run_action(name)
 
     def available_action_names(self) -> list[str]:
-        """Action names currently offered in the dropdown (excludes placeholder)."""
-        return [self._action_combo.itemData(i)
-                for i in range(1, self._action_combo.count())]
+        """Action names currently offered in the dropdown (excludes placeholder
+        and group separators)."""
+        return [d for i in range(1, self._action_combo.count())
+                if (d := self._action_combo.itemData(i))]
 
     # -- Run -----------------------------------------------------------------
 

@@ -47,6 +47,17 @@ class RewritePreviewDialog(QDialog):
         heading.setStyleSheet("font-weight: bold;")
         layout.addWidget(heading)
 
+        # Make the rewrite target explicit before the author applies anything.
+        _target_label = {
+            srw.TARGET_SELECTION: "selected text",
+            srw.TARGET_BLOCK: "selected block",
+            srw.TARGET_SCENE: "whole scene",
+        }.get(getattr(preview, "target", srw.TARGET_SCENE), "whole scene")
+        target_row = QLabel(f"Target: {_target_label}")
+        target_row.setObjectName("rewriteTarget")
+        target_row.setStyleSheet("font-size: 11px; color: #aaa;")
+        layout.addWidget(target_row)
+
         bd = getattr(preview, "block_diff", {}) or {}
         layout.addWidget(_small(
             f"Block changes — changed: {bd.get('changed', 0)} · added: "

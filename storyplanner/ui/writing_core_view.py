@@ -3145,7 +3145,7 @@ class WritingCoreView(QWidget):
 
     # -- Review menu -----------------------------------------------------------
 
-    def _show_review_menu(self) -> None:
+    def _build_review_menu(self) -> "QMenu":
         menu = QMenu(self._review_btn)
 
         review_act = QAction(
@@ -3210,6 +3210,18 @@ class WritingCoreView(QWidget):
             )
             sens_sub.addAction(act)
 
+        # Screenplay Phase 10: discoverable entry to the Screenplay Review
+        # Dashboard (screenplay projects only). Opening it never mutates data.
+        if self._is_screenplay_mode() and getattr(self, "on_open_review", None):
+            menu.addSeparator()
+            review_dash = QAction("Screenplay Review Dashboard…", menu)
+            review_dash.triggered.connect(lambda _=False: self._handle_open_review())
+            menu.addAction(review_dash)
+
+        return menu
+
+    def _show_review_menu(self) -> None:
+        menu = self._build_review_menu()
         pos = self._review_btn.mapToGlobal(self._review_btn.rect().bottomLeft())
         menu.exec(pos)
 

@@ -109,6 +109,56 @@ def describe_all_actions() -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# UX grouping (Phase 10 — readable dropdown). Pure helper: maps each action to a
+# readable category and buckets a list into ordered groups. No Qt, no behavior
+# change to the registry — purely for presentation.
+# ---------------------------------------------------------------------------
+
+UX_GROUP_ORDER: tuple[str, ...] = (
+    "Planning", "Checks", "Reflection", "Rewrite", "Export", "Other",
+)
+_EXPORT_HINTS = ("fountain", "export", "output", "production", "pdf", "fdx",
+                 "render", "prepare_for", "prepare_professional",
+                 "prepare_production")
+
+
+def ux_group(action: "LogosAction") -> str:
+    """Readable UX category for an action (Planning/Checks/Reflection/Rewrite/
+    Export/Other). Deterministic; based on name + category."""
+    n = (action.name or "").lower()
+    if any(h in n for h in _EXPORT_HINTS):
+        return "Export"
+    if "rewrite" in n:
+        return "Rewrite"
+    if "reflection" in n or n == "counterpart_critique":
+        return "Reflection"
+    if "beat_plan" in n and "alignment" not in n:
+        return "Planning"
+    if getattr(action, "category", "") == CATEGORY_GENERATIVE:
+        return "Rewrite"
+    return "Checks"
+
+
+def group_actions(
+    actions: list["LogosAction"],
+) -> list[tuple[str, list["LogosAction"]]]:
+    """Bucket *actions* into ordered UX groups, preserving each action's relative
+    order within its group. Empty groups are omitted."""
+    buckets: dict[str, list[LogosAction]] = {}
+    for a in actions:
+        buckets.setdefault(ux_group(a), []).append(a)
+    return [(g, buckets[g]) for g in UX_GROUP_ORDER if buckets.get(g)]
+
+
+def grouped_actions_for_section(
+    section_name: str, *, writing_mode: str = "",
+) -> list[tuple[str, list["LogosAction"]]]:
+    """Section actions (mode-filtered) bucketed into ordered UX groups."""
+    return group_actions(
+        list_actions_for_section(section_name, writing_mode=writing_mode))
+
+
+# ---------------------------------------------------------------------------
 # Manuscript actions (selection-aware, non-destructive)
 # ---------------------------------------------------------------------------
 
