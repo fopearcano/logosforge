@@ -1311,6 +1311,23 @@ class _EnergyGutter(QWidget):
         return super().event(ev)
 
 
+class _SummaryRailLabel(QLabel):
+    """The per-scene summary/navigation item in the in-page rail. Shows the
+    scene summary (or an 'Add summary…' placeholder) and, when clicked, jumps to
+    that scene's editor. Read-only metadata — it never edits the body."""
+
+    def __init__(self, text: str, on_click, parent=None) -> None:
+        super().__init__(text, parent)
+        self._on_click = on_click
+        self.setObjectName("writingSceneSummaryMeta")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self._on_click:
+            self._on_click()
+        super().mousePressEvent(event)
+
+
 class WritingCoreView(QWidget):
     """Immersive continuous manuscript writing view."""
 
@@ -1631,24 +1648,12 @@ class WritingCoreView(QWidget):
         self._scroll.setObjectName("writingScroll")
         # The Manuscript (structured_list) is a focused continuous WRITING PAGE:
         # centered Act header, large Chapter heading, a dominant editor, a per-
-        # scene context line, and inline "+ New Scene" / "+ New Chapter". No left
-        # tree, no numbered gutter, no foldable blocks.
-        if self._structured_list:
-            # Compact IDE-style outline navigator on the right (read/navigate
-            # only — replaces the old per-header "Actions" as the right-side
-            # structural surface).
-            from storyplanner.ui.manuscript_navigator import ManuscriptNavigator
-            body = QHBoxLayout()
-            body.setContentsMargins(0, 0, 0, 0)
-            body.setSpacing(0)
-            body.addWidget(self._scroll, stretch=1)
-            self._navigator = ManuscriptNavigator(
-                self._db, self._project_id, on_select=self._navigate_to_scene)
-            body.addWidget(self._navigator, stretch=0)
-            outer.addLayout(body)
-        else:
-            self._navigator = None
-            outer.addWidget(self._scroll)
+        # scene context line that doubles as a compact summary/navigation rail,
+        # and inline "+ New Scene" / "+ New Chapter". No left tree, no numbered
+        # gutter, no foldable blocks, and NO separate right Navigator panel —
+        # navigation lives in the in-page per-scene summary rail.
+        self._navigator = None
+        outer.addWidget(self._scroll)
 
         self._canvas = QWidget()
         self._canvas.setObjectName("writingCanvas")
@@ -1813,11 +1818,6 @@ class WritingCoreView(QWidget):
                     pass
                 editor.setFocus()
 
-        # Keep the right-side Navigator in sync with the (repaired, canonical)
-        # structure on every rebuild — incl. Outline changes and project switch.
-        if self._navigator is not None:
-            self._navigator.refresh(self._selected_scene_id)
-
     def _render_continuous(self, scenes) -> None:
         """Stable continuous manuscript: every scene rendered in order with
         plain Act/Chapter headers. Body is scene.content only — no numbered
@@ -1961,10 +1961,19 @@ class WritingCoreView(QWidget):
             n.setObjectName("writingSceneNotes")
             h.addWidget(n)
         h.addStretch()
+        # Compact summary/navigation rail item: summary preview (or a muted
+        # "Add summary…" placeholder); clicking it jumps to this scene's editor.
         summary = (scene.summary or "").strip()
-        meta = QLabel(summary or "Add summary…")
-        meta.setObjectName("writingSceneSummaryMeta")
-        meta.setToolTip(summary or "")
+        shown = summary if len(summary) <= 60 else summary[:59] + "…"
+        meta = _SummaryRailLabel(
+            shown or "Add summary…",
+            lambda sid=scene.id: self._navigate_to_scene(sid),
+        )
+        meta.setToolTip(
+            (summary + "\n\n" if summary else "")
+            + "Click to jump to this scene · edit summary in Outline")
+        if scene.id == self._selected_scene_id:
+            meta.setProperty("current", True)   # highlight the current unit
         h.addWidget(meta)
         self._inner_layout.addSpacing(24)
         self._inner_layout.addWidget(row)
@@ -2772,6 +2781,9 @@ class WritingCoreView(QWidget):
             f" font-size: 10px; font-weight: bold; }}"
             f"#writingSceneSummaryMeta {{ color: {theme.TEXT_MUTED};"
             f" font-size: 11px; font-style: italic; }}"
+            f"#writingSceneSummaryMeta:hover {{ color: {theme.TEXT_PRIMARY}; }}"
+            f"#writingSceneSummaryMeta[current=\"true\"] {{ color: {theme.ACCENT};"
+            f" font-style: normal; font-weight: bold; }}"
             f"#writingSceneNotes {{ color: {theme.ACCENT}; font-size: 10px; }}"
             f"#writingActionsBtn {{ color: {theme.TEXT_MUTED}; border: none;"
             f" font-size: 11px; background: transparent; }}"
@@ -4036,8 +4048,6 @@ class WritingCoreView(QWidget):
         if editor:
             self._scroll.ensureWidgetVisible(editor, 50, 50)
             editor.setFocus()
-        if self._navigator is not None:
-            self._navigator.set_current(scene_id)
 
     def _navigate_to_scene(self, scene_id: int) -> None:
         """Open + focus a unit chosen from the right-side Navigator. Selection
