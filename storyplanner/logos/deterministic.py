@@ -525,6 +525,31 @@ def _stage_reflection(db, context: LogosContext) -> LogosResult:
 register("stage_reflection", _stage_reflection)
 
 
+def _stage_continuity_check(db, context: LogosContext) -> LogosResult:
+    """Deterministic cross-scene Stage Script continuity report (Phase 6).
+
+    Project-level (no selection / current scene needed). Read-only — consolidates
+    character entrance/exit, blocking, props/set, lighting/sound cue continuity,
+    setup/payoff, Timeline alignment, and PSYKE/Notes. Never mutates."""
+    action = "stage_continuity_check"
+    try:
+        from storyplanner.stage_script_continuity import (
+            build_stage_script_continuity_report,
+        )
+        report = build_stage_script_continuity_report(db, context.project_id)
+    except Exception as exc:  # never crash the UI
+        return LogosResult.failure(action, f"Continuity check failed: {exc}")
+
+    return LogosResult(
+        ok=True, action=action, title="Stage Continuity Check",
+        message=report.to_text(), suggestions=list(report.recommended_fixes),
+        proposed_operations=[],  # report only — no mutation
+    )
+
+
+register("stage_continuity_check", _stage_continuity_check)
+
+
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
     action = "sp_detect_setup_payoff"
     try:

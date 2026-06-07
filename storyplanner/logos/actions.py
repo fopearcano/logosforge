@@ -1248,6 +1248,19 @@ for _ss_name, _ss_label, _ss_desc, _ss_prompt, _ss_sel in [
         name=_ss_name, label=_ss_label, description=_ss_desc,
         category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
         prompt=_ss_prompt, needs_selection=_ss_sel, modes=("stage_script",)))
+
+# Stage Script — Phase 6 (cross-scene continuity / coherence). Deterministic,
+# project-level (no selection / current scene needed); read-only report. Offered
+# in Manuscript, Timeline, and Outline.
+register(LogosAction(
+    name="stage_continuity_check", label="Stage Continuity Check",
+    description="Analyze how the stage play works across scenes: character "
+                "entrances/exits, blocking, props/set, lighting/sound cues, "
+                "setup/payoff, Timeline alignment, and PSYKE consistency.",
+    category=CATEGORY_DIAGNOSTIC,
+    sections=(SECTION_MANUSCRIPT, SECTION_TIMELINE, SECTION_OUTLINE),
+    prompt="", modes=("stage_script",), deterministic=True,
+))
 # Stage Script — Phase 2 (planning pipeline). Generative, full-scene; each action
 # produces a preview the writer reviews and confirms — never auto-applied, and the
 # AI never overwrites the body. The structured store/parse/apply lives in
