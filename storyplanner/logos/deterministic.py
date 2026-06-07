@@ -308,6 +308,58 @@ def _gn_panel_check(db, context: LogosContext) -> LogosResult:
 register("gn_panel_check", _gn_panel_check)
 
 
+def _gn_scene_health(db, context: LogosContext) -> LogosResult:
+    """Unified deterministic Graphic Novel scene-script check (Phase 3).
+
+    Groups every finding by category and reports transparent metrics. Report-only
+    — never mutates, never generates images/prompts."""
+    action = "gn_scene_health"
+    scene_id = context.current_scene_id
+    if scene_id is None:
+        return LogosResult(
+            ok=True, action=action, title="Graphic Novel Check",
+            message="Open a Graphic Novel scene in the Manuscript to run a check.",
+            suggestions=[], proposed_operations=[],
+        )
+    try:
+        from storyplanner.graphic_novel_diagnostics import (
+            analyze_scene_by_id, group_issues_by_category,
+        )
+        report = analyze_scene_by_id(db, context.project_id, scene_id)
+    except Exception as exc:  # never crash the UI
+        return LogosResult.failure(action, f"Graphic Novel check failed: {exc}")
+
+    lines = [report.summary, ""]
+    lines.append(
+        f"Metrics — Pages: {report.total_pages} · Panels: {report.total_panels} · "
+        f"Avg/page: {report.avg_panels_per_page} · No-visual: "
+        f"{report.panels_without_visual} · Empty: {report.empty_panels} · "
+        f"Dialogue-heavy: {report.dialogue_heavy_panels} · SFX: {report.sfx_count}")
+    suggestions: list[str] = []
+    for category, items in group_issues_by_category(report).items():
+        ordered = sorted(items, key=lambda i: i.severity_rank, reverse=True)
+        lines.append("")
+        lines.append(f"{category}:")
+        for i in ordered:
+            where = ""
+            if i.page_number is not None:
+                where = f" (page {i.page_number}"
+                where += f", panel {i.panel_number})" if i.panel_number else ")"
+            lines.append(f"- [{i.severity}] {i.label}{where} — {i.evidence}")
+            if i.suggested_action:
+                suggestions.append(f"{i.label}: {i.suggested_action}")
+    if report.strengths:
+        lines.append("")
+        lines.append("Strengths: " + "; ".join(report.strengths))
+    return LogosResult(
+        ok=True, action=action, title="Graphic Novel Check",
+        message="\n".join(lines).strip(), suggestions=suggestions,
+        proposed_operations=[])  # report only — no mutation
+
+
+register("gn_scene_health", _gn_scene_health)
+
+
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
     action = "sp_detect_setup_payoff"
     try:

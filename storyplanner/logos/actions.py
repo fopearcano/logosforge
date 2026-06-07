@@ -1061,6 +1061,17 @@ register(LogosAction(
     category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
     prompt="", modes=("graphic_novel",), deterministic=True,
 ))
+# Phase 3 — unified Graphic Novel scene-script intelligence (deterministic,
+# full-scene, report-only). Groups panel structure / visual clarity / dialogue-
+# caption balance / page flow / dramatic function / plan alignment / continuity.
+register(LogosAction(
+    name="gn_scene_health", label="Graphic Novel Check",
+    description="Full deterministic script check for this Graphic Novel scene: "
+                "panel structure, visual clarity, dialogue/caption balance, page "
+                "flow, dramatic function, plan alignment, and continuity.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("graphic_novel",), deterministic=True,
+))
 
 
 # ---------------------------------------------------------------------------
