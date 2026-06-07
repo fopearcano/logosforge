@@ -502,6 +502,9 @@ class PlanView(QWidget):
         # Separate worker so beat-plan generation never collides with outline gen.
         self._beat_worker: OutlineGenWorker | None = None
         self._beat_scene_id: int | None = None
+        # Graphic Novel page-breakdown generation (Phase 2).
+        self._gn_worker: OutlineGenWorker | None = None
+        self._gn_scene_id: int | None = None
 
         # The Outline section must stay usable when the Assistant panel is open
         # — keep a sensible minimum so the act cards never collapse to a sliver.
@@ -1276,6 +1279,15 @@ class PlanView(QWidget):
             beat_plan.triggered.connect(lambda: self._generate_beat_plan(scene_id))
             menu.addAction(beat_plan)
 
+        # Graphic-Novel-only: generate a page breakdown from this scene's summary.
+        if self._is_graphic_novel_mode():
+            page_bd = QAction("✨ Generate Page Breakdown", menu)
+            page_bd.setToolTip("Plan this scene's pages from its summary "
+                               "(separate from the Manuscript body).")
+            page_bd.triggered.connect(
+                lambda: self._generate_gn_page_breakdown(scene_id))
+            menu.addAction(page_bd)
+
         ai_expand = QAction("✨ AI Expand (add beats/scenes)", menu)
         ai_expand.triggered.connect(lambda: self._ai_expand_scene(scene_id))
         menu.addAction(ai_expand)
@@ -1415,6 +1427,68 @@ class PlanView(QWidget):
         if final.is_empty():
             return
         spp.save_beat_plan(self._db, self._project_id, final)
+        self._notify()
+
+    # -- Graphic Novel page breakdown (Phase 2; GN-only, non-destructive) -----
+
+    def _is_graphic_novel_mode(self) -> bool:
+        try:
+            from storyplanner.writing_modes import (
+                get_project_writing_mode_by_id, GRAPHIC_NOVEL,
+            )
+            return get_project_writing_mode_by_id(
+                self._db, self._project_id) == GRAPHIC_NOVEL
+        except Exception:
+            return (self._engine or "") == "graphic_novel"
+
+    def _generate_gn_page_breakdown(self, scene_id: int) -> None:
+        """Generate a page breakdown from the scene summary, off the UI thread.
+        Non-destructive: the result is reviewed and only saved (as a separate
+        planning artifact) on confirm. Never writes the Manuscript body."""
+        if self._gn_worker is not None:
+            return
+        provider = build_provider()
+        if provider is None:
+            QMessageBox.information(
+                self, "Generate Page Breakdown",
+                "No AI provider is configured. Set one in Settings first.")
+            return
+        from storyplanner import graphic_novel_pipeline as gp
+        prompt = gp.build_page_breakdown_prompt(self._db, self._project_id, scene_id)
+        self._gn_scene_id = scene_id
+        self._set_ai_busy(True)
+        self._gn_worker = OutlineGenWorker(gp.page_breakdown_messages(prompt), provider)
+        self._gn_worker.completed.connect(self._on_gn_breakdown_done)
+        self._gn_worker.failed.connect(self._on_gn_breakdown_failed)
+        self._gn_worker.start()
+
+    def _on_gn_breakdown_failed(self, error: str) -> None:
+        self._gn_worker = None
+        self._set_ai_busy(False)
+        QMessageBox.warning(self, "Generate Page Breakdown",
+                            f"Generation failed:\n\n{error}")
+
+    def _on_gn_breakdown_done(self, text: str) -> None:
+        self._gn_worker = None
+        self._set_ai_busy(False)
+        scene_id = self._gn_scene_id
+        if scene_id is None:
+            return
+        from storyplanner import graphic_novel_pipeline as gp
+        from storyplanner.ui.graphic_novel_pipeline_dialogs import (
+            PageBreakdownPreviewDialog,
+        )
+        bd = gp.parse_page_breakdown_response(text or "", scene_id=scene_id)
+        scene = self._db.get_scene_by_id(scene_id)
+        title = (getattr(scene, "title", "") or "") if scene else ""
+        edited = PageBreakdownPreviewDialog.get_text(
+            bd.to_text(), parent=self, title=title)
+        if edited is None:
+            return  # cancelled — nothing saved
+        final = gp.parse_page_breakdown_response(edited, scene_id=scene_id)
+        if final.is_empty():
+            return
+        gp.save_page_breakdown(self._db, self._project_id, final)
         self._notify()
 
     def _rename_act_dialog(self, act_name: str) -> None:

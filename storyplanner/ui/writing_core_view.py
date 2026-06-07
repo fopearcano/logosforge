@@ -751,6 +751,10 @@ class _SceneEditor(QTextEdit):
     _on_export_scene_fountain = None
     # Screenplay Phase 6: host-set hook for "Rewrite Scene…" (controlled).
     _on_rewrite_scene = None
+    # Graphic Novel Phase 2: host-set hooks + flag for panel planning.
+    _on_gn_panel_plan = None
+    _on_gn_draft_panels = None
+    _graphic_novel_mode = False
     # Screenplay Phase 8: host-set hook for "Screenplay Review…" (project dashboard).
     _on_open_review = None
 
@@ -1016,6 +1020,16 @@ class _SceneEditor(QTextEdit):
         if self._screenplay_mode and self._on_open_review is not None:
             review_act = menu.addAction("Screenplay Review…")
             review_act.triggered.connect(lambda _=False: self._on_open_review())
+        # Graphic Novel Phase 2: panel planning pipeline for this scene.
+        if (self._graphic_novel_mode and self._scene_id is not None
+                and self._on_gn_panel_plan is not None):
+            menu.addSeparator()
+            plan_act = menu.addAction("Generate Panel Plan…")
+            plan_act.triggered.connect(
+                lambda _=False, sid=self._scene_id: self._on_gn_panel_plan(sid))
+            draft_act = menu.addAction("Draft Panels from Plan…")
+            draft_act.triggered.connect(
+                lambda _=False, sid=self._scene_id: self._on_gn_draft_panels(sid))
         menu.exec(event.globalPos())
         menu.deleteLater()
 
@@ -2129,6 +2143,9 @@ class WritingCoreView(QWidget):
         editor._on_rewrite_scene = self._handle_rewrite_scene
         editor._on_open_review = self._handle_open_review
         editor._screenplay_mode = self._is_screenplay_mode()
+        editor._on_gn_panel_plan = self._handle_gn_panel_plan
+        editor._on_gn_draft_panels = self._handle_gn_draft_panels
+        editor._graphic_novel_mode = self._is_graphic_novel_mode()
         editor._smart_quotes = self._smart_quotes
         editor._grammar_enabled = self._grammar_checking
         editor._style_hints_enabled = self._style_hints_checking
@@ -3902,6 +3919,119 @@ class WritingCoreView(QWidget):
                 self._db, self._project_id) == SCREENPLAY
         except Exception:
             return False
+
+    # -- Graphic Novel panel planning (Phase 2; GN-only, preview->confirm) -----
+
+    def _is_graphic_novel_mode(self) -> bool:
+        try:
+            from storyplanner.writing_modes import (
+                get_project_writing_mode_by_id, GRAPHIC_NOVEL,
+            )
+            return get_project_writing_mode_by_id(
+                self._db, self._project_id) == GRAPHIC_NOVEL
+        except Exception:
+            return False
+
+    def _handle_gn_panel_plan(self, scene_id: int) -> None:
+        """Generate a panel plan from the page breakdown, off the UI thread.
+        Non-destructive: reviewed, saved (as a separate plan) only on confirm."""
+        from PySide6.QtWidgets import QMessageBox
+        from storyplanner import graphic_novel_pipeline as gp
+        if getattr(self, "_gn_plan_worker", None) is not None:
+            return
+        from storyplanner.ui.outline_ai import OutlineGenWorker, build_provider
+        provider = build_provider()
+        if provider is None:
+            QMessageBox.information(
+                self, "Generate Panel Plan",
+                "No AI provider is configured. Set one in Settings first.")
+            return
+        prompt = gp.build_panel_plan_prompt(self._db, self._project_id, scene_id)
+        self._gn_plan_scene_id = scene_id
+        self._gn_plan_worker = OutlineGenWorker(gp.panel_plan_messages(prompt), provider)
+        self._gn_plan_worker.completed.connect(self._on_gn_panel_plan_done)
+        self._gn_plan_worker.failed.connect(self._on_gn_plan_failed)
+        self._gn_plan_worker.start()
+
+    def _on_gn_plan_failed(self, error: str) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        self._gn_plan_worker = None
+        QMessageBox.warning(self, "Generate Panel Plan", f"Generation failed:\n\n{error}")
+
+    def _on_gn_panel_plan_done(self, text: str) -> None:
+        self._gn_plan_worker = None
+        scene_id = getattr(self, "_gn_plan_scene_id", None)
+        if scene_id is None:
+            return
+        from storyplanner import graphic_novel_pipeline as gp
+        from storyplanner.ui.graphic_novel_pipeline_dialogs import PanelPlanPreviewDialog
+        plan = gp.parse_panel_plan_response(text or "", scene_id=scene_id)
+        scene = self._db.get_scene_by_id(scene_id)
+        title = (getattr(scene, "title", "") or "") if scene else ""
+        edited = PanelPlanPreviewDialog.get_text(plan.to_text(), parent=self, title=title)
+        if edited is None:
+            return
+        final = gp.parse_panel_plan_response(edited, scene_id=scene_id)
+        if final.is_empty():
+            return
+        gp.save_panel_plan(self._db, self._project_id, final)
+
+    def _handle_gn_draft_panels(self, scene_id: int) -> None:
+        """Draft the page/panel script from the breakdown + plan, off the UI thread.
+        Strictly preview->confirm: the AI never writes the body itself."""
+        from PySide6.QtWidgets import QMessageBox
+        from storyplanner import graphic_novel_pipeline as gp
+        if getattr(self, "_gn_draft_worker", None) is not None:
+            return
+        from storyplanner.ui.outline_ai import OutlineGenWorker, build_provider
+        provider = build_provider()
+        if provider is None:
+            QMessageBox.information(
+                self, "Draft Panels from Plan",
+                "No AI provider is configured. Set one in Settings first.")
+            return
+        prompt = gp.build_draft_prompt(self._db, self._project_id, scene_id)
+        self._gn_draft_scene_id = scene_id
+        self._gn_draft_worker = OutlineGenWorker(gp.draft_messages(prompt), provider)
+        self._gn_draft_worker.completed.connect(self._on_gn_draft_done)
+        self._gn_draft_worker.failed.connect(self._on_gn_draft_failed)
+        self._gn_draft_worker.start()
+
+    def _on_gn_draft_failed(self, error: str) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        self._gn_draft_worker = None
+        QMessageBox.warning(self, "Draft Panels from Plan",
+                            f"Generation failed:\n\n{error}")
+
+    def _on_gn_draft_done(self, text: str) -> None:
+        self._gn_draft_worker = None
+        scene_id = getattr(self, "_gn_draft_scene_id", None)
+        if scene_id is None:
+            return
+        from PySide6.QtWidgets import QMessageBox
+        from storyplanner import graphic_novel_pipeline as gp
+        from storyplanner import graphic_novel_blocks as gnb
+        from storyplanner.ui.graphic_novel_pipeline_dialogs import PanelDraftPreviewDialog
+        script = gp.parse_draft_response(text or "", scene_id=scene_id)
+        validation = gp.validate_draft_script(script)
+        scene = self._db.get_scene_by_id(scene_id)
+        body_is_empty = not (getattr(scene, "content", "") or "").strip()
+        title = (getattr(scene, "title", "") or "") if scene else ""
+        choice = PanelDraftPreviewDialog.get_choice(
+            gnb.serialize_graphic_novel_script(script), validation,
+            body_is_empty=body_is_empty, parent=self, title=title)
+        if choice is None:
+            return  # cancelled — no mutation
+        mode, edited = choice
+        final = gp.parse_draft_response(edited, scene_id=scene_id)
+        result = gp.apply_draft(self._db, self._project_id, scene_id, final,
+                                mode=mode, confirmed=True)
+        if not result.get("ok"):
+            QMessageBox.warning(self, "Draft Panels from Plan",
+                                result.get("error", "Could not apply the draft."))
+            return
+        self.refresh()
+        self.scroll_to_scene(scene_id)
 
     def _handle_draft_from_beat_plan(self, scene_id: int) -> None:
         """Draft this scene's body from its saved beat plan, off the UI thread.
