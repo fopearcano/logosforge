@@ -1073,6 +1073,18 @@ register(LogosAction(
     prompt="", modes=("graphic_novel",), deterministic=True,
 ))
 
+# Graphic Novel Reflection / Counterpart (Phase 4) — a deterministic, non-mutating
+# multi-perspective reflection (reader / artist / story / dialogue) that produces
+# feedback and revision questions, never a rewrite and never an image.
+register(LogosAction(
+    name="gn_reflection", label="Graphic Novel Reflection",
+    description="Reflect on this Graphic Novel scene from the reader's, artist's, "
+                "story, and dialogue/caption perspectives — feedback and revision "
+                "questions, never a rewrite or an image.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("graphic_novel",), deterministic=True,
+))
+
 
 # ---------------------------------------------------------------------------
 # Deferred to later phases (NOT registered — TODO only).
