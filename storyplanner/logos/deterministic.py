@@ -392,6 +392,31 @@ def _gn_reflection(db, context: LogosContext) -> LogosResult:
 register("gn_reflection", _gn_reflection)
 
 
+def _gn_continuity_check(db, context: LogosContext) -> LogosResult:
+    """Deterministic cross-scene Graphic Novel continuity report (Phase 6).
+
+    Project-level (no selection / current scene needed). Read-only — consolidates
+    visual flow, character/object/place continuity, motifs, setup/payoff, Timeline
+    alignment, and PSYKE/Notes consistency. Never mutates or generates images."""
+    action = "gn_continuity_check"
+    try:
+        from storyplanner.graphic_novel_continuity import (
+            build_graphic_novel_continuity_report,
+        )
+        report = build_graphic_novel_continuity_report(db, context.project_id)
+    except Exception as exc:  # never crash the UI
+        return LogosResult.failure(action, f"Continuity check failed: {exc}")
+
+    return LogosResult(
+        ok=True, action=action, title="Graphic Novel Continuity Check",
+        message=report.to_text(), suggestions=list(report.recommended_fixes),
+        proposed_operations=[],  # report only — no mutation
+    )
+
+
+register("gn_continuity_check", _gn_continuity_check)
+
+
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
     action = "sp_detect_setup_payoff"
     try:

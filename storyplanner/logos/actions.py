@@ -1146,6 +1146,20 @@ for _gn_name, _gn_label, _gn_desc, _gn_prompt, _gn_sel in [
         category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
         prompt=_gn_prompt, needs_selection=_gn_sel, modes=("graphic_novel",)))
 
+# Graphic Novel — Phase 6 (cross-scene continuity / coherence). Deterministic,
+# project-level (no selection or current scene needed); read-only report.
+# Offered in Manuscript, Timeline, and Outline so it's reachable as the Graphic
+# Novel Continuity Check / Visual Timeline Alignment / Scene Chain check.
+register(LogosAction(
+    name="gn_continuity_check", label="Graphic Novel Continuity Check",
+    description="Analyze how the Graphic Novel scenes work together: visual flow, "
+                "character/object/place continuity, recurring motifs, setup/payoff, "
+                "Timeline alignment, and PSYKE consistency.",
+    category=CATEGORY_DIAGNOSTIC,
+    sections=(SECTION_MANUSCRIPT, SECTION_TIMELINE, SECTION_OUTLINE),
+    prompt="", modes=("graphic_novel",), deterministic=True,
+))
+
 
 # ---------------------------------------------------------------------------
 # Deferred to later phases (NOT registered — TODO only).
