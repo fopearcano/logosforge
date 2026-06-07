@@ -1085,6 +1085,67 @@ register(LogosAction(
     prompt="", modes=("graphic_novel",), deterministic=True,
 ))
 
+# Graphic Novel — Phase 5 (Controlled Rewrite). Generative; each action shows a
+# preview/diff before any confirmed apply — never auto-applies and never produces
+# images. Panel/text actions need a selection; full-scene actions do not. The
+# grounded preview->apply path lives in graphic_novel_rewrite.
+for _gn_name, _gn_label, _gn_desc, _gn_prompt, _gn_sel in [
+    ("gn_rewrite_panel", "Rewrite Panel",
+     "Propose a revision of the selected panel — shown as a preview to confirm, "
+     "never auto-applied.",
+     "Rewrite the selected graphic novel panel. Return only the panel's "
+     "Visual/Caption/Dialogue/SFX/Notes fields — no markdown, no commentary, and "
+     "no image-generation prompts. This is a preview for the writer to review; do "
+     "not claim it is applied.", True),
+    ("gn_rewrite_page", "Rewrite Page",
+     "Propose a revision of the selected page's panels — preview to confirm.",
+     "Rewrite the selected graphic novel page. Return its PANELs (PANEL n + "
+     "Visual/Caption/Dialogue/SFX/Notes) — no markdown, no commentary, no image "
+     "prompts. Preview only; do not claim it is applied.", True),
+    ("gn_make_more_visual", "Make Panel More Visual",
+     "Recast the selected panel as a concrete, drawable image.",
+     "Recast the selected panel as concrete, drawable action — clear subject, "
+     "setting, and behavior. Return panel fields only; no commentary, no image "
+     "prompts. Preview only.", True),
+    ("gn_reduce_dialogue", "Reduce Panel Dialogue",
+     "Trim the dialogue in the selected panel; let the art carry it.",
+     "Reduce the dialogue in the selected panel to its essential line and let the "
+     "art carry the beat. Return panel fields only; no commentary, no image "
+     "prompts. Preview only.", True),
+    ("gn_caption_to_action", "Replace Caption with Action",
+     "Turn caption exposition in the selection into visible action.",
+     "Turn the selected panel's caption exposition into a visible action or image. "
+     "Return panel fields only; no commentary, no image prompts. Preview only.",
+     True),
+    ("gn_strengthen_beat", "Strengthen Visual Beat",
+     "Sharpen the selected panel's visual beat.",
+     "Sharpen the selected panel's visual beat so its purpose reads at a glance. "
+     "Return panel fields only; no commentary, no image prompts. Preview only.",
+     True),
+    ("gn_clarify_page_turn", "Clarify Page Turn",
+     "Strengthen page turns across this scene — preview to confirm.",
+     "Revise this graphic novel scene so each page ends on a turn, question, or "
+     "reveal that pulls the reader onward. Return PAGE/PANEL script only — no "
+     "markdown, no commentary, no image prompts. Preview only; do not claim it is "
+     "applied.", False),
+    ("gn_improve_flow", "Improve Panel Flow",
+     "Smooth panel-to-panel flow across this scene — preview to confirm.",
+     "Revise this graphic novel scene so the panel-to-panel progression reads "
+     "clearly, each panel advancing the action. Return PAGE/PANEL script only — no "
+     "markdown, no commentary, no image prompts. Preview only.", False),
+    ("gn_rewrite_from_reflection", "Rewrite from Reflection Notes",
+     "Propose a revision addressing the Reflection report — preview to confirm.",
+     "Using the scene's reflection and diagnostics in context, propose a revised "
+     "graphic novel page/panel script that addresses its most important reader, "
+     "artist, and story gaps. Return PAGE/PANEL script only — no markdown, no "
+     "commentary, no image prompts. Preview only; do not claim it is applied.",
+     False),
+]:
+    register(LogosAction(
+        name=_gn_name, label=_gn_label, description=_gn_desc,
+        category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+        prompt=_gn_prompt, needs_selection=_gn_sel, modes=("graphic_novel",)))
+
 
 # ---------------------------------------------------------------------------
 # Deferred to later phases (NOT registered — TODO only).
