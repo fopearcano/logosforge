@@ -1183,6 +1183,40 @@ register(LogosAction(
     category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
     prompt="", modes=("stage_script",), deterministic=True,
 ))
+# Stage Script — Phase 2 (planning pipeline). Generative, full-scene; each action
+# produces a preview the writer reviews and confirms — never auto-applied, and the
+# AI never overwrites the body. The structured store/parse/apply lives in
+# stage_script_pipeline. No image generation.
+for _ss_name, _ss_label, _ss_desc, _ss_prompt in [
+    ("stage_beat_plan", "Generate Stage Beat Plan",
+     "Propose a stage beat plan from the scene's Outline summary — a preview to "
+     "review and store, never written into the body.",
+     "Using the scene's summary and context, produce a STAGE BEAT PLAN — the "
+     "dramatic spine, not stage script. Use labelled lines: Objective:, Dramatic "
+     "Question:, Conflict:, Turning Point:, Emotional Shift:, Dialogue Beats:, "
+     "Stage Action Beats:, Entrances:, Exits:, Continuity Notes:. No markdown, no "
+     "commentary. This is a preview; do not claim it is applied."),
+    ("stage_blocking_plan", "Generate Blocking / Cue Plan",
+     "Propose a blocking / cue plan from the beat plan — a preview to review and "
+     "store, never written into the body.",
+     "Using the scene's beat plan and context, produce a BLOCKING / CUE PLAN — "
+     "staging, movement, entrances/exits, lighting and sound cues. Use labelled "
+     "lines: Staging Area:, Character Positions:, Movement Beats:, Entrance / Exit "
+     "Plan:, Lighting Cues:, Sound Cues:, Prop Notes:, Set Notes:, Transition "
+     "Notes:. No markdown, no commentary. Preview only; do not claim it is applied."),
+    ("stage_draft_scene", "Draft Stage Scene from Plan",
+     "Draft a stage script from the beat + blocking plans — shown as a preview to "
+     "review and confirm, never auto-applied.",
+     "Realizing ONLY the beat plan and blocking/cue plan, write a stage-play "
+     "SCRIPT using labelled lines: SCENE:, STAGE:, CHARACTER:, dialogue lines, "
+     "(parentheticals), ENTER:, EXIT:, LIGHT:, SOUND:, SET:, TRANSITION:, NOTE:. "
+     "No markdown, no commentary, no image prompts. This is a preview for the "
+     "writer to review; do not claim it is applied."),
+]:
+    register(LogosAction(
+        name=_ss_name, label=_ss_label, description=_ss_desc,
+        category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+        prompt=_ss_prompt, modes=("stage_script",)))
 
 
 # ---------------------------------------------------------------------------
