@@ -268,6 +268,56 @@ def structure_ref_number(
     return ""
 
 
+def note_link_label(
+    db: Database, project_id: int, kind: str, ref,
+) -> tuple[str, bool]:
+    """Canonical display label + ``missing`` flag for a note's structure link.
+
+    ``("act", "Act I") → ("Act 1 — Act I", False)`` ·
+    ``("chapter", "Ch1") → ("Chapter 1.2 — Ch1", False)`` ·
+    ``("scene", 7) → ("Scene 1.2.3 — Title", False)``.
+
+    Recomputed on each call, so the number/path follows the current Outline order
+    automatically while the link itself stays bound to the same act-name / scene
+    id. Missing/renamed targets are flagged (never crash) and remain removable.
+    """
+    kind = (kind or "").lower()
+    try:
+        tree = build_structure_tree(db, project_id)
+        numbers = compute_structural_numbers(tree, is_novel_project(db, project_id))
+    except Exception:
+        tree, numbers = [], {"acts": {}, "chapters": {}, "scenes": {}}
+
+    if kind == "act":
+        present = ref in numbers.get("acts", {})
+        num = numbers.get("acts", {}).get(ref, "")
+        head = f"Act {num}" if num else "Act"
+        return (f"{head} — {ref}", not present)
+
+    if kind == "chapter":
+        match = next(((a, c) for a, chs in tree for c, _ in chs if c == ref), None)
+        if match is None:
+            return (f"Chapter — {ref}", True)
+        num = numbers.get("chapters", {}).get(match, "")
+        head = f"Chapter {num}" if num else "Chapter"
+        return (f"{head} — {ref}", False)
+
+    if kind == "scene":
+        scene = None
+        try:
+            scene = db.get_scene_by_id(int(ref))
+        except Exception:
+            scene = None
+        if scene is None:
+            return ("Scene — (missing)", True)
+        num = numbers.get("scenes", {}).get(scene.id, "")
+        title = (getattr(scene, "title", "") or "Untitled").strip() or "Untitled"
+        head = f"Scene {num}" if num else "Scene"
+        return (f"{head} — {title}", False)
+
+    return (f"{kind.title()} — {ref}", False)
+
+
 # ---------------------------------------------------------------------------
 # Structural invariant: every Scene under a Chapter, every Chapter under an Act
 # ---------------------------------------------------------------------------

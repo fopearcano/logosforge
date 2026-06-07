@@ -235,22 +235,18 @@ class NotesView(QWidget):
         descriptors; targets that no longer exist are flagged ``missing``."""
         if self._selected_id is None:
             return []
+        from storyplanner.story_structure import note_link_label
         out: list[dict] = []
-        acts = set(self._db.get_scene_acts(self._project_id))
-        chapters = set(self._db.get_scene_chapters(self._project_id))
         for ttype, ref in self._db.get_note_structure_links(self._selected_id):
-            present = ref in acts if ttype == "act" else ref in chapters
-            out.append({
-                "kind": ttype, "ref": ref,
-                "label": f"{ttype.title()}: {ref}", "missing": not present,
-            })
+            label, missing = note_link_label(
+                self._db, self._project_id, ttype, ref)
+            out.append({"kind": ttype, "ref": ref,
+                        "label": label, "missing": missing})
         for sid in self._db.get_note_scene_links(self._selected_id):
-            scene = self._db.get_scene_by_id(sid)
-            out.append({
-                "kind": "scene", "ref": sid,
-                "label": f"Scene: {scene.title}" if scene else "Scene: (missing)",
-                "missing": scene is None,
-            })
+            label, missing = note_link_label(
+                self._db, self._project_id, "scene", sid)
+            out.append({"kind": "scene", "ref": sid,
+                        "label": label, "missing": missing})
         for eid in self._db.get_note_psyke_links(self._selected_id):
             entry = self._db.get_psyke_entry_by_id(eid)
             out.append({

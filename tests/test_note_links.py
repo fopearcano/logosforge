@@ -189,6 +189,90 @@ def test_notes_view_has_refresh():
 
 
 # ==========================================================================
+# Canonical structure display (path / numbering, updates on move)
+# ==========================================================================
+
+
+def test_note_link_label_canonical_numbers_novel():
+    from storyplanner.story_structure import note_link_label
+    db = Database()
+    pid = _proj(db)
+    a = db.create_scene(pid, "Alpha", act="Act I", chapter="Ch1", content="x").id
+    db.create_scene(pid, "Beta", act="Act II", chapter="Ch2", content="y")
+    assert note_link_label(db, pid, "act", "Act I") == ("Act 1 — Act I", False)
+    assert note_link_label(db, pid, "act", "Act II") == ("Act 2 — Act II", False)
+    assert note_link_label(db, pid, "chapter", "Ch1") == ("Chapter 1.1 — Ch1", False)
+    assert note_link_label(db, pid, "scene", a) == ("Scene 1.1.1 — Alpha", False)
+
+
+def test_note_link_label_flattens_for_screenplay():
+    from storyplanner.story_structure import note_link_label
+    db = Database()
+    pid = _proj(db, "screenplay")
+    s = db.create_scene(pid, "Sc", act="Act I", chapter="Seq 1", content="z").id
+    # Screenplay numbering flattens to Act.Scene (novel is Act.Chapter.Scene).
+    assert note_link_label(db, pid, "scene", s) == ("Scene 1.1 — Sc", False)
+
+
+def test_note_link_label_missing_targets_safe():
+    from storyplanner.story_structure import note_link_label
+    db = Database()
+    pid = _proj(db)
+    assert note_link_label(db, pid, "act", "Ghost")[1] is True
+    assert note_link_label(db, pid, "chapter", "Nope")[1] is True
+    assert note_link_label(db, pid, "scene", 99999) == ("Scene — (missing)", True)
+
+
+def test_chips_show_canonical_path():
+    db = Database()
+    pid = _proj(db)
+    s = db.create_scene(pid, "Alpha", act="Act I", chapter="Ch1", content="x").id
+    n = db.create_note(pid, "N", "b").id
+    db.add_note_structure_link(n, pid, "act", "Act I")
+    db.add_note_structure_link(n, pid, "chapter", "Ch1")
+    db.link_note_to_scene(n, s)
+    view = _notes(db, pid)
+    view.select_note(n)
+    labels = {l["label"] for l in view._collect_links()}
+    assert "Act 1 — Act I" in labels
+    assert "Chapter 1.1 — Ch1" in labels
+    assert "Scene 1.1.1 — Alpha" in labels
+
+
+def test_moving_scene_updates_displayed_number_link_stays_bound():
+    db = Database()
+    pid = _proj(db)
+    a = db.create_scene(pid, "Alpha", act="Act I", chapter="Ch1", content="x").id
+    b = db.create_scene(pid, "Beta", act="Act I", chapter="Ch1", content="y").id
+    n = db.create_note(pid, "N", "b").id
+    db.link_note_to_scene(n, b)                       # Beta is 1.1.2
+    view = _notes(db, pid)
+    view.select_note(n)
+    assert any("Scene 1.1.2 — Beta" == l["label"] for l in view._collect_links())
+    db.reorder_scenes(pid, [b, a])                    # move Beta first -> 1.1.1
+    view._refresh_links()
+    assert any("Scene 1.1.1 — Beta" == l["label"] for l in view._collect_links())
+    assert db.get_note_scene_links(n) == [b]          # link still bound to same id
+
+
+def test_moving_chapter_updates_displayed_path():
+    db = Database()
+    pid = _proj(db)
+    a = db.create_scene(pid, "Alpha", act="Act I", chapter="Ch1", content="x").id
+    b = db.create_scene(pid, "Beta", act="Act I", chapter="Ch2", content="y").id
+    n = db.create_note(pid, "N", "b").id
+    db.add_note_structure_link(n, pid, "chapter", "Ch2")   # Ch2 is 1.2
+    view = _notes(db, pid)
+    view.select_note(n)
+    assert any("Chapter 1.2 — Ch2" == l["label"] for l in view._collect_links())
+    db.reorder_scenes(pid, [b, a])                    # Ch2's scene first -> Ch2 is 1.1
+    view._refresh_links()
+    assert any("Chapter 1.1 — Ch2" == l["label"] for l in view._collect_links())
+    # The link is still stored by chapter name (same node), only the number moved.
+    assert ("chapter", "Ch2") in db.get_note_structure_links(n)
+
+
+# ==========================================================================
 # Project isolation (UI + MainWindow)
 # ==========================================================================
 
