@@ -294,13 +294,19 @@ def test_timeline_move_does_not_reorder_outline():
     assert db.get_timeline_order(pid) == [b, a]                 # timeline order
 
 
-def test_unlinked_event_shows_clear_unassigned_state():
+def test_unassigned_scene_does_not_create_lane_without_real_lanes():
+    # A plotline-less scene (e.g. a fresh Outline Act's scene) must NOT reveal a
+    # Timeline lane on its own — the Timeline stays empty until a real lane is
+    # created. The "Unassigned" holding row only appears alongside a real lane.
     db = Database()
     pid = _novel(db)
-    db.create_scene(pid, "Floating", content="x")      # no plotline → unlinked
+    db.create_scene(pid, "Floating", content="x")      # no plotline, no lane
     view = PlotTimelineView(db, pid)
+    assert view._rows == []                             # no fabricated lane
+    db.create_timeline_lane(pid, "Main", "green")       # now the user opts in
+    view.refresh()
     lane_names = [name for _, name, _ in view._rows]
-    assert any("Unassigned" in n for n in lane_names)   # explicit, not fabricated
+    assert "Main" in lane_names and any("Unassigned" in n for n in lane_names)
 
 
 def test_timeline_chip_safe_when_target_renamed():

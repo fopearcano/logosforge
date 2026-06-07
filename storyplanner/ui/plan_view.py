@@ -524,9 +524,13 @@ class PlanView(QWidget):
         )
         header_row.addWidget(title)
 
-        self._mode_badge = QLabel("")
+        # Outline structure-mode badge (Classical / λ Lambda). Kept as a hidden
+        # widget so the mode/template logic and _refresh_mode_badge stay intact,
+        # but NOT shown in the header — the visible "Classical" text just wasted
+        # horizontal space. (Mode is still available internally / via template.)
+        self._mode_badge = QLabel("", self)
         self._mode_badge.setObjectName("planModeBadge")
-        header_row.addWidget(self._mode_badge)
+        self._mode_badge.setVisible(False)
 
         header_row.addStretch()
 
@@ -1216,11 +1220,11 @@ class PlanView(QWidget):
         menu.addAction(ai_gen)
         menu.addSeparator()
 
-        # -- Move --
-        up = QAction("Move Chapter Up", menu)
+        # -- Move (Chapters are columns inside the Act → left/right) --
+        up = QAction("Move Chapter Left", menu)
         up.triggered.connect(lambda: self.move_chapter(act_name, chapter_name, -1))
         menu.addAction(up)
-        down = QAction("Move Chapter Down", menu)
+        down = QAction("Move Chapter Right", menu)
         down.triggered.connect(lambda: self.move_chapter(act_name, chapter_name, +1))
         menu.addAction(down)
         self._add_move_to_act_submenu(menu, act_name, chapter_name)

@@ -472,8 +472,9 @@ class PlotTimelineView(QWidget):
         outer.addLayout(body, stretch=1)
 
         self._empty = QLabel(
-            "No events yet. Add scenes (Scenes/Manuscript), then assign them to "
-            "plot lanes here — or click “+ Lane” to start."
+            "No plot lanes yet. Click “+ Lane” to create a narrative track "
+            "(subplot, character arc, theme…), then add or link events.\n"
+            "Outline Acts are not Timeline lanes — creating an Act won’t add one."
         )
         self._empty.setWordWrap(True)
         self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -568,12 +569,17 @@ class PlotTimelineView(QWidget):
                 unassigned.append(s)
 
         self._rows = [(ln, ln.name, by_lane[ln.name]) for ln in self._lanes]
-        if unassigned:
+        # The virtual "Unassigned" holding row is a place to park events that
+        # aren't on a lane yet — shown ONLY when the Timeline is actually in use
+        # (at least one real lane exists). It is NOT derived from Outline Acts:
+        # creating an Act (a plotline-less scene) must never reveal a Timeline
+        # lane on its own, so with no real lanes the Timeline stays empty.
+        if unassigned and self._lanes:
             self._rows.append((None, _UNASSIGNED, unassigned))
 
         self._rebuild_headers()
         self._relayout_cards()
-        has_any = bool(scenes) or bool(self._lanes)
+        has_any = bool(self._lanes)
         self._empty.setVisible(not has_any)
         self._hscroll.setVisible(has_any)
         self._vheader.setVisible(has_any)
@@ -657,10 +663,21 @@ class PlotTimelineView(QWidget):
         )
         menu.addSeparator()
         menu.addAction(
-            "Delete lane (keeps its events)",
-            lambda lid=lane.id: self._delete_lane(lid),
+            "Delete lane (keeps its events)…",
+            lambda ln=lane: self._confirm_delete_lane(ln),
         )
         menu.exec(global_pos)
+
+    def _confirm_delete_lane(self, lane) -> None:
+        """Confirm before deleting a lane. Member events are never deleted —
+        their plotline is cleared so they fall back to Unassigned."""
+        from PySide6.QtWidgets import QMessageBox
+        if QMessageBox.question(
+            self, "Delete lane",
+            f"Delete the lane “{lane.name}”?\n\n"
+            "Its events are kept (moved to Unassigned) — no scene is deleted.",
+        ) == QMessageBox.StandardButton.Yes:
+            self._delete_lane(lane.id)
 
     def _add_event_to_lane(self, lane_name: str) -> None:
         """Explicitly create a linked Scene in this lane. The Scene is parented
