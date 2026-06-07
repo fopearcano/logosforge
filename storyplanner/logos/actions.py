@@ -1173,6 +1173,16 @@ register(LogosAction(
     sections=(SECTION_MANUSCRIPT, SECTION_TIMELINE, SECTION_OUTLINE),
     prompt="", modes=("graphic_novel",), deterministic=True,
 ))
+# Stage Script — Phase 1 (deterministic scene-body check). Report-only, mode-gated
+# to stage_script; runs on the current Scene with no selection. No image gen.
+register(LogosAction(
+    name="stage_check", label="Stage Script Check",
+    description="Deterministic check of this Stage Script scene: stage action, "
+                "character/dialogue balance, entrances/exits, and lighting/sound "
+                "cues. Report only — never rewrites or mutates.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("stage_script",), deterministic=True,
+))
 
 
 # ---------------------------------------------------------------------------

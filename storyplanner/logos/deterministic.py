@@ -441,6 +441,42 @@ def _gn_review_dashboard(db, context: LogosContext) -> LogosResult:
 register("gn_review_dashboard", _gn_review_dashboard)
 
 
+def _stage_check(db, context: LogosContext) -> LogosResult:
+    """Deterministic Stage Script scene-body check (Phase 1).
+
+    Report-only — never mutates, never generates. Validates the current Stage
+    Script scene's blocks (stage action, character/dialogue balance, entrances/
+    exits, lighting/sound cues)."""
+    action = "stage_check"
+    scene_id = context.current_scene_id
+    if scene_id is None:
+        return LogosResult(
+            ok=True, action=action, title="Stage Script Check",
+            message="Open a Stage Script scene in the Manuscript to check it.",
+            suggestions=[], proposed_operations=[],
+        )
+    try:
+        from storyplanner.stage_script_blocks import (
+            load_scene_script, validate_stage_script,
+        )
+        script = load_scene_script(db, scene_id)
+        report = validate_stage_script(script)
+    except Exception as exc:  # never crash the UI
+        return LogosResult.failure(action, f"Stage Script check failed: {exc}")
+
+    head = f"{len(script.blocks)} block(s)."
+    if not report.warnings:
+        msg = head + "\n\nNo stage-script issues detected."
+    else:
+        msg = head + "\n\nWarnings:\n" + "\n".join(f"- {w}" for w in report.warnings)
+    return LogosResult(
+        ok=True, action=action, title="Stage Script Check",
+        message=msg, suggestions=list(report.warnings), proposed_operations=[])
+
+
+register("stage_check", _stage_check)
+
+
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
     action = "sp_detect_setup_payoff"
     try:
