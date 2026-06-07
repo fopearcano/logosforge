@@ -38,6 +38,7 @@ from storyplanner.db import Database
 from storyplanner.models import TIMELINE_LINK_TYPES
 from storyplanner.story_structure import (
     build_structure_tree,
+    canonical_scene_order,
     compute_structural_numbers,
     is_novel_project,
 )
@@ -382,6 +383,9 @@ class PlotTimelineView(QWidget):
         # Timeline-specific event order (scene ids) — independent of Outline's
         # Scene.sort_order, so moving a block here never reorders the Outline.
         self._event_order: list[int] = []
+        # Column-ordering mode: "structural" (default — follow the canonical
+        # Outline order) or "custom" (timeline-local order, opt-in via a move).
+        self._order_mode: str = "structural"
         self._pending_link_source: int | None = None
         # Event → Act/Chapter structure links, grouped by event scene id.
         self._struct_by_scene: dict[int, list] = {}
@@ -409,6 +413,19 @@ class PlotTimelineView(QWidget):
         add_lane.setStyleSheet(theme.primary_btn() if hasattr(theme, "primary_btn") else "")
         add_lane.clicked.connect(self._add_lane)
         bar.addWidget(add_lane)
+        # Column-ordering mode toggle. Default "Structural" lines events up with
+        # the Outline; "Custom" lets the user reorder events independently.
+        self._order_mode_btn = QPushButton("Order: Structural")
+        self._order_mode_btn.setFlat(True)
+        self._order_mode_btn.setToolTip(
+            "Structural Order follows the Outline (1.1.1, 1.1.2, …). "
+            "Custom Timeline Order lets you reorder events independently.")
+        self._order_mode_btn.setStyleSheet(
+            f"QPushButton {{ color: {theme.TEXT_SECONDARY}; border: 1px solid "
+            f"{theme.BORDER}; border-radius: 4px; padding: 2px 8px;"
+            f" font-size: 10px; }}")
+        self._order_mode_btn.clicked.connect(self._toggle_order_mode)
+        bar.addWidget(self._order_mode_btn)
         bar.addStretch()
         self._status = QLabel("")
         self._status.setStyleSheet(f"color: {theme.ACCENT}; font-size: 10px;")
@@ -471,18 +488,49 @@ class PlotTimelineView(QWidget):
     # -- data load / layout -------------------------------------------------
 
     def _effective_order(self, scenes) -> list[int]:
-        """Resolve the timeline column order: the saved timeline order first
-        (filtered to scenes that still exist), then any newer scenes appended in
-        canonical sort_order. Never mutates Scene.sort_order."""
-        stored = self._db.get_timeline_order(self._project_id)
+        """Resolve the timeline column order.
+
+        "structural" (default): the canonical Outline order, so linked scene
+        events line up with Outline/Manuscript (1.1.1, 1.1.2, 1.1.3, …). Any
+        stale custom order is ignored.
+
+        "custom" (opt-in, set when the user moves a card): the timeline-local
+        order, then any newer scenes appended in canonical sort_order. Never
+        mutates Scene.sort_order.
+        """
         existing = {s.id for s in scenes}
-        order = [sid for sid in stored if sid in existing]
+        if self._order_mode == "custom":
+            base = self._db.get_timeline_order(self._project_id)
+        else:
+            base = canonical_scene_order(self._db, self._project_id)
+        order = [sid for sid in base if sid in existing]
         seen = set(order)
         for s in scenes:                      # scenes arrive in sort_order
             if s.id not in seen:
                 order.append(s.id)
                 seen.add(s.id)
         return order
+
+    def _sync_order_mode_button(self) -> None:
+        btn = getattr(self, "_order_mode_btn", None)
+        if btn is not None:
+            btn.setText("Order: Custom" if self._order_mode == "custom"
+                        else "Order: Structural")
+
+    def _toggle_order_mode(self) -> None:
+        new = "structural" if self._order_mode == "custom" else "custom"
+        self._db.set_timeline_order_mode(self._project_id, new)
+        if new == "custom":
+            # Seed the custom order from what's shown now (the canonical order)
+            # so switching starts from the visible order, not a stale one.
+            self._db.set_timeline_order(self._project_id, list(self._event_order))
+        self._notify()
+
+    def _enter_custom_order(self, order: list[int]) -> None:
+        """Persist an explicit horizontal reorder, switching the project into
+        Custom Timeline Order (never touches Scene.sort_order / the Outline)."""
+        self._db.set_timeline_order_mode(self._project_id, "custom")
+        self._db.set_timeline_order(self._project_id, order)
 
     def refresh(self) -> None:
         # Ensure lanes exist for any pre-existing plotline strings.
@@ -500,11 +548,11 @@ class PlotTimelineView(QWidget):
         )
         self._cur_acts = set(self._db.get_scene_acts(self._project_id))
         self._cur_chapters = set(self._db.get_scene_chapters(self._project_id))
+        self._order_mode = self._db.get_timeline_order_mode(self._project_id)
+        self._sync_order_mode_button()
         scenes = self._db.get_all_scenes(self._project_id)
-        # Horizontal position = the TIMELINE-specific order (falls back to the
-        # canonical sort_order for events with no explicit timeline position).
-        # This is deliberately separate from Scene.sort_order so a Timeline move
-        # never reorders the Outline/Manuscript.
+        # Column order follows the canonical Outline order by default
+        # ("structural"); only "custom" mode uses a timeline-local order.
         self._event_order = self._effective_order(scenes)
         self._time_index = {sid: i for i, sid in enumerate(self._event_order)}
         self._n_cols = len(self._event_order)
@@ -655,18 +703,22 @@ class PlotTimelineView(QWidget):
                 target_lane_name = "" if lane is None else lane.name
                 break
             row_y += h
-        # Move between lanes (plotline) when it changed.
+        # Move between lanes (plotline) when it changed — independent of order.
         scene = self._db.get_scene_by_id(scene_id)
         if scene is not None and (scene.plotline or "") != target_lane_name:
             self._db.update_scene_plotline(scene_id, target_lane_name)
-        # Reorder along the TIMELINE-specific axis from the drop column — this
-        # writes the timeline order only, never Scene.sort_order, so the Outline
-        # and Manuscript order are left intact.
+        # An actual horizontal move is an explicit reorder: opt into Custom
+        # Timeline Order and write the timeline-local order only (never
+        # Scene.sort_order, so the Outline/Manuscript order is untouched). A
+        # pure lane change (same column) stays in Structural Order.
         col = round((x - LEFT_PAD) / SLOT_W)
         col = max(0, min(col, max(self._n_cols - 1, 0)))
-        order = [sid for sid in self._event_order if sid != scene_id]
-        order.insert(min(col, len(order)), scene_id)
-        self._db.set_timeline_order(self._project_id, order)
+        cur = (self._event_order.index(scene_id)
+               if scene_id in self._event_order else -1)
+        if col != cur:
+            order = [sid for sid in self._event_order if sid != scene_id]
+            order.insert(min(col, len(order)), scene_id)
+            self._enter_custom_order(order)
         self._notify()
 
     def _open_scene(self, scene_id: int) -> None:
@@ -804,9 +856,9 @@ class PlotTimelineView(QWidget):
         menu.exec(global_pos)
 
     def _move_event(self, scene_id: int, delta: int) -> None:
-        """Move an event one column earlier/later along the TIMELINE axis only.
-        Writes the timeline-specific order, never Scene.sort_order, so the
-        Outline/Manuscript order is unaffected."""
+        """Move an event one column earlier/later — an explicit reorder that
+        opts into Custom Timeline Order. Writes the timeline-specific order
+        only, never Scene.sort_order, so the Outline/Manuscript is unaffected."""
         order = list(self._event_order)
         if scene_id not in order:
             return
@@ -814,7 +866,7 @@ class PlotTimelineView(QWidget):
         j = max(0, min(i + delta, len(order) - 1))
         if j != i:
             order.insert(j, order.pop(i))
-            self._db.set_timeline_order(self._project_id, order)
+            self._enter_custom_order(order)
             self._notify()
 
     def _rename_event(self, scene_id: int) -> None:

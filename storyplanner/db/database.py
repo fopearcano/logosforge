@@ -1578,6 +1578,19 @@ class Database:
         settings["timeline_order"] = [int(x) for x in ordered_ids]
         self.save_project_settings(project_id, settings)
 
+    def get_timeline_order_mode(self, project_id: int) -> str:
+        """Timeline column-ordering mode: "structural" (default — follow the
+        canonical Outline order) or "custom" (timeline-local order)."""
+        mode = self.get_project_settings(project_id).get(
+            "timeline_order_mode", "structural")
+        return "custom" if mode == "custom" else "structural"
+
+    def set_timeline_order_mode(self, project_id: int, mode: str) -> None:
+        settings = self.get_project_settings(project_id)
+        settings["timeline_order_mode"] = (
+            "custom" if mode == "custom" else "structural")
+        self.save_project_settings(project_id, settings)
+
     # -- Timeline links (event ↔ event) -------------------------------------
 
     def get_timeline_links(self, project_id: int) -> list["TimelineLink"]:

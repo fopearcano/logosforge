@@ -171,6 +171,14 @@ def get_ordered_structure(db: Database, project_id: int):
     return build_structure_tree(db, project_id)
 
 
+def canonical_scene_order(db: Database, project_id: int) -> list[int]:
+    """Flat list of scene ids in canonical structure order (the same order
+    Outline and Manuscript render). Timeline's "Structural Order" mode uses this
+    so linked scene events line up with the Outline (1.1.1, 1.1.2, 1.1.3, …)."""
+    order, _structure = flatten_tree_to_order(build_structure_tree(db, project_id))
+    return order
+
+
 def list_acts(db: Database, project_id: int) -> list[str]:
     return [a for a, _ in build_structure_tree(db, project_id)]
 
