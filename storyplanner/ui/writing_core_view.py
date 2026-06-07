@@ -747,6 +747,8 @@ class _SceneEditor(QTextEdit):
     # Screenplay Phase 2: host-set hook + flag for "Draft from Beat Plan…".
     _on_draft_from_beat_plan = None
     _screenplay_mode = False
+    # Screenplay Phase 4: host-set hook for "Export Scene to Fountain…".
+    _on_export_scene_fountain = None
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -988,6 +990,16 @@ class _SceneEditor(QTextEdit):
             draft_act.triggered.connect(
                 lambda _=False, sid=self._scene_id:
                     self._on_draft_from_beat_plan(sid),
+            )
+        # Screenplay Phase 4: export this scene to a .fountain file.
+        if (self._screenplay_mode and self._on_export_scene_fountain is not None
+                and self._scene_id is not None):
+            if not (self._screenplay_mode and self._on_draft_from_beat_plan):
+                menu.addSeparator()
+            export_act = menu.addAction("Export Scene to Fountain…")
+            export_act.triggered.connect(
+                lambda _=False, sid=self._scene_id:
+                    self._on_export_scene_fountain(sid),
             )
         menu.exec(event.globalPos())
         menu.deleteLater()
@@ -2098,6 +2110,7 @@ class WritingCoreView(QWidget):
         editor._on_tab_cycle = self._on_tab_cycle_element
         editor._on_psyke_context_action = self._handle_psyke_context
         editor._on_draft_from_beat_plan = self._handle_draft_from_beat_plan
+        editor._on_export_scene_fountain = self._handle_export_scene_fountain
         editor._screenplay_mode = self._is_screenplay_mode()
         editor._smart_quotes = self._smart_quotes
         editor._grammar_enabled = self._grammar_checking
@@ -3933,6 +3946,40 @@ class WritingCoreView(QWidget):
             return
         self.refresh()
         self.scroll_to_scene(scene_id)
+
+    def _handle_export_scene_fountain(self, scene_id: int) -> None:
+        """Export a single scene to a .fountain file (Phase 4). Read-only — a
+        pre-export check warns first; export never mutates project data."""
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+        from storyplanner import screenplay_interchange as si
+
+        scene = self._db.get_scene_by_id(scene_id)
+        title = (getattr(scene, "title", "") or "scene") if scene else "scene"
+        readiness = si.validate_fountain_export_readiness(
+            self._db, self._project_id, scene_id=scene_id)
+        if readiness.warnings:
+            proceed = QMessageBox.question(
+                self, "Export Scene to Fountain",
+                "Heads up before exporting:\n\n• " + "\n• ".join(readiness.warnings[:8])
+                + "\n\nExport anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if proceed != QMessageBox.StandardButton.Yes:
+                return
+        import re as _re
+        safe = _re.sub(r"[^\w\- ]+", "", title).strip() or "scene"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Scene to Fountain", f"{safe}.fountain",
+            "Fountain (*.fountain)")
+        if not path:
+            return
+        res = si.export_scene_fountain(self._db, self._project_id, scene_id, path)
+        if not res.get("ok"):
+            QMessageBox.warning(self, "Export failed",
+                                res.get("error", "Could not export the scene."))
+            return
+        QMessageBox.information(self, "Export", f"Exported to {res['path']}")
 
     def _resolve_term_at(self, text: str, col: int) -> int | None:
         hl = next(iter(self._highlighters.values()), None)

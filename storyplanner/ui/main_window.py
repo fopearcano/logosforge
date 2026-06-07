@@ -2010,11 +2010,11 @@ class MainWindow(QMainWindow):
         self._assistant_panel.set_active_scene(scene_id)
 
     def _on_import(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
+        path, selected_filter = QFileDialog.getOpenFileName(
             self,
             "Import Project",
             "",
-            "JSON (*.json)",
+            "JSON (*.json);;Fountain (*.fountain)",
         )
         if not path:
             return
@@ -2024,6 +2024,10 @@ class MainWindow(QMainWindow):
                 raw = f.read()
         except OSError as e:
             QMessageBox.warning(self, "Import", f"Could not read file:\n{e}")
+            return
+
+        if "Fountain" in selected_filter or path.endswith(".fountain"):
+            self._import_fountain(raw)
             return
 
         data, error = validate_import_data(raw)
@@ -2037,6 +2041,69 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self, "Import", f"Project imported successfully (ID {new_project_id})."
         )
+
+    def _import_fountain(self, raw: str) -> None:
+        """Preview a .fountain file and apply the chosen import on confirm (Phase 4).
+
+        Nothing is created or overwritten until the author confirms in the
+        preview dialog; new scenes always get a valid Act/Chapter parent and
+        existing-scene writes route through Controlled Apply.
+        """
+        from storyplanner import screenplay_interchange as si
+        from storyplanner.ui.screenplay_import_dialog import FountainImportDialog
+
+        preview = si.parse_fountain_to_scenes(raw)
+        if not preview.scenes:
+            QMessageBox.information(
+                self, "Import Fountain",
+                "No screenplay scenes were detected in that .fountain file.")
+            return
+
+        # A scene is "targetable" only on the Manuscript writing surface.
+        target_scene_id = None
+        try:
+            from storyplanner.ui.writing_core_view import WritingCoreView
+            if isinstance(self.content_area, WritingCoreView):
+                target_scene_id = getattr(self.content_area, "_selected_scene_id", None)
+        except Exception:
+            target_scene_id = None
+
+        mode = FountainImportDialog.get_mode(
+            preview, has_target_scene=target_scene_id is not None, parent=self)
+        if mode is None:
+            return  # cancelled — no mutation
+
+        result = si.apply_fountain_import(
+            self._db, self._project_id, preview, mode=mode, confirmed=True,
+            target_scene_id=target_scene_id)
+        if not result.get("ok"):
+            QMessageBox.warning(self, "Import Fountain",
+                                result.get("error", "Could not import."))
+            return
+
+        from storyplanner.project_events import get_event_bus
+        bus = get_event_bus()
+        for sig in ("scenes_changed", "outline_changed", "project_data_changed"):
+            try:
+                getattr(bus, sig).emit()
+            except Exception:
+                pass
+        if mode == si.IMPORT_NEW_PROJECT and result.get("project_id"):
+            self._set_active_section("Dashboard")
+            self._switch_project(result["project_id"])
+            QMessageBox.information(
+                self, "Import Fountain",
+                f"Imported {result['scenes_created']} scene(s) into a new project.")
+            return
+        self._refresh_active_view()
+        created = result.get("scenes_created", 0)
+        if created:
+            QMessageBox.information(
+                self, "Import Fountain",
+                f"Imported {created} scene(s) into “{result.get('act')}/"
+                f"{result.get('chapter')}”.")
+        else:
+            QMessageBox.information(self, "Import Fountain", "Scene updated from import.")
 
     def _on_export(self) -> None:
         project = self._db.get_project_by_id(self._project_id)
