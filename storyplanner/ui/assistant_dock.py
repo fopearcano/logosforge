@@ -93,6 +93,22 @@ class AssistantDock(QWidget):
         if hasattr(self._panel, "pin_toggled"):
             self._panel.pin_toggled.connect(self.set_pinned)
 
+    def apply_theme(self) -> None:
+        """Propagate an Appearance change to the embedded Assistant panel
+        (whether docked or floating — held by reference) and repolish the dock
+        chrome (the collapse strip) so the whole dock updates live."""
+        if hasattr(self._panel, "apply_theme"):
+            try:
+                self._panel.apply_theme()
+            except Exception:
+                pass
+        for w in self.findChildren(QWidget):
+            w.style().unpolish(w)
+            w.style().polish(w)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.update()
+
     # -- Strip ---------------------------------------------------------------
 
     def _build_strip(self) -> QWidget:

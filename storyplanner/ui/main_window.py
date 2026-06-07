@@ -3358,6 +3358,11 @@ class MainWindow(QMainWindow):
         for key, btn in self._appearance_btns.items():
             btn.setChecked(key == name)
         self._psyke_console.refresh_style()
+        # Live-propagate the new theme to the Assistant (dock chrome + panel,
+        # docked or floating). The panel's child widgets carry inline styles, so
+        # the global stylesheet alone can't refresh them — apply_theme re-runs
+        # them. No recreation, no restart.
+        self._assistant_dock.apply_theme()
         preferences.set_string("appearance", name)
         get_settings().set("appearance", name)
 

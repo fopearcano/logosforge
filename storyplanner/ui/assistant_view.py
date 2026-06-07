@@ -257,6 +257,10 @@ class AssistantPanel(QWidget):
 
         self._overlay_mode = False
         self._typing_dimmed = False
+        # Widgets whose inline stylesheet depends on the theme. Registered via
+        # _t() at build time and re-applied by apply_theme() so the Assistant
+        # follows an Appearance change live (no recreation / restart).
+        self._themed_widgets: list = []
 
         self.setMinimumWidth(220)
         self.setMaximumWidth(360)
@@ -293,7 +297,7 @@ class AssistantPanel(QWidget):
         title_font.setBold(True)
         title_font.setPointSize(title_font.pointSize() + 1)
         title.setFont(title_font)
-        title.setStyleSheet(f"color: {theme.TEXT_PRIMARY};")
+        self._t(title, lambda: f"color: {theme.TEXT_PRIMARY};")
         header.addWidget(title)
         header.addStretch()
 
@@ -305,11 +309,11 @@ class AssistantPanel(QWidget):
         self._pin_btn.setFixedSize(24, 24)
         self._pin_btn.setFlat(True)
         self._pin_btn.setToolTip("Pin the assistant (keep docked when space is tight)")
-        self._pin_btn.setStyleSheet(
+        self._t(self._pin_btn, lambda: (
             f"QPushButton {{ color: {theme.TEXT_MUTED}; border: none; }}"
             f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
             f"QPushButton:checked {{ color: {theme.ACCENT}; }}"
-        )
+        ))
         self._pin_btn.toggled.connect(self.pin_toggled.emit)
         header.addWidget(self._pin_btn)
 
@@ -319,10 +323,10 @@ class AssistantPanel(QWidget):
         self._collapse_btn.setFixedSize(24, 24)
         self._collapse_btn.setFlat(True)
         self._collapse_btn.setToolTip("Collapse the assistant panel")
-        self._collapse_btn.setStyleSheet(
+        self._t(self._collapse_btn, lambda: (
             f"QPushButton {{ color: {theme.TEXT_MUTED}; border: none; }}"
             f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
-        )
+        ))
         self._collapse_btn.clicked.connect(self.collapse_requested.emit)
         header.addWidget(self._collapse_btn)
 
@@ -332,27 +336,27 @@ class AssistantPanel(QWidget):
         self._overlay_btn.setToolTip(
             "Undock / dock the assistant (floating overlay panel)",
         )
-        self._overlay_btn.setStyleSheet(
+        self._t(self._overlay_btn, lambda: (
             f"QPushButton {{ color: {theme.TEXT_MUTED}; border: none; }}"
             f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
-        )
+        ))
         self._overlay_btn.clicked.connect(self._toggle_overlay)
         header.addWidget(self._overlay_btn)
 
         close_btn = QPushButton("\u2715")
         close_btn.setFixedSize(24, 24)
         close_btn.setFlat(True)
-        close_btn.setStyleSheet(
+        self._t(close_btn, lambda: (
             f"QPushButton {{ color: {theme.TEXT_MUTED}; border: none; }}"
             f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
-        )
+        ))
         close_btn.clicked.connect(self.panel_closed.emit)
         header.addWidget(close_btn)
         self._layout.addLayout(header)
 
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f"color: {theme.BORDER};")
+        self._t(sep, lambda: f"color: {theme.BORDER};")
         self._layout.addWidget(sep)
 
         # Panel mode selector: Assistant | Counterpart | Quantum
@@ -398,7 +402,7 @@ class AssistantPanel(QWidget):
         self._ctx_source_combo.setCurrentIndex(1)
         ctx_row.addWidget(self._ctx_source_combo, stretch=1)
         self._send_btn = QPushButton("Generate")
-        self._send_btn.setStyleSheet(theme.primary_btn())
+        self._t(self._send_btn, lambda: theme.primary_btn())
         self._send_btn.clicked.connect(self._send_custom)
         ctx_row.addWidget(self._send_btn)
         self._layout.addLayout(ctx_row)
@@ -520,9 +524,9 @@ class AssistantPanel(QWidget):
         sm_layout.setContentsMargins(0, 2, 0, 2)
         sm_layout.setSpacing(2)
         sm_label = QLabel("Structure:")
-        sm_label.setStyleSheet(
+        self._t(sm_label, lambda: (
             f"color: {theme.TEXT_MUTED}; font-size: 10px; background: transparent;"
-        )
+        ))
         sm_layout.addWidget(sm_label)
         self._structure_mode_buttons: list[QPushButton] = []
         for mode_name in STRUCTURE_MODES:
@@ -592,11 +596,11 @@ class AssistantPanel(QWidget):
         # Collapsible settings
         self._settings_btn = QPushButton("\u25b6 Settings")
         self._settings_btn.setFlat(True)
-        self._settings_btn.setStyleSheet(
+        self._t(self._settings_btn, lambda: (
             f"QPushButton {{ color: {theme.TEXT_SECONDARY}; border: none;"
             f" text-align: left; padding: 2px 0; font-size: 11px; }}"
             f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
-        )
+        ))
         self._settings_btn.clicked.connect(self._toggle_settings)
         self._layout.addWidget(self._settings_btn)
 
@@ -629,10 +633,10 @@ class AssistantPanel(QWidget):
         self._irrational_check.setToolTip(
             "Disrupt PSYKE rules: temporal displacement, entity blending, surreal prompts"
         )
-        self._irrational_check.setStyleSheet(
+        self._t(self._irrational_check, lambda: (
             f"QCheckBox {{ color: {theme.TEXT_SECONDARY}; }}"
             f"QCheckBox::indicator:checked {{ background: #a855f7; border: 1px solid #7c3aed; }}"
-        )
+        ))
         settings_layout.addWidget(self._irrational_check)
         self._irrational_iteration = 0
 
@@ -646,14 +650,14 @@ class AssistantPanel(QWidget):
         self._ctx_viewer.setPlaceholderText(
             "Context will appear here after a request..."
         )
-        self._ctx_viewer.setStyleSheet(
+        self._t(self._ctx_viewer, lambda: (
             f"QPlainTextEdit {{"
             f"  background-color: {theme.BG_PANEL};"
             f"  color: {theme.TEXT_SECONDARY};"
             f"  border: 1px solid {theme.BORDER};"
             f"  font-size: 10px; padding: 4px;"
             f"}}"
-        )
+        ))
         self._ctx_viewer.setVisible(False)
         settings_layout.addWidget(self._ctx_viewer)
 
@@ -664,7 +668,7 @@ class AssistantPanel(QWidget):
         timeout_row = QHBoxLayout()
         timeout_row.setSpacing(4)
         timeout_label = QLabel("API timeout:")
-        timeout_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 11px;")
+        self._t(timeout_label, lambda: f"color: {theme.TEXT_SECONDARY}; font-size: 11px;")
         timeout_row.addWidget(timeout_label)
         self._timeout_spin = QSpinBox()
         self._timeout_spin.setRange(0, 600)
@@ -686,14 +690,14 @@ class AssistantPanel(QWidget):
         resp_header = QHBoxLayout()
         resp_header.setSpacing(4)
         resp_label = QLabel("Response")
-        resp_label.setStyleSheet(
+        self._t(resp_label, lambda: (
             f"color: {theme.TEXT_SECONDARY}; font-size: 11px;"
-        )
+        ))
         resp_header.addWidget(resp_label)
         self._cache_label = QLabel("cached")
-        self._cache_label.setStyleSheet(
+        self._t(self._cache_label, lambda: (
             f"color: {theme.ACCENT}; font-size: 10px; font-style: italic;"
-        )
+        ))
         self._cache_label.setVisible(False)
         resp_header.addWidget(self._cache_label)
         resp_header.addStretch()
@@ -706,14 +710,14 @@ class AssistantPanel(QWidget):
         )
         self._response_output.setMinimumHeight(80)
         self._response_output.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
-        self._response_output.setStyleSheet(
+        self._t(self._response_output, lambda: (
             f"QPlainTextEdit {{"
             f"  background-color: {theme.BG_PANEL};"
             f"  color: {theme.TEXT_PRIMARY};"
             f"  border: 1px solid {theme.BORDER};"
             f"  border-radius: 4px; padding: 6px;"
             f"}}"
-        )
+        ))
         self._layout.addWidget(self._response_output, stretch=1)
 
         # Apply actions: Copy | Replace | Insert | Append
@@ -2055,6 +2059,44 @@ class AssistantPanel(QWidget):
 
     def refresh_style(self) -> None:
         self.setStyleSheet(self._build_style(dimmed=self._typing_dimmed))
+
+    def _t(self, widget, style_fn):
+        """Register a widget whose inline stylesheet depends on the theme and
+        apply it now. apply_theme() re-runs every registered style_fn so the
+        panel follows an Appearance change live (no recreation)."""
+        self._themed_widgets.append((widget, style_fn))
+        widget.setStyleSheet(style_fn())
+        return widget
+
+    def apply_theme(self) -> None:
+        """Re-apply the current app theme to the panel and all of its themed
+        child widgets (header, mode tabs, buttons, inputs, settings, response).
+        Called on Appearance change so the Assistant updates without a restart.
+        Safe to call repeatedly; never recreates the panel."""
+        # 1. Panel container (background / border / scrollbars).
+        self.refresh_style()
+        # 2. Inline-styled children registered via _t (theme colours are read
+        #    live, so re-running each style_fn picks up the new palette).
+        for widget, style_fn in list(self._themed_widgets):
+            try:
+                widget.setStyleSheet(style_fn())
+            except Exception:
+                pass
+        # 3. State-dependent button groups (their refreshers read the theme too).
+        try:
+            self._set_panel_mode(self._panel_mode)
+            self._sync_structure_mode_buttons()
+            self._sync_lambda_toggle()
+        except Exception:
+            pass
+        # 4. Repolish so children styled purely by the global app stylesheet
+        #    (combos, checkboxes, spin boxes, preset buttons) refresh too.
+        for child in self.findChildren(QWidget):
+            child.style().unpolish(child)
+            child.style().polish(child)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.update()
 
     def _build_style(self, dimmed: bool = False) -> str:
         opacity_rule = "opacity: 0.65;" if dimmed and not self._overlay_mode else ""
