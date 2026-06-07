@@ -285,8 +285,11 @@ def test_timeline_chip_shows_canonical_number_and_updates_on_move():
 def test_timeline_move_does_not_reorder_outline():
     db = Database()
     pid = _novel(db)
-    a = db.create_scene(pid, "A", act="Act I", chapter="Ch1", content="x").id
-    b = db.create_scene(pid, "B", act="Act I", chapter="Ch1", content="y").id
+    # Events must be on a lane to be reorderable on the Timeline.
+    a = db.create_scene(pid, "A", act="Act I", chapter="Ch1", content="x",
+                        plotline="Main").id
+    b = db.create_scene(pid, "B", act="Act I", chapter="Ch1", content="y",
+                        plotline="Main").id
     before = [s.id for s in db.get_all_scenes(pid)]
     view = PlotTimelineView(db, pid)
     view._move_event(b, -1)                            # timeline-only reorder
@@ -295,18 +298,18 @@ def test_timeline_move_does_not_reorder_outline():
 
 
 def test_unassigned_scene_does_not_create_lane_without_real_lanes():
-    # A plotline-less scene (e.g. a fresh Outline Act's scene) must NOT reveal a
-    # Timeline lane on its own — the Timeline stays empty until a real lane is
-    # created. The "Unassigned" holding row only appears alongside a real lane.
+    # An Outline scene (no plotline) is NOT a Timeline event, so it never shows
+    # as a lane/Unassigned — even after a real lane is created. The Timeline is
+    # user-controlled: only assigned/linked scenes become events.
     db = Database()
     pid = _novel(db)
-    db.create_scene(pid, "Floating", content="x")      # no plotline, no lane
+    db.create_scene(pid, "Floating", content="x")      # Outline scene, no lane
     view = PlotTimelineView(db, pid)
-    assert view._rows == []                             # no fabricated lane
-    db.create_timeline_lane(pid, "Main", "green")       # now the user opts in
+    assert view._rows == []                             # nothing shown
+    db.create_timeline_lane(pid, "Main", "green")       # user opts into Timeline
     view.refresh()
-    lane_names = [name for _, name, _ in view._rows]
-    assert "Main" in lane_names and any("Unassigned" in n for n in lane_names)
+    names = [name for _, name, _ in view._rows]
+    assert names == ["Main"]                            # still no Unassigned row
 
 
 def test_timeline_chip_safe_when_target_renamed():

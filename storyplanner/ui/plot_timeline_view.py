@@ -55,7 +55,7 @@ CARD_H = LANE_H - 26
 LEFT_PAD = 14
 HEADER_W = 168
 
-_UNASSIGNED = "— Unassigned"   # display label for the virtual lane
+_UNASSIGNED = "Unassigned Events"   # display label for the virtual fallback row
 
 
 # ===========================================================================
@@ -244,20 +244,28 @@ class _LaneHeader(QFrame):
         text.addWidget(count_lbl)
         lay.addLayout(text, stretch=1)
 
+        # Both real lanes and the virtual "Unassigned Events" row get a ⋯ menu;
+        # the virtual row's menu offers assignment/cleanup actions instead of
+        # rename/colour/delete.
+        menu_btn = QPushButton("⋯")
+        menu_btn.setFixedWidth(18)
+        menu_btn.setFlat(True)
+        menu_btn.setStyleSheet(
+            f"QPushButton {{ color: {theme.TEXT_SECONDARY}; border: none;"
+            f" font-size: 14px; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
+        )
         if lane is not None:
-            menu_btn = QPushButton("⋯")
-            menu_btn.setFixedWidth(18)
-            menu_btn.setFlat(True)
-            menu_btn.setStyleSheet(
-                f"QPushButton {{ color: {theme.TEXT_SECONDARY}; border: none;"
-                f" font-size: 14px; }}"
-                f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
-            )
             menu_btn.clicked.connect(
                 lambda: view._show_lane_menu(
                     lane, menu_btn.mapToGlobal(QPoint(0, menu_btn.height())))
             )
-            lay.addWidget(menu_btn)
+        else:
+            menu_btn.clicked.connect(
+                lambda: view._show_unassigned_menu(
+                    menu_btn.mapToGlobal(QPoint(0, menu_btn.height())))
+            )
+        lay.addWidget(menu_btn)
 
 
 # ===========================================================================
@@ -551,17 +559,24 @@ class PlotTimelineView(QWidget):
         self._cur_chapters = set(self._db.get_scene_chapters(self._project_id))
         self._order_mode = self._db.get_timeline_order_mode(self._project_id)
         self._sync_order_mode_button()
-        scenes = self._db.get_all_scenes(self._project_id)
+        # Only scenes that are actually Timeline EVENTS are shown — a scene is an
+        # event iff it has a lane (non-empty plotline) or is in the explicit
+        # membership set. Outline scenes are NOT auto-events, so creating an Act
+        # never makes a Timeline event/lane appear.
+        event_ids = self._db.get_timeline_event_ids(self._project_id)
+        all_scenes = self._db.get_all_scenes(self._project_id)
+        events = [s for s in all_scenes
+                  if (s.plotline or "").strip() or s.id in event_ids]
         # Column order follows the canonical Outline order by default
         # ("structural"); only "custom" mode uses a timeline-local order.
-        self._event_order = self._effective_order(scenes)
+        self._event_order = self._effective_order(events)
         self._time_index = {sid: i for i, sid in enumerate(self._event_order)}
         self._n_cols = len(self._event_order)
 
         lane_names = {ln.name for ln in self._lanes}
         by_lane: dict[str, list] = {ln.name: [] for ln in self._lanes}
         unassigned: list = []
-        for s in scenes:
+        for s in events:
             pl = (s.plotline or "").strip()
             if pl and pl in lane_names:
                 by_lane[pl].append(s)
@@ -569,17 +584,16 @@ class PlotTimelineView(QWidget):
                 unassigned.append(s)
 
         self._rows = [(ln, ln.name, by_lane[ln.name]) for ln in self._lanes]
-        # The virtual "Unassigned" holding row is a place to park events that
-        # aren't on a lane yet — shown ONLY when the Timeline is actually in use
-        # (at least one real lane exists). It is NOT derived from Outline Acts:
-        # creating an Act (a plotline-less scene) must never reveal a Timeline
-        # lane on its own, so with no real lanes the Timeline stays empty.
-        if unassigned and self._lanes:
+        # "Unassigned Events" holds events that have no lane (e.g. after a lane
+        # was deleted). It appears ONLY when such events exist — never merely
+        # because Outline scenes or lanes exist — and is hidden when empty.
+        self._has_unassigned = bool(unassigned)
+        if unassigned:
             self._rows.append((None, _UNASSIGNED, unassigned))
 
         self._rebuild_headers()
         self._relayout_cards()
-        has_any = bool(self._lanes)
+        has_any = bool(self._lanes) or bool(events)
         self._empty.setVisible(not has_any)
         self._hscroll.setVisible(has_any)
         self._vheader.setVisible(has_any)
@@ -656,6 +670,9 @@ class PlotTimelineView(QWidget):
         menu.addAction(
             "Create linked scene…",
             lambda nm=lane.name: self._add_event_to_lane(nm))
+        menu.addAction(
+            "Add existing scene…",
+            lambda nm=lane.name: self._add_existing_scene_to_lane(nm))
         menu.addAction("Rename…", lambda: self._rename_lane(lane))
         build_color_menu(
             menu, lane.color_label,
@@ -693,6 +710,76 @@ class PlotTimelineView(QWidget):
             plotline=lane_name or "")
         self._notify()
 
+    def _add_existing_scene_to_lane(self, lane_name: str) -> None:
+        """Bring an existing (non-event) Scene onto the Timeline by assigning it
+        to this lane — Timeline stays user-controlled (no auto-import)."""
+        event_ids = self._db.get_timeline_event_ids(self._project_id)
+        cands = [s for s in self._db.get_all_scenes(self._project_id)
+                 if not ((s.plotline or "").strip() or s.id in event_ids)]
+        from PySide6.QtWidgets import QMessageBox
+        if not cands:
+            QMessageBox.information(
+                self, "Add existing scene",
+                "No unlinked scenes to add — create scenes in Outline/Manuscript "
+                "first, or use “Create linked scene…”.")
+            return
+        nums = compute_structural_numbers(
+            build_structure_tree(self._db, self._project_id),
+            is_novel_project(self._db, self._project_id))["scenes"]
+        by_label: dict[str, int] = {}
+        labels: list[str] = []
+        for s in cands:
+            n = nums.get(s.id, "")
+            label = f"{n}  {s.title or 'Untitled'}" if n else (s.title or "Untitled")
+            labels.append(label)
+            by_label[label] = s.id
+        choice, ok = QInputDialog.getItem(
+            self, "Add existing scene",
+            f"Add a scene to lane “{lane_name}”:", labels, 0, False)
+        if ok and choice in by_label:
+            sid = by_label[choice]
+            self._db.add_timeline_event(self._project_id, sid)
+            self._db.update_scene_plotline(sid, lane_name)
+            self._notify()
+
+    # -- Unassigned Events fallback inbox -----------------------------------
+
+    def _unassigned_event_ids(self) -> list[int]:
+        event_ids = self._db.get_timeline_event_ids(self._project_id)
+        lane_names = {ln.name for ln in self._lanes}
+        out: list[int] = []
+        for s in self._db.get_all_scenes(self._project_id):
+            pl = (s.plotline or "").strip()
+            is_event = bool(pl) or s.id in event_ids
+            if is_event and not (pl and pl in lane_names):
+                out.append(s.id)
+        return out
+
+    def _show_unassigned_menu(self, global_pos) -> None:
+        menu = QMenu(self)
+        assign = menu.addMenu("Assign all to lane")
+        assign.setEnabled(bool(self._lanes))
+        for lane in self._lanes:
+            assign.addAction(
+                lane.name, lambda nm=lane.name: self._assign_all_unassigned(nm))
+        menu.addAction(
+            "Create lane from these…", self._create_lane_from_unassigned)
+        menu.exec(global_pos)
+
+    def _assign_all_unassigned(self, lane_name: str) -> None:
+        for sid in self._unassigned_event_ids():
+            self._db.add_timeline_event(self._project_id, sid)
+            self._db.update_scene_plotline(sid, lane_name)
+        self._notify()
+
+    def _create_lane_from_unassigned(self) -> None:
+        name, ok = QInputDialog.getText(
+            self, "Create lane from Unassigned", "New lane name:", text="Main Plot")
+        if not ok or not name.strip():
+            return
+        self._db.create_timeline_lane(self._project_id, name.strip())
+        self._assign_all_unassigned(name.strip())
+
     def _rename_lane(self, lane) -> None:
         name, ok = QInputDialog.getText(
             self, "Rename lane", "Lane name:", text=lane.name)
@@ -705,7 +792,14 @@ class PlotTimelineView(QWidget):
         self._notify()
 
     def _delete_lane(self, lane_id: int) -> None:
-        self._db.delete_timeline_lane(lane_id)
+        # Keep the lane's events ON the timeline (they fall back to Unassigned),
+        # rather than vanishing: mark them as events before clearing the lane.
+        lane = next((ln for ln in self._lanes if ln.id == lane_id), None)
+        if lane is not None:
+            for s in self._db.get_all_scenes(self._project_id):
+                if (s.plotline or "").strip() == lane.name:
+                    self._db.add_timeline_event(self._project_id, s.id)
+        self._db.delete_timeline_lane(lane_id)   # clears member plotlines
         self._notify()
 
     # -- interactions: events ----------------------------------------------
@@ -720,6 +814,9 @@ class PlotTimelineView(QWidget):
                 target_lane_name = "" if lane is None else lane.name
                 break
             row_y += h
+        # The dropped scene is a Timeline event now (keep it on the board even if
+        # dropped onto Unassigned).
+        self._db.add_timeline_event(self._project_id, scene_id)
         # Move between lanes (plotline) when it changed — independent of order.
         scene = self._db.get_scene_by_id(scene_id)
         if scene is not None and (scene.plotline or "") != target_lane_name:
@@ -771,6 +868,9 @@ class PlotTimelineView(QWidget):
             lambda sid=card.scene_id: self._assign_lane(sid, ""),
         )
         menu.addMenu(lane_menu)
+        menu.addAction(
+            "Remove from Timeline…",
+            lambda sid=card.scene_id: self._remove_event(sid))
         menu.addSeparator()
 
         # Link this event to Outline structure (Act / Chapter) or directly to
@@ -901,7 +1001,25 @@ class PlotTimelineView(QWidget):
         self._notify()
 
     def _assign_lane(self, scene_id: int, lane_name: str) -> None:
+        # Assigning to a lane (or explicitly to Unassigned) keeps the scene a
+        # Timeline event so it stays on the board.
+        self._db.add_timeline_event(self._project_id, scene_id)
         self._db.update_scene_plotline(scene_id, lane_name)
+        self._notify()
+
+    def _remove_event(self, scene_id: int) -> None:
+        """Remove a scene from the Timeline (it stops being an event). The Scene
+        and its Outline node/body are preserved — this only unlists it here."""
+        from PySide6.QtWidgets import QMessageBox
+        if QMessageBox.question(
+            self, "Remove from Timeline",
+            "Remove this event from the Timeline?\n\n"
+            "The Scene and its Outline place/body are kept — it is only removed "
+            "from the Timeline board.",
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        self._db.remove_timeline_event(self._project_id, scene_id)
+        self._db.update_scene_plotline(scene_id, "")
         self._notify()
 
     # -- interactions: links ------------------------------------------------

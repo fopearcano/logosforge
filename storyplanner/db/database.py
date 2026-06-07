@@ -1591,6 +1591,40 @@ class Database:
             "custom" if mode == "custom" else "structural")
         self.save_project_settings(project_id, settings)
 
+    # -- Timeline event membership (which scenes are Timeline events) ---------
+    # A scene is a Timeline event iff it has a lane (non-empty plotline) OR its
+    # id is in this explicit set. The set keeps a scene as an event after its
+    # lane is deleted (so it lands in "Unassigned Events" rather than vanishing),
+    # without auto-promoting every Outline scene. Stored in project settings —
+    # additive, project-scoped, no schema migration.
+
+    def get_timeline_event_ids(self, project_id: int) -> set[int]:
+        raw = self.get_project_settings(project_id).get("timeline_event_ids", [])
+        out: set[int] = set()
+        if isinstance(raw, list):
+            for x in raw:
+                try:
+                    out.add(int(x))
+                except (TypeError, ValueError):
+                    continue
+        return out
+
+    def add_timeline_event(self, project_id: int, scene_id: int) -> None:
+        ids = self.get_timeline_event_ids(project_id)
+        if scene_id not in ids:
+            ids.add(scene_id)
+            settings = self.get_project_settings(project_id)
+            settings["timeline_event_ids"] = sorted(ids)
+            self.save_project_settings(project_id, settings)
+
+    def remove_timeline_event(self, project_id: int, scene_id: int) -> None:
+        ids = self.get_timeline_event_ids(project_id)
+        if scene_id in ids:
+            ids.discard(scene_id)
+            settings = self.get_project_settings(project_id)
+            settings["timeline_event_ids"] = sorted(ids)
+            self.save_project_settings(project_id, settings)
+
     # -- Timeline links (event ↔ event) -------------------------------------
 
     def get_timeline_links(self, project_id: int) -> list["TimelineLink"]:

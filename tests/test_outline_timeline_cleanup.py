@@ -194,16 +194,22 @@ def test_creating_act_does_not_create_timeline_lane(tmp_path):
     assert db.get_timeline_lanes(pid) == []     # and no real lane created
 
 
-def test_unassigned_row_only_with_real_lane():
+def test_unassigned_row_only_for_events_without_lane():
+    # An Outline scene is not an event → no Unassigned even with a real lane.
     db = Database()
     pid = _novel(db)
     ss.create_scene(db, pid, act="Act I", chapter="Ch1", title="S")  # no plotline
+    lane = db.create_timeline_lane(pid, "Main", "green")
     view = PlotTimelineView(db, pid)
-    assert view._rows == []                      # nothing without a real lane
-    db.create_timeline_lane(pid, "Main", "green")
+    assert [n for _, n, _ in view._rows] == ["Main"]     # no Unassigned row
+    # Put an event on the lane, then delete the lane → it becomes unassigned.
+    ev = ss.create_scene(db, pid, act="Act I", chapter="Ch1", title="E",
+                         plotline="Main").id
+    view._delete_lane(lane.id)
     view.refresh()
     names = [n for _, n, _ in view._rows]
-    assert "Main" in names and any("Unassigned" in n for n in names)
+    assert any("Unassigned" in n for n in names)         # now it appears
+    assert ev in view._unassigned_event_ids()
 
 
 def test_real_lane_is_editable():
