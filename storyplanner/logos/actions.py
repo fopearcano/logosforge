@@ -1183,6 +1183,17 @@ register(LogosAction(
     category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
     prompt="", modes=("stage_script",), deterministic=True,
 ))
+# Stage Script — Phase 4 (Counterpart / Reflection). Deterministic, non-mutating
+# multi-perspective reflection (audience / actor / director / dramaturg) producing
+# feedback and revision questions — never a rewrite.
+register(LogosAction(
+    name="stage_reflection", label="Stage Script Reflection",
+    description="Reflect on this Stage Script scene from the audience, actor, "
+                "director/blocking, and dramaturg perspectives — feedback and "
+                "revision questions, never a rewrite.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("stage_script",), deterministic=True,
+))
 # Stage Script — Phase 2 (planning pipeline). Generative, full-scene; each action
 # produces a preview the writer reviews and confirms — never auto-applied, and the
 # AI never overwrites the body. The structured store/parse/apply lives in

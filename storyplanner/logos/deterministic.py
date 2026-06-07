@@ -493,6 +493,38 @@ def _stage_check(db, context: LogosContext) -> LogosResult:
 register("stage_check", _stage_check)
 
 
+def _stage_reflection(db, context: LogosContext) -> LogosResult:
+    """Deterministic Stage Script Counterpart / Reflection (Phase 4).
+
+    Re-projects the Phase 3 diagnostics + Phase 2 beat/blocking plans + PSYKE into
+    audience / actor / director / dramaturg perspectives with revision questions.
+    Reflection only — never rewrites, never mutates, never calls the LLM."""
+    action = "stage_reflection"
+    scene_id = context.current_scene_id
+    if scene_id is None:
+        return LogosResult(
+            ok=True, action=action, title="Stage Script Reflection",
+            message="Open a Stage Script scene in the Manuscript to reflect on it.",
+            suggestions=[], proposed_operations=[],
+        )
+    try:
+        from storyplanner.stage_script_reflection import build_scene_reflection
+        report = build_scene_reflection(db, context.project_id, scene_id)
+    except Exception as exc:  # never crash the UI
+        return LogosResult.failure(action, f"Reflection failed: {exc}")
+
+    suggestions = list(report.suggested_actions) + [
+        f"Q: {q}" for q in report.questions]
+    return LogosResult(
+        ok=True, action=action, title="Stage Script Reflection",
+        message=report.to_text(), suggestions=suggestions,
+        proposed_operations=[],  # reflection only — no mutation
+    )
+
+
+register("stage_reflection", _stage_reflection)
+
+
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
     action = "sp_detect_setup_payoff"
     try:
