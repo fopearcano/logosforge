@@ -1194,6 +1194,60 @@ register(LogosAction(
     category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
     prompt="", modes=("stage_script",), deterministic=True,
 ))
+
+# Stage Script — Phase 5 (Controlled Rewrite). Generative; each action shows a
+# preview/diff before any confirmed apply — never auto-applies. Block/text actions
+# need a selection; full-scene actions do not. The grounded preview->apply path
+# lives in stage_script_rewrite.
+for _ss_name, _ss_label, _ss_desc, _ss_prompt, _ss_sel in [
+    ("stage_rewrite_block", "Rewrite Stage Block",
+     "Propose a revision of the selected stage block(s) — preview to confirm.",
+     "Rewrite the selected stage-script block(s). Return stage-script blocks only "
+     "(SCENE:/STAGE:/CHARACTER:/dialogue/(parenthetical)/ENTER:/EXIT:/LIGHT:/"
+     "SOUND:/SET:/TRANSITION:/NOTE:) — no markdown, no commentary, no screenplay "
+     "sluglines. This is a preview; do not claim it is applied.", True),
+    ("stage_make_playable", "Make More Playable",
+     "Recast the selection as playable, observable stage action.",
+     "Recast the selected material as playable, observable stage action an actor "
+     "can perform. Return stage blocks only; no commentary, no sluglines. Preview "
+     "only.", True),
+    ("stage_reduce_exposition", "Reduce Exposition",
+     "Trim expositional dialogue in the selection.",
+     "Reduce the exposition in the selected dialogue, turning told backstory into "
+     "present action or implication. Return stage blocks only. Preview only.", True),
+    ("stage_strengthen_objective", "Strengthen Actor Objective",
+     "Make the character's active want playable in the selection.",
+     "Revise the selection so the character's active want and tactic are playable "
+     "in action and line. Return stage blocks only. Preview only.", True),
+    ("stage_clarify_cue", "Clarify Cue",
+     "Give the selected lighting/sound cue clear, motivated text.",
+     "Clarify the selected lighting/sound cue: motivated text with a dramatic "
+     "function. Return stage blocks only. Preview only.", True),
+    ("stage_rewrite_scene", "Rewrite Stage Scene",
+     "Propose a revision of the whole scene — preview to confirm.",
+     "Rewrite this stage scene as stage-script blocks — no markdown, no "
+     "commentary, no screenplay sluglines. Preview only; do not claim it is "
+     "applied.", False),
+    ("stage_clarify_blocking", "Clarify Blocking",
+     "Revise the scene so movement/blocking is clear — preview to confirm.",
+     "Revise this stage scene so stage geography, movement, and entrances/exits "
+     "read clearly and support the conflict. Return stage blocks only. Preview "
+     "only.", False),
+    ("stage_strengthen_turn", "Strengthen Theatrical Turn",
+     "Revise so the scene turns on a staged value shift — preview to confirm.",
+     "Revise this stage scene so it turns on a clear, staged value shift by the "
+     "last beat. Return stage blocks only. Preview only.", False),
+    ("stage_rewrite_from_reflection", "Rewrite from Reflection Notes",
+     "Propose a revision addressing the reflection — preview to confirm.",
+     "Using the scene's reflection and diagnostics in context, propose a revised "
+     "stage-script scene that addresses its most important audience, actor, "
+     "director, and dramaturg gaps. Return stage blocks only — no markdown, no "
+     "commentary, no sluglines. Preview only; do not claim it is applied.", False),
+]:
+    register(LogosAction(
+        name=_ss_name, label=_ss_label, description=_ss_desc,
+        category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+        prompt=_ss_prompt, needs_selection=_ss_sel, modes=("stage_script",)))
 # Stage Script — Phase 2 (planning pipeline). Generative, full-scene; each action
 # produces a preview the writer reviews and confirms — never auto-applied, and the
 # AI never overwrites the body. The structured store/parse/apply lives in
