@@ -117,3 +117,12 @@ limitations for this RC:
   the Episode Beat Plan's `a/b/c_story` fields; there is **no per-scene thread
   assignment metadata and no separate plot/Season/Episode storage** yet — the
   navigator never mutates data.
+- **Graphic Novel — one shared body.** The Manuscript and the **Pages** section
+  edit the *same* GN scene body (`Scene.content`, structured by
+  `graphic_novel_blocks` into Pages → Panels: visual / caption / dialogue / SFX /
+  notes). Edits round-trip on refresh / section switch (not live-simultaneous;
+  there are two separate sections). Pages/Panels are **writing/script structure,
+  not image generation** — no ComfyUI, no image prompts, no visual canvas. Panel
+  cards collapse/expand (panel **undocking** is deferred). The Pages view is
+  scene-centric; a legacy project-level pages model still exists in storage but is
+  no longer the wired surface (kept for data safety, deferred).

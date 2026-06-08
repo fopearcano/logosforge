@@ -19,6 +19,15 @@
   Episode Beat Plan). It mirrors the Graphic-Novel "Pages" gating, navigates to
   Outline/Manuscript without mutating data, and never appears in other modes. No
   Season/Episode storage hierarchy was introduced.
+- **Graphic Novel Pages/Manuscript single source of truth:** the GN "Pages"
+  section now edits the **same** scene body as the Manuscript — `Scene.content`
+  parsed/serialized by `graphic_novel_blocks` into Pages → Panels (visual /
+  caption / dialogue / SFX / notes). The new scene-centric Pages view
+  (collapsible panel cards) replaces the previously disconnected project-level
+  pages surface as the wired nav; edits round-trip between Manuscript and Pages
+  via the shared body. The legacy project-level `GraphicNovelPage/Panel` tables
+  are left intact (non-destructive, deferred). No image generation / ComfyUI /
+  prompt fields / visual canvas.
 
 ## Post-gate blocker fix
 

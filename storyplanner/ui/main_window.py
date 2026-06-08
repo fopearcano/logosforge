@@ -1505,12 +1505,17 @@ class MainWindow(QMainWindow):
         if not self._project_is_graphic_novel():
             self._show_dashboard()
             return
-        from storyplanner.ui.graphic_novel_pages_view import GraphicNovelPagesView
+        # Pages edits the SAME shared scene body as the Manuscript (Scene.content
+        # via graphic_novel_blocks) — one source of truth, not a separate store.
+        from storyplanner.ui.graphic_novel_scene_pages_view import (
+            GraphicNovelScenePagesView,
+        )
         self._set_content(
-            GraphicNovelPagesView(
+            GraphicNovelScenePagesView(
                 self._db,
                 self._project_id,
                 on_data_changed=self._on_data_changed,
+                on_open_manuscript=self._open_unit_in_manuscript,
             )
         )
 

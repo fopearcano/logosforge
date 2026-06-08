@@ -92,6 +92,11 @@ stays Project → Act → Chapter → Scene):
 - **Export dependencies:** `requirements.txt` now lists `reportlab` (PDF) and
   `python-docx` (DOCX); a normal install supports every export format, with the
   same graceful fallback if a library is missing.
+- **Graphic Novel — Manuscript & Pages share one body:** the Pages section now
+  edits the same scene body as the Manuscript (`Scene.content` → Pages → Panels:
+  visual / caption / dialogue / SFX / notes), with collapsible panel cards. Edits
+  round-trip between the two; Pages/Panels are script structure, not image
+  generation.
 
 **Verification:** the final global multi-mode integrity audit (Alpha Release Gate)
 returned **A**. Focused gate `tests/test_alpha_release_gate.py` = **35 passed**;

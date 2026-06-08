@@ -271,14 +271,18 @@ def test_novel_view_is_inert():
 # =========================================================================
 
 def test_main_window_mounts_pages_for_gn():
+    # The GN "Pages" nav now mounts the shared scene-centric Pages editor
+    # (graphic_novel_scene_pages_view), which edits the same Scene.content body as
+    # the Manuscript — a single source of truth (Alpha fix).
     from storyplanner.ui.main_window import MainWindow
+    from storyplanner.ui.graphic_novel_scene_pages_view import GraphicNovelScenePagesView
     db = Database()
     p = _gn(db)
     win = MainWindow(db, p.id)
     assert "Pages" in win.sidebar_buttons
     assert "Pages" in win._nav_labels
     win._show_gn_pages()
-    assert isinstance(win.content_area, GraphicNovelPagesView)
+    assert isinstance(win.content_area, GraphicNovelScenePagesView)
 
 
 def test_main_window_hides_pages_for_novel():
