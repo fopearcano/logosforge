@@ -978,6 +978,30 @@ def _series_continuity_check(db, context: LogosContext) -> LogosResult:
 register("series_continuity_check", _series_continuity_check)
 
 
+def _series_review_dashboard(db, context: LogosContext) -> LogosResult:
+    """Deterministic project-level Series Review Dashboard (Phase 7).
+
+    Read-only roll-up rendered as Markdown: per-scene plan/body/A-B-C/act-break/
+    cold-open-tag/continuity/Timeline/PSYKE status across Season -> Episode -> Scene,
+    plus a recommended next action and export readiness. Never mutates, never
+    auto-applies, never calls the LLM."""
+    action = "series_review_dashboard"
+    try:
+        from storyplanner.series_dashboard import build_series_review
+        report = build_series_review(db, context.project_id)
+    except Exception as exc:  # never crash the UI
+        return LogosResult.failure(action, f"Review failed: {exc}")
+    suggestions = [f"{r.episode_label} · {r.title or 'Scene'}: {r.next_action}"
+                   for r in report.scenes if r.overall_status != "OK"][:10]
+    return LogosResult(
+        ok=True, action=action, title="Series Review Dashboard",
+        message=report.to_markdown(), suggestions=suggestions,
+        proposed_operations=[])  # report only — no mutation
+
+
+register("series_review_dashboard", _series_review_dashboard)
+
+
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
     action = "sp_detect_setup_payoff"
     try:

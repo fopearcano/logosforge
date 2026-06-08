@@ -1462,6 +1462,19 @@ register(LogosAction(
     sections=(SECTION_MANUSCRIPT, SECTION_TIMELINE, SECTION_OUTLINE),
     prompt="", modes=("series",), deterministic=True,
 ))
+# Series — Phase 7 (Review Dashboard). Deterministic, project-level, read-only
+# status roll-up across Season -> Episode -> Scene. Offered in Manuscript, Outline,
+# and Timeline. No image generation.
+register(LogosAction(
+    name="series_review_dashboard", label="Series Review Dashboard",
+    description="Project-level Series status overview: per-season / per-episode / "
+                "per-scene plan, body, A/B/C, act-break / cold-open-tag, continuity, "
+                "Timeline, PSYKE/Notes, and a recommended next action — plus export "
+                "readiness. Report only.",
+    category=CATEGORY_DIAGNOSTIC,
+    sections=(SECTION_MANUSCRIPT, SECTION_OUTLINE, SECTION_TIMELINE),
+    prompt="", modes=("series",), deterministic=True,
+))
 # Series — Phase 2 (planning pipeline). Generative; each action produces a preview
 # the writer reviews and confirms — never auto-applied, and the AI never overwrites
 # the body. The structured store/parse/apply lives in series_pipeline. The

@@ -932,16 +932,29 @@ class MainWindow(QMainWindow):
         view.on_open_review = self._show_screenplay_review
         try:
             from storyplanner.writing_modes import (
-                get_project_writing_mode_by_id, GRAPHIC_NOVEL, STAGE_SCRIPT,
+                get_project_writing_mode_by_id, GRAPHIC_NOVEL, STAGE_SCRIPT, SERIES,
             )
             mode = get_project_writing_mode_by_id(self._db, self._project_id)
             if mode == GRAPHIC_NOVEL:
                 view.on_open_review = self._show_graphic_novel_review
             elif mode == STAGE_SCRIPT:
                 view.on_open_review = self._show_stage_script_review
+            elif mode == SERIES:
+                view.on_open_review = self._show_series_review
         except Exception:
             pass
         self._set_content(view)
+
+    def _show_series_review(self) -> None:
+        """Open the project-level Series Review Dashboard (Phase 7). Read-only; rows
+        navigate to Manuscript/Outline/Timeline without mutating data."""
+        from storyplanner.ui.series_review_view import SeriesReviewView
+        self._set_content(SeriesReviewView(
+            self._db, self._project_id,
+            on_open_manuscript=self._open_unit_in_manuscript,
+            on_open_outline=self._open_outline_scene,
+            on_open_timeline=self._open_timeline_scene,
+        ))
 
     def _show_stage_script_review(self) -> None:
         """Open the project-level Stage Script Review Dashboard (Phase 7). Read-only;
