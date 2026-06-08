@@ -1261,6 +1261,18 @@ register(LogosAction(
     sections=(SECTION_MANUSCRIPT, SECTION_TIMELINE, SECTION_OUTLINE),
     prompt="", modes=("stage_script",), deterministic=True,
 ))
+# Stage Script — Phase 7 (Review Dashboard). Deterministic, project-level
+# (no selection / current scene needed); read-only roll-up rendered as Markdown.
+register(LogosAction(
+    name="stage_review_dashboard", label="Stage Script Review Dashboard",
+    description="Project overview of the stage play: which scenes have beat plans, "
+                "blocking/cue plans, written bodies, missing stage action, "
+                "dialogue/cue/blocking/continuity warnings, Timeline links — plus "
+                "a recommended next action per scene.",
+    category=CATEGORY_DIAGNOSTIC,
+    sections=(SECTION_MANUSCRIPT, SECTION_TIMELINE, SECTION_OUTLINE),
+    prompt="", modes=("stage_script",), deterministic=True,
+))
 # Stage Script — Phase 2 (planning pipeline). Generative, full-scene; each action
 # produces a preview the writer reviews and confirms — never auto-applied, and the
 # AI never overwrites the body. The structured store/parse/apply lives in

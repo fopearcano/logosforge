@@ -550,6 +550,29 @@ def _stage_continuity_check(db, context: LogosContext) -> LogosResult:
 register("stage_continuity_check", _stage_continuity_check)
 
 
+def _stage_review_dashboard(db, context: LogosContext) -> LogosResult:
+    """Deterministic project-level Stage Script Review Dashboard (Phase 7).
+
+    Read-only roll-up rendered as Markdown: per-scene beat/blocking plan, body,
+    dialogue/stage-action/entrance-exit/cue/continuity status, Timeline link, and
+    a recommended next action. Never mutates, never auto-applies."""
+    action = "stage_review_dashboard"
+    try:
+        from storyplanner.stage_script_dashboard import build_stage_script_review
+        report = build_stage_script_review(db, context.project_id)
+    except Exception as exc:  # never crash the UI
+        return LogosResult.failure(action, f"Review failed: {exc}")
+    suggestions = [f"{r.title or 'Scene'}: {r.next_action}"
+                   for r in report.rows if r.overall_status != "OK"][:10]
+    return LogosResult(
+        ok=True, action=action, title="Stage Script Review Dashboard",
+        message=report.to_markdown(), suggestions=suggestions,
+        proposed_operations=[])  # report only — no mutation
+
+
+register("stage_review_dashboard", _stage_review_dashboard)
+
+
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
     action = "sp_detect_setup_payoff"
     try:

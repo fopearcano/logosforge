@@ -927,18 +927,32 @@ class MainWindow(QMainWindow):
             structured_list=True,
         )
         # The Manuscript scene menu can open the project review. The review is
-        # mode-aware: Graphic Novel -> the GN Review Dashboard (Phase 7), otherwise
-        # the Screenplay Review Dashboard (Phase 8).
+        # mode-aware: Graphic Novel -> the GN Review Dashboard, Stage Script -> the
+        # Stage Script Review Dashboard, otherwise the Screenplay Review Dashboard.
         view.on_open_review = self._show_screenplay_review
         try:
             from storyplanner.writing_modes import (
-                get_project_writing_mode_by_id, GRAPHIC_NOVEL,
+                get_project_writing_mode_by_id, GRAPHIC_NOVEL, STAGE_SCRIPT,
             )
-            if get_project_writing_mode_by_id(self._db, self._project_id) == GRAPHIC_NOVEL:
+            mode = get_project_writing_mode_by_id(self._db, self._project_id)
+            if mode == GRAPHIC_NOVEL:
                 view.on_open_review = self._show_graphic_novel_review
+            elif mode == STAGE_SCRIPT:
+                view.on_open_review = self._show_stage_script_review
         except Exception:
             pass
         self._set_content(view)
+
+    def _show_stage_script_review(self) -> None:
+        """Open the project-level Stage Script Review Dashboard (Phase 7). Read-only;
+        rows navigate to Manuscript/Outline/Timeline without mutating data."""
+        from storyplanner.ui.stage_script_review_view import StageScriptReviewView
+        self._set_content(StageScriptReviewView(
+            self._db, self._project_id,
+            on_open_manuscript=self._open_unit_in_manuscript,
+            on_open_outline=self._open_outline_scene,
+            on_open_timeline=self._open_timeline_scene,
+        ))
 
     def _show_graphic_novel_review(self) -> None:
         """Open the project-level Graphic Novel Review Dashboard (Phase 7). Read-only;
