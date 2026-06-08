@@ -1,0 +1,458 @@
+"""Graphic Novel Outline — Page/Panel management mirrored with the Manuscript.
+
+The standalone Pages section is disabled for Alpha; the Graphic Novel **Outline**
+is the Page/Panel navigator. It manages Pages/Panels over the shared `Scene.content`
+body (so it mirrors the Manuscript) and presents a Scenes view (Act → Chapter →
+Scene → Page → Panel) and a chapter-level Pages cross-reference view. These tests
+cover the data layer, Outline visibility, editing, mirroring, export, navigation,
+isolation, fullscreen safety, and non-GN regression.
+"""
+
+from __future__ import annotations
+
+import warnings
+
+import pytest
+from PySide6.QtWidgets import QApplication, QLineEdit
+
+warnings.filterwarnings("ignore")
+
+from storyplanner.db import Database
+from storyplanner import graphic_novel_blocks as gnb
+from storyplanner import graphic_novel_outline as gno
+from storyplanner import story_structure as ss
+from storyplanner.ui import safe_dialogs
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _qapp():
+    app = QApplication.instance() or QApplication([])
+    yield app
+
+
+@pytest.fixture(autouse=True)
+def reset_settings(monkeypatch, tmp_path):
+    import storyplanner.settings as settings
+    settings._instance = None
+    monkeypatch.setattr(settings, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(settings, "SETTINGS_FILE", tmp_path / "settings.json")
+    import storyplanner.gomckee_bridge as gb
+    monkeypatch.setattr(gb, "is_gomckee_enabled", lambda: False, raising=False)
+    yield
+    settings._instance = None
+
+
+def _gn(db, title="GN"):
+    return db.create_project(title, narrative_engine="graphic_novel",
+                             default_writing_format="graphic_novel").id
+
+
+def _scene(db, pid, title="S", act="Act 1", chapter="Chapter 1"):
+    return ss.create_scene(db, pid, act=act, chapter=chapter, title=title).id
+
+
+def _outline(db, pid):
+    from storyplanner.ui.graphic_novel_outline_view import GraphicNovelOutlineView
+    return GraphicNovelOutlineView(db, pid, on_data_changed=lambda: None,
+                                   on_open_manuscript=lambda i: None)
+
+
+def _body(db, sid):
+    return gnb.load_scene_script(db, sid)
+
+
+def _find(tree, predicate):
+    stack = [tree.topLevelItem(i) for i in range(tree.topLevelItemCount())]
+    while stack:
+        it = stack.pop()
+        if predicate(it):
+            return it
+        for i in range(it.childCount()):
+            stack.append(it.child(i))
+    return None
+
+
+# ==========================================================================
+# 1-8  Data model
+# ==========================================================================
+
+
+def test_scene_owns_panels_via_pages():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    gno.add_page(db, sid); gno.add_panel(db, sid, 0)
+    assert _body(db, sid).pages[0].panels
+
+
+def test_panel_assigned_to_page_by_containment():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    gno.add_page(db, sid); gno.add_page(db, sid)
+    gno.add_panel(db, sid, 1)                  # panel on page index 1
+    script = _body(db, sid)
+    assert len(script.pages[1].panels) == 1 and len(script.pages[0].panels) == 0
+
+
+def test_scene_can_span_multiple_pages():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    gno.add_page(db, sid); gno.add_panel(db, sid, 0)
+    gno.add_page(db, sid); gno.add_panel(db, sid, 1)
+    assert len(_body(db, sid).pages) == 2
+
+
+def test_chapter_page_view_spans_multiple_scenes():
+    db = Database()
+    pid = _gn(db)
+    a = _scene(db, pid, "Scene A")
+    b = _scene(db, pid, "Scene B")
+    gno.add_page(db, a); gno.add_panel(db, a, 0)      # Scene A page 1
+    gno.add_panel(db, b, None)                        # Scene B page 1 (auto-seed)
+    scenes = gno.scenes_in_chapter(db, pid, "Act 1", "Chapter 1")
+    pv = dict(gno.chapter_page_view(db, scenes))
+    titles = sorted({s.title for s, _pi, _ci, _p in pv[1]})
+    assert titles == ["Scene A", "Scene B"]           # one page, two scenes
+
+
+def test_no_duplicate_panel_body():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    gno.add_page(db, sid); gno.add_panel(db, sid, 0)
+    gno.set_panel_field(db, sid, 0, 0, "visual_description", "UNIQUE_BODY")
+    body = _body(db, sid)
+    count = sum(p.visual_description.count("UNIQUE_BODY")
+                for pg in body.pages for p in pg.panels)
+    assert count == 1
+
+
+# ==========================================================================
+# 9-13  Outline visibility
+# ==========================================================================
+
+
+def test_outline_mounts_gn_outline_for_graphic_novel():
+    from storyplanner.ui.main_window import MainWindow
+    from storyplanner.ui.graphic_novel_outline_view import GraphicNovelOutlineView
+    db = Database()
+    win = MainWindow(db, _gn(db))
+    win._show_plan()
+    assert isinstance(win.content_area, GraphicNovelOutlineView)
+
+
+@pytest.mark.parametrize("engine", ["novel", "screenplay", "stage_script",
+                                    "series"])
+def test_outline_unchanged_for_non_gn(engine):
+    from storyplanner.ui.main_window import MainWindow
+    from storyplanner.ui.plan_view import PlanView
+    db = Database()
+    pid = db.create_project(engine, narrative_engine=engine,
+                            default_writing_format=engine).id
+    win = MainWindow(db, pid)
+    win._show_plan()
+    assert isinstance(win.content_area, PlanView)
+
+
+def test_outline_shows_scene_page_panel_under_chapter():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid, "Cold Open")
+    gno.add_page(db, sid); gno.add_panel(db, sid, 0)
+    v = _outline(db, pid)
+    assert _find(v._scene_tree, lambda it: it.text(0) == "Chapter 1")
+    assert _find(v._scene_tree, lambda it: "Cold Open" in it.text(0))
+    assert _find(v._scene_tree, lambda it: it.text(0).startswith("Page 1"))
+    assert _find(v._scene_tree, lambda it: it.text(0).startswith("Panel 1"))
+
+
+def test_outline_page_view_shows_panels_under_chapter_pages():
+    db = Database()
+    pid = _gn(db)
+    a = _scene(db, pid, "Scene A")
+    gno.add_page(db, a); gno.add_panel(db, a, 0)
+    v = _outline(db, pid)
+    pg = _find(v._page_tree, lambda it: it.text(0) == "Page 1")
+    assert pg is not None and pg.childCount() >= 1
+    assert "Scene A" in pg.child(0).text(0)
+
+
+# ==========================================================================
+# 14-27  Editing in Outline
+# ==========================================================================
+
+
+def test_add_page_from_outline():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    v = _outline(db, pid)
+    v._sel = {"kind": "scene", "act": "Act 1", "chapter": "Chapter 1",
+              "scene_id": sid}
+    v._add_page()
+    assert len(_body(db, sid).pages) == 1
+
+
+def test_add_panel_from_outline():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    v = _outline(db, pid)
+    v._sel = {"kind": "scene", "act": "Act 1", "chapter": "Chapter 1",
+              "scene_id": sid}
+    v._add_page(); v._add_panel()
+    assert len(_body(db, sid).pages[0].panels) == 1
+
+
+@pytest.mark.parametrize("field,value", [
+    ("visual_description", "Rooftop"),
+    ("caption", "Midnight"),
+    ("dialogue", "Run!"),
+    ("sfx", "BOOM"),
+    ("notes", "wide"),
+])
+def test_edit_panel_field_from_outline(field, value):
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    gno.add_page(db, sid); gno.add_panel(db, sid, 0)
+    assert gno.set_panel_field(db, sid, 0, 0, field, value)
+    assert getattr(_body(db, sid).pages[0].panels[0], field) == value
+
+
+def test_assign_panel_to_another_page():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    gno.add_page(db, sid); gno.add_panel(db, sid, 0)
+    gno.add_page(db, sid)
+    assert gno.move_panel_to_page(db, sid, 0, 0, 1)
+    body = _body(db, sid)
+    assert len(body.pages[0].panels) == 0 and len(body.pages[1].panels) == 1
+
+
+def test_move_panel_within_scene():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    gno.add_page(db, sid)
+    gno.add_panel(db, sid, 0); gno.set_panel_field(db, sid, 0, 0, "visual_description", "first")
+    gno.add_panel(db, sid, 0); gno.set_panel_field(db, sid, 0, 1, "visual_description", "second")
+    assert gno.move_panel(db, sid, 0, 1, -1)
+    assert _body(db, sid).pages[0].panels[0].visual_description == "second"
+
+
+def test_delete_panel_from_outline_with_confirmation(monkeypatch):
+    monkeypatch.setattr(safe_dialogs, "question", lambda *a, **k: True)
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    gno.add_page(db, sid); gno.add_panel(db, sid, 0); gno.add_panel(db, sid, 0)
+    v = _outline(db, pid)
+    v._sel = {"kind": "panel", "act": "Act 1", "chapter": "Chapter 1",
+              "scene_id": sid, "page": 0, "panel": 0}
+    v._delete_selected()
+    assert len(_body(db, sid).pages[0].panels) == 1
+
+
+def test_delete_page_cancel_keeps_data(monkeypatch):
+    monkeypatch.setattr(safe_dialogs, "question", lambda *a, **k: False)
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    gno.add_page(db, sid); gno.add_panel(db, sid, 0)
+    v = _outline(db, pid)
+    v._sel = {"kind": "page", "act": "Act 1", "chapter": "Chapter 1",
+              "scene_id": sid, "page": 0}
+    v._delete_selected()
+    assert len(_body(db, sid).pages) == 1
+
+
+def test_add_scene_to_chapter_from_outline():
+    db = Database()
+    pid = _gn(db)
+    _scene(db, pid, "First")
+    v = _outline(db, pid)
+    v._sel = {"kind": "chapter", "act": "Act 1", "chapter": "Chapter 1"}
+    v._add_scene()
+    titles = {s.title for s in ss.list_scenes(db, pid)}
+    assert "Untitled Scene" in titles
+
+
+# ==========================================================================
+# 28-34  Mirroring Outline <-> Manuscript (shared body)
+# ==========================================================================
+
+
+def test_outline_edit_visible_in_manuscript():
+    from storyplanner.ui.graphic_novel_manuscript_view import (
+        GraphicNovelManuscriptView)
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    gno.add_page(db, sid); gno.add_panel(db, sid, 0)
+    gno.set_panel_field(db, sid, 0, 0, "visual_description", "FROM_OUTLINE")
+    # The Manuscript reads the same Scene.content body.
+    m = GraphicNovelManuscriptView(db, pid, on_data_changed=lambda: None)
+    m.select_scene(sid)
+    assert "FROM_OUTLINE" in (db.get_scene_by_id(sid).content or "")
+
+
+def test_manuscript_edit_visible_in_outline():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    # Manuscript-side authoring straight into the shared body.
+    script = gnb.GraphicNovelScript(pages=[gnb.Page(
+        number=1, panels=[gnb.Panel(number=1, visual_description="FROM_MS")])])
+    gnb.save_scene_script(db, sid, script)
+    v = _outline(db, pid)
+    panel_item = _find(v._scene_tree, lambda it: "FROM_MS" in it.text(0))
+    assert panel_item is not None
+
+
+def test_project_switch_isolation(tmp_path):
+    db = Database(str(tmp_path / "iso.db"))
+    a = _gn(db, "A")
+    sa = _scene(db, a, "A-scene")
+    gno.add_page(db, sa); gno.add_panel(db, sa, 0)
+    b = _gn(db, "B")
+    vb = _outline(db, b)
+    assert vb._scene_tree.topLevelItemCount() == 0       # B has no acts/scenes
+
+
+# ==========================================================================
+# 35-37  Navigation
+# ==========================================================================
+
+
+def test_double_click_scene_opens_manuscript():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid, "Opener")
+    opened = []
+    from storyplanner.ui.graphic_novel_outline_view import GraphicNovelOutlineView
+    v = GraphicNovelOutlineView(db, pid, on_open_manuscript=lambda i: opened.append(i))
+    item = _find(v._scene_tree, lambda it: "Opener" in it.text(0))
+    v._activate(item)
+    assert opened == [sid]
+
+
+def test_double_click_panel_opens_manuscript():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    gno.add_page(db, sid); gno.add_panel(db, sid, 0)
+    opened = []
+    from storyplanner.ui.graphic_novel_outline_view import GraphicNovelOutlineView
+    v = GraphicNovelOutlineView(db, pid, on_open_manuscript=lambda i: opened.append(i))
+    item = _find(v._scene_tree, lambda it: it.text(0).startswith("Panel 1"))
+    v._activate(item)
+    assert opened == [sid]
+
+
+def test_selection_does_not_mutate():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    gno.add_page(db, sid); gno.add_panel(db, sid, 0)
+    before = db.get_scene_by_id(sid).content
+    v = _outline(db, pid)
+    item = _find(v._scene_tree, lambda it: it.text(0).startswith("Panel 1"))
+    v._scene_tree.setCurrentItem(item)            # selection only
+    assert db.get_scene_by_id(sid).content == before
+
+
+# ==========================================================================
+# 38-41  Standalone Pages disabled
+# ==========================================================================
+
+
+def test_standalone_pages_hidden():
+    from storyplanner.ui.main_window import MainWindow
+    db = Database()
+    win = MainWindow(db, _gn(db))
+    assert "Pages" not in win._nav_labels and "Pages" not in win.sidebar_buttons
+
+
+def test_pages_route_does_not_mount_old_widget():
+    from storyplanner.ui.main_window import MainWindow
+    from storyplanner.ui.graphic_novel_scene_pages_view import (
+        GraphicNovelScenePagesView)
+    db = Database()
+    win = MainWindow(db, _gn(db))
+    win._show_gn_pages()
+    assert not isinstance(win.content_area, GraphicNovelScenePagesView)
+
+
+def test_outline_creates_no_top_level_window():
+    from storyplanner.ui.main_window import MainWindow
+    db = Database()
+    win = MainWindow(db, _gn(db))
+    before = set(QApplication.topLevelWidgets())
+    win._show_plan()
+    new_visible = [w for w in (set(QApplication.topLevelWidgets()) - before)
+                   if w.isVisible()]
+    assert new_visible == [] and win.content_area.window() is win
+
+
+def test_outline_activation_does_not_minimize():
+    from storyplanner.ui.main_window import MainWindow
+    db = Database()
+    win = MainWindow(db, _gn(db))
+    calls = {"min": 0, "hide": 0}
+    win.showMinimized = lambda: calls.__setitem__("min", calls["min"] + 1)  # type: ignore
+    win.hide = lambda: calls.__setitem__("hide", calls["hide"] + 1)         # type: ignore
+    win._show_plan()
+    assert calls == {"min": 0, "hide": 0}
+
+
+# ==========================================================================
+# 42-49  Export
+# ==========================================================================
+
+
+def test_export_includes_pages_panels_scene_and_page_assignment():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid, "Cold Open")
+    gno.add_page(db, sid); gno.add_panel(db, sid, 0)
+    gno.set_panel_field(db, sid, 0, 0, "visual_description", "EXPORTABLE")
+    md = gno.export_outline_markdown(db, pid)
+    assert "Cold Open" in md            # scene
+    assert "Page 1" in md               # page
+    assert "EXPORTABLE" in md           # panel body
+    assert "Page view" in md            # chapter page cross-reference
+
+
+def test_export_no_duplicate_panel_text():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    gno.add_page(db, sid); gno.add_panel(db, sid, 0)
+    gno.set_panel_field(db, sid, 0, 0, "dialogue", "ONLY_ONCE_LINE")
+    md = gnb.export_project_markdown(db, pid)
+    assert md.count("ONLY_ONCE_LINE") == 1
+
+
+def test_export_no_image_or_comfyui_or_secrets():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    gno.add_page(db, sid); gno.add_panel(db, sid, 0)
+    settings = db.get_project_settings(pid) or {}
+    settings["api_key"] = "sk-SECRET"
+    db.save_project_settings(pid, settings)
+    md = gno.export_outline_markdown(db, pid)
+    low = md.lower()
+    for banned in ("comfyui", "image prompt", "lora", "img2img", "txt2img"):
+        assert banned not in low
+    assert "sk-SECRET" not in md and "SECRET" not in md
+
+
+def test_panel_model_has_no_image_fields():
+    fields = set(vars(gnb.Panel()).keys())
+    for banned in ("image", "prompt", "comfyui", "lora", "seed", "sampler"):
+        assert not any(banned in f for f in fields), banned

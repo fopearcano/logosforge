@@ -72,7 +72,10 @@ def test_chapters_and_scenes_hidden_from_nav(tmp_path, engine, fmt):
     # Outline is the structural section.
     win.sidebar_buttons["Outline"].click()
     from storyplanner.ui.plan_view import PlanView
-    assert isinstance(win.content_area, PlanView)
+    from storyplanner.ui.graphic_novel_outline_view import GraphicNovelOutlineView
+    # Outline is the structural section: PlanView in most modes; the GN-aware
+    # Page/Panel Outline in Graphic Novel mode.
+    assert isinstance(win.content_area, (PlanView, GraphicNovelOutlineView))
 
 
 def test_chapters_handler_kept_as_legacy(tmp_path):

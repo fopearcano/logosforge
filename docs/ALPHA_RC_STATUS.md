@@ -65,29 +65,39 @@ isolation / Alpha gate: **858 passed, 0 failures** (only the pre-existing
 optional-lib PDF/DOCX cases fail in an environment without `reportlab` /
 `python-docx`). **Classification: A — post-fix gate passed.**
 
-## Graphic Novel — embedded Page/Panel Navigator (standalone Pages disabled)
+## Graphic Novel — Pages/Panels in the Outline + Manuscript (standalone Pages disabled)
 
 The standalone left-panel **Pages** route proved fullscreen-hostile (clicking it
 minimized the app in macOS fullscreen, across multiple attempted fixes), so it is
-**disabled for Alpha** — hidden in every mode, with an inert route that never mounts
-the old standalone Pages widget. Graphic Novel Page/Panel navigation now lives
-**inside the Manuscript** as an embedded **Page/Panel Navigator**
-(`GraphicNovelManuscriptView`): a **Scene → Page → Panel** tree on the left and a
-selected-item editor on the right (empty-state ladder Create Scene → + Add Page →
-+ Add Panel; per-Panel **Visual / Caption / Dialogue / SFX / Notes**; add / move /
-delete for Pages and Panels). It reads/writes the shared `Scene.content` body
-(single source of truth) and is a single embedded child widget — no separate route,
-no top-level window, no dialog on mount — so it cannot trigger the minimize. Non-GN
-Manuscripts are unchanged (`WritingCoreView`).
+**disabled for Alpha** — hidden in every mode, inert route that never mounts the old
+standalone Pages widget. Graphic Novel Page/Panel management now lives in **two
+mirrored surfaces** over the shared `Scene.content` body:
 
-Single source: `MainWindow._show_manuscript` (GN → embedded navigator) +
-`_apply_pages_availability` (hides the standalone Pages item) + `_show_gn_pages`
-(inert; routes to the Manuscript). Tests: `tests/test_gn_embedded_navigator.py`
-(**33 passed**) plus `tests/test_pages_alpha_fallback.py`,
-`tests/test_pages_fullscreen_safe.py`, lifecycle/phase suites. True macOS fullscreen
-behavior (opening the GN Manuscript does not minimize) must still be confirmed
-manually (smoke-test F-items). **Classification: A — embedded Page/Panel Navigator
-works inside the Manuscript; standalone Pages disabled.**
+- the **Outline** (`GraphicNovelOutlineView`) — the GN Page/Panel navigator: a
+  **Scenes** tab (`Act → Chapter → Scene → Page → Panel`, editable) + a **Pages** tab
+  (chapter-level cross-reference grouping panels across the chapter's scenes by page
+  number — a page can show panels from multiple scenes), with a selected-Panel editor
+  (Visual / Caption / Dialogue / SFX / Notes), add/move/delete, assign-panel-to-page,
+  and double-click → Manuscript;
+- the **Manuscript** (`GraphicNovelManuscriptView`) — the embedded Scene → Page →
+  Panel editor.
+
+Both read/write the same body (single source of truth), so they mirror. Model:
+Chapter owns Pages (via scenes), Scene owns Panels, Panel assigned to a Page, Scene
+can span Pages. Pages are physically scene-scoped for Alpha (the chapter Page View is
+a cross-reference; merging panels from different scenes onto one shared page record is
+a documented next step). Both surfaces are single embedded child widgets (no separate
+route, no top-level window, no dialog on mount) → cannot trigger the minimize. Non-GN
+Outline/Manuscript unchanged (`PlanView` / `WritingCoreView`).
+
+Single source: `MainWindow._show_plan` (GN → `GraphicNovelOutlineView`) +
+`_show_manuscript` (GN → `GraphicNovelManuscriptView`) + `_apply_pages_availability`
+(hides standalone Pages) + `_show_gn_pages` (inert). Data layer:
+`storyplanner/graphic_novel_outline.py`. Tests: `tests/test_gn_outline.py`
+(**38 passed**), `tests/test_gn_embedded_navigator.py` (**33 passed**), plus
+pages/lifecycle/phase suites. True macOS fullscreen behavior must still be confirmed
+manually (smoke-test F-items). **Classification: A — Graphic Novel Outline manages
+Pages/Panels and mirrors the Manuscript; standalone Pages disabled.**
 
 ## Last audit summary
 

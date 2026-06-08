@@ -140,24 +140,35 @@ limitations for this RC:
   global Outline stays flat — see the Series hierarchy note). The full Season →
   Episode → Act → Chapter → Scene **path is available** (`series_structure.
   scene_series_path`); wiring it into the Manuscript title bar is deferred.
-- **Graphic Novel — embedded Page/Panel Navigator (standalone Pages section
-  disabled for Alpha).** The separate left-panel **Pages** route was fullscreen-
+- **Graphic Novel — Pages/Panels managed in the Outline + Manuscript (standalone
+  Pages section disabled).** The separate left-panel **Pages** route was fullscreen-
   hostile (clicking it minimized the app in macOS fullscreen, across multiple
-  attempted fixes), so it is **disabled for Alpha**: hidden in every mode and its
-  route is inert (it never mounts the old standalone Pages widget). Graphic Novel
-  Page/Panel navigation now lives **inside the Manuscript** as an embedded
-  **Page/Panel Navigator** (`GraphicNovelManuscriptView`): a **Scene → Page → Panel**
-  tree (collapsible, with snippets) on the left and a selected-item editor on the
-  right — empty-state ladder (**Create Scene → + Add Page → + Add Panel**) and, for a
-  selected Panel, editable **Visual / Caption / Dialogue / SFX / Notes**; Add / move
-  / delete (confirmed) for Pages and Panels. It reads/writes the shared
-  `Scene.content` body (single source of truth — no separate Pages storage), is a
-  single embedded **child widget** (no separate route, no top-level window, no dialog
-  on mount), so it cannot trigger the fullscreen minimize. The embedded navigator is
-  the intended **future anchor point for visual-production integrations** (panel
-  visual brief / render status / generated assets), but **no image generation /
-  prompt / ComfyUI** fields exist today. (Confirm in macOS fullscreen — smoke-test
-  F-items — that opening the GN Manuscript does not minimize the app.)
+  attempted fixes), so it is **disabled for Alpha**: hidden in every mode, route
+  inert (never mounts the old standalone Pages widget). Graphic Novel Page/Panel
+  navigation now lives in **two mirrored surfaces** over the shared `Scene.content`
+  body:
+  - the **Outline** (`GraphicNovelOutlineView`) is the GN Page/Panel navigator —
+    a **Scenes** tab (`Act → Chapter → Scene → Page → Panel`, editable) and a
+    **Pages** tab (a chapter-level cross-reference grouping panels across the
+    chapter's scenes by page number, so a page can show panels from more than one
+    scene), with a selected-Panel editor (**Visual / Caption / Dialogue / SFX /
+    Notes**), add / move / delete, assign-panel-to-page, and double-click → Manuscript;
+  - the **Manuscript** (`GraphicNovelManuscriptView`) is the embedded
+    Scene → Page → Panel editor.
+  Both read/write the **same** `Scene.content` (single source of truth — no separate
+  Pages storage), so edits mirror. Relationships: **Chapter owns Pages** (via its
+  scenes), **Scene owns Panels**, **Panel is assigned to a Page** (its containing
+  page), and a **Scene can span multiple Pages**. **Storage note (Alpha):** pages are
+  physically **scene-scoped** (each scene owns its Pages/Panels in its body); the
+  chapter Page View surfaces panels from multiple scenes by page number, but
+  physically merging panels from different scenes onto one shared page record is a
+  documented future step. Both surfaces are single embedded **child widgets** (no
+  separate route, no top-level window, no dialog on mount), so they cannot trigger
+  the fullscreen minimize. This structure is the intended **future anchor point for
+  visual-production integrations** (panel visual brief / render status / generated
+  assets); **no image generation / prompt / ComfyUI** fields exist today. (Confirm in
+  macOS fullscreen — smoke-test F-items — that opening the GN Outline/Manuscript does
+  not minimize the app.)
 - **Graphic Novel — one shared body.** The Manuscript edits the GN scene body
   (`Scene.content`, structured by `graphic_novel_blocks` into Pages → Panels:
   visual / caption / dialogue / SFX / notes). Pages/Panels are **writing/script

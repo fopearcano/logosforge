@@ -900,6 +900,24 @@ class MainWindow(QMainWindow):
         # Outline is the single structural section for ALL modes: a unified
         # Act → Chapter → Scene(optional) tree (PlanView). Separate Chapters/
         # Scenes sections are hidden from navigation.
+        #
+        # Graphic Novel: the Outline becomes the Page/Panel navigator (the
+        # standalone Pages section is disabled for Alpha). It manages Pages/Panels
+        # over the same shared Scene.content body the Manuscript uses, so the two
+        # mirror each other. Embedded child widget — fullscreen-safe.
+        if self._project_is_graphic_novel():
+            from storyplanner.ui.graphic_novel_outline_view import (
+                GraphicNovelOutlineView,
+            )
+            self._set_content(
+                GraphicNovelOutlineView(
+                    self._db,
+                    self._project_id,
+                    on_data_changed=self._on_data_changed,
+                    on_open_manuscript=self._open_unit_in_manuscript,
+                )
+            )
+            return
         self._set_content(
             PlanView(
                 self._db,

@@ -92,17 +92,20 @@ stays Project → Act → Chapter → Scene):
 - **Export dependencies:** `requirements.txt` now lists `reportlab` (PDF) and
   `python-docx` (DOCX); a normal install supports every export format, with the
   same graceful fallback if a library is missing.
-- **Graphic Novel — embedded Page/Panel Navigator (standalone Pages disabled):** the
-  separate left-panel **Pages** route was fullscreen-hostile, so it is **disabled for
-  Alpha** (hidden; inert route). Graphic Novel Page/Panel navigation now lives **inside
-  the Manuscript** as an embedded **Scene → Page → Panel** navigator with a
-  selected-item editor (Create Scene → + Add Page → + Add Panel; per-Panel **Visual /
-  Caption / Dialogue / SFX / Notes**; add/move/delete) over the shared scene body
-  (`Scene.content`). Pages/Panels are script structure, not image generation; the
-  navigator is the future anchor point for visual-production integrations. The editor
-  is a single embedded child widget (no separate route, no top-level window), which
-  addresses the earlier macOS fullscreen minimize. See
-  `docs/KNOWN_LIMITATIONS_ALPHA.md`.
+- **Graphic Novel — Pages/Panels in the Outline + Manuscript (standalone Pages
+  disabled):** the separate left-panel **Pages** route was fullscreen-hostile, so it
+  is **disabled for Alpha** (hidden; inert route). Graphic Novel Page/Panel management
+  now lives in **two mirrored surfaces** over the shared scene body (`Scene.content`):
+  the **Outline** becomes the GN Page/Panel navigator — a **Scenes** view
+  (`Act → Chapter → Scene → Page → Panel`) and a chapter-level **Pages** cross-reference
+  view (panels grouped across a chapter's scenes by page number) with a selected-Panel
+  editor (**Visual / Caption / Dialogue / SFX / Notes**), add/move/delete, and
+  assign-panel-to-page — and the **Manuscript** embeds the Scene → Page → Panel editor.
+  Model: Chapter owns Pages, Scene owns Panels, Panel assigned to a Page, Scene can
+  span Pages. Pages/Panels are script structure, not image generation; this is the
+  future anchor point for visual-production integrations. Both surfaces are embedded
+  child widgets (no separate route, no top-level window), addressing the earlier macOS
+  fullscreen minimize. See `docs/KNOWN_LIMITATIONS_ALPHA.md`.
 
 **Verification:** the final global multi-mode integrity audit (Alpha Release Gate)
 returned **A**. Focused gate `tests/test_alpha_release_gate.py` = **35 passed**;

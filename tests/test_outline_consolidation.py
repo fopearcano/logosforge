@@ -59,7 +59,10 @@ def test_chapters_scenes_not_visible_outline_is(tmp_path, engine):
     assert _avail(win, "Scenes") is False
     assert "Chapters" not in win._nav_labels and "Scenes" not in win._nav_labels
     win.sidebar_buttons["Outline"].click()
-    assert isinstance(win.content_area, PlanView)
+    from storyplanner.ui.graphic_novel_outline_view import GraphicNovelOutlineView
+    # Outline is the structural section: PlanView in most modes; the GN-aware
+    # Page/Panel Outline in Graphic Novel mode.
+    assert isinstance(win.content_area, (PlanView, GraphicNovelOutlineView))
 
 
 def test_project_switch_does_not_restore_hidden_sections(tmp_path):
