@@ -142,6 +142,13 @@ class Scene(SQLModel, table=True):
     audience_visibility_notes: str = ""
     performance_duration_minutes: int = 0
     sort_order: int = 0
+    # -- Series hierarchy link (Series-only; NULL everywhere else) ----------
+    # When set, the scene belongs to a specific Episode in the corrected
+    # Season -> Episode -> Act -> Chapter -> Scene hierarchy. NULL means the
+    # scene is not episode-scoped — every non-Series mode, and legacy Series
+    # projects that pre-date the hierarchy (back-compatible default). See
+    # storyplanner/series_structure.py.
+    episode_id: Optional[int] = Field(default=None, foreign_key="episode.id")
     created_at: datetime = Field(default_factory=_now)
 
 

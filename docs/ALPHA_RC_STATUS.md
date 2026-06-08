@@ -78,11 +78,25 @@ Documentation only:
 
 **Production code touched: none.**
 
+## Series hierarchy — Phase 1 (post-RC foundation)
+
+The Series Alpha shortcut (Act = Season, Chapter = Episode) has been replaced by a
+real **Season → Episode → Act → Chapter → Scene** hierarchy: Season/Episode are
+stored rows, each Series scene links to its Episode via a new nullable
+`Scene.episode_id` (NULL elsewhere — no other mode is affected), and the
+Act→Chapter→Scene outline is episode-scoped. The Series Navigator is now the
+structural editor (full CRUD + non-destructive, confirmed legacy migration). The
+*global* Outline/Manuscript/Timeline stay episode-agnostic for now (documented
+Phase-1 boundary). Single source: `storyplanner/series_structure.py`; see
+[SERIES_ARCHITECTURE_CORRECTION_REPORT.md](SERIES_ARCHITECTURE_CORRECTION_REPORT.md)
+§10 and [KNOWN_LIMITATIONS_ALPHA.md](KNOWN_LIMITATIONS_ALPHA.md). Tests:
+`tests/test_series_hierarchy.py` (70 passed); legacy navigator stays green.
+
 ## Deferred work (out of scope, intentionally)
 
 - Canvas Plot (hidden/deferred), ComfyUI / image generation, production scheduling,
-  rehearsal / writers-room management, showrunner automation, and a real separate
-  Season/Episode storage hierarchy. See
+  rehearsal / writers-room management, showrunner automation, and a Season/Episode-
+  aware *global* Outline (the Phase-1 hierarchy lives in the Series Navigator). See
   [KNOWN_LIMITATIONS_ALPHA.md](KNOWN_LIMITATIONS_ALPHA.md).
 
 ## Recommended next steps

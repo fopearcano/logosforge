@@ -104,10 +104,35 @@ the broad certification sweep = **1527 passed, 0 failures**
 (see `docs/ALPHA_TEST_COMMANDS.md`).
 
 **Still deferred / out of scope:** ComfyUI / image generation, Canvas Plot
-(hidden), production scheduling, writers-room / showrunner automation, and a real
-separate Season/Episode storage hierarchy. Persistent serialized-story relation
-links are reported but not yet persisted. See `docs/KNOWN_LIMITATIONS_ALPHA.md`,
+(hidden), production scheduling, writers-room / showrunner automation, and a
+Season/Episode-aware *global* Outline (the new hierarchy lives in the Series
+Navigator — see below). Persistent serialized-story relation links are reported
+but not yet persisted. See `docs/KNOWN_LIMITATIONS_ALPHA.md`,
 `docs/ALPHA_RC_STATUS.md`, and `docs/ALPHA_RC_CHECKLIST.md`.
+
+## Series — real Season → Episode → Act → Chapter → Scene hierarchy (Phase 1)
+
+The Series Alpha shortcut (Act = Season, Chapter = Episode) is replaced by a real
+hierarchy: **Season** and **Episode** are now **stored rows**, each Series scene
+links to its Episode (`Scene.episode_id`, a nullable column — `NULL` everywhere
+else, so nothing changes for Novel / Screenplay / Graphic Novel / Stage Script),
+and the Act → Chapter → Scene outline is **episode-scoped**.
+
+- **Series Navigator is now the structural editor** (Series-only, left **Plan**
+  group): create / rename / delete / move Seasons, Episodes, internal
+  Acts/Chapters and Scenes; move a scene between Episodes; per-episode A/B/C
+  buckets; an "Unassigned Scenes" bucket so no body is hidden. Deleting a
+  Season/Episode **unlinks** its scenes (it never deletes a body).
+- **Legacy Series projects keep working** and offer a one-click, **confirmed,
+  non-destructive Convert to Season/Episode** (old Act → Season title, old Chapter
+  → Episode title; bodies, labels and order untouched).
+- **Phase-1 boundary:** the *global* Outline / Manuscript / Timeline stay
+  episode-agnostic (canonical flat Act → Chapter → Scene); the Navigator is the
+  canonical Season/Episode surface. Export adds a Series Markdown outline
+  (structure + bodies only — never settings or API keys).
+- **Verification:** `tests/test_series_hierarchy.py` = **70 passed**; the legacy
+  `tests/test_series_navigator.py` stays green (**26 passed**); broad cross-mode +
+  gate sweep clean. See `docs/SERIES_ARCHITECTURE_CORRECTION_REPORT.md` §10.
 
 > ⚠️ **This is Alpha software, not a final production release.** Back up your work.
 

@@ -274,6 +274,21 @@ class Database:
                 ))
                 conn.commit()
 
+            # Scene.episode_id — the Series Season -> Episode -> Act -> Chapter
+            # -> Scene hierarchy links each Series scene to an Episode. The
+            # column is nullable; NULL preserves every pre-existing scene's
+            # behaviour (non-Series modes and legacy Series alike), so this is a
+            # purely additive, back-compatible migration.
+            scene_rows = conn.execute(
+                text("PRAGMA table_info(scene)"),
+            ).fetchall()
+            scene_columns = {row[1] for row in scene_rows}
+            if scene_rows and "episode_id" not in scene_columns:
+                conn.execute(text(
+                    "ALTER TABLE scene ADD COLUMN episode_id INTEGER"
+                ))
+                conn.commit()
+
     # -- Projects ------------------------------------------------------------
 
     def get_project_by_id(self, project_id: int) -> Project | None:
@@ -1082,6 +1097,7 @@ class Database:
         offstage_events: str = "",
         audience_visibility_notes: str = "",
         performance_duration_minutes: int = 0,
+        episode_id: int | None = None,
         character_ids: list[int] | None = None,
         place_ids: list[int] | None = None,
         character_states: list[tuple[int, str]] | None = None,
@@ -1140,6 +1156,7 @@ class Database:
                 offstage_events=offstage_events,
                 audience_visibility_notes=audience_visibility_notes,
                 performance_duration_minutes=performance_duration_minutes,
+                episode_id=episode_id,
                 sort_order=next_order,
             )
             session.add(scene)
@@ -2146,6 +2163,47 @@ class Database:
             scene.chapter = chapter or ""
             session.commit()
 
+    def set_scene_episode(self, scene_id: int, episode_id: int | None) -> None:
+        """Assign (or clear, with ``None``) a scene's Series Episode link.
+
+        Touches only ``episode_id`` — never the body, summary, labels, links or
+        sort order. Used by the Series Navigator to move a scene between
+        Episodes (and by the legacy-series migration). ``None`` unassigns it.
+        """
+        with Session(self._engine) as session:
+            scene = session.get(Scene, scene_id)
+            if scene is None:
+                return
+            scene.episode_id = episode_id
+            session.commit()
+
+    def get_scenes_for_episode(self, episode_id: int) -> list[Scene]:
+        """Scenes linked to one Episode, in canonical ``sort_order``."""
+        with Session(self._engine) as session:
+            stmt = (
+                select(Scene)
+                .where(Scene.episode_id == episode_id)
+                .order_by(Scene.sort_order, Scene.id)
+            )
+            return list(session.exec(stmt).all())
+
+    def get_unassigned_series_scenes(self, project_id: int) -> list[Scene]:
+        """Project scenes with no Episode link (``episode_id`` IS NULL).
+
+        In a Series project these are scenes not yet placed in any Episode; the
+        Navigator surfaces them in an "Unassigned Scenes" bucket so a body is
+        never hidden. (In non-Series projects every scene is unassigned — this
+        is only meaningful in Series context.)
+        """
+        with Session(self._engine) as session:
+            stmt = (
+                select(Scene)
+                .where(Scene.project_id == project_id)
+                .where(Scene.episode_id.is_(None))
+                .order_by(Scene.sort_order, Scene.id)
+            )
+            return list(session.exec(stmt).all())
+
     def reorder_scenes(
         self, project_id: int, ordered_scene_ids: list[int],
     ) -> None:
@@ -2841,6 +2899,109 @@ class Database:
 
     def update_episode(self, episode_id: int, **fields) -> None:
         self._patch_row(Episode, episode_id, fields)
+
+    def delete_episode(self, episode_id: int) -> None:
+        """Delete an Episode row and **unlink** (never delete) its scenes.
+
+        Scenes that pointed at the episode have ``episode_id`` reset to NULL so
+        their bodies survive as unassigned Series scenes — deleting structure
+        must not destroy manuscript text. Episode plotlines (a child table) are
+        removed with the episode.
+        """
+        with Session(self._engine) as session:
+            for sc in session.exec(
+                select(Scene).where(Scene.episode_id == episode_id)
+            ).all():
+                sc.episode_id = None
+                session.add(sc)
+            for pl in session.exec(
+                select(EpisodePlotline).where(
+                    EpisodePlotline.episode_id == episode_id)
+            ).all():
+                session.delete(pl)
+            row = session.get(Episode, episode_id)
+            if row is not None:
+                session.delete(row)
+            session.commit()
+
+    def delete_season(self, season_id: int) -> None:
+        """Delete a Season, its Episodes, and **unlink** (never delete) scenes.
+
+        Cascades to the season's episodes (and their plotlines); every scene
+        that belonged to those episodes has ``episode_id`` reset to NULL so its
+        body survives as an unassigned Series scene.
+        """
+        with Session(self._engine) as session:
+            episodes = session.exec(
+                select(Episode).where(Episode.season_id == season_id)
+            ).all()
+            ep_ids = [e.id for e in episodes]
+            if ep_ids:
+                for sc in session.exec(
+                    select(Scene).where(Scene.episode_id.in_(ep_ids))
+                ).all():
+                    sc.episode_id = None
+                    session.add(sc)
+                for pl in session.exec(
+                    select(EpisodePlotline).where(
+                        EpisodePlotline.episode_id.in_(ep_ids))
+                ).all():
+                    session.delete(pl)
+                for e in episodes:
+                    session.delete(e)
+            row = session.get(Season, season_id)
+            if row is not None:
+                session.delete(row)
+            session.commit()
+
+    def reorder_seasons(self, project_id: int, ordered_ids: list[int]) -> None:
+        """Assign ``order_index`` from the position of each id in *ordered_ids*.
+
+        Seasons not listed keep their relative order after the listed ones. Only
+        ``order_index`` is written.
+        """
+        with Session(self._engine) as session:
+            rows = list(session.exec(
+                select(Season)
+                .where(Season.project_id == project_id)
+                .order_by(Season.order_index, Season.id)
+            ).all())
+            self._apply_order(session, rows, ordered_ids)
+            session.commit()
+
+    def reorder_episodes(self, season_id: int, ordered_ids: list[int]) -> None:
+        """Assign ``order_index`` (and ``episode_number``) from the position of
+        each id in *ordered_ids*, within one season. Episodes not listed keep
+        their relative order after the listed ones."""
+        with Session(self._engine) as session:
+            rows = list(session.exec(
+                select(Episode)
+                .where(Episode.season_id == season_id)
+                .order_by(Episode.order_index, Episode.id)
+            ).all())
+            ordered = self._apply_order(session, rows, ordered_ids)
+            for i, e in enumerate(ordered, start=1):
+                e.episode_number = i
+                session.add(e)
+            session.commit()
+
+    @staticmethod
+    def _apply_order(session, rows, ordered_ids):
+        by_id = {r.id: r for r in rows}
+        ordered = []
+        seen: set[int] = set()
+        for rid in ordered_ids:
+            r = by_id.get(rid)
+            if r is not None and r.id not in seen:
+                ordered.append(r)
+                seen.add(r.id)
+        for r in rows:
+            if r.id not in seen:
+                ordered.append(r)
+        for i, r in enumerate(ordered):
+            r.order_index = i
+            session.add(r)
+        return ordered
 
     def create_series_arc(
         self, project_id: int, *, scope: str = "series", title: str = "",

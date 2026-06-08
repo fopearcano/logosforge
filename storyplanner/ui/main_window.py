@@ -1534,6 +1534,7 @@ class MainWindow(QMainWindow):
                 on_open_outline=self._open_outline_scene,
                 on_open_manuscript=self._open_unit_in_manuscript,
                 on_open_timeline=self._open_timeline_scene,
+                on_data_changed=self._on_data_changed,
             )
         )
 

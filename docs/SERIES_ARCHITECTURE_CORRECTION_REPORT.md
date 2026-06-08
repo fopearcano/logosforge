@@ -303,3 +303,46 @@ this limitation into `KNOWN_LIMITATIONS_ALPHA.md` / `ALPHA_RC_STATUS.md`. Then, 
 separate **post-Alpha** track, implement **Option B** behind a Series gate
 (`Scene.episode_id` + episode-scoped `story_structure` + Navigator CRUD + confirmed
 migration), reusing the existing `Season`/`Episode` tables.
+
+## 10. Phase 1 — IMPLEMENTED (Option B foundation)
+
+Option B is now landed as the **Series hierarchy foundation** (Series-only,
+additive, back-compatible). What shipped:
+
+- **`Scene.episode_id`** — a nullable FK column (`models.py` +
+  `db/database.py::_migrate` ALTER-TABLE-ADD-COLUMN). `NULL` everywhere preserves
+  prior behaviour (all non-Series modes and pre-migration Series), so the change
+  is purely additive. `create_scene` accepts `episode_id`; new helpers
+  `set_scene_episode` / `get_scenes_for_episode` / `get_unassigned_series_scenes`.
+- **Season/Episode are now used as real storage.** Added the missing CRUD:
+  `delete_season` / `delete_episode` (cascade episodes; **unlink** scenes to NULL
+  rather than delete them — bodies are never destroyed), `reorder_seasons` /
+  `reorder_episodes`.
+- **`storyplanner/series_structure.py`** — the episode-scoped data layer:
+  detection (`is_series_project` / `has_series_hierarchy` / `is_legacy_series`),
+  Season/Episode CRUD wrappers + move, scene↔episode linking, episode-scoped
+  Act→Chapter→Scene tree (reuses the canonical grouping, filtered by
+  `episode_id`), `build_series_tree`, readable `scene_series_path`,
+  `series_stats`, a **confirmed, non-destructive** `migrate_legacy_series`
+  (old Act→Season title, old Chapter→Episode title, link scenes; bodies/labels/
+  order untouched), and `export_series_markdown` (structure + bodies only — never
+  settings/API keys).
+- **Rebuilt `ui/series_navigator_view.py`** — renders **two ways**: *hierarchy
+  mode* (real Season→Episode→Act→Chapter→Scene with full CRUD: create/rename/
+  delete/move Seasons, Episodes, internal Acts/Chapters, Scenes; move a scene
+  between Episodes; A/B/C buckets per episode; an "Unassigned Scenes" bucket) and
+  *legacy mode* (the original read-only view + a one-click confirmed **Convert to
+  Season/Episode**). A trivial single Act/Chapter (e.g. a migration echo) is
+  collapsed for readability.
+- **Mode lock** now counts Season/Episode rows as meaningful content.
+
+**Deliberately deferred to a later phase (documented):** the **global** Outline /
+Manuscript / Timeline remain episode-agnostic (they still read the canonical flat
+`story_structure`); the **Series Navigator is the canonical Season/Episode
+structural surface**. Season/Episode-aware global Outline context-switching,
+durable relation links, and per-scene A/B/C thread assignment are future work.
+
+**Verification:** `tests/test_series_hierarchy.py` (**70 passed**); the legacy
+`tests/test_series_navigator.py` stays green (**26 passed**); broad cross-mode +
+gate sweep clean (only pre-existing optional-lib PDF/DOCX skips fail in CI
+without `reportlab`/`python-docx`).

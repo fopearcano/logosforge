@@ -82,17 +82,30 @@ limitations for this RC:
   / Stage Script / Series Review Dashboards recompute when opened or via Refresh
   (no live debounced recompute). "Open in Manuscript" focuses the scene (block-
   level deep-linking is the scene scroll today).
-- **Series still uses Act → Chapter → Scene internally.** "Season / Arc" and
-  "Episode" are **display labels** over canonical Acts/Chapters. Series Season/Arc
-  and Episode beat plans are settings-backed and **name-keyed** to Acts/Chapters
-  (consistent with `act_summaries` / `chapter_summaries`); renaming or duplicate
-  names across acts can desync a plan.
+- **Series now has a real Season → Episode → Act → Chapter → Scene hierarchy
+  (Phase 1 foundation).** Seasons and Episodes are **stored rows**; each Series
+  scene links to its Episode via `Scene.episode_id`; the Act→Chapter→Scene outline
+  is **episode-scoped** (scene-derived, filtered by `episode_id`). The **Series
+  Navigator** is the canonical structural surface for this — create / rename /
+  delete / move Seasons, Episodes, internal Acts/Chapters and Scenes, and move a
+  scene between Episodes. Deleting a Season/Episode **unlinks** its scenes (it
+  never deletes a body). Phase-1 boundary: the **global** Outline / Manuscript /
+  Timeline are still **episode-agnostic** (they read the canonical flat
+  Act→Chapter→Scene); Season/Episode-aware *global* Outline context-switching is a
+  later phase. Series Season/Arc and Episode beat plans remain settings-backed and
+  **name-keyed** (consistent with `act_summaries` / `chapter_summaries`); the
+  Navigator looks A/B/C buckets up by Episode title.
+- **Legacy Series projects keep working and can convert.** A Series project that
+  pre-dates the hierarchy (Act/Chapter used as Season/Episode, no Season rows)
+  renders in the original **read-only** Navigator view and offers a one-click,
+  **confirmed Convert to Season/Episode** migration. The migration is
+  **non-destructive**: old Act → Season title, old Chapter → Episode title, scenes
+  linked by `episode_id`; bodies, labels and order are untouched (so the global
+  Outline is unchanged).
 - **Persistent relation links are reported, not persisted.** Cross-scene /
   cross-episode setup-payoff, cliffhanger/reveal, A/B/C thread, and character-arc
   links are **detected and reported**, but not yet stored as durable links.
-- **No real Season/Episode storage migration.** The Series writing system never
-  uses the legacy `Season`/`Episode` tables; a dedicated Season/Episode storage
-  hierarchy is deferred.
+  Per-scene A/B/C thread assignment is likewise not yet stored.
 - **Out of scope (deferred), confirmed absent:** ComfyUI / image generation,
   Canvas Plot (hidden from navigation), production scheduling, rehearsal / writers-
   room management, and showrunner automation that mutates data. "Showrunner" and
@@ -110,13 +123,14 @@ limitations for this RC:
   workflow — it does **not** exist yet. To work in a different mode today, create a
   new project. (The project's *default writing format* for new scenes remains
   editable; it does not reinterpret existing bodies.)
-- **Series Navigator** is a Series-only item under the left **Plan** group. It is a
-  read-only tree over the canonical structure — **Act = Season / Arc**,
-  **Chapter = Episode**, **Scene = Scene** — for navigation (Season/Episode →
-  Outline, Scene → Manuscript). **A/B/C Plots** are read-only buckets derived from
-  the Episode Beat Plan's `a/b/c_story` fields; there is **no per-scene thread
-  assignment metadata and no separate plot/Season/Episode storage** yet — the
-  navigator never mutates data.
+- **Series Navigator** is a Series-only item under the left **Plan** group and is
+  now the **structural editor** for the Season → Episode → Act → Chapter → Scene
+  hierarchy (see the Series hierarchy note above). For projects with real Season
+  rows it offers full CRUD and moves; for legacy projects it stays read-only with a
+  confirmed convert action. **A/B/C Plots** remain read-only buckets derived from
+  the Episode Beat Plan's `a/b/c_story` fields (no per-scene thread assignment
+  metadata yet). Navigation: a scene opens in the Manuscript; structural nodes open
+  the (global, flat) Outline.
 - **Graphic Novel — one shared body.** The Manuscript and the **Pages** section
   edit the *same* GN scene body (`Scene.content`, structured by
   `graphic_novel_blocks` into Pages → Panels: visual / caption / dialogue / SFX /

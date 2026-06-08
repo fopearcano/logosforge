@@ -281,9 +281,9 @@ def project_has_meaningful_content(db, project_id: int) -> bool:
         store = settings.get(key)
         if isinstance(store, dict) and any(store.values()):
             return True
-    # -- Timeline events / Notes / PSYKE entries --
+    # -- Timeline events / Notes / PSYKE entries / Series structure --
     for accessor in ("get_timeline_event_ids", "get_all_notes",
-                     "get_all_psyke_entries"):
+                     "get_all_psyke_entries", "get_seasons", "get_episodes"):
         try:
             fn = getattr(db, accessor, None)
             if fn is not None and fn(project_id):
