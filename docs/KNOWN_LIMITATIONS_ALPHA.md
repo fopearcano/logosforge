@@ -20,8 +20,10 @@ panel** yet:
 
 ## Experimental / optional
 
-- **PDF / DOCX export** — need optional libraries (`reportlab` / `python-docx`).
-  Without them you get a readable message; other formats work.
+- **PDF / DOCX export** — use optional libraries (`reportlab` / `python-docx`).
+  These are now listed in `requirements.txt`, so a normal install supports them;
+  the app still degrades gracefully (a readable "install …" message) if a given
+  environment lacks them, and other formats always work.
 - **FDX export** — the menu FDX is standard XML; the advanced render-document FDX
   path is experimental.
 - **HTML export** — preview-grade.
@@ -108,3 +110,10 @@ limitations for this RC:
   workflow — it does **not** exist yet. To work in a different mode today, create a
   new project. (The project's *default writing format* for new scenes remains
   editable; it does not reinterpret existing bodies.)
+- **Series Navigator** is a Series-only item under the left **Plan** group. It is a
+  read-only tree over the canonical structure — **Act = Season / Arc**,
+  **Chapter = Episode**, **Scene = Scene** — for navigation (Season/Episode →
+  Outline, Scene → Manuscript). **A/B/C Plots** are read-only buckets derived from
+  the Episode Beat Plan's `a/b/c_story` fields; there is **no per-scene thread
+  assignment metadata and no separate plot/Season/Episode storage** yet — the
+  navigator never mutates data.

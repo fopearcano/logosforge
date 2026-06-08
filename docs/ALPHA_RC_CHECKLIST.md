@@ -85,6 +85,18 @@ per-mode export tests.)
 - [ ] Usable at small window width; no obsolete "Classical" header / extra
       Navigator panel; Manuscript summary/navigation rail intact.
 
+## Series Navigator + export deps
+
+- [ ] `pip install -r requirements.txt` installs `reportlab` + `python-docx`; PDF
+      and DOCX export work. (If a lib is absent, export shows a graceful "install …"
+      message and other formats still work.)
+- [ ] In a **Series** project, the left **Plan** group shows **Series Navigator**;
+      it does **not** appear in Novel / Screenplay / Graphic Novel / Stage Script.
+- [ ] Series Navigator shows Season/Arc → Episode → Scene with canonical numbers;
+      clicking a Season/Episode opens Outline, clicking a Scene opens Manuscript;
+      A/B/C buckets reflect the Episode Beat Plan (or show an empty-state message).
+      Navigation does not modify or dirty the project.
+
 ## Deferred features (must remain off/hidden)
 
 - [ ] **Canvas Plot** hidden from navigation.

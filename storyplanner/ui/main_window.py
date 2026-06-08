@@ -406,7 +406,11 @@ class MainWindow(QMainWindow):
         # + visibility are toggled per the *current* project's writing mode via
         # _apply_pages_availability() — at startup and on every project switch.
         self._is_graphic_novel = self._project_is_graphic_novel()
-        _plan_members = ["Outline", "Chapters", "Scenes", "Timeline", "Plot", "Pages"]
+        # "Series Navigator" is a Series-only Plan member; like "Pages" (GN-only)
+        # its visibility/registration is toggled per writing mode via
+        # _apply_series_navigator_availability().
+        _plan_members = ["Outline", "Chapters", "Scenes", "Timeline", "Plot",
+                         "Pages", "Series Navigator"]
 
         _SIDEBAR_LAYOUT: list = [
             "Projects", "Dashboard", "Notes", "Manuscript",
@@ -575,9 +579,20 @@ class MainWindow(QMainWindow):
         # Scenes is wired by the nav loop above; keep a handle for visibility.
         self._scenes_nav_btn = self.sidebar_buttons.get("Scenes")
 
+        # The Series Navigator button widget always exists (last Plan member); its
+        # click is wired exactly once here, like Pages. Registration/visibility are
+        # toggled per writing mode by _apply_series_navigator_availability().
+        self._series_nav_btn = self.sidebar_buttons["Series Navigator"]
+        self._series_nav_btn.setCheckable(True)
+        self._series_nav_btn.clicked.connect(
+            lambda _: (self._set_active_section("Series Navigator"),
+                       self._show_series_navigator())
+        )
+
         self._apply_pages_availability()
         self._apply_unit_section_availability()
         self._apply_canvas_plot_availability()
+        self._apply_series_navigator_availability()
 
         # -- Right content area ----------------------------------------------
         self.content_area = self._build_initial_content()
@@ -1362,6 +1377,43 @@ class MainWindow(QMainWindow):
         except Exception:
             return False
 
+    def _project_is_series(self) -> bool:
+        """True if the *current* project's writing mode is series."""
+        try:
+            from storyplanner.project_compat import get_project_narrative_engine
+            project = self._db.get_project_by_id(self._project_id)
+            return get_project_narrative_engine(project) == "series"
+        except Exception:
+            return False
+
+    def _apply_series_navigator_availability(self) -> None:
+        """Show/register the Series-only Series Navigator item for the *current*
+        project's writing mode (mirrors _apply_pages_availability). Idempotent;
+        called at startup and on every project switch so the sidebar never shows a
+        stale (or missing) navigator after switching projects."""
+        is_series = self._project_is_series()
+        btn = getattr(self, "_series_nav_btn", None)
+        if btn is None:
+            return
+        btn.setProperty("nav_available", is_series)
+        if is_series:
+            self.sidebar_buttons["Series Navigator"] = btn
+            self._nav_section_handlers["Series Navigator"] = self._show_series_navigator
+            if "Series Navigator" not in self._nav_labels:
+                self._nav_labels.append("Series Navigator")
+        else:
+            self.sidebar_buttons.pop("Series Navigator", None)
+            self._nav_section_handlers.pop("Series Navigator", None)
+            if "Series Navigator" in self._nav_labels:
+                self._nav_labels.remove("Series Navigator")
+            # Never leave a non-Series project sitting on the Series Navigator.
+            if getattr(self, "_current_section", None) == "Series Navigator":
+                self._current_section = "Dashboard"
+        plan = next((g for g in getattr(self, "_sidebar_groups", [])
+                     if g.label == "Plan"), None)
+        if plan is not None:
+            plan.refresh_child_visibility()
+
     def _apply_pages_availability(self) -> None:
         """Show/register the Graphic-Novel-only Pages item for the *current*
         project's writing mode. Idempotent; called at startup and on every
@@ -1459,6 +1511,24 @@ class MainWindow(QMainWindow):
                 self._db,
                 self._project_id,
                 on_data_changed=self._on_data_changed,
+            )
+        )
+
+    def _show_series_navigator(self) -> None:
+        # Defensive: Series Navigator is a Series-only surface. If the current
+        # project is not a series, never mount it — route to the Dashboard (the
+        # button is normally hidden for non-Series projects). Read-only.
+        if not self._project_is_series():
+            self._show_dashboard()
+            return
+        from storyplanner.ui.series_navigator_view import SeriesNavigatorView
+        self._set_content(
+            SeriesNavigatorView(
+                self._db,
+                self._project_id,
+                on_open_outline=self._open_outline_scene,
+                on_open_manuscript=self._open_unit_in_manuscript,
+                on_open_timeline=self._open_timeline_scene,
             )
         )
 
@@ -3156,6 +3226,8 @@ class MainWindow(QMainWindow):
         # the rest) for the new project's writing mode.
         self._apply_unit_section_availability()
         self._apply_canvas_plot_availability()
+        # Series-only Series Navigator item for the new project's writing mode.
+        self._apply_series_navigator_availability()
         # Re-bind the always-on PSYKE console to the new project: clears its
         # in-progress query + stale results and rebuilds the index eagerly.
         # (The PSYKE section view itself is rebuilt fresh in step 4, so its

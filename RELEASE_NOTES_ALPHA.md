@@ -86,6 +86,12 @@ stays Project → Act → Chapter → Scene):
   Dashboard. **Novel** prose is unchanged (primary unit = Chapter).
 - Every mutating AI action is **propose-then-confirm** (preview + Controlled
   Apply); deterministic checks never call a provider; actions are **mode-gated**.
+- **Series Navigator** (left **Plan** group, Series-only): a read-only tree over
+  Season/Arc → Episode → Scene with A/B/C buckets from the Episode Beat Plan; it
+  navigates to Outline/Manuscript and never mutates data.
+- **Export dependencies:** `requirements.txt` now lists `reportlab` (PDF) and
+  `python-docx` (DOCX); a normal install supports every export format, with the
+  same graceful fallback if a library is missing.
 
 **Verification:** the final global multi-mode integrity audit (Alpha Release Gate)
 returned **A**. Focused gate `tests/test_alpha_release_gate.py` = **35 passed**;

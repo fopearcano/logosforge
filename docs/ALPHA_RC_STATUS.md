@@ -9,6 +9,17 @@
 - **Scope of this step:** Alpha RC **packaging / freeze + documentation only** — no
   product features, no refactors, **no production code changed**.
 
+## Post-gate fixes (packaging/usability)
+
+- **Dependency manifest:** `requirements.txt` now lists the optional export libs
+  `reportlab` (PDF) and `python-docx` (DOCX), so a normal install supports every
+  export format. Graceful degradation is preserved when an environment lacks them.
+- **Series Navigator:** a Series-only, read-only navigator was added under the left
+  **Plan** group (Season/Arc → Episode → Scene, with A/B/C buckets derived from the
+  Episode Beat Plan). It mirrors the Graphic-Novel "Pages" gating, navigates to
+  Outline/Manuscript without mutating data, and never appears in other modes. No
+  Season/Episode storage hierarchy was introduced.
+
 ## Post-gate blocker fix
 
 One Alpha-blocker was fixed after the gate: **writing mode is now locked once a

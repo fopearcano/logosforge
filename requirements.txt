@@ -7,3 +7,9 @@ pyobjc-framework-Cocoa; sys_platform == "darwin"
 # Web-PWA backend.  The desktop PyQt app runs without these.
 fastapi>=0.110
 uvicorn>=0.27
+
+# -- Optional export formats.  PDF export uses reportlab; DOCX export uses
+# python-docx.  The app degrades gracefully (a clear "install …" message) when
+# these are absent, but a normal install should support every export format.
+reportlab>=4.0
+python-docx>=1.1
