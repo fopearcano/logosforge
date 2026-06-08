@@ -99,6 +99,18 @@ pages/lifecycle/phase suites. True macOS fullscreen behavior must still be confi
 manually (smoke-test F-items). **Classification: A — Graphic Novel Outline manages
 Pages/Panels and mirrors the Manuscript; standalone Pages disabled.**
 
+**Post-fix integrity gate (2026-06-08).** A targeted audit re-verified the model
+(Chapter owns Pages, Scene owns Panels, Panel assigned to Page, Scene spans Pages),
+data integrity (move-to-page preserves the body; reorder-scene preserves panels;
+save/reload round-trips with no duplicate panels; one canonical panel body),
+Outline⇄Manuscript single-body mirroring, standalone-Pages-disabled + fullscreen
+safety, export (Panel→Page and Panel→Scene, no duplicate text / no secrets / no
+ComfyUI), and full cross-mode regression — **no regressions** found. New gate:
+`tests/test_gn_outline_integrity_gate.py` (**13 passed**); broad audit sweep
+**813 passed, 0 failures**. Only deferral: **Page reorder** (move Page up/down) in
+the Outline is not implemented for Alpha (panel reorder + move-panel-to-page are).
+**Gate result: A.**
+
 ## Last audit summary
 
 The final global multi-mode integrity audit (the **Alpha Release Gate**, see

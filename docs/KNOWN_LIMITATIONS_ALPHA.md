@@ -153,6 +153,9 @@ limitations for this RC:
     chapter's scenes by page number, so a page can show panels from more than one
     scene), with a selected-Panel editor (**Visual / Caption / Dialogue / SFX /
     Notes**), add / move / delete, assign-panel-to-page, and double-click → Manuscript;
+    Pages are renamed via the page detail (title field). **Panel** reorder (within a
+    scene) and **move-panel-to-page** are supported; **Page reorder** (move Page
+    up/down) is deferred for Alpha (pages are scene-scoped and authored in order).
   - the **Manuscript** (`GraphicNovelManuscriptView`) is the embedded
     Scene → Page → Panel editor.
   Both read/write the **same** `Scene.content` (single source of truth — no separate
