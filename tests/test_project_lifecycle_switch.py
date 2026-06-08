@@ -38,46 +38,49 @@ def _db_two():
 # ==========================================================================
 
 
-def test_pages_appears_when_switching_into_graphic_novel():
+def test_pages_stays_hidden_when_switching_into_graphic_novel():
+    # Alpha: the standalone Pages section is disabled (fullscreen-hostile). It is
+    # hidden in every mode, including Graphic Novel — Page/Panel navigation lives
+    # in the GN Manuscript (embedded navigator).
     db = Database()
     novel = db.create_project("Novel", narrative_engine="novel").id
     gn = db.create_project("GN", narrative_engine="graphic_novel").id
     win = MainWindow(db, novel)
     assert "Pages" not in win.sidebar_buttons
     win._switch_project(gn)
-    assert "Pages" in win.sidebar_buttons
-    assert "Pages" in win._nav_labels
-    assert "Pages" in win._nav_section_handlers
+    assert "Pages" not in win.sidebar_buttons
+    assert "Pages" not in win._nav_labels
 
 
-def test_pages_disappears_when_switching_out_of_graphic_novel():
+def test_pages_hidden_in_both_gn_and_novel():
     db = Database()
     gn = db.create_project("GN", narrative_engine="graphic_novel").id
     novel = db.create_project("Novel", narrative_engine="novel").id
     win = MainWindow(db, gn)
-    assert "Pages" in win.sidebar_buttons
+    assert "Pages" not in win.sidebar_buttons
     win._switch_project(novel)
     assert "Pages" not in win.sidebar_buttons
     assert "Pages" not in win._nav_labels
 
 
-def test_pages_view_falls_back_to_dashboard_for_non_gn():
+def test_pages_route_falls_back_safely_for_non_gn():
     db = Database()
     novel = db.create_project("Novel", narrative_engine="novel").id
     win = MainWindow(db, novel)
-    from storyplanner.ui.graphic_novel_pages_view import GraphicNovelPagesView
-    win._show_gn_pages()  # defensive: must not mount Pages for a novel
-    assert not isinstance(win.content_area, GraphicNovelPagesView)
+    from storyplanner.ui.graphic_novel_scene_pages_view import (
+        GraphicNovelScenePagesView)
+    win._show_gn_pages()  # inert: must not mount the standalone Pages widget
+    assert not isinstance(win.content_area, GraphicNovelScenePagesView)
 
 
-def test_switching_out_of_pages_section_resets_to_dashboard():
+def test_pages_section_reset_clears_to_safe_section():
+    # If _current_section is ever "Pages", availability resets it (Pages can no
+    # longer be the active section).
     db = Database()
     gn = db.create_project("GN", narrative_engine="graphic_novel").id
-    novel = db.create_project("Novel", narrative_engine="novel").id
     win = MainWindow(db, gn)
-    win.sidebar_buttons["Pages"].click()
-    assert win._current_section == "Pages"
-    win._switch_project(novel)
+    win._current_section = "Pages"
+    win._apply_pages_availability()
     assert win._current_section != "Pages"
 
 
@@ -157,11 +160,12 @@ def test_writing_mode_refreshes_after_switch():
 # ==========================================================================
 
 
-def test_pages_present_on_gn_startup():
+def test_pages_absent_on_gn_startup():
+    # Alpha: standalone Pages is disabled even for GN (navigation is in Manuscript).
     db = Database()
     gn = db.create_project("GN", narrative_engine="graphic_novel").id
     win = MainWindow(db, gn)
-    assert "Pages" in win.sidebar_buttons and "Pages" in win._nav_labels
+    assert "Pages" not in win.sidebar_buttons and "Pages" not in win._nav_labels
 
 
 def test_pages_absent_on_novel_startup():

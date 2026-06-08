@@ -270,19 +270,20 @@ def test_novel_view_is_inert():
 # 6. Main window mounting + engine gating
 # =========================================================================
 
-def test_main_window_shows_pages_section_for_gn():
-    # The Graphic Novel "Pages" section is shown in the left panel and opens the
-    # scene-centric Page/Panel editor (the same fullscreen-safe editor the
-    # Manuscript uses, over the shared Scene.content body).
+def test_main_window_disables_standalone_pages_navigation_in_manuscript():
+    # Alpha: the standalone "Pages" section is disabled (fullscreen-hostile) and
+    # hidden in every mode. Graphic Novel Page/Panel navigation lives in the
+    # Manuscript as the embedded navigator (GraphicNovelManuscriptView).
     from storyplanner.ui.main_window import MainWindow
-    from storyplanner.ui.graphic_novel_scene_pages_view import GraphicNovelScenePagesView
+    from storyplanner.ui.graphic_novel_manuscript_view import (
+        GraphicNovelManuscriptView)
     db = Database()
     p = _gn(db)
     win = MainWindow(db, p.id)
-    assert "Pages" in win.sidebar_buttons
-    assert "Pages" in win._nav_labels
-    win._show_gn_pages()
-    assert isinstance(win.content_area, GraphicNovelScenePagesView)
+    assert "Pages" not in win.sidebar_buttons
+    assert "Pages" not in win._nav_labels
+    win._show_manuscript()
+    assert isinstance(win.content_area, GraphicNovelManuscriptView)
 
 
 def test_main_window_hides_pages_for_novel():

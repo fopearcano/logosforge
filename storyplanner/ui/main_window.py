@@ -922,34 +922,32 @@ class MainWindow(QMainWindow):
         self._show_manuscript()
         view = self.content_area
         from storyplanner.ui.writing_core_view import WritingCoreView
-        from storyplanner.ui.graphic_novel_scene_pages_view import (
-            GraphicNovelScenePagesView,
+        from storyplanner.ui.graphic_novel_manuscript_view import (
+            GraphicNovelManuscriptView,
         )
         if isinstance(view, WritingCoreView):
             view.scroll_to_scene(scene_id)
-        elif isinstance(view, GraphicNovelScenePagesView):
-            # GN Manuscript is the Page/Panel editor — focus the requested scene.
+        elif isinstance(view, GraphicNovelManuscriptView):
+            # GN Manuscript hosts the embedded Page/Panel Navigator — focus scene.
             view.select_scene(scene_id)
         self._assistant_panel.set_active_scene(scene_id)
 
     def _show_manuscript(self) -> None:
-        # Graphic Novel: the Manuscript IS the Page/Panel editor. The standalone
-        # left-panel Pages section is deferred for Alpha (macOS fullscreen
-        # window-management bug), so the Manuscript is the Alpha-safe access path
-        # for Pages/Panels. It edits the same shared Scene.content body, so a
-        # re-enabled standalone Pages section would mirror the same data. The
-        # editor is child-widget-only and mounts via the same _set_content path as
-        # every other section, so it is fullscreen-safe.
+        # Graphic Novel: the Manuscript hosts the embedded Page/Panel Navigator
+        # (Scene -> Page -> Panel tree + selected-item editor) over the shared
+        # Scene.content body. The standalone left-panel Pages route is disabled for
+        # Alpha (it was fullscreen-hostile); this embedded navigator is a single
+        # child widget mounted via the standard _set_content path — no separate
+        # Pages route, no top-level window — so it is fullscreen-safe.
         if self._project_is_graphic_novel():
-            from storyplanner.ui.graphic_novel_scene_pages_view import (
-                GraphicNovelScenePagesView,
+            from storyplanner.ui.graphic_novel_manuscript_view import (
+                GraphicNovelManuscriptView,
             )
             self._set_content(
-                GraphicNovelScenePagesView(
+                GraphicNovelManuscriptView(
                     self._db,
                     self._project_id,
                     on_data_changed=self._on_data_changed,
-                    embedded_as_manuscript=True,
                 )
             )
             return
@@ -1441,34 +1439,28 @@ class MainWindow(QMainWindow):
             plan.refresh_child_visibility()
 
     def _apply_pages_availability(self) -> None:
-        """Show the Graphic-Novel **Pages** section (the scene-centric Page/Panel
-        editor) for Graphic Novel projects; hide it in every other mode.
+        """Disable the standalone left-panel **Pages** section for Alpha.
 
-        Pages opens the same fullscreen-safe Page/Panel editor the GN Manuscript
-        uses (``GraphicNovelScenePagesView`` over the shared ``Scene.content``
-        body), mounted via the standard embedded ``_set_content`` route. The editor
-        is child-widget-only (it creates no top-level window), so it does not
-        trigger the macOS fullscreen minimize that the *previous* standalone Pages
-        wiring did. Idempotent; called at startup and on every project switch."""
-        is_gn = self._project_is_graphic_novel()
-        self._is_graphic_novel = is_gn
+        The standalone Pages route was fullscreen-hostile (clicking it minimized
+        the app in macOS fullscreen, across multiple attempted fixes), so it is
+        **hidden in every mode** and its route is made **inert** — it never mounts
+        the old standalone Pages widget. Graphic Novel Page/Panel navigation lives
+        in the **Manuscript** as an embedded Page/Panel Navigator
+        (``GraphicNovelManuscriptView``) over the shared ``Scene.content`` body.
+        The handler stays registered but only redirects to the Manuscript.
+        Idempotent; called at startup and on every project switch."""
+        self._is_graphic_novel = self._project_is_graphic_novel()
         btn = getattr(self, "_pages_btn", None)
-        if btn is None:
-            return
-        btn.setProperty("nav_available", is_gn)
-        if is_gn:
-            self.sidebar_buttons["Pages"] = btn
+        if btn is not None:
+            btn.setProperty("nav_available", False)
             self._nav_section_handlers["Pages"] = self._show_gn_pages
-            if "Pages" not in self._nav_labels:
-                self._nav_labels.append("Pages")
-        else:
             self.sidebar_buttons.pop("Pages", None)
-            self._nav_section_handlers.pop("Pages", None)
             if "Pages" in self._nav_labels:
                 self._nav_labels.remove("Pages")
-            # A non-GN project must never land on the Pages section.
-            if getattr(self, "_current_section", None) == "Pages":
-                self._current_section = "Dashboard"
+        # Never leave the app sitting on the now-hidden Pages section.
+        if getattr(self, "_current_section", None) == "Pages":
+            self._current_section = (
+                "Manuscript" if self._is_graphic_novel else "Dashboard")
         # Re-apply Plan-group child visibility honoring availability.
         plan = next((g for g in getattr(self, "_sidebar_groups", [])
                      if g.label == "Plan"), None)
@@ -1529,25 +1521,16 @@ class MainWindow(QMainWindow):
             plan.refresh_child_visibility()
 
     def _show_gn_pages(self) -> None:
-        # The Pages section is the Graphic Novel Page/Panel editor: the same
-        # scene-centric editor the Manuscript uses for GN, over the shared
-        # Scene.content body. It is child-widget-only and mounts through the
-        # standard embedded _set_content route, so it is fullscreen-safe. Pages is
-        # a GN-only item; defensively fall back to the Dashboard otherwise.
-        if not self._project_is_graphic_novel():
+        # The standalone Pages route is disabled for Alpha (fullscreen-hostile).
+        # It is kept registered but INERT — it never mounts the old standalone
+        # Pages widget. Graphic Novel Page/Panel navigation lives in the Manuscript
+        # (the embedded Page/Panel Navigator), so route there safely; non-GN
+        # projects fall back to the Dashboard.
+        if self._project_is_graphic_novel():
+            self._set_active_section("Manuscript")
+            self._show_manuscript()
+        else:
             self._show_dashboard()
-            return
-        from storyplanner.ui.graphic_novel_scene_pages_view import (
-            GraphicNovelScenePagesView,
-        )
-        self._set_content(
-            GraphicNovelScenePagesView(
-                self._db,
-                self._project_id,
-                on_data_changed=self._on_data_changed,
-                embedded_as_manuscript=True,
-            )
-        )
 
     def _show_series_navigator(self) -> None:
         # Defensive: Series Navigator is a Series-only surface. If the current

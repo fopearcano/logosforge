@@ -55,13 +55,13 @@ manual UI check). Command form:
 | `tests/test_post_fix_regression_gate.py` | **20 passed** |
 | `tests/test_pages_fullscreen_safe.py` (Pages fullscreen-safe dialogs) | **16 passed** |
 | `tests/test_pages_alpha_fallback.py` (standalone Pages deferred) | **15 passed** |
-| `tests/test_gn_manuscript_page_editor.py` (GN Manuscript = Page/Panel editor) | **21 passed** |
+| `tests/test_gn_embedded_navigator.py` (embedded Page/Panel Navigator) | **33 passed** |
 | `tests/test_gn_pages_manuscript_sync.py` (GN shared body) | **30 passed** |
 | `tests/test_series_hierarchy.py` (Series hierarchy) | **70 passed** |
 | `tests/test_series_navigator.py` (Navigator + deps) | **26 passed** |
 | `tests/test_writing_mode_lock.py` (mode lock) | **22 passed** |
 | `tests/test_export_safety.py` (export privacy) | **4 passed** |
-| **Total** | **259 passed, 0 failed** |
+| **Total** | **271 passed, 0 failed** |
 
 > Environment note: PDF/DOCX export tests fail only where `reportlab` /
 > `python-docx` are not installed (pre-existing, graceful-degradation behavior),
@@ -130,24 +130,25 @@ this behavior as supporting evidence (the manual UI check is still required).
 | 31 | Export uses shared Pages/Panels body | PENDING MANUAL RETEST | ✓ |
 | 32 | No image-generation / ComfyUI fields appear | PENDING MANUAL RETEST | ✓ |
 
-### Fullscreen window-management — Graphic Novel Pages/Panels editor
+### Fullscreen window-management — Graphic Novel embedded Page/Panel Navigator
 
-> The Graphic Novel **Pages** section is shown in the left panel and opens the
-> scene-centric Page/Panel editor (the same editor the Manuscript presents) over the
-> shared `Scene.content` body. The editor is child-widget-only (creates no top-level
-> window). Headless tests cover the editor + route safety
-> (`tests/test_gn_manuscript_page_editor.py`, `tests/test_pages_alpha_fallback.py`,
+> The standalone **Pages** sidebar section is **disabled for Alpha** (it was
+> fullscreen-hostile). Graphic Novel Page/Panel navigation lives **inside the
+> Manuscript** as an embedded Scene → Page → Panel navigator + selected-item editor
+> over the shared `Scene.content` body (child-widget-only; no separate route, no
+> top-level window). Headless tests cover the navigator + route safety
+> (`tests/test_gn_embedded_navigator.py`, `tests/test_pages_alpha_fallback.py`,
 > `tests/test_pages_fullscreen_safe.py`). **Confirm the fullscreen behavior manually**
-> — especially that clicking **Pages** does not minimize the app:
+> — especially that opening the GN Manuscript does not minimize the app:
 
 | # | Item | Result | Auto |
 |---|------|--------|------|
 | F1 | Enter macOS **fullscreen**, open a Graphic Novel project | PENDING MANUAL RETEST | |
-| F2 | The **Pages** sidebar item **is shown** (Graphic Novel only) | PENDING MANUAL RETEST | ✓ |
-| F3 | Click **Pages** — the Page/Panel editor opens; app does **not** minimize/flicker | PENDING MANUAL RETEST | partial |
-| F4 | The **Manuscript** shows the same Page/Panel editor (consistent body) | PENDING MANUAL RETEST | ✓ |
-| F5 | Empty project: **+ Scene** then **+ Page** / **+ Panel** work in place | PENDING MANUAL RETEST | ✓ |
-| F6 | Edit Visual / Caption / Dialogue / SFX / Notes; collapse/expand a panel | PENDING MANUAL RETEST | ✓ |
+| F2 | The standalone **Pages** sidebar item is **not shown** (disabled) | PENDING MANUAL RETEST | ✓ |
+| F3 | Open the **Manuscript** — the embedded Page/Panel Navigator appears; app does **not** minimize/flicker | PENDING MANUAL RETEST | partial |
+| F4 | The navigator shows a **Scene → Page → Panel** tree; selecting a node shows its editor | PENDING MANUAL RETEST | ✓ |
+| F5 | Empty project: **Create Scene** then **+ Add Page** / **+ Add Panel** work in place | PENDING MANUAL RETEST | ✓ |
+| F6 | Edit Visual / Caption / Dialogue / SFX / Notes; navigator snippet updates | PENDING MANUAL RETEST | ✓ |
 | F7 | Export Graphic Novel text / Markdown (shared body) | PENDING MANUAL RETEST | ✓ |
 
 ### Stage Script
@@ -285,7 +286,7 @@ These are already documented in `docs/KNOWN_LIMITATIONS_ALPHA.md` and are
 
 ## Decision
 
-**PENDING MANUAL RETEST.** Automated focused suites are green (259 passed), but
+**PENDING MANUAL RETEST.** Automated focused suites are green (271 passed), but
 the manual UI checklist above has not been executed. **Do not tag** the Alpha RC
 until the manual checklist is completed and this decision is updated to one of:
 

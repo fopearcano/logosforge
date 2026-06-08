@@ -1,17 +1,16 @@
-"""Graphic Novel Pages section — restored as the fullscreen-safe Page/Panel editor.
+"""Standalone Pages section disabled for Alpha; navigation lives in the Manuscript.
 
-The Graphic Novel **Pages** section is shown in the left panel (GN-only) and opens
-the scene-centric Page/Panel editor (``GraphicNovelScenePagesView``) over the
-shared ``Scene.content`` body — the same editor the GN Manuscript uses. The editor
-is **child-widget-only** (it creates no top-level window), mounted via the standard
-embedded ``_set_content`` route, so it does not trigger the macOS fullscreen
-minimize the *previous* standalone Pages wiring did.
+The standalone left-panel Pages route was fullscreen-hostile, so it is **disabled
+for Alpha** (hidden in every mode; its handler is inert and never mounts the old
+standalone Pages widget). Graphic Novel Page/Panel navigation lives **inside the
+Manuscript** as the embedded Page/Panel Navigator (``GraphicNovelManuscriptView``)
+over the shared ``Scene.content`` body — see ``test_gn_embedded_navigator.py`` for
+the navigator's behaviour.
 
-These tests assert: Pages is visible for GN (hidden elsewhere), opening it mounts
-the editor without minimizing/hiding the window or creating a top-level window, the
-editor stays embedded, editing round-trips through the shared body, export uses the
-shared body, and the limitation note is documented. True macOS fullscreen behavior
-must still be confirmed manually.
+These tests assert the sidebar/route safety (Pages hidden everywhere, route inert
+and never mounts the old widget, no minimize/hide, no top-level window, embedded
+content) plus shared-body/export safety and the documentation note. True macOS
+fullscreen behaviour must still be confirmed manually.
 """
 
 from __future__ import annotations
@@ -64,20 +63,11 @@ def _scene(db, pid, title="P1"):
 # ==========================================================================
 
 
-def test_pages_visible_for_graphic_novel():
-    # The Pages section (the GN Page/Panel editor) is shown for Graphic Novel.
-    from storyplanner.ui.main_window import MainWindow
-    db = Database()
-    pid = _gn(db)
-    win = MainWindow(db, pid)
-    assert "Pages" in win._nav_labels
-    assert "Pages" in win.sidebar_buttons
-    assert win._pages_btn.property("nav_available") is True
-
-
-@pytest.mark.parametrize("engine", ["novel", "screenplay", "stage_script",
-                                    "series"])
-def test_pages_hidden_in_non_gn_modes(engine):
+@pytest.mark.parametrize("engine", ["graphic_novel", "novel", "screenplay",
+                                    "stage_script", "series"])
+def test_pages_hidden_in_every_mode(engine):
+    # The standalone Pages section is disabled for Alpha (fullscreen-hostile) —
+    # hidden in EVERY mode, including Graphic Novel.
     from storyplanner.ui.main_window import MainWindow
     db = Database()
     pid = db.create_project(engine, narrative_engine=engine,
@@ -90,7 +80,7 @@ def test_pages_hidden_in_non_gn_modes(engine):
         assert btn.property("nav_available") is False
 
 
-def test_pages_route_lands_on_page_panel_editor():
+def test_pages_route_does_not_mount_old_standalone_widget():
     from storyplanner.ui.main_window import MainWindow
     from storyplanner.ui.graphic_novel_scene_pages_view import (
         GraphicNovelScenePagesView)
@@ -98,24 +88,21 @@ def test_pages_route_lands_on_page_panel_editor():
     pid = _gn(db)
     _scene(db, pid)
     win = MainWindow(db, pid)
-    win._show_gn_pages()                       # redirects to the Manuscript editor
-    # The Page/Panel editor is mounted via the fullscreen-safe Manuscript route
-    # (it is the GN Manuscript), not via a standalone Pages section.
-    assert isinstance(win.content_area, GraphicNovelScenePagesView)
-    assert win.content_area._embedded_as_manuscript is True
+    win._show_gn_pages()                       # inert: never mounts the old widget
+    assert not isinstance(win.content_area, GraphicNovelScenePagesView)
 
 
-def test_pages_route_redirects_gn_to_manuscript_editor():
+def test_pages_route_redirects_gn_to_embedded_navigator():
     from storyplanner.ui.main_window import MainWindow
-    from storyplanner.ui.graphic_novel_scene_pages_view import (
-        GraphicNovelScenePagesView)
+    from storyplanner.ui.graphic_novel_manuscript_view import (
+        GraphicNovelManuscriptView)
     db = Database()
     pid = _gn(db)
     _scene(db, pid)
     win = MainWindow(db, pid)
     win._show_gn_pages()
-    # GN Manuscript IS the Page/Panel editor — the redirect lands on it.
-    assert isinstance(win.content_area, GraphicNovelScenePagesView)
+    # Routes to the Manuscript, which hosts the embedded Page/Panel Navigator.
+    assert isinstance(win.content_area, GraphicNovelManuscriptView)
 
 
 # ==========================================================================
@@ -167,21 +154,19 @@ def test_pages_content_is_embedded_in_central_dock():
 # ==========================================================================
 
 
-def test_manuscript_is_graphic_novel_page_panel_editor():
+def test_manuscript_hosts_embedded_page_panel_navigator():
     from storyplanner.ui.main_window import MainWindow
-    from storyplanner.ui.graphic_novel_scene_pages_view import (
-        GraphicNovelScenePagesView)
+    from storyplanner.ui.graphic_novel_manuscript_view import (
+        GraphicNovelManuscriptView)
     db = Database()
     pid = _gn(db)
     _scene(db, pid)
     win = MainWindow(db, pid)
     win._show_manuscript()
     view = win.content_area
-    # In Graphic Novel mode the Manuscript IS the Page/Panel editor (Alpha-safe
-    # access path while the standalone Pages section is deferred).
-    assert isinstance(view, GraphicNovelScenePagesView)
-    assert view._embedded_as_manuscript is True
-    # Add Page / Add Panel are available in the Manuscript editor.
+    # In Graphic Novel mode the Manuscript hosts the embedded Page/Panel Navigator.
+    assert isinstance(view, GraphicNovelManuscriptView)
+    # Add Page / Add Panel are available in the navigator.
     assert hasattr(view, "_add_page") and hasattr(view, "_add_panel")
 
 

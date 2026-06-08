@@ -305,8 +305,8 @@ def test_no_image_generation_in_gn_reports_text():
 
 def test_ui_routing_mounts_correct_views(tmp_path):
     from storyplanner.ui.main_window import MainWindow
-    from storyplanner.ui.graphic_novel_scene_pages_view import (
-        GraphicNovelScenePagesView)
+    from storyplanner.ui.graphic_novel_manuscript_view import (
+        GraphicNovelManuscriptView)
     from storyplanner.ui.graphic_novel_review_view import GraphicNovelReviewView
     from storyplanner.ui.plot_timeline_view import PlotTimelineView
     db = Database(str(tmp_path / "gn.db"))
@@ -314,10 +314,10 @@ def test_ui_routing_mounts_correct_views(tmp_path):
     _scene(db, pid, "S", "PAGE 1\n\nPANEL 1\nVisual: In the room, x.")
     win = MainWindow(db, pid)
 
-    # Alpha fallback: GN Manuscript IS the Page/Panel editor (standalone Pages
-    # section deferred for fullscreen safety).
+    # Alpha: GN Manuscript hosts the embedded Page/Panel Navigator (standalone Pages
+    # section disabled for fullscreen safety).
     win._show_manuscript()
-    assert isinstance(win.content_area, GraphicNovelScenePagesView)
+    assert isinstance(win.content_area, GraphicNovelManuscriptView)
 
     win._show_timeline()
     assert isinstance(win.content_area, PlotTimelineView)

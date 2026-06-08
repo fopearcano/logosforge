@@ -65,28 +65,29 @@ isolation / Alpha gate: **858 passed, 0 failures** (only the pre-existing
 optional-lib PDF/DOCX cases fail in an environment without `reportlab` /
 `python-docx`). **Classification: A — post-fix gate passed.**
 
-## Graphic Novel Pages/Panels editor (Pages section restored)
+## Graphic Novel — embedded Page/Panel Navigator (standalone Pages disabled)
 
-The Graphic Novel **Pages** section is shown in the left **Plan** group (GN-only)
-and opens the scene-centric Page/Panel editor (`GraphicNovelScenePagesView`) over
-the shared `Scene.content` body — the same editor the GN Manuscript presents: a
-scene list with **+ Scene**, and per scene **+ Page** / **+ Panel**, collapsible
-Page groups and Panel cards editing **Visual / Caption / Dialogue / SFX / Notes**.
-The editor is **child-widget-only** (it creates no top-level window) and mounts via
-the standard embedded `_set_content` route, which avoids the earlier macOS
-fullscreen minimize seen with the previous standalone Pages wiring. Pages and the
-Manuscript edit the same body, so edits stay consistent; non-GN Manuscripts are
-unchanged (`WritingCoreView`).
+The standalone left-panel **Pages** route proved fullscreen-hostile (clicking it
+minimized the app in macOS fullscreen, across multiple attempted fixes), so it is
+**disabled for Alpha** — hidden in every mode, with an inert route that never mounts
+the old standalone Pages widget. Graphic Novel Page/Panel navigation now lives
+**inside the Manuscript** as an embedded **Page/Panel Navigator**
+(`GraphicNovelManuscriptView`): a **Scene → Page → Panel** tree on the left and a
+selected-item editor on the right (empty-state ladder Create Scene → + Add Page →
++ Add Panel; per-Panel **Visual / Caption / Dialogue / SFX / Notes**; add / move /
+delete for Pages and Panels). It reads/writes the shared `Scene.content` body
+(single source of truth) and is a single embedded child widget — no separate route,
+no top-level window, no dialog on mount — so it cannot trigger the minimize. Non-GN
+Manuscripts are unchanged (`WritingCoreView`).
 
-Single source: `MainWindow._apply_pages_availability` (shows Pages for GN) +
-`_show_gn_pages` (mounts the editor) + `_show_manuscript` (GN → the same editor).
-Pre-existing lifecycle tests (`tests/test_project_lifecycle_switch.py`) assert
-Pages appears for GN and disappears for non-GN. Tests:
-`tests/test_gn_manuscript_page_editor.py` (**21 passed**),
-`tests/test_pages_alpha_fallback.py`, `tests/test_pages_fullscreen_safe.py`. True
-macOS fullscreen behavior (clicking **Pages** does not minimize) must still be
-confirmed manually (smoke-test F-items). **Classification: A — Page/Panel editing
-is accessible (Pages section + Manuscript) and fullscreen-safe by construction.**
+Single source: `MainWindow._show_manuscript` (GN → embedded navigator) +
+`_apply_pages_availability` (hides the standalone Pages item) + `_show_gn_pages`
+(inert; routes to the Manuscript). Tests: `tests/test_gn_embedded_navigator.py`
+(**33 passed**) plus `tests/test_pages_alpha_fallback.py`,
+`tests/test_pages_fullscreen_safe.py`, lifecycle/phase suites. True macOS fullscreen
+behavior (opening the GN Manuscript does not minimize) must still be confirmed
+manually (smoke-test F-items). **Classification: A — embedded Page/Panel Navigator
+works inside the Manuscript; standalone Pages disabled.**
 
 ## Last audit summary
 

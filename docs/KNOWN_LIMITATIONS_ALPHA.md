@@ -140,20 +140,24 @@ limitations for this RC:
   global Outline stays flat — see the Series hierarchy note). The full Season →
   Episode → Act → Chapter → Scene **path is available** (`series_structure.
   scene_series_path`); wiring it into the Manuscript title bar is deferred.
-- **Graphic Novel — Pages / Panels editor.** Graphic Novel projects show a
-  **Pages** item in the left **Plan** group *and* present the same Page/Panel editor
-  as the **Manuscript** — both open the scene-centric editor
-  (`GraphicNovelScenePagesView`) over the shared `Scene.content` body: a scene list
-  with **+ Scene**, and per scene **+ Page** / **+ Panel**, collapsible Page groups
-  and Panel cards with editable **Visual / Caption / Dialogue / SFX / Notes**. The
-  editor is **child-widget-only** (it creates no top-level window) and mounts via the
-  same embedded route as every other section, which avoids the earlier macOS
-  fullscreen minimize seen with the previous standalone Pages wiring. Pages and the
-  Manuscript edit the same body, so edits are consistent. (Confirm clicking **Pages**
-  in macOS fullscreen does not minimize — smoke-test F-items. The Manuscript's
-  prose-mode AI "Generate Panel Plan / Draft Panels" context menu is part of the
-  prose `WritingCoreView` surface; in GN mode the structured Page/Panel editor is
-  shown instead, with the AI Assistant panel still available.)
+- **Graphic Novel — embedded Page/Panel Navigator (standalone Pages section
+  disabled for Alpha).** The separate left-panel **Pages** route was fullscreen-
+  hostile (clicking it minimized the app in macOS fullscreen, across multiple
+  attempted fixes), so it is **disabled for Alpha**: hidden in every mode and its
+  route is inert (it never mounts the old standalone Pages widget). Graphic Novel
+  Page/Panel navigation now lives **inside the Manuscript** as an embedded
+  **Page/Panel Navigator** (`GraphicNovelManuscriptView`): a **Scene → Page → Panel**
+  tree (collapsible, with snippets) on the left and a selected-item editor on the
+  right — empty-state ladder (**Create Scene → + Add Page → + Add Panel**) and, for a
+  selected Panel, editable **Visual / Caption / Dialogue / SFX / Notes**; Add / move
+  / delete (confirmed) for Pages and Panels. It reads/writes the shared
+  `Scene.content` body (single source of truth — no separate Pages storage), is a
+  single embedded **child widget** (no separate route, no top-level window, no dialog
+  on mount), so it cannot trigger the fullscreen minimize. The embedded navigator is
+  the intended **future anchor point for visual-production integrations** (panel
+  visual brief / render status / generated assets), but **no image generation /
+  prompt / ComfyUI** fields exist today. (Confirm in macOS fullscreen — smoke-test
+  F-items — that opening the GN Manuscript does not minimize the app.)
 - **Graphic Novel — one shared body.** The Manuscript edits the GN scene body
   (`Scene.content`, structured by `graphic_novel_blocks` into Pages → Panels:
   visual / caption / dialogue / SFX / notes). Pages/Panels are **writing/script
