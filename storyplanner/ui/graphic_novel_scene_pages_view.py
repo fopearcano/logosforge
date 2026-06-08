@@ -155,6 +155,7 @@ class GraphicNovelScenePagesView(QWidget):
         self, db, project_id: int, *, scene_id: int | None = None,
         on_data_changed: Callable[[], None] | None = None,
         on_open_manuscript: Callable[[int], None] | None = None,
+        embedded_as_manuscript: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -163,6 +164,7 @@ class GraphicNovelScenePagesView(QWidget):
         self._project_id = project_id
         self._on_data_changed = on_data_changed
         self._on_open_manuscript = on_open_manuscript
+        self._embedded_as_manuscript = embedded_as_manuscript
         self._scene_id: int | None = None
         self._script = gnb.GraphicNovelScript()
         self._panel_cards: list[_PanelCard] = []
@@ -172,7 +174,7 @@ class GraphicNovelScenePagesView(QWidget):
         root.setContentsMargins(10, 8, 10, 8)
         root.setSpacing(10)
 
-        # -- Left: scene list (canonical order) --
+        # -- Left: scene list (canonical order) + scene management --
         left = QVBoxLayout()
         left.setSpacing(4)
         left.addWidget(QLabel("Scenes"))
@@ -181,9 +183,18 @@ class GraphicNovelScenePagesView(QWidget):
         self._scene_list.setMaximumWidth(220)
         self._scene_list.currentItemChanged.connect(self._on_scene_selected)
         left.addWidget(self._scene_list, stretch=1)
-        open_btn = QPushButton("Open in Manuscript")
-        open_btn.clicked.connect(self._open_in_manuscript)
-        left.addWidget(open_btn)
+        # Create a scene without leaving the editor (so a brand-new Graphic Novel
+        # project is never stuck on an empty "Begin writing" prose state).
+        add_scene_btn = QPushButton("+ Scene")
+        add_scene_btn.setObjectName("gnPagesAddScene")
+        add_scene_btn.setToolTip("Create a new Graphic Novel scene")
+        add_scene_btn.clicked.connect(self._create_scene)
+        left.addWidget(add_scene_btn)
+        # "Open in Manuscript" is redundant when this view *is* the Manuscript.
+        if not embedded_as_manuscript and on_open_manuscript is not None:
+            open_btn = QPushButton("Open in Manuscript")
+            open_btn.clicked.connect(self._open_in_manuscript)
+            left.addWidget(open_btn)
         root.addLayout(left)
 
         # -- Right: pages/panels for the selected scene --
@@ -239,8 +250,9 @@ class GraphicNovelScenePagesView(QWidget):
         self._scene_list.blockSignals(False)
         if not scenes:
             self._scene_id = None
-            self._render_empty("No Graphic Novel scenes yet. Create a Scene in "
-                               "Outline, then write its pages here.")
+            self._render_empty(
+                "Begin building your Graphic Novel scene. Use “+ Scene” on the "
+                "left to create your first scene, then add Pages and Panels here.")
             return
         target = preselect if preselect in {s.id for s in scenes} else scenes[0].id
         for i in range(self._scene_list.count()):
@@ -256,6 +268,17 @@ class GraphicNovelScenePagesView(QWidget):
     def select_scene(self, scene_id: int) -> None:
         self._scene_id = scene_id
         self.refresh()
+
+    def _create_scene(self) -> None:
+        """Create a Graphic Novel scene in place and select it (so the editor is
+        never stuck on an empty no-scene state). Writes only a new Scene; the
+        page/panel body is added afterwards via “+ Page” / “+ Panel”."""
+        from storyplanner import story_structure as ss
+        scene = ss.create_scene(self._db, self._project_id,
+                                title="Untitled Scene")
+        self._reload_scene_list(preselect=scene.id)
+        if self._on_data_changed:
+            self._on_data_changed()
 
     # -- Build pages/panels (read from the shared Scene.content body) --------
 
@@ -291,8 +314,9 @@ class GraphicNovelScenePagesView(QWidget):
     def _render_pages(self) -> None:
         self._clear_pages()
         if not self._script.pages:
-            self._render_empty("No pages yet. Use “+ Page” to start the scene’s "
-                               "page/panel script.")
+            self._render_empty("Add a Page to start structuring panels — use "
+                               "“+ Page” above. Panels hold Visual / Caption / "
+                               "Dialogue / SFX / Notes.")
             return
         for pi, page in enumerate(self._script.pages):
             self._pages_layout.addWidget(self._build_page_widget(pi, page))

@@ -271,21 +271,22 @@ def test_novel_view_is_inert():
 # =========================================================================
 
 def test_main_window_defers_pages_section_for_alpha():
-    # Alpha fallback: the standalone "Pages" section is DEFERRED from navigation
-    # because opening it can minimize the app in macOS fullscreen (a
-    # window-management bug isolated to the Pages-view surface). It is hidden in
-    # every mode and the route is INERT — it never mounts GraphicNovelScenePagesView.
-    # Graphic Novel Page/Panel editing remains available in the Manuscript via the
-    # shared Scene.content body.
+    # Alpha fallback: the standalone "Pages" sidebar section is DEFERRED from
+    # navigation (a macOS fullscreen issue with a separate Pages route). It is
+    # hidden in every mode. Graphic Novel Page/Panel editing remains available
+    # because the **Manuscript** mounts the Page/Panel editor (the same shared
+    # Scene.content body), reached via the fullscreen-safe Manuscript route.
     from storyplanner.ui.main_window import MainWindow
     from storyplanner.ui.graphic_novel_scene_pages_view import GraphicNovelScenePagesView
     db = Database()
     p = _gn(db)
     win = MainWindow(db, p.id)
+    # The standalone Pages nav item is hidden.
     assert "Pages" not in win.sidebar_buttons
     assert "Pages" not in win._nav_labels
-    win._show_gn_pages()                       # inert — must not mount the Pages view
-    assert not isinstance(win.content_area, GraphicNovelScenePagesView)
+    # But the Page/Panel editor IS the GN Manuscript (Alpha-safe access path).
+    win._show_manuscript()
+    assert isinstance(win.content_area, GraphicNovelScenePagesView)
 
 
 def test_main_window_hides_pages_for_novel():

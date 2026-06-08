@@ -922,11 +922,37 @@ class MainWindow(QMainWindow):
         self._show_manuscript()
         view = self.content_area
         from storyplanner.ui.writing_core_view import WritingCoreView
+        from storyplanner.ui.graphic_novel_scene_pages_view import (
+            GraphicNovelScenePagesView,
+        )
         if isinstance(view, WritingCoreView):
             view.scroll_to_scene(scene_id)
+        elif isinstance(view, GraphicNovelScenePagesView):
+            # GN Manuscript is the Page/Panel editor — focus the requested scene.
+            view.select_scene(scene_id)
         self._assistant_panel.set_active_scene(scene_id)
 
     def _show_manuscript(self) -> None:
+        # Graphic Novel: the Manuscript IS the Page/Panel editor. The standalone
+        # left-panel Pages section is deferred for Alpha (macOS fullscreen
+        # window-management bug), so the Manuscript is the Alpha-safe access path
+        # for Pages/Panels. It edits the same shared Scene.content body, so a
+        # re-enabled standalone Pages section would mirror the same data. The
+        # editor is child-widget-only and mounts via the same _set_content path as
+        # every other section, so it is fullscreen-safe.
+        if self._project_is_graphic_novel():
+            from storyplanner.ui.graphic_novel_scene_pages_view import (
+                GraphicNovelScenePagesView,
+            )
+            self._set_content(
+                GraphicNovelScenePagesView(
+                    self._db,
+                    self._project_id,
+                    on_data_changed=self._on_data_changed,
+                    embedded_as_manuscript=True,
+                )
+            )
+            return
         # Manuscript is a focused writing surface: a compact selectable structure
         # list on the left, and the editor on the right opens ONLY the selected
         # writing unit (no inline whole-project structure). Storage is unchanged

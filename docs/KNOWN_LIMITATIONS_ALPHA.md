@@ -140,19 +140,22 @@ limitations for this RC:
   global Outline stays flat — see the Series hierarchy note). The full Season →
   Episode → Act → Chapter → Scene **path is available** (`series_structure.
   scene_series_path`); wiring it into the Manuscript title bar is deferred.
-- **Graphic Novel — standalone Pages section is DEFERRED for Alpha (fullscreen
-  bug).** Opening the standalone left-panel **Pages** section could minimize the
-  app in macOS fullscreen (a window-management bug isolated to the Pages-view
-  surface that could not be safely fixed/verified for the Alpha RC). As an
-  Alpha-safe fallback the standalone Pages section is **hidden in navigation in
-  every mode and its route is inert** (it never mounts the Pages view), so it can
-  no longer minimize the app. **Page/Panel editing remains fully available in the
-  Manuscript** — the Graphic Novel scene body is the shared `Scene.content`
-  (structured by `graphic_novel_blocks` into Pages → Panels: visual / caption /
-  dialogue / SFX / notes), edited in the Manuscript along with the AI Panel-Plan /
-  Draft-Panels tools. No Pages data is lost; `GraphicNovelScenePagesView` is kept
-  in the codebase and the **standalone Pages section returns post-Alpha** once the
-  window-management issue is resolved.
+- **Graphic Novel — the Manuscript IS the Page/Panel editor; standalone Pages
+  section is DEFERRED for Alpha.** The separate left-panel **Pages** nav item is
+  deferred for Alpha (a macOS fullscreen window-management issue with that separate
+  route). It is **hidden in every mode**, and **Page/Panel editing lives in the
+  Manuscript instead**: in Graphic Novel mode the Manuscript mounts the scene-centric
+  Page/Panel editor (`GraphicNovelScenePagesView`, `embedded_as_manuscript`) — a
+  scene list with **+ Scene**, and per scene **+ Page** / **+ Panel**, collapsible
+  Page groups and Panel cards with editable **Visual / Caption / Dialogue / SFX /
+  Notes**. It edits the shared `Scene.content` body (so a re-enabled standalone
+  Pages section would mirror the same data), mounts via the same fullscreen-safe
+  route as every other section, and is **child-widget-only** (it creates no
+  top-level window, so it cannot minimize the app). No Pages data is lost; the
+  standalone Pages nav item returns post-Alpha. (The Manuscript's prose-mode AI
+  "Generate Panel Plan / Draft Panels" context menu is part of the prose
+  `WritingCoreView` surface and is not shown in the GN Page/Panel editor for Alpha;
+  the AI Assistant panel remains available.)
 - **Graphic Novel — one shared body.** The Manuscript edits the GN scene body
   (`Scene.content`, structured by `graphic_novel_blocks` into Pages → Panels:
   visual / caption / dialogue / SFX / notes). Pages/Panels are **writing/script

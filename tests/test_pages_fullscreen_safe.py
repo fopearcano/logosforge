@@ -143,10 +143,10 @@ def test_add_page_opens_no_dialog(monkeypatch):
     assert len(_body(db, sid).pages) >= 1
 
 
-def test_pages_route_is_inert_and_does_not_minimize_main_window():
-    # Alpha fallback: the standalone Pages route is deferred (macOS fullscreen
-    # window-management bug). Navigating it must NOT mount the Pages view and must
-    # never minimize/hide the main window — it redirects to a safe surface.
+def test_pages_route_lands_on_editor_without_minimizing_main_window():
+    # The standalone Pages nav item is deferred; the Pages route redirects to the
+    # Manuscript, which for Graphic Novel IS the Page/Panel editor. It mounts via
+    # the fullscreen-safe Manuscript path and must never minimize/hide the window.
     from storyplanner.ui.main_window import MainWindow
     from storyplanner.ui.graphic_novel_scene_pages_view import (
         GraphicNovelScenePagesView)
@@ -157,8 +157,8 @@ def test_pages_route_is_inert_and_does_not_minimize_main_window():
     calls = {"min": 0, "hide": 0}
     win.showMinimized = lambda: calls.__setitem__("min", calls["min"] + 1)  # type: ignore
     win.hide = lambda: calls.__setitem__("hide", calls["hide"] + 1)         # type: ignore
-    win._show_gn_pages()                       # inert route
-    assert not isinstance(win.content_area, GraphicNovelScenePagesView)
+    win._show_gn_pages()                       # -> Manuscript Page/Panel editor
+    assert isinstance(win.content_area, GraphicNovelScenePagesView)
     assert calls == {"min": 0, "hide": 0}
 
 

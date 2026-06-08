@@ -55,12 +55,13 @@ manual UI check). Command form:
 | `tests/test_post_fix_regression_gate.py` | **20 passed** |
 | `tests/test_pages_fullscreen_safe.py` (Pages fullscreen-safe dialogs) | **16 passed** |
 | `tests/test_pages_alpha_fallback.py` (standalone Pages deferred) | **15 passed** |
+| `tests/test_gn_manuscript_page_editor.py` (GN Manuscript = Page/Panel editor) | **21 passed** |
 | `tests/test_gn_pages_manuscript_sync.py` (GN shared body) | **30 passed** |
 | `tests/test_series_hierarchy.py` (Series hierarchy) | **70 passed** |
 | `tests/test_series_navigator.py` (Navigator + deps) | **26 passed** |
 | `tests/test_writing_mode_lock.py` (mode lock) | **22 passed** |
 | `tests/test_export_safety.py` (export privacy) | **4 passed** |
-| **Total** | **238 passed, 0 failed** |
+| **Total** | **259 passed, 0 failed** |
 
 > Environment note: PDF/DOCX export tests fail only where `reportlab` /
 > `python-docx` are not installed (pre-existing, graceful-degradation behavior),
@@ -129,24 +130,25 @@ this behavior as supporting evidence (the manual UI check is still required).
 | 31 | Export uses shared Pages/Panels body | PENDING MANUAL RETEST | ✓ |
 | 32 | No image-generation / ComfyUI fields appear | PENDING MANUAL RETEST | ✓ |
 
-### Fullscreen window-management — Pages section (Alpha fallback: Case 2 — Pages DEFERRED)
+### Fullscreen window-management — Pages section (Alpha fallback: Case 2 — Pages DEFERRED, Manuscript IS the editor)
 
-> The standalone **Pages** section is **deferred for Alpha** because opening it
-> could minimize the app in macOS fullscreen. The sidebar entry is hidden in every
-> mode and the route is inert (it never mounts the Pages view); Page/Panel editing
-> remains in the **Manuscript** via the shared `Scene.content` body. Headless tests
-> cover the route safety + Manuscript access path (`tests/test_pages_alpha_fallback.py`,
+> The standalone **Pages** sidebar section is **deferred for Alpha** (it could
+> minimize the app in macOS fullscreen). The sidebar entry is hidden in every mode;
+> Graphic Novel **Page/Panel editing is the Manuscript** — in GN mode the Manuscript
+> mounts the scene-centric Page/Panel editor over the shared `Scene.content` body.
+> Headless tests cover the route safety + the Manuscript Page/Panel editor
+> (`tests/test_gn_manuscript_page_editor.py`, `tests/test_pages_alpha_fallback.py`,
 > `tests/test_pages_fullscreen_safe.py`). Confirm the fullscreen behavior **manually**:
 
 | # | Item | Result | Auto |
 |---|------|--------|------|
 | F1 | Enter macOS **fullscreen**, open a Graphic Novel project | PENDING MANUAL RETEST | |
 | F2 | The **Pages** sidebar item is **not shown** (deferred) | PENDING MANUAL RETEST | ✓ |
-| F3 | App stays fullscreen; nothing minimizes/flickers | PENDING MANUAL RETEST | partial |
-| F4 | Open the **Manuscript** (Graphic Novel) | PENDING MANUAL RETEST | ✓ |
-| F5 | Edit Page/Panel content in the Manuscript (shared body) | PENDING MANUAL RETEST | ✓ |
-| F6 | Use **Generate Panel Plan / Draft Panels** (AI preview) | PENDING MANUAL RETEST | |
-| F7 | Export Graphic Novel text / Markdown | PENDING MANUAL RETEST | ✓ |
+| F3 | Open the **Manuscript** — it shows the Page/Panel editor (not blank prose) | PENDING MANUAL RETEST | ✓ |
+| F4 | App stays fullscreen; nothing minimizes/flickers when opening Manuscript | PENDING MANUAL RETEST | partial |
+| F5 | Empty project: **+ Scene** then **+ Page** / **+ Panel** work in place | PENDING MANUAL RETEST | ✓ |
+| F6 | Edit Visual / Caption / Dialogue / SFX / Notes; collapse/expand a panel | PENDING MANUAL RETEST | ✓ |
+| F7 | Export Graphic Novel text / Markdown (shared body) | PENDING MANUAL RETEST | ✓ |
 
 ### Stage Script
 
@@ -283,7 +285,7 @@ These are already documented in `docs/KNOWN_LIMITATIONS_ALPHA.md` and are
 
 ## Decision
 
-**PENDING MANUAL RETEST.** Automated focused suites are green (238 passed), but
+**PENDING MANUAL RETEST.** Automated focused suites are green (259 passed), but
 the manual UI checklist above has not been executed. **Do not tag** the Alpha RC
 until the manual checklist is completed and this decision is updated to one of:
 

@@ -77,7 +77,7 @@ def test_pages_hidden_in_every_mode(engine):
         assert btn.property("nav_available") is False
 
 
-def test_pages_route_never_mounts_pages_view():
+def test_pages_route_lands_on_page_panel_editor():
     from storyplanner.ui.main_window import MainWindow
     from storyplanner.ui.graphic_novel_scene_pages_view import (
         GraphicNovelScenePagesView)
@@ -85,19 +85,24 @@ def test_pages_route_never_mounts_pages_view():
     pid = _gn(db)
     _scene(db, pid)
     win = MainWindow(db, pid)
-    win._show_gn_pages()                       # inert — redirects, never mounts
-    assert not isinstance(win.content_area, GraphicNovelScenePagesView)
+    win._show_gn_pages()                       # redirects to the Manuscript editor
+    # The Page/Panel editor is mounted via the fullscreen-safe Manuscript route
+    # (it is the GN Manuscript), not via a standalone Pages section.
+    assert isinstance(win.content_area, GraphicNovelScenePagesView)
+    assert win.content_area._embedded_as_manuscript is True
 
 
-def test_pages_route_redirects_gn_to_manuscript():
+def test_pages_route_redirects_gn_to_manuscript_editor():
     from storyplanner.ui.main_window import MainWindow
-    from storyplanner.ui.writing_core_view import WritingCoreView
+    from storyplanner.ui.graphic_novel_scene_pages_view import (
+        GraphicNovelScenePagesView)
     db = Database()
     pid = _gn(db)
     _scene(db, pid)
     win = MainWindow(db, pid)
     win._show_gn_pages()
-    assert isinstance(win.content_area, WritingCoreView)
+    # GN Manuscript IS the Page/Panel editor — the redirect lands on it.
+    assert isinstance(win.content_area, GraphicNovelScenePagesView)
 
 
 # ==========================================================================
@@ -151,15 +156,20 @@ def test_pages_content_is_embedded_in_central_dock():
 
 def test_manuscript_is_graphic_novel_page_panel_editor():
     from storyplanner.ui.main_window import MainWindow
-    from storyplanner.ui.writing_core_view import WritingCoreView
+    from storyplanner.ui.graphic_novel_scene_pages_view import (
+        GraphicNovelScenePagesView)
     db = Database()
     pid = _gn(db)
     _scene(db, pid)
     win = MainWindow(db, pid)
     win._show_manuscript()
     view = win.content_area
-    assert isinstance(view, WritingCoreView)
-    assert view._is_graphic_novel_mode() is True
+    # In Graphic Novel mode the Manuscript IS the Page/Panel editor (Alpha-safe
+    # access path while the standalone Pages section is deferred).
+    assert isinstance(view, GraphicNovelScenePagesView)
+    assert view._embedded_as_manuscript is True
+    # Add Page / Add Panel are available in the Manuscript editor.
+    assert hasattr(view, "_add_page") and hasattr(view, "_add_panel")
 
 
 def test_page_panel_editing_round_trips_through_shared_body():
