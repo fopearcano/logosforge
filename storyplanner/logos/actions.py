@@ -1300,6 +1300,37 @@ register(LogosAction(
     category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
     prompt="", modes=("series",), deterministic=True,
 ))
+# Series — Phase 3 (deterministic intelligence checks). Report-only, mode-gated to
+# series; powered by series_diagnostics. Resolve scene/episode from the current
+# Scene. No mutation, no LLM, no image generation.
+register(LogosAction(
+    name="series_act_break_check", label="Act Break Check",
+    description="Deterministic check of Act Break placement in this scene and the "
+                "Episode plan's act-break coverage. Report only — never mutates.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("series",), deterministic=True,
+))
+register(LogosAction(
+    name="series_cold_open_tag_check", label="Cold Open / Tag Check",
+    description="Deterministic check of Cold Open / Teaser and Tag placement and "
+                "the Episode plan's coverage. Report only — never mutates.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("series",), deterministic=True,
+))
+register(LogosAction(
+    name="series_dialogue_balance", label="Dialogue / Action Balance",
+    description="Deterministic dialogue/action balance check for this scene "
+                "(ratio, long runs, monologues, exposition). Report only.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("series",), deterministic=True,
+))
+register(LogosAction(
+    name="series_arc_alignment", label="Season Arc Alignment",
+    description="Deterministic check of whether this Episode reflects the Season / "
+                "Arc plan (arc question, setup/payoff, motifs). Report only.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("series",), deterministic=True,
+))
 # Series — Phase 2 (planning pipeline). Generative; each action produces a preview
 # the writer reviews and confirms — never auto-applied, and the AI never overwrites
 # the body. The structured store/parse/apply lives in series_pipeline. The

@@ -574,11 +574,12 @@ register("stage_review_dashboard", _stage_review_dashboard)
 
 
 def _series_check(db, context: LogosContext) -> LogosResult:
-    """Deterministic Series scene-body check (Phase 1).
+    """Deterministic Series scene health check (Phases 1 + 3).
 
-    Report-only — never mutates, never generates, never calls the LLM. Validates
-    the current Series scene's blocks (scene heading, action, character/dialogue
-    balance, act-break / teaser / tag markers)."""
+    Report-only — never mutates, never generates, never calls the LLM. Runs the
+    deterministic Series scene diagnostics (format / block order, scene function,
+    dialogue-action balance, plan alignment, PSYKE continuity) on the current
+    scene and renders metrics + categorized issues."""
     action = "series_check"
     scene_id = context.current_scene_id
     if scene_id is None:
@@ -588,22 +589,19 @@ def _series_check(db, context: LogosContext) -> LogosResult:
             suggestions=[], proposed_operations=[],
         )
     try:
-        from storyplanner.series_blocks import (
-            load_scene_script, validate_series_script,
-        )
-        script = load_scene_script(db, scene_id)
-        report = validate_series_script(script)
+        from storyplanner import series_diagnostics as sd
+        report = sd.analyze_scene_by_id(db, context.project_id, scene_id)
     except Exception as exc:  # never crash the UI
         return LogosResult.failure(action, f"Series check failed: {exc}")
 
-    head = f"{len(script.blocks)} block(s)."
-    if not report.warnings:
-        msg = head + "\n\nNo series-script issues detected."
+    if not report.issues:
+        msg = report.summary + "\n\nNo series-script issues detected."
     else:
-        msg = head + "\n\nWarnings:\n" + "\n".join(f"- {w}" for w in report.warnings)
+        msg = report.summary + "\n\n" + sd.render_issues(report.issues)
     return LogosResult(
         ok=True, action=action, title="Series Scene Check",
-        message=msg, suggestions=list(report.warnings), proposed_operations=[])
+        message=msg, suggestions=[i.label for i in report.top_issues(8)],
+        proposed_operations=[])
 
 
 register("series_check", _series_check)
@@ -743,6 +741,132 @@ def _series_abc_check(db, context: LogosContext) -> LogosResult:
 
 
 register("series_abc_check", _series_abc_check)
+
+
+def _series_reports(db, context: LogosContext):
+    """Return ``(scene_report_or_None, episode_report_or_None, chapter)`` for the
+    current Series scene/episode, using the deterministic diagnostics engine."""
+    from storyplanner import series_diagnostics as sd
+    scene_report = None
+    if context.current_scene_id is not None:
+        scene_report = sd.analyze_scene_by_id(db, context.project_id,
+                                              context.current_scene_id)
+    chapter, _scenes = _series_episode(db, context)
+    episode_report = (sd.analyze_episode(db, context.project_id, chapter)
+                      if chapter else None)
+    return scene_report, episode_report, chapter
+
+
+def _series_act_break_check(db, context: LogosContext) -> LogosResult:
+    """Deterministic Act Break check (Phase 3) — scene-level placement + the
+    Episode plan's act-break coverage. Report-only, never calls the LLM."""
+    action = "series_act_break_check"
+    if context.current_scene_id is None:
+        return LogosResult(ok=True, action=action, title="Act Break Check",
+            message="Open a Series scene in the Manuscript to check act breaks.",
+            suggestions=[], proposed_operations=[])
+    try:
+        from storyplanner import series_diagnostics as sd
+        scene_r, ep_r, _chapter = _series_reports(db, context)
+        issues = [i for i in (scene_r.issues if scene_r else []) if "act_break" in i.id]
+        issues += [i for i in (ep_r.issues if ep_r else []) if "act_break" in i.id]
+    except Exception as exc:
+        return LogosResult.failure(action, f"Act Break check failed: {exc}")
+    count = scene_r.metrics.act_break_count if scene_r else 0
+    head = f"Act Break markers in this scene: {count}."
+    msg = head + ("\n\nNo act-break issues detected." if not issues
+                  else "\n\n" + sd.render_issues(issues))
+    return LogosResult(ok=True, action=action, title="Act Break Check",
+        message=msg, suggestions=[i.label for i in issues], proposed_operations=[])
+
+
+register("series_act_break_check", _series_act_break_check)
+
+
+def _series_cold_open_tag_check(db, context: LogosContext) -> LogosResult:
+    """Deterministic Cold Open / Tag check (Phase 3) — teaser & tag placement plus
+    the Episode plan's teaser/tag coverage. Report-only, never calls the LLM."""
+    action = "series_cold_open_tag_check"
+    if context.current_scene_id is None:
+        return LogosResult(ok=True, action=action, title="Cold Open / Tag Check",
+            message="Open a Series scene in the Manuscript to check cold open / tag.",
+            suggestions=[], proposed_operations=[])
+    try:
+        from storyplanner import series_diagnostics as sd
+        scene_r, ep_r, _chapter = _series_reports(db, context)
+
+        def _pick(issues):
+            return [i for i in issues
+                    if "teaser" in i.id or "tag" in i.id or "cold_open" in i.id]
+        issues = _pick(scene_r.issues if scene_r else [])
+        issues += _pick(ep_r.issues if ep_r else [])
+    except Exception as exc:
+        return LogosResult.failure(action, f"Cold Open / Tag check failed: {exc}")
+    teaser = scene_r.metrics.teaser_count if scene_r else 0
+    tag = scene_r.metrics.tag_count if scene_r else 0
+    head = f"Cold Open / Teaser markers: {teaser}; Tag markers: {tag}."
+    msg = head + ("\n\nNo cold open / tag issues detected." if not issues
+                  else "\n\n" + sd.render_issues(issues))
+    return LogosResult(ok=True, action=action, title="Cold Open / Tag Check",
+        message=msg, suggestions=[i.label for i in issues], proposed_operations=[])
+
+
+register("series_cold_open_tag_check", _series_cold_open_tag_check)
+
+
+def _series_arc_alignment(db, context: LogosContext) -> LogosResult:
+    """Deterministic Season / Arc alignment check (Phase 3) — whether the current
+    Episode reflects the Season / Arc plan. Report-only, never calls the LLM."""
+    action = "series_arc_alignment"
+    chapter, _scenes = _series_episode(db, context)
+    if chapter is None:
+        return LogosResult(ok=True, action=action, title="Season Arc Alignment",
+            message="Open a Series scene in the Manuscript to check season-arc "
+                    "alignment.", suggestions=[], proposed_operations=[])
+    try:
+        from storyplanner import series_diagnostics as sd
+        ep = sd.analyze_episode(db, context.project_id, chapter)
+        issues = ep.issues_in(sd.CAT_SERIAL)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Season arc alignment failed: {exc}")
+    head = (f"{ep.episode_label} ({chapter}): Season / Arc plan: "
+            f"{'yes' if ep.has_season_plan else 'no'}.")
+    msg = head + ("\n\nNo season-arc alignment issues detected." if not issues
+                  else "\n\n" + sd.render_issues(issues))
+    return LogosResult(ok=True, action=action, title="Season Arc Alignment",
+        message=msg, suggestions=[i.label for i in issues], proposed_operations=[])
+
+
+register("series_arc_alignment", _series_arc_alignment)
+
+
+def _series_dialogue_balance(db, context: LogosContext) -> LogosResult:
+    """Deterministic Dialogue / Action balance check (Phase 3) for the current
+    scene. Report-only, never calls the LLM."""
+    action = "series_dialogue_balance"
+    scene_id = context.current_scene_id
+    if scene_id is None:
+        return LogosResult(ok=True, action=action, title="Dialogue / Action Balance",
+            message="Open a Series scene in the Manuscript to check balance.",
+            suggestions=[], proposed_operations=[])
+    try:
+        from storyplanner import series_diagnostics as sd
+        r = sd.analyze_scene_by_id(db, context.project_id, scene_id)
+        issues = r.issues_in(sd.CAT_BALANCE)
+        m = r.metrics
+    except Exception as exc:
+        return LogosResult.failure(action, f"Dialogue / Action balance failed: {exc}")
+    head = (f"{m.dialogue_count} dialogue / {m.action_count} action "
+            f"(ratio {m.dialogue_action_ratio}); longest speech "
+            f"{m.longest_dialogue_words} words; longest dialogue run "
+            f"{m.max_consecutive_dialogue}.")
+    msg = head + ("\n\nDialogue / action balance looks healthy." if not issues
+                  else "\n\n" + sd.render_issues(issues))
+    return LogosResult(ok=True, action=action, title="Dialogue / Action Balance",
+        message=msg, suggestions=[i.label for i in issues], proposed_operations=[])
+
+
+register("series_dialogue_balance", _series_dialogue_balance)
 
 
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
