@@ -869,6 +869,92 @@ def _series_dialogue_balance(db, context: LogosContext) -> LogosResult:
 register("series_dialogue_balance", _series_dialogue_balance)
 
 
+def _series_reflection(db, context: LogosContext) -> LogosResult:
+    """Deterministic Series Counterpart / Reflection (Phase 4).
+
+    Re-projects the Phase 3 diagnostics + Phase 2 plans + PSYKE + Timeline into
+    audience / showrunner / character-arc / episode-structure / writers-room
+    perspectives with revision questions. Reflection only — never rewrites, never
+    mutates, never calls the LLM."""
+    action = "series_reflection"
+    scene_id = context.current_scene_id
+    if scene_id is None:
+        return LogosResult(
+            ok=True, action=action, title="Series Reflection",
+            message="Open a Series scene in the Manuscript to reflect on it.",
+            suggestions=[], proposed_operations=[])
+    try:
+        from storyplanner.series_reflection import build_scene_reflection
+        report = build_scene_reflection(db, context.project_id, scene_id)
+    except Exception as exc:  # never crash the UI
+        return LogosResult.failure(action, f"Reflection failed: {exc}")
+    suggestions = list(report.suggested_actions) + [f"Q: {q}" for q in report.questions]
+    return LogosResult(ok=True, action=action, title="Series Reflection",
+                       message=report.to_text(), suggestions=suggestions,
+                       proposed_operations=[])   # reflection only — no mutation
+
+
+register("series_reflection", _series_reflection)
+
+
+def _series_perspective(db, context: LogosContext, *, action: str, title: str,
+                        section: str) -> LogosResult:
+    """Shared driver: build the Series reflection once and render one perspective."""
+    scene_id = context.current_scene_id
+    if scene_id is None:
+        return LogosResult(ok=True, action=action, title=title,
+            message="Open a Series scene in the Manuscript to reflect on it.",
+            suggestions=[], proposed_operations=[])
+    try:
+        from storyplanner.series_reflection import build_scene_reflection
+        report = build_scene_reflection(db, context.project_id, scene_id)
+    except Exception as exc:
+        return LogosResult.failure(action, f"Reflection failed: {exc}")
+    return LogosResult(ok=True, action=action, title=title,
+                       message=report.section_text(section),
+                       suggestions=[f"Q: {q}" for q in report.questions],
+                       proposed_operations=[])
+
+
+def _series_audience_reflection(db, context: LogosContext) -> LogosResult:
+    from storyplanner import series_reflection as sr
+    return _series_perspective(db, context, action="series_audience_reflection",
+                               title="Audience Perspective", section=sr.SEC_AUDIENCE)
+
+
+def _series_showrunner_reflection(db, context: LogosContext) -> LogosResult:
+    from storyplanner import series_reflection as sr
+    return _series_perspective(db, context, action="series_showrunner_reflection",
+                               title="Showrunner Perspective", section=sr.SEC_SHOWRUNNER)
+
+
+def _series_character_reflection(db, context: LogosContext) -> LogosResult:
+    from storyplanner import series_reflection as sr
+    return _series_perspective(db, context, action="series_character_reflection",
+                               title="Character Arc Perspective", section=sr.SEC_CHARACTER)
+
+
+def _series_episode_structure_reflection(db, context: LogosContext) -> LogosResult:
+    from storyplanner import series_reflection as sr
+    return _series_perspective(db, context,
+                               action="series_episode_structure_reflection",
+                               title="Episode Structure Perspective",
+                               section=sr.SEC_EPISODE)
+
+
+def _series_writers_room(db, context: LogosContext) -> LogosResult:
+    from storyplanner import series_reflection as sr
+    return _series_perspective(db, context, action="series_writers_room",
+                               title="Writers-Room Notes", section=sr.SEC_WRITERS)
+
+
+register("series_audience_reflection", _series_audience_reflection)
+register("series_showrunner_reflection", _series_showrunner_reflection)
+register("series_character_reflection", _series_character_reflection)
+register("series_episode_structure_reflection", _series_episode_structure_reflection)
+register("series_writers_room", _series_writers_room)
+
+
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
     action = "sp_detect_setup_payoff"
     try:

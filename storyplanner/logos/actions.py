@@ -1331,6 +1331,53 @@ register(LogosAction(
     category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
     prompt="", modes=("series",), deterministic=True,
 ))
+# Series — Phase 4 (Counterpart / Reflection). Deterministic, non-mutating
+# multi-perspective reflection (audience / showrunner / character-arc / episode-
+# structure / writers-room) producing feedback and revision questions — never a
+# rewrite. The full report plus per-perspective views; powered by series_reflection.
+register(LogosAction(
+    name="series_reflection", label="Series Reflection",
+    description="Reflect on this Series scene from the audience, showrunner, "
+                "character-arc, episode-structure, and writers-room perspectives — "
+                "feedback and revision questions, never a rewrite.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("series",), deterministic=True,
+))
+register(LogosAction(
+    name="series_audience_reflection", label="Audience Perspective",
+    description="What plays for the viewer: hook, legible conflict, exposition load, "
+                "and whether the act break / tag / reveal lands. Report only.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("series",), deterministic=True,
+))
+register(LogosAction(
+    name="series_showrunner_reflection", label="Showrunner Perspective",
+    description="Does the scene serve the episode and the episode the season — "
+                "A/B/C balance, escalation vs. repetition. Report only.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("series",), deterministic=True,
+))
+register(LogosAction(
+    name="series_character_reflection", label="Character Arc Perspective",
+    description="Per character: want, change, reveal-through-action, and PSYKE "
+                "consistency. Report only — never creates PSYKE entries.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("series",), deterministic=True,
+))
+register(LogosAction(
+    name="series_episode_structure_reflection", label="Episode Structure Perspective",
+    description="Cold open / act breaks / climax / tag / sequence and alignment with "
+                "the Episode beat plan. Report only.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("series",), deterministic=True,
+))
+register(LogosAction(
+    name="series_writers_room", label="Writers-Room Notes",
+    description="Practical, writer-facing notes and the showrunner note (cut / "
+                "combine / escalate / clarify / move). Report only.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("series",), deterministic=True,
+))
 # Series — Phase 2 (planning pipeline). Generative; each action produces a preview
 # the writer reviews and confirms — never auto-applied, and the AI never overwrites
 # the body. The structured store/parse/apply lives in series_pipeline. The
