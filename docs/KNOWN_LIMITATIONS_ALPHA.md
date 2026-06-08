@@ -136,7 +136,14 @@ limitations for this RC:
   `graphic_novel_blocks` into Pages → Panels: visual / caption / dialogue / SFX /
   notes). Edits round-trip on refresh / section switch (not live-simultaneous;
   there are two separate sections). Pages/Panels are **writing/script structure,
-  not image generation** — no ComfyUI, no image prompts, no visual canvas. Panel
-  cards collapse/expand (panel **undocking** is deferred). The Pages view is
-  scene-centric; a legacy project-level pages model still exists in storage but is
-  no longer the wired surface (kept for data safety, deferred).
+  not image generation** — the wired scene-centric Pages surface has no ComfyUI,
+  no image prompts and no visual canvas. Panel cards collapse/expand (panel
+  **undocking** is deferred). The Pages view is scene-centric; a legacy
+  project-level pages model still exists in storage but is no longer the wired
+  surface (kept for data safety, deferred). For completeness: a standalone
+  image-*prompt* export module (`graphic_novel_ai_export`) and a "Prompt" action
+  on the deprecated legacy pages view still exist in the codebase — they emit
+  **text** prompt sheets only, and the **ComfyUI connector is a disabled stub**
+  (`comfyui_available()` is `False`; `send_to_comfyui` raises). **No image
+  generation runs**, and no image/ComfyUI action exists in the Logos/Assistant
+  registry.

@@ -39,6 +39,32 @@ and any mode change is refused without mutating data. Conversion remains a defer
 future workflow. Single source of truth: `writing_modes.can_change_writing_mode` /
 `change_writing_mode`. See `docs/KNOWN_LIMITATIONS_ALPHA.md`.
 
+## Post-fix regression gate (2026-06-08)
+
+A targeted gate re-verified the three Alpha-blocker fixes (Graphic Novel shared
+body, corrected Series hierarchy, writing-mode lock) plus the export-dependency
+manifest, and confirmed **no regressions** elsewhere:
+
+- **Graphic Novel:** Manuscript ↔ Pages/Panels share one body (`Scene.content`);
+  single store; add/edit/delete/reorder round-trip; export uses the shared body;
+  panel fields are script-only (no image data). ComfyUI stays a **disabled stub**
+  and no image-generation action exists in the Logos registry.
+- **Series:** real Season → Episode → Act → Chapter → Scene; episode-local
+  Acts/Chapters are **not** confused with Seasons/Episodes; Navigator scenes open
+  in the Manuscript; moving a Season/Episode never loses a body; export traverses
+  the real hierarchy once with no secrets; legacy shortcut projects load read-only
+  and convert non-destructively.
+- **Mode lock:** empty projects can change mode; any project with body / planning
+  / Season-Episode content is locked; a blocked change mutates nothing.
+- **Dependencies:** `requirements.txt` lists `reportlab` + `python-docx`; PDF/DOCX
+  still degrade gracefully when absent. Canvas Plot stays hidden.
+
+New focused gate: `tests/test_post_fix_regression_gate.py` (**20 passed**).
+Verification sweep across the audited areas + all five modes + Timeline / PSYKE /
+isolation / Alpha gate: **858 passed, 0 failures** (only the pre-existing
+optional-lib PDF/DOCX cases fail in an environment without `reportlab` /
+`python-docx`). **Classification: A — post-fix gate passed.**
+
 ## Last audit summary
 
 The final global multi-mode integrity audit (the **Alpha Release Gate**, see
