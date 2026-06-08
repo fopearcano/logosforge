@@ -96,7 +96,8 @@ def test_toggle_logos_shows_manuscript_actions():
     win._toggle_logos()
     QApplication.instance().processEvents()
     assert win._logos_visible is True
-    labels = [b.text() for b in win._logos_toolbar._action_buttons]
+    combo = win._logos_toolbar._action_combo
+    labels = [combo.itemText(i) for i in range(combo.count())]
     assert "Explain Selection" in labels
     assert "Rewrite Options" in labels
     assert "Counterpart Critique" in labels
@@ -108,7 +109,8 @@ def test_toolbar_actions_update_on_section_switch():
     win._toggle_logos()  # show
     win._show_plan(); win._set_active_section("Outline")
     QApplication.instance().processEvents()
-    labels = [b.text() for b in win._logos_toolbar._action_buttons]
+    combo = win._logos_toolbar._action_combo
+    labels = [combo.itemText(i) for i in range(combo.count())]
     assert "Identify Structure Problem" in labels
     assert "Explain Selection" not in labels  # manuscript-only
 
