@@ -573,6 +573,42 @@ def _stage_review_dashboard(db, context: LogosContext) -> LogosResult:
 register("stage_review_dashboard", _stage_review_dashboard)
 
 
+def _series_check(db, context: LogosContext) -> LogosResult:
+    """Deterministic Series scene-body check (Phase 1).
+
+    Report-only — never mutates, never generates, never calls the LLM. Validates
+    the current Series scene's blocks (scene heading, action, character/dialogue
+    balance, act-break / teaser / tag markers)."""
+    action = "series_check"
+    scene_id = context.current_scene_id
+    if scene_id is None:
+        return LogosResult(
+            ok=True, action=action, title="Series Scene Check",
+            message="Open a Series scene in the Manuscript to check it.",
+            suggestions=[], proposed_operations=[],
+        )
+    try:
+        from storyplanner.series_blocks import (
+            load_scene_script, validate_series_script,
+        )
+        script = load_scene_script(db, scene_id)
+        report = validate_series_script(script)
+    except Exception as exc:  # never crash the UI
+        return LogosResult.failure(action, f"Series check failed: {exc}")
+
+    head = f"{len(script.blocks)} block(s)."
+    if not report.warnings:
+        msg = head + "\n\nNo series-script issues detected."
+    else:
+        msg = head + "\n\nWarnings:\n" + "\n".join(f"- {w}" for w in report.warnings)
+    return LogosResult(
+        ok=True, action=action, title="Series Scene Check",
+        message=msg, suggestions=list(report.warnings), proposed_operations=[])
+
+
+register("series_check", _series_check)
+
+
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
     action = "sp_detect_setup_payoff"
     try:

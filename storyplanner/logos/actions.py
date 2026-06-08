@@ -1273,6 +1273,16 @@ register(LogosAction(
     sections=(SECTION_MANUSCRIPT, SECTION_TIMELINE, SECTION_OUTLINE),
     prompt="", modes=("stage_script",), deterministic=True,
 ))
+# Series — Phase 1 (deterministic scene-body check). Report-only, mode-gated to
+# series; runs on the current Scene with no selection. No image generation.
+register(LogosAction(
+    name="series_check", label="Series Scene Check",
+    description="Deterministic check of this Series scene: scene heading, action, "
+                "character/dialogue balance, and act-break / teaser / tag markers. "
+                "Report only — never rewrites or mutates.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("series",), deterministic=True,
+))
 # Stage Script — Phase 2 (planning pipeline). Generative, full-scene; each action
 # produces a preview the writer reviews and confirms — never auto-applied, and the
 # AI never overwrites the body. The structured store/parse/apply lives in
