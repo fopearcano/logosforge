@@ -1378,6 +1378,78 @@ register(LogosAction(
     category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
     prompt="", modes=("series",), deterministic=True,
 ))
+# Series — Phase 5 (Controlled Rewrite). Generative; each action shows a
+# preview/diff before any confirmed apply — never auto-applies. Block/text actions
+# need a selection; full-scene actions do not. The grounded preview->apply path
+# lives in series_rewrite. Output stays Series teleplay blocks (no Stage cues, no
+# Graphic Novel panels, no novel prose). No image generation.
+for _sr_name, _sr_label, _sr_desc, _sr_prompt, _sr_sel in [
+    ("series_rewrite_block", "Rewrite Series Block",
+     "Propose a revision of the selected Series block(s) — preview to confirm.",
+     "Rewrite the selected teleplay block(s). Return teleplay blocks only (scene "
+     "heading / action / CHARACTER cue / dialogue / (parenthetical) / CUT TO: / "
+     "COLD OPEN / ACT BREAK / TAG) — no markdown, no commentary, no Stage cue "
+     "labels, no page/panel structure. This is a preview; do not claim it is "
+     "applied.", True),
+    ("series_tighten_dialogue", "Tighten Dialogue",
+     "Trim and sharpen the selected dialogue — preview to confirm.",
+     "Tighten the selected dialogue — cut filler, keep subtext and voice. Return "
+     "teleplay blocks only. Preview only.", True),
+    ("series_reduce_exposition", "Reduce Exposition",
+     "Trim expositional dialogue in the selection — preview to confirm.",
+     "Reduce the exposition in the selection, dramatizing the information through "
+     "action. Return teleplay blocks only. Preview only.", True),
+    ("series_rewrite_scene", "Rewrite Series Scene",
+     "Propose a revision of the whole scene — preview to confirm.",
+     "Rewrite this Series scene as teleplay blocks — no markdown, no commentary, "
+     "no Stage cue labels, no page/panel structure. Preview only; do not claim it "
+     "is applied.", False),
+    ("series_strengthen_act_break", "Strengthen Act Break",
+     "Revise so the act break creates pressure — preview to confirm.",
+     "Revise this scene so the Act Break builds to a reversal or decision that "
+     "creates pressure for the next act. Return teleplay blocks only. Preview only.",
+     False),
+    ("series_sharpen_cold_open", "Sharpen Cold Open",
+     "Revise so the cold open hooks the viewer — preview to confirm.",
+     "Revise so the Cold Open / Teaser raises a sharp question that pulls the "
+     "viewer in. Return teleplay blocks only. Preview only.", False),
+    ("series_improve_tag", "Improve Tag / Button",
+     "Revise so the tag lands — preview to confirm.",
+     "Revise so the Tag / Button lands — an earned button tied to the episode's "
+     "turn. Return teleplay blocks only. Preview only.", False),
+    ("series_strengthen_a_story", "Strengthen A-Story",
+     "Revise so the scene serves the A-story — preview to confirm.",
+     "Revise so the scene serves the A-story more clearly and escalates it. Return "
+     "teleplay blocks only. Preview only.", False),
+    ("series_strengthen_b_story", "Strengthen B-Story",
+     "Revise so the scene advances the B-story — preview to confirm.",
+     "Revise so the scene advances the B-story meaningfully. Return teleplay blocks "
+     "only. Preview only.", False),
+    ("series_clarify_character_arc", "Clarify Character Arc",
+     "Revise so the character arc beat reads — preview to confirm.",
+     "Revise so the character's want and change are visible through action and "
+     "line. Return teleplay blocks only. Preview only.", False),
+    ("series_connect_season_arc", "Connect to Season Arc",
+     "Revise so the scene ties to the season arc — preview to confirm.",
+     "Revise so the scene ties to the season/arc question, a setup/payoff, or a "
+     "recurring motif. Return teleplay blocks only. Preview only.", False),
+    ("series_rewrite_from_showrunner", "Rewrite from Showrunner Notes",
+     "Propose a revision addressing the showrunner notes — preview to confirm.",
+     "Using the scene's diagnostics and showrunner perspective in context, propose "
+     "a revised teleplay scene that addresses the scene's job, A/B/C balance, and "
+     "escalation. Return teleplay blocks only. Preview only; do not claim it is "
+     "applied.", False),
+    ("series_rewrite_from_reflection", "Rewrite from Reflection Notes",
+     "Propose a revision addressing the reflection — preview to confirm.",
+     "Using the scene's reflection and diagnostics in context, propose a revised "
+     "teleplay scene that addresses its most important audience, showrunner, "
+     "character-arc, and episode-structure gaps. Return teleplay blocks only — no "
+     "markdown, no commentary. Preview only; do not claim it is applied.", False),
+]:
+    register(LogosAction(
+        name=_sr_name, label=_sr_label, description=_sr_desc,
+        category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+        prompt=_sr_prompt, needs_selection=_sr_sel, modes=("series",)))
 # Series — Phase 2 (planning pipeline). Generative; each action produces a preview
 # the writer reviews and confirms — never auto-applied, and the AI never overwrites
 # the body. The structured store/parse/apply lives in series_pipeline. The
