@@ -209,3 +209,118 @@ def set_project_writing_mode(db, project_id: int, mode: str) -> str:
     normalized = normalize_mode(mode)
     db.update_project_narrative_engine(project_id, normalized)
     return normalized
+
+
+# -- Writing-mode lock (Alpha safety) ----------------------------------------
+# Mode is chosen at project creation. Once a project has meaningful content, its
+# writing mode is LOCKED: changing it would make the Manuscript read one mode's
+# body as another's (e.g. prose parsed as screenplay blocks) — a corruption risk.
+# Automatic conversion is intentionally NOT done; a "Convert Project Mode" wizard
+# is a deferred future workflow. This is the single source of truth every UI mode
+# selector must consult.
+
+MODE_LOCK_MESSAGE = (
+    "Writing mode is locked because this project already contains content. "
+    "Changing mode could misread or corrupt Manuscript data. Create a new "
+    "project or use a future conversion workflow."
+)
+
+# Settings keys that hold user/AI planning data — any non-empty store is content.
+_PLANNING_SETTINGS_KEYS: tuple[str, ...] = (
+    "act_summaries", "chapter_summaries",
+    "screenplay_beat_plans",
+    "gn_page_breakdowns", "gn_panel_plans",
+    "stage_beat_plans", "stage_blocking_plans",
+    "series_season_plans", "series_episode_plans",
+)
+
+_DEFAULT_SCENE_TITLES = {"", "untitled", "untitled scene", "untitled chapter"}
+_SCENE_CONTENT_FIELDS = ("summary", "synopsis", "goal", "conflict", "outcome", "beat")
+
+
+def project_has_meaningful_content(db, project_id: int) -> bool:
+    """True if the project has any content beyond an empty starter scaffold.
+
+    Meaningful content (any one is enough): a scene with body text, a planning
+    summary/field, or a user title; more than one scene or user-created
+    Act/Chapter labels; stored beat/plan/outline data; Timeline events; Notes; or
+    PSYKE entries. Read-only and defensive — it never raises and never mutates.
+    """
+    # -- Scenes: body / planning fields / user title / user structure --
+    try:
+        scenes = list(db.get_all_scenes(project_id) or [])
+    except Exception:
+        scenes = []
+    if len(scenes) > 1:
+        return True
+    try:
+        from storyplanner import story_structure as ss
+        default_acts = {"", ss.DEFAULT_ACT, ss.UNASSIGNED_ACT}
+        default_chapters = {"", ss.DEFAULT_CHAPTER, ss.UNASSIGNED_CHAPTER}
+    except Exception:
+        default_acts = {"", "Act 1", "Unassigned"}
+        default_chapters = {"", "Chapter 1", "Unassigned"}
+    for s in scenes:
+        if (getattr(s, "content", "") or "").strip():
+            return True
+        if any((getattr(s, f, "") or "").strip() for f in _SCENE_CONTENT_FIELDS):
+            return True
+        title = (getattr(s, "title", "") or "").strip().lower()
+        if title and title not in _DEFAULT_SCENE_TITLES:
+            return True
+        if (getattr(s, "act", "") or "").strip() not in default_acts:
+            return True
+        if (getattr(s, "chapter", "") or "").strip() not in default_chapters:
+            return True
+    # -- Stored planning / outline data (settings-backed) --
+    try:
+        settings = db.get_project_settings(project_id) or {}
+    except Exception:
+        settings = {}
+    for key in _PLANNING_SETTINGS_KEYS:
+        store = settings.get(key)
+        if isinstance(store, dict) and any(store.values()):
+            return True
+    # -- Timeline events / Notes / PSYKE entries --
+    for accessor in ("get_timeline_event_ids", "get_all_notes",
+                     "get_all_psyke_entries"):
+        try:
+            fn = getattr(db, accessor, None)
+            if fn is not None and fn(project_id):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def can_change_writing_mode(db, project_id: int) -> bool:
+    """True only when it is SAFE to change a project's writing mode — i.e. the
+    project is still an empty scaffold. Once meaningful content exists the mode is
+    locked. On any doubt this returns ``False`` (the unsafe direction is *allowing*
+    a change). Single source of truth for every UI mode selector."""
+    try:
+        return not project_has_meaningful_content(db, project_id)
+    except Exception:
+        return False
+
+
+def change_writing_mode(db, project_id: int, mode: str) -> tuple[bool, str]:
+    """Guarded mode change. Returns ``(changed, mode)``.
+
+    * Same mode → ``(False, current)`` (no-op, no write).
+    * Locked project (meaningful content) → ``(False, current)`` and **writes
+      nothing** — the lock is never bypassed.
+    * Unlocked project with a different valid target → persists and returns
+      ``(True, target)``.
+
+    This is the only guarded path; the low-level :func:`set_project_writing_mode`
+    remains the unguarded persistence primitive used at creation time.
+    """
+    current = get_project_writing_mode_by_id(db, project_id)
+    target = normalize_mode(mode)
+    if target == current:
+        return (False, current)
+    if not can_change_writing_mode(db, project_id):
+        return (False, current)
+    set_project_writing_mode(db, project_id, target)
+    return (True, target)

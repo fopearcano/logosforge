@@ -9,6 +9,16 @@
 - **Scope of this step:** Alpha RC **packaging / freeze + documentation only** — no
   product features, no refactors, **no production code changed**.
 
+## Post-gate blocker fix
+
+One Alpha-blocker was fixed after the gate: **writing mode is now locked once a
+project has meaningful content** (it was previously switchable, which could make
+the Manuscript read one mode's body as another's). Mode is chosen at creation and
+locked thereafter; the Project Settings selector is disabled with a clear message
+and any mode change is refused without mutating data. Conversion remains a deferred
+future workflow. Single source of truth: `writing_modes.can_change_writing_mode` /
+`change_writing_mode`. See `docs/KNOWN_LIMITATIONS_ALPHA.md`.
+
 ## Last audit summary
 
 The final global multi-mode integrity audit (the **Alpha Release Gate**, see

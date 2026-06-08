@@ -30,11 +30,16 @@ This file is the **multi-mode RC** checklist used before tagging.
 1. [ ] Launch the app (`python3 run.py`).
 2. [ ] Create a new project.
 3. [ ] Create **Act → Chapter → Scene** in the Outline.
-4. [ ] Switch writing mode through all five — **Novel, Screenplay, Graphic Novel,
-       Stage Script, Series** — one at a time.
-5. [ ] Verify the **Manuscript** editor behavior changes per mode (prose vs.
-       screenplay blocks vs. page/panel vs. stage blocks vs. teleplay blocks) in
+4. [ ] On a **brand-new (empty)** project, open **Project Settings** and confirm the
+       writing-mode selector is **enabled** and changes apply (mode is chosen at
+       creation while empty). Create **five** projects, one per mode — **Novel,
+       Screenplay, Graphic Novel, Stage Script, Series** — to exercise all editors.
+5. [ ] Verify the **Manuscript** editor behavior matches each project's mode (prose
+       vs. screenplay blocks vs. page/panel vs. stage blocks vs. teleplay blocks) in
        the **same** Manuscript section.
+   - [ ] **Mode lock:** after a project has content (body/notes/PSYKE/etc.), open
+         Project Settings and confirm the writing-mode selector is **disabled** with
+         a lock message; the mode cannot be changed (no conversion in Alpha).
 6. [ ] Verify **Outline** still shows the canonical Act → Chapter → Scene structure.
 7. [ ] Verify **Timeline** opens and lanes are independent (not Acts/Seasons).
 8. [ ] Verify **Notes** and **PSYKE** are project-bound.

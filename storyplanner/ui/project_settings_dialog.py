@@ -27,6 +27,7 @@ from storyplanner.project_compat import (
     get_project_narrative_engine,
     get_project_writing_format,
 )
+from storyplanner.writing_modes import MODE_LOCK_MESSAGE, can_change_writing_mode
 
 
 class ProjectSettingsDialog(QDialog):
@@ -82,6 +83,19 @@ class ProjectSettingsDialog(QDialog):
         engine_row.addWidget(self._engine_combo, stretch=1)
         layout.addLayout(engine_row)
 
+        # Alpha safety: the writing mode (narrative engine) is LOCKED once the
+        # project has meaningful content — changing it would make the Manuscript
+        # read one mode's body as another's. Disable the selector and show why.
+        self._mode_locked = not can_change_writing_mode(self._db, self._project_id)
+        self._lock_label = None
+        if self._mode_locked:
+            self._engine_combo.setEnabled(False)
+            self._lock_label = QLabel(MODE_LOCK_MESSAGE)
+            self._lock_label.setObjectName("projectSettingsModeLock")
+            self._lock_label.setWordWrap(True)
+            self._lock_label.setStyleSheet("color: #f59e0b; font-size: 11px;")
+            layout.addWidget(self._lock_label)
+
         # -- Default writing format ------------------------------------------
         format_row = QHBoxLayout()
         format_row.addWidget(QLabel("Default Writing Format:"))
@@ -125,6 +139,11 @@ class ProjectSettingsDialog(QDialog):
         new_format = self._format_combo.currentData()
 
         engine_changed = new_engine != self._initial_engine
+        # Defense-in-depth: never persist a mode change on a locked project, even
+        # if the selector were somehow enabled. No mutation; keep the dialog open.
+        if engine_changed and not can_change_writing_mode(self._db, self._project_id):
+            QMessageBox.information(self, "Writing Mode Locked", MODE_LOCK_MESSAGE)
+            return
         if engine_changed:
             confirm = QMessageBox.question(
                 self,

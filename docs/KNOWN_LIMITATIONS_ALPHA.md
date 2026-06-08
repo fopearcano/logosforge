@@ -99,3 +99,12 @@ limitations for this RC:
 - **Mode-aware AI is propose-then-confirm.** Every mutating Assistant/Logos action
   goes through a preview and a confirmed Controlled Apply (STAGE checkpoint); there
   is no silent overwrite. Deterministic checks never call the provider.
+- **Writing mode is locked after a project has meaningful content.** Mode is chosen
+  at project creation; once the project contains body text, planning data,
+  Timeline/Notes/PSYKE, or user-created structure, the Project Settings mode
+  selector is disabled and any mode change is refused (no mutation). This prevents
+  accidental body/parser misinterpretation (e.g. prose read as screenplay blocks).
+  **Mode conversion is deferred** to a future explicit "Convert Project Mode"
+  workflow — it does **not** exist yet. To work in a different mode today, create a
+  new project. (The project's *default writing format* for new scenes remains
+  editable; it does not reinterpret existing bodies.)
