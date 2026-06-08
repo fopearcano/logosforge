@@ -100,14 +100,12 @@ per-mode export tests.)
 ## Deferred features (must remain off/hidden)
 
 - [ ] **Canvas Plot** hidden from navigation.
-- [ ] **Standalone Pages section** deferred for Alpha (macOS fullscreen
-      window-management bug): the left-panel **Pages** item is hidden in every
-      mode. Graphic Novel **Page/Panel editing is the Manuscript** — in GN mode the
-      Manuscript mounts the scene-centric Page/Panel editor (+ Scene / + Page /
-      + Panel; Visual / Caption / Dialogue / SFX / Notes) over the shared
-      `Scene.content` body. Returns post-Alpha. Verify in fullscreen (smoke-test
-      Case 2 / F1–F7): Pages item hidden, Manuscript shows the Page/Panel editor,
-      and nothing minimizes.
+- [ ] **Graphic Novel Pages/Panels editor present:** the left-panel **Pages** item
+      is shown for Graphic Novel (hidden in other modes) and opens the scene-centric
+      Page/Panel editor (+ Scene / + Page / + Panel; Visual / Caption / Dialogue /
+      SFX / Notes) over the shared `Scene.content` body — the same editor the
+      Manuscript presents. **Verify in macOS fullscreen** (smoke-test F-items) that
+      clicking **Pages** shows the editor and does **not** minimize the app.
 - [ ] No **ComfyUI / image-generation** module, action, or settings.
 - [ ] No **production scheduling / rehearsal / writers-room** management.
 - [ ] No **showrunner automation** that mutates data.

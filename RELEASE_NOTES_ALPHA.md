@@ -92,16 +92,15 @@ stays Project → Act → Chapter → Scene):
 - **Export dependencies:** `requirements.txt` now lists `reportlab` (PDF) and
   `python-docx` (DOCX); a normal install supports every export format, with the
   same graceful fallback if a library is missing.
-- **Graphic Novel — the Manuscript is the Page/Panel editor:** Page/Panel content is
-  the shared scene body (`Scene.content` → Pages → Panels: visual / caption /
-  dialogue / SFX / notes); Pages/Panels are script structure, not image generation.
-  **Alpha note:** the *standalone* left-panel **Pages** section is **temporarily
-  disabled for Alpha** (a macOS fullscreen window-management issue with that
-  separate route). So in Graphic Novel mode the **Manuscript itself is the Page/Panel
-  editor** — a scene list with **+ Scene**, and per scene **+ Page** / **+ Panel**,
-  collapsible Page groups and Panel cards (Visual / Caption / Dialogue / SFX /
-  Notes) over the shared body. No data is lost and the standalone Pages section
-  returns post-Alpha. See `docs/KNOWN_LIMITATIONS_ALPHA.md`.
+- **Graphic Novel — Pages/Panels editor:** the left-panel **Pages** section (Graphic
+  Novel only) and the **Manuscript** both open the scene-centric Page/Panel editor
+  over the shared scene body (`Scene.content` → Pages → Panels: visual / caption /
+  dialogue / SFX / notes) — a scene list with **+ Scene**, and per scene **+ Page** /
+  **+ Panel**, collapsible Page groups and Panel cards. Pages/Panels are script
+  structure, not image generation. The editor is child-widget-only and mounts via the
+  standard embedded route (no top-level window), addressing the earlier macOS
+  fullscreen minimize seen with the previous standalone Pages wiring. See
+  `docs/KNOWN_LIMITATIONS_ALPHA.md`.
 
 **Verification:** the final global multi-mode integrity audit (Alpha Release Gate)
 returned **A**. Focused gate `tests/test_alpha_release_gate.py` = **35 passed**;

@@ -130,22 +130,22 @@ this behavior as supporting evidence (the manual UI check is still required).
 | 31 | Export uses shared Pages/Panels body | PENDING MANUAL RETEST | ✓ |
 | 32 | No image-generation / ComfyUI fields appear | PENDING MANUAL RETEST | ✓ |
 
-### Fullscreen window-management — Pages section (Alpha fallback: Case 2 — Pages DEFERRED, Manuscript IS the editor)
+### Fullscreen window-management — Graphic Novel Pages/Panels editor
 
-> The standalone **Pages** sidebar section is **deferred for Alpha** (it could
-> minimize the app in macOS fullscreen). The sidebar entry is hidden in every mode;
-> Graphic Novel **Page/Panel editing is the Manuscript** — in GN mode the Manuscript
-> mounts the scene-centric Page/Panel editor over the shared `Scene.content` body.
-> Headless tests cover the route safety + the Manuscript Page/Panel editor
+> The Graphic Novel **Pages** section is shown in the left panel and opens the
+> scene-centric Page/Panel editor (the same editor the Manuscript presents) over the
+> shared `Scene.content` body. The editor is child-widget-only (creates no top-level
+> window). Headless tests cover the editor + route safety
 > (`tests/test_gn_manuscript_page_editor.py`, `tests/test_pages_alpha_fallback.py`,
-> `tests/test_pages_fullscreen_safe.py`). Confirm the fullscreen behavior **manually**:
+> `tests/test_pages_fullscreen_safe.py`). **Confirm the fullscreen behavior manually**
+> — especially that clicking **Pages** does not minimize the app:
 
 | # | Item | Result | Auto |
 |---|------|--------|------|
 | F1 | Enter macOS **fullscreen**, open a Graphic Novel project | PENDING MANUAL RETEST | |
-| F2 | The **Pages** sidebar item is **not shown** (deferred) | PENDING MANUAL RETEST | ✓ |
-| F3 | Open the **Manuscript** — it shows the Page/Panel editor (not blank prose) | PENDING MANUAL RETEST | ✓ |
-| F4 | App stays fullscreen; nothing minimizes/flickers when opening Manuscript | PENDING MANUAL RETEST | partial |
+| F2 | The **Pages** sidebar item **is shown** (Graphic Novel only) | PENDING MANUAL RETEST | ✓ |
+| F3 | Click **Pages** — the Page/Panel editor opens; app does **not** minimize/flicker | PENDING MANUAL RETEST | partial |
+| F4 | The **Manuscript** shows the same Page/Panel editor (consistent body) | PENDING MANUAL RETEST | ✓ |
 | F5 | Empty project: **+ Scene** then **+ Page** / **+ Panel** work in place | PENDING MANUAL RETEST | ✓ |
 | F6 | Edit Visual / Caption / Dialogue / SFX / Notes; collapse/expand a panel | PENDING MANUAL RETEST | ✓ |
 | F7 | Export Graphic Novel text / Markdown (shared body) | PENDING MANUAL RETEST | ✓ |

@@ -1,15 +1,17 @@
-"""Pages section — Alpha fallback (standalone Pages deferred for fullscreen safety).
+"""Graphic Novel Pages section — restored as the fullscreen-safe Page/Panel editor.
 
-The standalone Graphic Novel **Pages** section could minimize the app in macOS
-fullscreen (a window-management bug isolated to the Pages-view surface that could
-not be safely fixed/verified for the Alpha RC). The Alpha fallback **defers** the
-standalone section: the sidebar entry is hidden in every mode and the route is
-inert (it never mounts the Pages view). Page/Panel editing remains fully available
-through the **Manuscript** via the shared ``Scene.content`` body — no data is lost
-and ``GraphicNovelScenePagesView`` stays in the codebase for a post-Alpha return.
+The Graphic Novel **Pages** section is shown in the left panel (GN-only) and opens
+the scene-centric Page/Panel editor (``GraphicNovelScenePagesView``) over the
+shared ``Scene.content`` body — the same editor the GN Manuscript uses. The editor
+is **child-widget-only** (it creates no top-level window), mounted via the standard
+embedded ``_set_content`` route, so it does not trigger the macOS fullscreen
+minimize the *previous* standalone Pages wiring did.
 
-These tests assert the fallback (route safety + Manuscript access path + docs).
-True macOS fullscreen behavior must still be confirmed manually.
+These tests assert: Pages is visible for GN (hidden elsewhere), opening it mounts
+the editor without minimizing/hiding the window or creating a top-level window, the
+editor stays embedded, editing round-trips through the shared body, export uses the
+shared body, and the limitation note is documented. True macOS fullscreen behavior
+must still be confirmed manually.
 """
 
 from __future__ import annotations
@@ -62,9 +64,20 @@ def _scene(db, pid, title="P1"):
 # ==========================================================================
 
 
-@pytest.mark.parametrize("engine", ["graphic_novel", "novel", "screenplay",
-                                    "stage_script", "series"])
-def test_pages_hidden_in_every_mode(engine):
+def test_pages_visible_for_graphic_novel():
+    # The Pages section (the GN Page/Panel editor) is shown for Graphic Novel.
+    from storyplanner.ui.main_window import MainWindow
+    db = Database()
+    pid = _gn(db)
+    win = MainWindow(db, pid)
+    assert "Pages" in win._nav_labels
+    assert "Pages" in win.sidebar_buttons
+    assert win._pages_btn.property("nav_available") is True
+
+
+@pytest.mark.parametrize("engine", ["novel", "screenplay", "stage_script",
+                                    "series"])
+def test_pages_hidden_in_non_gn_modes(engine):
     from storyplanner.ui.main_window import MainWindow
     db = Database()
     pid = db.create_project(engine, narrative_engine=engine,
@@ -207,9 +220,9 @@ def test_page_panel_body_has_no_image_generation_fields():
 # ==========================================================================
 
 
-def test_known_limitations_documents_pages_deferral():
+def test_known_limitations_documents_pages_editor():
     text = open(os.path.join(_ROOT, "docs",
                              "KNOWN_LIMITATIONS_ALPHA.md")).read().lower()
     assert "pages" in text
-    assert "manuscript" in text
-    assert ("defer" in text or "disabled" in text or "temporarily" in text)
+    assert "panel" in text
+    assert "scene.content" in text or "shared" in text
