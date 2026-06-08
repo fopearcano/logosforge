@@ -1415,30 +1415,32 @@ class MainWindow(QMainWindow):
             plan.refresh_child_visibility()
 
     def _apply_pages_availability(self) -> None:
-        """Show/register the Graphic-Novel-only Pages item for the *current*
-        project's writing mode. Idempotent; called at startup and on every
-        project switch so the sidebar never shows a stale (or missing) Pages
-        item after switching projects."""
-        is_gn = self._project_is_graphic_novel()
-        self._is_graphic_novel = is_gn
+        """Alpha fallback: the standalone Graphic-Novel **Pages** section is
+        **deferred** in navigation. Opening it could minimize the app in macOS
+        fullscreen (a window-management bug isolated to the Pages-view surface),
+        so for the Alpha RC the sidebar entry is hidden and the route is made
+        inert — it can never be opened from the UI.
+
+        This is **non-destructive** and loses no capability: the Graphic Novel
+        Page/Panel body is the shared ``Scene.content`` and remains fully editable
+        in the **Manuscript** (plus the AI Panel-Plan / Draft-Panels tools).
+        ``GraphicNovelScenePagesView`` is kept in the codebase and returns
+        post-Alpha once the window-management issue is fixed. Idempotent; called
+        at startup and on every project switch."""
+        self._is_graphic_novel = self._project_is_graphic_novel()
         btn = getattr(self, "_pages_btn", None)
-        if btn is None:
-            return
-        btn.setProperty("nav_available", is_gn)
-        if is_gn:
-            self.sidebar_buttons["Pages"] = btn
+        if btn is not None:
+            # Hidden from navigation in every mode (deferred for Alpha). The
+            # handler stays registered but redirects to a safe surface.
+            btn.setProperty("nav_available", False)
             self._nav_section_handlers["Pages"] = self._show_gn_pages
-            if "Pages" not in self._nav_labels:
-                self._nav_labels.append("Pages")
-        else:
             self.sidebar_buttons.pop("Pages", None)
-            self._nav_section_handlers.pop("Pages", None)
             if "Pages" in self._nav_labels:
                 self._nav_labels.remove("Pages")
-            # If we were viewing Pages in the previous (GN) project, fall back to
-            # the Dashboard so a non-GN project never lands on the Pages view.
-            if getattr(self, "_current_section", None) == "Pages":
-                self._current_section = "Dashboard"
+        # Never leave the app sitting on the now-hidden Pages section.
+        if getattr(self, "_current_section", None) == "Pages":
+            self._current_section = (
+                "Manuscript" if self._is_graphic_novel else "Dashboard")
         # Re-apply Plan-group child visibility honoring availability.
         plan = next((g for g in getattr(self, "_sidebar_groups", [])
                      if g.label == "Plan"), None)
@@ -1499,25 +1501,17 @@ class MainWindow(QMainWindow):
             plan.refresh_child_visibility()
 
     def _show_gn_pages(self) -> None:
-        # Defensive: Pages is a Graphic-Novel-only surface. If the current
-        # project is not a graphic novel, never mount the Pages view — route to
-        # the Dashboard instead (the button is normally hidden for non-GN).
-        if not self._project_is_graphic_novel():
+        # Alpha fallback: the standalone Pages view is deferred because opening it
+        # can minimize the app in macOS fullscreen (window-management bug isolated
+        # to the Pages-view surface). The route is kept registered but made INERT
+        # — it never mounts GraphicNovelScenePagesView. Graphic Novel Page/Panel
+        # content is edited in the Manuscript via the shared Scene.content body, so
+        # redirect there (non-GN projects fall back to the Dashboard).
+        if self._project_is_graphic_novel():
+            self._set_active_section("Manuscript")
+            self._show_manuscript()
+        else:
             self._show_dashboard()
-            return
-        # Pages edits the SAME shared scene body as the Manuscript (Scene.content
-        # via graphic_novel_blocks) — one source of truth, not a separate store.
-        from storyplanner.ui.graphic_novel_scene_pages_view import (
-            GraphicNovelScenePagesView,
-        )
-        self._set_content(
-            GraphicNovelScenePagesView(
-                self._db,
-                self._project_id,
-                on_data_changed=self._on_data_changed,
-                on_open_manuscript=self._open_unit_in_manuscript,
-            )
-        )
 
     def _show_series_navigator(self) -> None:
         # Defensive: Series Navigator is a Series-only surface. If the current

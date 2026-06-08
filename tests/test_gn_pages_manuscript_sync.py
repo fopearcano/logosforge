@@ -256,21 +256,21 @@ def test_pages_isolated_across_projects(tmp_path):
 
 
 def test_project_switch_refreshes_pages():
-    from storyplanner.ui.main_window import MainWindow
+    # The standalone Pages route is deferred for Alpha (no longer mounted via nav),
+    # but the scene-centric Pages view stays project-isolated when constructed for
+    # each project (it still edits the shared body that the Manuscript syncs with).
     db = Database()
     a = _gn(db, "A")
-    sa = _scene(db, a, title="AlphaScene")
+    _scene(db, a, title="AlphaScene")
     b = _gn(db, "B")
     _scene(db, b, title="BetaScene")
-    win = MainWindow(db, a)
-    win._show_gn_pages()
-    titles_a = [win.content_area._scene_list.item(i).text()
-                for i in range(win.content_area._scene_list.count())]
+    va = _view(db, a)
+    titles_a = [va._scene_list.item(i).text()
+                for i in range(va._scene_list.count())]
     assert "AlphaScene" in titles_a
-    win._switch_project(b)
-    win._show_gn_pages()
-    titles_b = [win.content_area._scene_list.item(i).text()
-                for i in range(win.content_area._scene_list.count())]
+    vb = _view(db, b)
+    titles_b = [vb._scene_list.item(i).text()
+                for i in range(vb._scene_list.count())]
     assert "BetaScene" in titles_b and "AlphaScene" not in titles_b
 
 

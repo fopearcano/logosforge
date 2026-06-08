@@ -65,6 +65,27 @@ isolation / Alpha gate: **858 passed, 0 failures** (only the pre-existing
 optional-lib PDF/DOCX cases fail in an environment without `reportlab` /
 `python-docx`). **Classification: A — post-fix gate passed.**
 
+## Standalone Pages section — DEFERRED for Alpha (fullscreen safety)
+
+Manual fullscreen testing showed that opening the standalone left-panel **Pages**
+section still minimized the app in macOS fullscreen — before any Add/Create —
+which isolates the trigger to the **Pages-view surface** (the shared routing
+`_set_content` / `_set_active_section` is used by every section and only Pages
+misbehaved). The exact trigger could not be statically pinpointed or verified
+headlessly, so the **Alpha-safe fallback** was applied: the standalone Pages
+section is **hidden in navigation in every mode and its route is inert** (it never
+mounts the Pages view). Page/Panel editing **remains available in the Manuscript**
+via the shared `Scene.content` body (plus the AI Panel-Plan / Draft-Panels tools);
+no data is lost, `GraphicNovelScenePagesView` is kept in the codebase, and the
+standalone section **returns post-Alpha** after the window-management fix.
+
+Single source: `MainWindow._apply_pages_availability` (defers the nav item) +
+`_show_gn_pages` (inert redirect to the Manuscript). Tests:
+`tests/test_pages_alpha_fallback.py` (**15 passed**),
+`tests/test_pages_fullscreen_safe.py` (**16 passed**). True macOS fullscreen
+behavior must still be confirmed manually (smoke-test Case 2 / items F1–F7).
+**Classification: B — Alpha-safe fallback applied.**
+
 ## Last audit summary
 
 The final global multi-mode integrity audit (the **Alpha Release Gate**, see

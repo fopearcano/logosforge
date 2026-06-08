@@ -270,19 +270,22 @@ def test_novel_view_is_inert():
 # 6. Main window mounting + engine gating
 # =========================================================================
 
-def test_main_window_mounts_pages_for_gn():
-    # The GN "Pages" nav now mounts the shared scene-centric Pages editor
-    # (graphic_novel_scene_pages_view), which edits the same Scene.content body as
-    # the Manuscript — a single source of truth (Alpha fix).
+def test_main_window_defers_pages_section_for_alpha():
+    # Alpha fallback: the standalone "Pages" section is DEFERRED from navigation
+    # because opening it can minimize the app in macOS fullscreen (a
+    # window-management bug isolated to the Pages-view surface). It is hidden in
+    # every mode and the route is INERT — it never mounts GraphicNovelScenePagesView.
+    # Graphic Novel Page/Panel editing remains available in the Manuscript via the
+    # shared Scene.content body.
     from storyplanner.ui.main_window import MainWindow
     from storyplanner.ui.graphic_novel_scene_pages_view import GraphicNovelScenePagesView
     db = Database()
     p = _gn(db)
     win = MainWindow(db, p.id)
-    assert "Pages" in win.sidebar_buttons
-    assert "Pages" in win._nav_labels
-    win._show_gn_pages()
-    assert isinstance(win.content_area, GraphicNovelScenePagesView)
+    assert "Pages" not in win.sidebar_buttons
+    assert "Pages" not in win._nav_labels
+    win._show_gn_pages()                       # inert — must not mount the Pages view
+    assert not isinstance(win.content_area, GraphicNovelScenePagesView)
 
 
 def test_main_window_hides_pages_for_novel():

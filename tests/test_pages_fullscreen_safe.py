@@ -143,21 +143,22 @@ def test_add_page_opens_no_dialog(monkeypatch):
     assert len(_body(db, sid).pages) >= 1
 
 
-def test_add_page_does_not_minimize_or_hide_main_window():
+def test_pages_route_is_inert_and_does_not_minimize_main_window():
+    # Alpha fallback: the standalone Pages route is deferred (macOS fullscreen
+    # window-management bug). Navigating it must NOT mount the Pages view and must
+    # never minimize/hide the main window — it redirects to a safe surface.
     from storyplanner.ui.main_window import MainWindow
+    from storyplanner.ui.graphic_novel_scene_pages_view import (
+        GraphicNovelScenePagesView)
     db = Database()
     pid = _gn(db)
-    sid = _scene(db, pid)
+    _scene(db, pid)
     win = MainWindow(db, pid)
     calls = {"min": 0, "hide": 0}
     win.showMinimized = lambda: calls.__setitem__("min", calls["min"] + 1)  # type: ignore
     win.hide = lambda: calls.__setitem__("hide", calls["hide"] + 1)         # type: ignore
-    win._set_active_section("Pages")
-    win._show_gn_pages()
-    view = win.content_area
-    view.select_scene(sid)
-    view._add_page()
-    view._add_panel()
+    win._show_gn_pages()                       # inert route
+    assert not isinstance(win.content_area, GraphicNovelScenePagesView)
     assert calls == {"min": 0, "hide": 0}
 
 

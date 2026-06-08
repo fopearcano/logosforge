@@ -100,8 +100,12 @@ per-mode export tests.)
 ## Deferred features (must remain off/hidden)
 
 - [ ] **Canvas Plot** hidden from navigation.
+- [ ] **Standalone Pages section** deferred for Alpha (macOS fullscreen
+      window-management bug): the left-panel **Pages** item is hidden in every
+      mode and the route is inert. Graphic Novel **Page/Panel editing remains in
+      the Manuscript** (shared `Scene.content` body). Returns post-Alpha. Verify
+      in fullscreen (smoke-test Case 2 / F1–F7) that clicking can no longer
+      minimize the app.
 - [ ] No **ComfyUI / image-generation** module, action, or settings.
 - [ ] No **production scheduling / rehearsal / writers-room** management.
 - [ ] No **showrunner automation** that mutates data.
-- [ ] No separate **Season/Episode** storage hierarchy (Series stays
-      Act → Chapter → Scene internally).
