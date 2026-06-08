@@ -27,7 +27,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -37,6 +36,7 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner import graphic_novel_blocks as gnb
+from storyplanner.ui import safe_dialogs
 
 _ID_ROLE = Qt.ItemDataRole.UserRole
 # (field key, label, multiline?)
@@ -403,11 +403,8 @@ class GraphicNovelScenePagesView(QWidget):
         except (IndexError, AttributeError):
             return
         if confirm:
-            ok = QMessageBox.question(
-                self, "Delete Panel", "Delete this panel?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No)
-            if ok != QMessageBox.StandardButton.Yes:
+            if not safe_dialogs.question(self, "Delete Panel",
+                                         "Delete this panel?"):
                 return
         gnb.delete_panel(page, panel_idx)
         self._save()
@@ -415,11 +412,8 @@ class GraphicNovelScenePagesView(QWidget):
 
     def _delete_page(self, page_idx: int, confirm: bool = True) -> None:
         if confirm:
-            ok = QMessageBox.question(
-                self, "Delete Page", "Delete this page and its panels?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No)
-            if ok != QMessageBox.StandardButton.Yes:
+            if not safe_dialogs.question(self, "Delete Page",
+                                         "Delete this page and its panels?"):
                 return
         gnb.delete_page(self._script, page_idx)
         self._save()

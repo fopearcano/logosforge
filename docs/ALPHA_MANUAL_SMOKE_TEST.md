@@ -53,12 +53,13 @@ manual UI check). Command form:
 |-------|--------|
 | `tests/test_alpha_release_gate.py` | **35 passed** |
 | `tests/test_post_fix_regression_gate.py` | **20 passed** |
+| `tests/test_pages_fullscreen_safe.py` (Pages fullscreen-safe dialogs) | **16 passed** |
 | `tests/test_gn_pages_manuscript_sync.py` (GN shared body) | **30 passed** |
 | `tests/test_series_hierarchy.py` (Series hierarchy) | **70 passed** |
 | `tests/test_series_navigator.py` (Navigator + deps) | **26 passed** |
 | `tests/test_writing_mode_lock.py` (mode lock) | **22 passed** |
 | `tests/test_export_safety.py` (export privacy) | **4 passed** |
-| **Total** | **207 passed, 0 failed** |
+| **Total** | **223 passed, 0 failed** |
 
 > Environment note: PDF/DOCX export tests fail only where `reportlab` /
 > `python-docx` are not installed (pre-existing, graceful-degradation behavior),
@@ -126,6 +127,24 @@ this behavior as supporting evidence (the manual UI check is still required).
 | 30 | Panels collapsible/hideable, layout usable | PENDING MANUAL RETEST | ✓ |
 | 31 | Export uses shared Pages/Panels body | PENDING MANUAL RETEST | ✓ |
 | 32 | No image-generation / ComfyUI fields appear | PENDING MANUAL RETEST | ✓ |
+
+### Fullscreen window-management — Pages Create New (post-RC blocker fix)
+
+> Headless tests can verify the dialog is window-modal, correctly parented, and
+> that create opens **no** dialog and makes **no** minimize/hide call
+> (`tests/test_pages_fullscreen_safe.py`, 16 passed). True fullscreen
+> Space behavior on macOS **must be confirmed manually** — run these **in
+> fullscreen**:
+
+| # | Item | Result | Auto |
+|---|------|--------|------|
+| F1 | Enter macOS **fullscreen**, open a Graphic Novel project | PENDING MANUAL RETEST | |
+| F2 | Open the **Pages** section | PENDING MANUAL RETEST | |
+| F3 | Click **+ Page** — app does **not** minimize/disappear | PENDING MANUAL RETEST | partial |
+| F4 | No rapid window flicker; main window stays visible & focused | PENDING MANUAL RETEST | partial |
+| F5 | A Page is created in place (or cancel does nothing) | PENDING MANUAL RETEST | ✓ |
+| F6 | Click **+ Panel** — same: no minimize, no flicker | PENDING MANUAL RETEST | partial |
+| F7 | Delete Page/Panel confirmation appears as a **sheet** (window-modal), not a separate window; cancel leaves data unchanged | PENDING MANUAL RETEST | ✓ |
 
 ### Stage Script
 
@@ -262,7 +281,7 @@ These are already documented in `docs/KNOWN_LIMITATIONS_ALPHA.md` and are
 
 ## Decision
 
-**PENDING MANUAL RETEST.** Automated focused suites are green (207 passed), but
+**PENDING MANUAL RETEST.** Automated focused suites are green (223 passed), but
 the manual UI checklist above has not been executed. **Do not tag** the Alpha RC
 until the manual checklist is completed and this decision is updated to one of:
 
