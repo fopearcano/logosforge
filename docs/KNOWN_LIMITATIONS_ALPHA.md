@@ -130,7 +130,16 @@ limitations for this RC:
   confirmed convert action. **A/B/C Plots** remain read-only buckets derived from
   the Episode Beat Plan's `a/b/c_story` fields (no per-scene thread assignment
   metadata yet). Navigation: a scene opens in the Manuscript; structural nodes open
-  the (global, flat) Outline.
+  the (global, flat) Outline. **Phase-1 operation scope** (deferred, not bugs):
+  Season create/rename/delete/move and Episode create/rename/delete/move *within a
+  season*, internal Act/Chapter create/rename, Scene create/rename/delete/move and
+  **moving a scene between Episodes** are supported; **moving a whole Episode to a
+  different Season** and **reordering internal Acts/Chapters** (only Scenes reorder)
+  are deferred. The "episode-local outline" is the Navigator's Episode subtree
+  itself; a dedicated Season/Episode-aware *global* Outline panel is deferred (the
+  global Outline stays flat — see the Series hierarchy note). The full Season →
+  Episode → Act → Chapter → Scene **path is available** (`series_structure.
+  scene_series_path`); wiring it into the Manuscript title bar is deferred.
 - **Graphic Novel — one shared body.** The Manuscript and the **Pages** section
   edit the *same* GN scene body (`Scene.content`, structured by
   `graphic_novel_blocks` into Pages → Panels: visual / caption / dialogue / SFX /
