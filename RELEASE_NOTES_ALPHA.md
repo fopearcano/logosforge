@@ -72,4 +72,32 @@ Full list: `docs/KNOWN_LIMITATIONS_ALPHA.md`.
 7. **Close and reopen** the app; **reload** the project and confirm everything is
    intact.
 
+## Alpha Release Candidate — multi-mode gate (2026-06-08)
+
+This RC completes and stabilizes the five **Writing Modes** on the single
+**universal Manuscript** (the editor adapts by `writing_mode`; canonical structure
+stays Project → Act → Chapter → Scene):
+
+- **Screenplay** (blocks + Fountain foundation), **Graphic Novel** (Page/Panel
+  script), **Stage Script** (stage blocks), and **Series** (teleplay blocks;
+  Act↦Season/Arc and Chapter↦Episode are display labels only) each add a planning
+  pipeline, deterministic intelligence checks, Counterpart/Reflection, a controlled
+  rewrite (preview → diff → confirmed apply), cross-unit continuity, and a Review
+  Dashboard. **Novel** prose is unchanged (primary unit = Chapter).
+- Every mutating AI action is **propose-then-confirm** (preview + Controlled
+  Apply); deterministic checks never call a provider; actions are **mode-gated**.
+
+**Verification:** the final global multi-mode integrity audit (Alpha Release Gate)
+returned **A**. Focused gate `tests/test_alpha_release_gate.py` = **35 passed**;
+the broad certification sweep = **1527 passed, 0 failures**
+(see `docs/ALPHA_TEST_COMMANDS.md`).
+
+**Still deferred / out of scope:** ComfyUI / image generation, Canvas Plot
+(hidden), production scheduling, writers-room / showrunner automation, and a real
+separate Season/Episode storage hierarchy. Persistent serialized-story relation
+links are reported but not yet persisted. See `docs/KNOWN_LIMITATIONS_ALPHA.md`,
+`docs/ALPHA_RC_STATUS.md`, and `docs/ALPHA_RC_CHECKLIST.md`.
+
+> ⚠️ **This is Alpha software, not a final production release.** Back up your work.
+
 Thanks for testing Logosforge. Please report what breaks.

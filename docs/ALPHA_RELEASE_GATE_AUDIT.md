@@ -179,3 +179,16 @@ broadcaster layouts), persistent serialized-story relation links surfaced in
 Timeline/Graph, and a refreshed global audit after any new mode. Visual production
 (ComfyUI/image generation), a real Season/Episode storage hierarchy, and
 production tooling remain deferred.
+
+## 16. Final Alpha RC status (packaging step)
+
+The Alpha RC was packaged on **2026-06-08** (branch
+`claude/setup-storyplanner-app-5cVxF`, version `0.9.0-alpha`) as a
+**documentation/freeze step — no production code changed.** Added/updated:
+`RELEASE_NOTES_ALPHA.md`, `CHANGELOG.md`, `docs/ALPHA_RC_STATUS.md`,
+`docs/ALPHA_RC_CHECKLIST.md`, `docs/ALPHA_TEST_COMMANDS.md`,
+`docs/KNOWN_LIMITATIONS_ALPHA.md`, and this audit. Re-verified: focused gate
+`tests/test_alpha_release_gate.py` = **35 passed**; broad certification sweep =
+**1527 passed, 0 failures**. The repository is ready for a **manual Alpha RC smoke
+test** ([ALPHA_RC_CHECKLIST.md](ALPHA_RC_CHECKLIST.md)); a Git tag / GitHub release
+is intentionally **not** created in this step.

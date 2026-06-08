@@ -64,3 +64,38 @@ panel** yet:
 - **PDF/DOCX "Export failed: install …"** when the optional lib isn't present.
 - The **Assistant panel auto-hiding** on a narrow window (it protects the editor
   width).
+
+## Writing-mode systems (multi-mode Alpha RC)
+
+The five writing modes (Novel / Screenplay / Graphic Novel / Stage Script /
+Series) ship on one **universal Manuscript** + `writing_mode` adapter. Mode-system
+limitations for this RC:
+
+- **Heuristic, rule-based checks.** Mode health, reflection, continuity, and
+  dashboard signals are conservative string / marker / overlap heuristics (no
+  NLP) — directional craft guidance, not authoritative. A/B/C-story support and
+  season-arc alignment use word overlap, so paraphrased material can read as
+  unsupported.
+- **Dashboards refresh on open + manual button.** The Screenplay / Graphic Novel
+  / Stage Script / Series Review Dashboards recompute when opened or via Refresh
+  (no live debounced recompute). "Open in Manuscript" focuses the scene (block-
+  level deep-linking is the scene scroll today).
+- **Series still uses Act → Chapter → Scene internally.** "Season / Arc" and
+  "Episode" are **display labels** over canonical Acts/Chapters. Series Season/Arc
+  and Episode beat plans are settings-backed and **name-keyed** to Acts/Chapters
+  (consistent with `act_summaries` / `chapter_summaries`); renaming or duplicate
+  names across acts can desync a plan.
+- **Persistent relation links are reported, not persisted.** Cross-scene /
+  cross-episode setup-payoff, cliffhanger/reveal, A/B/C thread, and character-arc
+  links are **detected and reported**, but not yet stored as durable links.
+- **No real Season/Episode storage migration.** The Series writing system never
+  uses the legacy `Season`/`Episode` tables; a dedicated Season/Episode storage
+  hierarchy is deferred.
+- **Out of scope (deferred), confirmed absent:** ComfyUI / image generation,
+  Canvas Plot (hidden from navigation), production scheduling, rehearsal / writers-
+  room management, and showrunner automation that mutates data. "Showrunner" and
+  "Writers-Room" exist only as an AI prompt persona and a reflection perspective
+  label.
+- **Mode-aware AI is propose-then-confirm.** Every mutating Assistant/Logos action
+  goes through a preview and a confirmed Controlled Apply (STAGE checkpoint); there
+  is no silent overwrite. Deterministic checks never call the provider.

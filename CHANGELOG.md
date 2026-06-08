@@ -3,6 +3,51 @@
 All notable changes to Logosforge. This project uses semantic-ish versioning;
 dates are release-readiness milestones, not packaged builds.
 
+## [0.9.0-alpha] — Alpha Release Candidate (multi-mode) — 2026-06-08
+
+Release-candidate milestone for the five-mode writing system on the **universal
+Manuscript**. **Feature-frozen**; this milestone focused on completing the
+writing modes, then auditing and stabilizing the whole system. **No new product
+features and no production-code changes were made during RC packaging.**
+
+### Major additions (writing modes on the universal Manuscript)
+
+- **Screenplay** (Phases 1–10), **Graphic Novel** (Phases 1–8), **Stage Script**
+  (Phases 1–8), and **Series** (Phases 1–8), each adding — over a Scene's flat
+  body — a typed block adapter, a planning pipeline (preview → confirmed apply),
+  deterministic intelligence checks, Counterpart/Reflection, controlled rewrite
+  (preview/diff/confirmed apply), cross-unit continuity, and a Review Dashboard.
+- **Series** interprets the canonical Act → Chapter → Scene as Season/Arc →
+  Episode → Scene (display only); plans are settings-backed (no Season/Episode
+  storage hierarchy).
+- All mode AI surfaces are **mode-gated** and **propose-then-confirm**; no silent
+  overwrites; deterministic checks never call the provider.
+
+### Stabilization / audits
+
+- Per-mode integrity audits (Screenplay, Graphic Novel, Stage Script, Series) and
+  a final **global multi-mode integrity audit / Alpha Release Gate** — all
+  classification **A**. See `docs/ALPHA_RELEASE_GATE_AUDIT.md` and the per-mode
+  `docs/*_MODE_INTEGRITY_AUDIT.md`.
+- Fixed two stale `test_logos_integration.py` cases that referenced the removed
+  `_action_buttons` toolbar API (test-harness only; the toolbar is the
+  `_action_combo` dropdown) — the suite is now fully green.
+
+### Tests
+
+- Focused gate `tests/test_alpha_release_gate.py` — **35 passed**.
+- Broad certification sweep — **1527 passed, 0 failures** (see
+  `docs/ALPHA_TEST_COMMANDS.md`).
+
+### Known non-blocking limitations
+
+- Mode checks are conservative/rule-based (no NLP); dashboards refresh on open +
+  manual button; persistent serialized-story relation links are reported but not
+  yet persisted; optional DOCX/PDF export degrades gracefully when libs are
+  absent. ComfyUI/image generation, Canvas Plot, production scheduling,
+  writers-room/showrunner automation, and a real Season/Episode storage hierarchy
+  remain **deferred**. See `docs/KNOWN_LIMITATIONS_ALPHA.md`.
+
 ## [0.9.0-alpha] — Private Alpha
 
 First closed alpha: a local-first narrative operating system for structured
