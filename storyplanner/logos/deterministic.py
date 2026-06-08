@@ -955,6 +955,29 @@ register("series_episode_structure_reflection", _series_episode_structure_reflec
 register("series_writers_room", _series_writers_room)
 
 
+def _series_continuity_check(db, context: LogosContext) -> LogosResult:
+    """Deterministic cross-episode Series continuity report (Phase 6).
+
+    Project-level (no selection / current scene needed). Read-only — consolidates
+    season/arc coherence, the episode chain, A/B/C story tracking, character arcs,
+    setup/payoff, episode structure, Timeline alignment, and PSYKE/Notes. Never
+    mutates, never calls the LLM."""
+    action = "series_continuity_check"
+    try:
+        from storyplanner.series_continuity import build_series_continuity_report
+        report = build_series_continuity_report(db, context.project_id)
+    except Exception as exc:  # never crash the UI
+        return LogosResult.failure(action, f"Continuity check failed: {exc}")
+    return LogosResult(
+        ok=True, action=action, title="Series Continuity Check",
+        message=report.to_text(), suggestions=list(report.recommended_fixes),
+        proposed_operations=[],  # report only — no mutation
+    )
+
+
+register("series_continuity_check", _series_continuity_check)
+
+
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
     action = "sp_detect_setup_payoff"
     try:

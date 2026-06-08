@@ -1450,6 +1450,18 @@ for _sr_name, _sr_label, _sr_desc, _sr_prompt, _sr_sel in [
         name=_sr_name, label=_sr_label, description=_sr_desc,
         category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
         prompt=_sr_prompt, needs_selection=_sr_sel, modes=("series",)))
+# Series — Phase 6 (cross-episode continuity / coherence). Deterministic,
+# project-level (no selection / current scene needed); read-only report. Offered
+# in Manuscript, Timeline, and Outline. No image generation.
+register(LogosAction(
+    name="series_continuity_check", label="Series Continuity Check",
+    description="Analyze how the series works across episodes: season/arc coherence, "
+                "episode chain, A/B/C story tracking, character arcs, setup/payoff, "
+                "episode structure, Timeline alignment, and PSYKE consistency.",
+    category=CATEGORY_DIAGNOSTIC,
+    sections=(SECTION_MANUSCRIPT, SECTION_TIMELINE, SECTION_OUTLINE),
+    prompt="", modes=("series",), deterministic=True,
+))
 # Series — Phase 2 (planning pipeline). Generative; each action produces a preview
 # the writer reviews and confirms — never auto-applied, and the AI never overwrites
 # the body. The structured store/parse/apply lives in series_pipeline. The
