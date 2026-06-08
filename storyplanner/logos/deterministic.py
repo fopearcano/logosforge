@@ -609,6 +609,142 @@ def _series_check(db, context: LogosContext) -> LogosResult:
 register("series_check", _series_check)
 
 
+def _series_episode(db, context: LogosContext):
+    """Resolve the current Episode (the current Scene's Chapter) and its ordered
+    scenes. Returns ``(chapter_name, scenes)`` or ``(None, [])``."""
+    scene_id = context.current_scene_id
+    if scene_id is None:
+        return None, []
+    scene = db.get_scene_by_id(scene_id)
+    chapter = (getattr(scene, "chapter", "") or "").strip() if scene else ""
+    if not chapter:
+        return None, []
+    try:
+        from storyplanner import story_structure as ss
+        scenes = ss.list_scenes(db, context.project_id, chapter=chapter)
+    except Exception:
+        scenes = []
+    return chapter, scenes
+
+
+def _series_episode_check(db, context: LogosContext) -> LogosResult:
+    """Deterministic Episode (serial) structure check (Phase 2).
+
+    Report-only — never mutates, never generates, never calls the LLM. Examines
+    the current Episode: scene count, beat-plan presence, and teaser / act-break /
+    climax / tag coverage across the episode's scenes."""
+    action = "series_episode_check"
+    chapter, scenes = _series_episode(db, context)
+    if chapter is None:
+        return LogosResult(
+            ok=True, action=action, title="Episode Structure Check",
+            message="Open a Series scene in the Manuscript to check its Episode.",
+            suggestions=[], proposed_operations=[])
+    try:
+        from storyplanner import series_blocks as sbk
+        from storyplanner import series_pipeline as spp
+        label = sbk.episode_label(chapter)
+        plan = spp.get_episode_plan(db, context.project_id, chapter)
+        markers: set[str] = set()
+        headings = 0
+        for s in scenes:
+            script = sbk.load_scene_script(db, s.id)
+            for b in script.blocks:
+                if b.block_type in sbk._SERIES_MARKERS:
+                    markers.add(b.block_type)
+                if b.block_type == sbk.BT_SCENE_HEADING:
+                    headings += 1
+    except Exception as exc:  # never crash the UI
+        return LogosResult.failure(action, f"Episode check failed: {exc}")
+
+    warnings: list[str] = []
+    if not scenes:
+        warnings.append("This Episode has no scenes.")
+    if headings == 0 and scenes:
+        warnings.append("No scene headings across the Episode.")
+    if plan is None or plan.is_empty():
+        warnings.append("No Episode beat plan — generate one to guide structure.")
+    else:
+        if plan.teaser_or_cold_open.strip() and sbk.BT_TEASER not in markers:
+            warnings.append("Beat plan defines a Teaser / Cold Open, but no Teaser "
+                            "marker appears in the Episode's scenes.")
+        if plan.act_breaks and sbk.BT_ACT_BREAK not in markers:
+            warnings.append("Beat plan defines Act Breaks, but no Act Break marker "
+                            "appears in the Episode's scenes.")
+        if plan.tag_or_button.strip() and sbk.BT_TAG not in markers:
+            warnings.append("Beat plan defines a Tag / Button, but no Tag marker "
+                            "appears in the Episode's scenes.")
+        if not plan.climax.strip():
+            warnings.append("Beat plan has no climax defined.")
+
+    head = (f"{label} ({chapter}): {len(scenes)} scene(s); "
+            f"{headings} scene heading(s); "
+            f"markers: {', '.join(sorted(markers)) or 'none'}; "
+            f"beat plan: {'yes' if (plan and not plan.is_empty()) else 'no'}.")
+    if not warnings:
+        msg = head + "\n\nNo episode-structure issues detected."
+    else:
+        msg = head + "\n\nWarnings:\n" + "\n".join(f"- {w}" for w in warnings)
+    return LogosResult(ok=True, action=action, title="Episode Structure Check",
+                       message=msg, suggestions=warnings, proposed_operations=[])
+
+
+register("series_episode_check", _series_episode_check)
+
+
+def _series_abc_check(db, context: LogosContext) -> LogosResult:
+    """Deterministic A/B/C story-coverage check (Phase 2).
+
+    Report-only — never mutates, never generates, never calls the LLM. Reports
+    which of the A/B/C stories the current Episode's beat plan defines and flags
+    a thin scene count for a multi-thread episode."""
+    action = "series_abc_check"
+    chapter, scenes = _series_episode(db, context)
+    if chapter is None:
+        return LogosResult(
+            ok=True, action=action, title="A/B/C Story Check",
+            message="Open a Series scene in the Manuscript to check its Episode.",
+            suggestions=[], proposed_operations=[])
+    try:
+        from storyplanner import series_blocks as sbk
+        from storyplanner import series_pipeline as spp
+        label = sbk.episode_label(chapter)
+        plan = spp.get_episode_plan(db, context.project_id, chapter)
+    except Exception as exc:
+        return LogosResult.failure(action, f"A/B/C check failed: {exc}")
+
+    if plan is None or plan.is_empty():
+        return LogosResult(
+            ok=True, action=action, title="A/B/C Story Check",
+            message=f"{label} ({chapter}) has no Episode beat plan yet — generate "
+                    "one to define its A/B/C stories.",
+            suggestions=[], proposed_operations=[])
+
+    abc = plan.has_abc()
+    defined = [k for k, v in abc.items() if v]
+    warnings: list[str] = []
+    if not defined:
+        warnings.append("The beat plan defines no A/B/C story — at least an A story "
+                        "is expected.")
+    elif "A" not in defined:
+        warnings.append("The beat plan defines a B/C story but no A story.")
+    if len(defined) >= 2 and len(scenes) < len(defined):
+        warnings.append(f"{len(defined)} storylines ({'/'.join(defined)}) but only "
+                        f"{len(scenes)} scene(s) — they may be under-served.")
+
+    head = (f"{label} ({chapter}): stories defined: "
+            f"{'/'.join(defined) or 'none'}; {len(scenes)} scene(s).")
+    if not warnings:
+        msg = head + "\n\nA/B/C coverage looks consistent with the scene count."
+    else:
+        msg = head + "\n\nWarnings:\n" + "\n".join(f"- {w}" for w in warnings)
+    return LogosResult(ok=True, action=action, title="A/B/C Story Check",
+                       message=msg, suggestions=warnings, proposed_operations=[])
+
+
+register("series_abc_check", _series_abc_check)
+
+
 def _detect_setup_payoff(db, context: LogosContext) -> LogosResult:
     action = "sp_detect_setup_payoff"
     try:

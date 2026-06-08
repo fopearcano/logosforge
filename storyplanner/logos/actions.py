@@ -1283,6 +1283,68 @@ register(LogosAction(
     category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
     prompt="", modes=("series",), deterministic=True,
 ))
+# Series — Phase 2 (deterministic episode/serial structure checks). Report-only,
+# mode-gated to series; resolve the Episode from the current Scene. No mutation.
+register(LogosAction(
+    name="series_episode_check", label="Episode Structure Check",
+    description="Deterministic check of this Episode (the current Scene's Chapter): "
+                "scene count, beat-plan presence, teaser / act-break / climax / tag "
+                "coverage. Report only — never rewrites or mutates.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("series",), deterministic=True,
+))
+register(LogosAction(
+    name="series_abc_check", label="A/B/C Story Check",
+    description="Deterministic check of A/B/C story coverage for this Episode "
+                "against its beat plan. Report only — never rewrites or mutates.",
+    category=CATEGORY_DIAGNOSTIC, sections=(SECTION_MANUSCRIPT,),
+    prompt="", modes=("series",), deterministic=True,
+))
+# Series — Phase 2 (planning pipeline). Generative; each action produces a preview
+# the writer reviews and confirms — never auto-applied, and the AI never overwrites
+# the body. The structured store/parse/apply lives in series_pipeline. The
+# Season / Arc and Episode plans live in project settings (Act-/Chapter-name keyed),
+# not the Manuscript body, and not a new Season/Episode storage. No image generation.
+register(LogosAction(
+    name="series_season_plan", label="Generate Season / Arc Plan",
+    description="Propose a Season / Arc plan for this Act / Season from its Outline "
+                "summary and its episodes — a preview to review and store, never "
+                "written into the body.",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_OUTLINE,),
+    prompt="Using the Act / Season summary and the ordered episode summaries, "
+           "produce a SEASON / ARC PLAN — the serialized spine, not script. Use "
+           "labelled lines: Premise:, Arc Question:, Episode Progression:, "
+           "Character Arcs:, Recurring Motifs:, Setup / Payoff:, Cliffhangers / "
+           "Reveals:, Continuity Notes:. No markdown, no commentary. This is a "
+           "preview; do not claim it is applied.",
+    modes=("series",)))
+register(LogosAction(
+    name="series_episode_plan", label="Generate Episode Beat Plan",
+    description="Propose an Episode beat plan for this Episode from its Outline "
+                "summary, the parent Season / Arc plan, and its scenes — a preview "
+                "to review and store, never written into the body.",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_OUTLINE,),
+    prompt="Using the Episode summary, the parent Season / Arc plan, and the "
+           "ordered scene summaries, produce an EPISODE BEAT PLAN. Use labelled "
+           "lines: Premise:, Objective:, Dramatic Question:, A Story:, B Story:, "
+           "C Story:, Teaser / Cold Open:, Act Breaks:, Turning Points:, Climax:, "
+           "Tag / Button:, Character Arc Beats:, Continuity Notes:. No markdown, "
+           "no commentary. This is a preview; do not claim it is applied.",
+    modes=("series",)))
+register(LogosAction(
+    name="series_draft_scene", label="Draft Series Scene from Episode Plan",
+    description="Draft a teleplay scene from the Episode beat plan and the scene's "
+                "intent — shown as a preview to review and confirm, never "
+                "auto-applied.",
+    category=CATEGORY_GENERATIVE, sections=(SECTION_MANUSCRIPT,),
+    prompt="Realizing ONLY the Episode beat plan and the scene's intent, write a "
+           "teleplay SCENE using teleplay lines: scene headings (INT./EXT.), "
+           "action, CHARACTER cues in caps, dialogue, (parentheticals), "
+           "transitions (CUT TO:), and serial markers on their own line "
+           "(COLD OPEN, ACT BREAK, TAG). No markdown, no commentary, no image "
+           "prompts. This is a preview for the writer to review; do not claim it "
+           "is applied.",
+    modes=("series",)))
 # Stage Script — Phase 2 (planning pipeline). Generative, full-scene; each action
 # produces a preview the writer reviews and confirms — never auto-applied, and the
 # AI never overwrites the body. The structured store/parse/apply lives in
