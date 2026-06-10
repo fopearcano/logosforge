@@ -66,8 +66,20 @@ panel** yet:
   discarded/cleared, and the **last** voice commit can be undone where safe
   (editor revision guard / GN previous value / created Note-PSYKE deletion —
   otherwise disabled with the reason). History does not persist across app
-  restarts; no automatic cleanup/correction, no diarization, no voice
-  commands, no Live Writer Room. See `docs/VOICE_MVP.md`.
+  restarts. **Phase 4 Intent mode (opt-in, preview-first):** a transcript can
+  be treated as an *instruction* from a fixed allowlist — rule-based cleanup
+  (no AI, never fabricates), insert-cleaned via the commit targets, AI
+  rewrite-of-selection and AI summarize-to-Note (existing provider settings
+  only, text-only — audio never goes to AI; disabled with a clear message
+  when no provider is configured), PSYKE draft (user-chosen type) and GN
+  Panel-field send. Every intent previews before/after and applies only on
+  explicit confirm; stale previews (project/target/before-text drift) are
+  blocked; applied intents are covered by the same Undo. **Still not:** a
+  realtime conversation, an unrestricted voice agent, automatic command
+  execution, speaker diarization, automatic character attribution, or any
+  production/image workflow; no shell/system commands; no voice commands; no
+  Live Writer Room; cloud realtime remains deferred. See
+  `docs/VOICE_MVP.md`.
 
 ## Model / feature limits
 

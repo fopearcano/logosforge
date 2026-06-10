@@ -185,6 +185,50 @@ mode) it was captured in; switching projects freezes the visible history and
 any commit of foreign segments is blocked: *"This transcript was captured in
 another project. Switch back or explicitly retarget."*
 
+## Dictation vs Intent mode (Phase 4 — the Voice Intent Router)
+
+The panel has an explicit mode selector — **Dictation** (default: the
+transcript is content; the Phase 2 commit targets apply) and **Intent**
+(opt-in: the transcript is an *instruction*). Intent mode is **preview-first
+and confirm-only** (`storyplanner/voice/intent_router.py`): pick an intent,
+click **Preview**, review the before/after (or the Note/PSYKE-entry
+preview), then **Apply** — or **Cancel**, which mutates nothing. Command
+mode is never inferred from a transcript; nothing ever auto-applies.
+
+Fixed intent allowlist:
+
+- **Clean up transcript** (rule-based, no AI): whitespace/capitalization
+  normalization, optional spoken punctuation ("comma" → ",", "period" →
+  ".", "new paragraph" → break), final period — never fabricates content.
+  Applying updates only the transcript segment (project untouched).
+- **Insert cleaned transcript** — cleaned text routed through the chosen
+  commit target (the Commit Router; never bypassed).
+- **Rewrite selected text** (AI) — needs an editor selection; before/after
+  + diff preview; apply replaces exactly the selection (one undo step).
+  Disabled without a selection: *"Select text first."*
+- **Summarize to Note** (AI) — note preview; apply creates the Note.
+- **Send to PSYKE draft entry** — user-chosen type (default **Other**,
+  never classified); entry preview; apply creates it.
+- **Graphic Novel: send to selected Panel field** — user-chosen field
+  (Visual/Caption/Dialogue/SFX/Notes); append preview; Outline/Manuscript
+  mirror after apply. No image prompts, no ComfyUI.
+- **Outline draft item** — still listed disabled (*"Outline voice target
+  not available yet."*).
+
+AI policy: AI-backed intents use the app's **existing provider settings
+only** (`build_active_provider` + the shared chat completion) — **text in,
+text out; audio is never sent to AI or any cloud speech API**. With no
+provider configured they are disabled with: *"AI text operation
+unavailable. Configure an AI provider or use rule-based cleanup."*
+
+Safety: previews store the project id and the expected before-state; Apply
+re-validates the live project, target existence and before-text — a stale
+preview is blocked with *"Target changed since preview. Regenerate preview
+before applying."* Applied intents produce the same operation records as
+Phase 3, so **Undo last commit** covers them (editor revision guard, GN
+previous-value restore, created Note/PSYKE deletion). No shell/system
+commands, no voice-command execution, no unrestricted agent.
+
 ## Future hooks (anchor points, not implemented)
 
 `EditorCommitTarget` defines (and deliberately stubs) the later shape:

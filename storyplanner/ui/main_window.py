@@ -2953,8 +2953,32 @@ class MainWindow(QMainWindow):
                 self._db, self._project_id),
             has_active_editor=self._voice_commit.has_target(),
             insert_at_cursor=self._voice_commit.insert_as_plain_text,
+            active_editor_getter=self._voice_commit.active_editor,
             gn_panel_ref=gn_ref,
+            ai_complete=self._voice_ai_complete_callable(),
         )
+
+    def _voice_ai_complete_callable(self):
+        """Text-only completion via the EXISTING provider settings — None
+        when no provider is configured (AI-backed voice intents disable)."""
+        from storyplanner.providers import build_active_provider
+        if build_active_provider(require_configured=True) is None:
+            return None
+        return self._voice_ai_complete
+
+    def _voice_ai_complete(self, prompt: str) -> str:
+        try:
+            from storyplanner.assistant import chat_completion
+            from storyplanner.providers import build_active_provider
+            provider = build_active_provider(require_configured=True)
+            if provider is None:
+                return ""
+            response, _cached = chat_completion(
+                [{"role": "user", "content": prompt}],
+                provider=provider, timeout=60, use_cache=False)
+            return response or ""
+        except Exception:
+            return ""                     # non-blocking: preview reports it
 
     def _menu_toggle_focus(self) -> None:
         if (

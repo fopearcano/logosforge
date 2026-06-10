@@ -134,6 +134,15 @@ class VoicePanel(QWidget):
 
         # -- Commit target row (Phase 2; shown only with a context provider) --
         target_row = QHBoxLayout()
+        self._mode_combo = QComboBox()
+        self._mode_combo.setObjectName("voiceModeSelect")
+        self._mode_combo.addItem("Dictation", "dictation")   # default
+        self._mode_combo.addItem("Intent", "intent")
+        self._mode_combo.setToolTip(
+            "Dictation: the transcript is content. Intent: the transcript "
+            "is an instruction — preview first, apply only on confirm.")
+        self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
+        target_row.addWidget(self._mode_combo)
         self._target_label = QLabel("Send to:")
         self._target_label.setObjectName("voiceTargetLabel")
         target_row.addWidget(self._target_label)
@@ -157,7 +166,53 @@ class VoicePanel(QWidget):
             "Character cue for the dialogue — chosen by you, never guessed.")
         target_row.addWidget(self._char_combo)
         layout.addLayout(target_row)
-        for w in (self._target_label, self._target_combo,
+
+        # -- Intent row (Phase 4; visible only in Intent mode) ----------------
+        intent_row = QHBoxLayout()
+        self._intent_label = QLabel("Intent:")
+        self._intent_label.setObjectName("voiceIntentLabel")
+        intent_row.addWidget(self._intent_label)
+        self._intent_combo = QComboBox()
+        self._intent_combo.setObjectName("voiceIntentCombo")
+        self._intent_combo.currentIndexChanged.connect(
+            self._on_intent_changed)
+        intent_row.addWidget(self._intent_combo, stretch=1)
+        self._gn_field_combo = QComboBox()
+        self._gn_field_combo.setObjectName("voiceGnFieldCombo")
+        from storyplanner.voice.intent_router import GN_FIELD_CHOICES
+        for value, label in GN_FIELD_CHOICES:
+            self._gn_field_combo.addItem(label, value)
+        intent_row.addWidget(self._gn_field_combo)
+        self._intent_preview_btn = QPushButton("Preview")
+        self._intent_preview_btn.setObjectName("voiceIntentPreview")
+        self._intent_preview_btn.clicked.connect(self._on_intent_preview)
+        intent_row.addWidget(self._intent_preview_btn)
+        self._intent_apply_btn = QPushButton("Apply")
+        self._intent_apply_btn.setObjectName("voiceIntentApply")
+        self._intent_apply_btn.clicked.connect(self._on_intent_apply)
+        self._intent_apply_btn.setEnabled(False)
+        intent_row.addWidget(self._intent_apply_btn)
+        self._intent_cancel_btn = QPushButton("Cancel")
+        self._intent_cancel_btn.setObjectName("voiceIntentCancel")
+        self._intent_cancel_btn.clicked.connect(self._on_intent_cancel)
+        intent_row.addWidget(self._intent_cancel_btn)
+        layout.addLayout(intent_row)
+        self._intent_preview_area = QPlainTextEdit()
+        self._intent_preview_area.setObjectName("voiceIntentPreviewArea")
+        self._intent_preview_area.setReadOnly(True)
+        self._intent_preview_area.setMaximumHeight(110)
+        layout.addWidget(self._intent_preview_area)
+        self._pending_intent_preview = None
+        self._intent_widgets = (self._intent_label, self._intent_combo,
+                                self._gn_field_combo,
+                                self._intent_preview_btn,
+                                self._intent_apply_btn,
+                                self._intent_cancel_btn,
+                                self._intent_preview_area)
+        for w in self._intent_widgets:
+            w.setVisible(False)          # Dictation mode is the default
+
+        for w in (self._mode_combo, self._target_label, self._target_combo,
                   self._psyke_type, self._char_combo):
             w.setVisible(False)          # inert without a context provider
 
@@ -374,6 +429,8 @@ class VoicePanel(QWidget):
         ctx.psyke_entry_type = self._psyke_type.currentData() or "other"
         ctx.character_name = self._char_combo.currentText().strip()
         ctx.transcript_project_id = self._transcript_project_id
+        ctx.gn_field_choice = (self._gn_field_combo.currentData()
+                               or "visual_description")
         return ctx
 
     def _selected_target_id(self) -> str:
@@ -407,10 +464,12 @@ class VoicePanel(QWidget):
         self._target_combo.blockSignals(False)
         self._targets_active = True
         has_text = bool(self._preview.toPlainText().strip())
-        for w in (self._target_label, self._target_combo):
+        for w in (self._mode_combo, self._target_label, self._target_combo):
             w.setVisible(True)
         self._target_combo.setEnabled(has_text)
         self._sync_target_subcontrols(ctx)
+        if self.voice_mode() == "intent":
+            self._refresh_intents()
 
     def _sync_target_subcontrols(self, ctx=None) -> None:
         from storyplanner.voice.commit_router import (
@@ -601,11 +660,153 @@ class VoicePanel(QWidget):
                                    "cleared")
         self._refresh_history_ui()
 
+    # -- Phase 4: Intent mode -------------------------------------------------
+    def voice_mode(self) -> str:
+        return self._mode_combo.currentData() or "dictation"
+
+    def _on_mode_changed(self, _index: int) -> None:
+        intent_mode = self.voice_mode() == "intent"
+        for w in self._intent_widgets:
+            w.setVisible(intent_mode)
+        self._intent_preview_area.setVisible(
+            intent_mode and self._pending_intent_preview is not None)
+        if intent_mode:
+            self._refresh_intents()
+        self._sync_target_subcontrols(self._build_context())
+
+    def _refresh_intents(self) -> None:
+        ctx = self._build_context()
+        if ctx is None:
+            return
+        from storyplanner.voice.intent_router import (
+            get_available_voice_intents)
+        keep = self._intent_combo.currentData()
+        self._intent_combo.blockSignals(True)
+        self._intent_combo.clear()
+        for intent in get_available_voice_intents(ctx):
+            self._intent_combo.addItem(intent.label, intent.id)
+            i = self._intent_combo.count() - 1
+            item = self._intent_combo.model().item(i)
+            if not intent.enabled:
+                item.setEnabled(False)
+                item.setToolTip(intent.reason_if_disabled)
+        idx = self._intent_combo.findData(keep)
+        self._intent_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self._intent_combo.blockSignals(False)
+        self._on_intent_changed(self._intent_combo.currentIndex())
+
+    def _on_intent_changed(self, _index: int) -> None:
+        from storyplanner.voice.intent_router import (
+            I_GN_PANEL_FIELD, I_INSERT_CLEANED)
+        tid = self._intent_combo.currentData()
+        self._gn_field_combo.setVisible(
+            self.voice_mode() == "intent" and tid == I_GN_PANEL_FIELD)
+        # The commit-target combo doubles as the destination for
+        # "insert cleaned transcript".
+        self._target_combo.setEnabled(
+            tid == I_INSERT_CLEANED or self.voice_mode() == "dictation"
+            or bool(self._preview.toPlainText().strip()))
+
+    def _intent_source_text(self) -> tuple[str, list[str]]:
+        """Checked segments (visible order) → current row → preview text."""
+        ids = self._checked_entry_ids()
+        if ids:
+            return self._history.concat_text(ids), ids
+        entry = self._current_entry()
+        if entry is not None and self._history.committable(entry):
+            return entry.text, [entry.id]
+        return self._preview.toPlainText().strip(), []
+
+    def _on_intent_preview(self) -> None:
+        ctx = self._build_context()
+        if ctx is None:
+            return
+        from storyplanner.voice.intent_router import build_intent_preview
+        text, source_ids = self._intent_source_text()
+        intent_id = self._intent_combo.currentData()
+        preview = build_intent_preview(
+            intent_id, text, ctx,
+            commit_target_id=self._selected_target_id(),
+            source_segment_ids=source_ids)
+        self._pending_intent_preview = preview
+        if not preview.can_apply:
+            self._intent_preview_area.setVisible(True)
+            self._intent_preview_area.setPlainText(preview.reason_if_blocked)
+            self._intent_apply_btn.setEnabled(False)
+            self._status_label.setText(f"Voice: {preview.reason_if_blocked}")
+            return
+        parts = [f"Target: {preview.target_summary}",
+                 f"Risk: {preview.risk_level}"]
+        if preview.created_note_preview:
+            parts.append("— NOTE PREVIEW —\n"
+                         f"{preview.created_note_preview['title']}\n"
+                         f"{preview.created_note_preview['content']}")
+        elif preview.created_psyke_entry_preview:
+            data = preview.created_psyke_entry_preview
+            parts.append("— PSYKE ENTRY PREVIEW —\n"
+                         f"[{data['entry_type']}] {data['name']}\n"
+                         f"{data['notes']}")
+        else:
+            if preview.before_text is not None:
+                parts.append(f"— BEFORE —\n{preview.before_text}")
+            parts.append(f"— AFTER —\n{preview.after_text or ''}")
+        self._intent_preview_area.setVisible(True)
+        self._intent_preview_area.setPlainText("\n\n".join(parts))
+        self._intent_apply_btn.setEnabled(True)
+        self._status_label.setText(
+            "Voice: preview ready — review, then Apply")
+
+    def _on_intent_apply(self) -> None:
+        preview = self._pending_intent_preview
+        ctx = self._build_context()
+        if preview is None or ctx is None:
+            self._status_label.setText("Voice: build a preview first")
+            return
+        from storyplanner.voice.intent_router import (
+            I_CLEANUP, apply_intent_preview)
+        ok, msg, op = apply_intent_preview(preview, ctx)
+        self._status_label.setText(f"Voice: {msg}")
+        if not ok:
+            self._intent_apply_btn.setEnabled(False)
+            return
+        if preview.intent_type == I_CLEANUP:
+            # Transcript-only: update the source segments / live preview.
+            if preview.source_segment_ids:
+                for eid in preview.source_segment_ids:
+                    self._history.edit(eid, preview.after_text or "")
+            else:
+                self._preview.setPlainText(preview.after_text or "")
+        else:
+            if op is not None:
+                self._history.last_commit_op = op
+            if preview.source_segment_ids:
+                self._history.mark_committed(preview.source_segment_ids,
+                                             preview.intent_type,
+                                             op.id if op else "")
+            if self._on_data_changed is not None:
+                self._on_data_changed()   # dirty only after real mutation
+        self._pending_intent_preview = None
+        self._intent_apply_btn.setEnabled(False)
+        self._refresh_history_ui()
+
+    def _on_intent_cancel(self) -> None:
+        from storyplanner.voice.intent_router import cancel_voice_intent
+        cancel_voice_intent(self._pending_intent_preview)
+        self._pending_intent_preview = None
+        self._intent_apply_btn.setEnabled(False)
+        self._intent_preview_area.clear()
+        self._intent_preview_area.setVisible(False)
+        self._status_label.setText("Voice: intent preview cancelled")
+
     def note_project_switched(self, new_project_id: int) -> None:
         """Project changed: freeze (don't lose) the visible history — every
         commit re-validates per-entry project ids, so stale segments can
         never land in the new project."""
         self._history.mark_session_stale()
+        # Pending intent previews are project-bound: invalidate on switch.
+        self._pending_intent_preview = None
+        self._intent_apply_btn.setEnabled(False)
+        self._intent_preview_area.clear()
         if any(e.status in ("pending", "edited")
                for e in self._history.entries):
             self._status_label.setText(

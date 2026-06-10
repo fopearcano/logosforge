@@ -87,6 +87,27 @@ retest gate** (see `docs/ALPHA_RC_STATUS.md`).
 
 ### Added (feature-flagged, off by default)
 
+- **Voice Phase 4 — Voice Intent Router (preview-first confirmed text
+  operations).** An explicit **Dictation / Intent** mode selector in the
+  voice panel (Dictation stays the default; Intent is opt-in — command mode
+  is never inferred). In Intent mode a transcript is an *instruction* from a
+  fixed allowlist: rule-based cleanup (whitespace/capitalization/spoken
+  punctuation; no AI, never fabricates; transcript-only apply), insert
+  cleaned transcript via the chosen commit target, **AI rewrite of the
+  editor selection** and **AI summarize-to-Note** (existing provider
+  settings only — `build_active_provider` + the shared chat completion;
+  text-only, audio never sent; disabled with "AI text operation unavailable.
+  Configure an AI provider or use rule-based cleanup." when unconfigured),
+  PSYKE draft entry (user-chosen type, default Other) and Graphic Novel
+  Panel-field send (chosen field; Outline/Manuscript mirror). Every intent
+  builds a before/after (+ diff) or entity preview and applies ONLY on
+  explicit confirm; Cancel mutates nothing; apply re-validates project id,
+  target existence and the expected before-text ("Target changed since
+  preview. Regenerate preview before applying."); applied intents emit the
+  Phase 3 operation records so Undo-last-commit covers them. No shell or
+  system commands, no voice-command execution, no auto-apply.
+  `storyplanner/voice/intent_router.py` + `tests/test_voice_intents.py`
+  (37 passed).
 - **Voice Phase 3 — transcript history, correction, undo, retry.** A local,
   session-only history of dictated segments in the voice panel: edit before
   commit (original kept + restorable; empty segments never commit), select

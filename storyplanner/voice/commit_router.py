@@ -100,6 +100,10 @@ class VoiceCommitContext:
     # Explicit user selections from the panel UI (never guessed).
     psyke_entry_type: str = "other"
     character_name: str = ""
+    # Phase 4 (Intent mode): explicit GN field choice + optional AI text
+    # transform via the app's EXISTING provider (text-only; never audio).
+    gn_field_choice: str = "visual_description"
+    ai_complete: Callable[[str], str] | None = None
     # Project the transcript was captured in (None = not captured yet).
     transcript_project_id: int | None = None
     extras: dict = field(default_factory=dict)
