@@ -12,6 +12,8 @@ auto-format transcripts. See ``docs/VOICE_MVP.md``.
 
 from __future__ import annotations
 
+import time
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -29,13 +31,27 @@ class VoiceStatus(str, Enum):
 
 @dataclass
 class TranscriptSegment:
-    """One transcribed segment (Alpha: always treated as plain text)."""
+    """One transcribed segment (Alpha: always treated as plain text).
+
+    Commit metadata is filled by the Voice Commit Router when (and only when)
+    the user explicitly commits — segments are never auto-committed. Audio is
+    never stored on the segment.
+    """
 
     text: str = ""
     is_final: bool = True
     language: str = ""
     duration_s: float = 0.0
     error: str = ""
+    # -- identity / provenance (Phase 2) --
+    id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    created_at: float = field(default_factory=time.time)
+    source: str = "local_whisper"
+    confidence: float | None = None
+    # -- explicit-commit tracking (Phase 2) --
+    committed: bool = False
+    committed_target: str = ""
+    committed_at: float | None = None
 
     def is_empty(self) -> bool:
         return not (self.text or "").strip()

@@ -48,7 +48,17 @@ panel** yet:
   main window (one instance; toggled show/hide via the menu action /
   Ctrl+Shift+V; close/Hide/Esc hide it with the transcript preview preserved;
   hiding while recording stops the session safely; never a parentless
-  top-level window, never auto-shown, never auto-recording). See
+  top-level window, never auto-shown, never auto-recording). **Phase 2 commit
+  targets (conservative, mode-aware):** after review the user picks a *Send
+  to* target — cursor insert, New Note, PSYKE draft entry (user-chosen type,
+  default **Other**, never auto-classified), Screenplay Action / Dialogue and
+  Stage Direction / Dialogue (character chosen manually, never guessed), and
+  Graphic Novel Panel fields for the **selected** Panel (appends; "Select a
+  Panel first." otherwise). Listing never mutates; commits are blocked if the
+  project changed since transcription; the project goes dirty only after a
+  successful commit. **Deferred:** Outline / Series-episode draft items
+  ("Outline voice target not available yet.") and Append-to-Manuscript (the
+  open editor owns the scene body — use cursor insert). See
   `docs/VOICE_MVP.md`.
 
 ## Model / feature limits

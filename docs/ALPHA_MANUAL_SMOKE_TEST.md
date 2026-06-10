@@ -62,6 +62,7 @@ manual UI check). Command form:
 | `tests/test_voice_dictation_window.py` (floating Voice Dictation window) | **23 passed** |
 | `tests/test_preferences_dialog.py` (scrollable General Preferences) | **11 passed** |
 | `tests/test_voice_prefs_integrity_gate.py` (post-fix integrity gate) | **17 passed** |
+| `tests/test_voice_commit_router.py` (Phase 2 mode-aware commit targets) | **41 passed** |
 | `tests/test_voice_lan.py` (backend modes + LAN Whisper server) | **43 passed** |
 | `tests/test_voice_lan_server.py` (LAN companion server + client integration) | **22 passed** |
 | `tests/test_gn_pages_manuscript_sync.py` (GN shared body) | **30 passed** |
@@ -69,7 +70,7 @@ manual UI check). Command form:
 | `tests/test_series_navigator.py` (Navigator + deps) | **26 passed** |
 | `tests/test_writing_mode_lock.py` (mode lock) | **22 passed** |
 | `tests/test_export_safety.py` (export privacy) | **4 passed** |
-| **Total** | **496 passed, 0 failed** |
+| **Total** | **537 passed, 0 failed** |
 
 > Environment note: PDF/DOCX export tests fail only where `reportlab` /
 > `python-docx` are not installed (pre-existing, graceful-degradation behavior),
@@ -190,6 +191,11 @@ this behavior as supporting evidence (the manual UI check is still required).
 | V15 | Voice Dictation opens as a **floating, resizable** window; toggle (menu/Ctrl+Shift+V) hides and reopens it repeatedly with **no duplicates** | PENDING MANUAL RETEST | ✓ |
 | V16 | Hide/Close/Esc hide the window; transcript preview is still there on reopen (until Clear) | PENDING MANUAL RETEST | ✓ |
 | V17 | Hiding/closing while recording stops the session safely and keeps the preview | PENDING MANUAL RETEST | ✓ |
+| V18 | **Send to** dropdown lists mode-aware targets; unavailable ones are greyed out with a reason tooltip | PENDING MANUAL RETEST | ✓ |
+| V19 | Commit to **New Note** / **PSYKE draft (type selector, default Other)** creates the entry only on Commit | PENDING MANUAL RETEST | ✓ |
+| V20 | GN: focus a Panel script block → Panel field targets enable; commit appends to that panel; no panel selected → "Select a Panel first." | PENDING MANUAL RETEST | ✓ |
+| V21 | Screenplay/Stage Dialogue target requires picking a character (never guessed from the transcript) | PENDING MANUAL RETEST | ✓ |
+| V22 | Switch project with a pending transcript → commit is blocked ("Project changed since transcription…") | PENDING MANUAL RETEST | ✓ |
 | L1 | Backend selector shows Disabled / Local PC / Local LAN Server / Mock; default Disabled | PENDING MANUAL RETEST | ✓ |
 | L2 | Start a Whisper server on another LAN machine (`docs/LOCAL_LAN_WHISPER.md`) | PENDING MANUAL RETEST | |
 | L3 | Select **Local LAN Server**; enter the private LAN URL (e.g. `http://192.168.x.x:8765`) | PENDING MANUAL RETEST | ✓ |

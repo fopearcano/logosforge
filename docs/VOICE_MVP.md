@@ -112,6 +112,48 @@ Wired in `MainWindow` (flag-gated, stop-on-switch, stop-on-close).
 - On project switch, the tracked editor is cleared so a pending transcript can
   never be committed into the wrong project.
 
+## Commit targets (Phase 2 — the Voice Commit Router)
+
+After reviewing the transcript, the user picks a **Send to** target in the
+panel and clicks Commit. Targets are listed by
+`storyplanner/voice/commit_router.py` per writing mode — **listing never
+mutates anything**; only the explicit Commit writes, and only after the
+router re-validates the target against the live project (a transcript
+captured in one project can never be committed into another). Unavailable
+targets stay visible but **disabled with a reason**.
+
+Implemented targets:
+
+- **All modes** — Insert at cursor (the original MVP path); **New Note**
+  (title `Voice note — <first words>`, body = transcript); **PSYKE draft
+  entry** (entry type chosen by the user from Character / Place / Object /
+  Lore / Theme / **Other (default)** — the transcript is **never**
+  auto-classified).
+- **Screenplay** — Insert as Action (blank-line paragraph at cursor); Insert
+  as Dialogue under a **manually chosen** character (cue line + dialogue at
+  cursor; character names are **never guessed** from the transcript).
+- **Graphic Novel** — Panel → Visual / Caption / Dialogue / SFX / Notes for
+  the **selected** Panel (the script block last focused in the Manuscript or
+  deep-linked from the Outline); text **appends** to the field. With no
+  Panel selected the targets are disabled: *"Select a Panel first."* No
+  image prompts, no ComfyUI.
+- **Stage Script** — Insert as Stage Direction (`STAGE: …` paragraph);
+  Insert as Dialogue under a manually chosen character
+  (`CHARACTER: NAME` + line).
+- **Series** — cursor insert targets the selected Scene's Manuscript editor;
+  Notes/PSYKE as above.
+
+Deferred (listed disabled, with these exact reasons): **Outline draft item**
+and **Series Episode Outline item** — *"Outline voice target not available
+yet."* (the outline is scene-derived; there is no safe unclassified-draft
+area); **Append to Manuscript** — *"Use cursor insert — the open editor owns
+the scene body."* (a direct DB append could clobber unsaved editor state).
+
+Segments now carry explicit-commit metadata (`id`, `created_at`, `source`,
+`committed`, `committed_target`, `committed_at`); no audio is ever stored.
+The project is marked dirty **only after** a successful commit; Clear
+mutates nothing.
+
 ## Future hooks (anchor points, not implemented)
 
 `EditorCommitTarget` defines (and deliberately stubs) the later shape:

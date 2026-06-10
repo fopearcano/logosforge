@@ -87,6 +87,22 @@ retest gate** (see `docs/ALPHA_RC_STATUS.md`).
 
 ### Added (feature-flagged, off by default)
 
+- **Voice Phase 2 — mode-aware commit targets (Voice Commit Router).** After
+  reviewing the transcript the user picks an explicit *Send to* target:
+  cursor insert; **New Note**; **PSYKE draft entry** (type chosen by the
+  user — Character/Place/Object/Lore/Theme/**Other** (default), never
+  auto-classified); **Screenplay** Action / Dialogue and **Stage** Direction /
+  Dialogue (character picked manually from existing characters — never
+  guessed); **Graphic Novel** Panel → Visual/Caption/Dialogue/SFX/Notes for
+  the selected Panel (appends; disabled with "Select a Panel first."
+  otherwise). Listing/preview never mutates; commits re-validate the live
+  target and are blocked if the project changed since transcription; the
+  project is marked dirty only after a successful commit; transcript
+  segments carry explicit-commit metadata (no audio stored). Deferred with
+  visible reasons: Outline / Series-episode draft items and
+  Append-to-Manuscript. `storyplanner/voice/commit_router.py` +
+  `tests/test_voice_commit_router.py` (41 passed).
+
 - **Local voice-to-script MVP** (`enable_voice_mode`; backend mode defaults to
   *Disabled*): local mic capture, buffered silence-segmented dictation,
   transcript preview, **manual plain-text commit** at the editor cursor.

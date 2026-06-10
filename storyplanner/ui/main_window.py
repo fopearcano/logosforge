@@ -695,7 +695,11 @@ class MainWindow(QMainWindow):
         from storyplanner.voice.editor_commit import EditorCommitTarget
         from storyplanner.ui.voice_panel import VoiceDictationWindow, VoicePanel
         self._voice_commit = EditorCommitTarget()
-        self._voice_panel = VoicePanel(commit_target=self._voice_commit)
+        self._voice_panel = VoicePanel(
+            commit_target=self._voice_commit,
+            context_provider=self._voice_commit_context,
+            on_data_changed=self._on_data_changed,
+        )
         self._voice_window = VoiceDictationWindow(self._voice_panel,
                                                   parent=self)
 
@@ -2930,6 +2934,27 @@ class MainWindow(QMainWindow):
         win = getattr(self, "_voice_window", None)
         if win is not None:
             win.toggle()
+
+    def _voice_commit_context(self):
+        """Live context for the Voice Commit Router (read-only snapshot)."""
+        from storyplanner.voice.commit_router import VoiceCommitContext
+        from storyplanner.writing_modes import get_project_writing_mode_by_id
+        gn_ref = None
+        view = self.content_area
+        from storyplanner.ui.graphic_novel_manuscript_view import (
+            GraphicNovelManuscriptView,
+        )
+        if isinstance(view, GraphicNovelManuscriptView):
+            gn_ref = view.current_panel_ref()
+        return VoiceCommitContext(
+            db=self._db,
+            project_id=self._project_id,
+            writing_mode=get_project_writing_mode_by_id(
+                self._db, self._project_id),
+            has_active_editor=self._voice_commit.has_target(),
+            insert_at_cursor=self._voice_commit.insert_as_plain_text,
+            gn_panel_ref=gn_ref,
+        )
 
     def _menu_toggle_focus(self) -> None:
         if (

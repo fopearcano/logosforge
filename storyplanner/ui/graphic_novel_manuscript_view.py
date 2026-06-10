@@ -98,6 +98,12 @@ class _AutoGrowScript(_FocusPlainText):
     """A script block that grows with its text (no inner scrollbar), so the
     whole scene scrolls as ONE document — manuscript flow, not form fields."""
 
+    focused = Signal()
+
+    def focusInEvent(self, event) -> None:  # noqa: N802 (Qt signature)
+        super().focusInEvent(event)
+        self.focused.emit()
+
     def __init__(self, *, min_height: int = 120, parent=None) -> None:
         super().__init__(parent)
         self._min_height = min_height
@@ -135,6 +141,9 @@ class GraphicNovelManuscriptView(QWidget):
 
         self._scene_id: int | None = None
         self._script = gnb.GraphicNovelScript()
+        # Last panel whose script block had focus — (page_idx, panel_idx).
+        # The Voice Commit Router reads this as "the selected Panel".
+        self._last_panel_loc: tuple[int, int] | None = None
         # Logical location -> live editor widget (focus restore / navigation).
         # Keys: ("panel", page_idx, panel_idx) -> the panel's script block;
         #       ("page", page_idx, "title"|"summary") -> page header editors.
@@ -265,8 +274,25 @@ class GraphicNovelManuscriptView(QWidget):
         if sid is None or sid == self._scene_id:
             return
         self._scene_id = int(sid)
+        self._last_panel_loc = None      # panel selection is scene-scoped
         self._rendered_fp = None         # force the rebuild for the new scene
         self.refresh()
+
+    def _note_panel_focus(self, page_idx: int, panel_idx: int) -> None:
+        self._last_panel_loc = (page_idx, panel_idx)
+
+    def current_panel_ref(self) -> tuple[int, int, int] | None:
+        """The selected Panel for voice commits: (scene_id, page_idx,
+        panel_idx) of the last-focused script block, validated against the
+        live script — or ``None`` when nothing valid is selected."""
+        if self._scene_id is None or self._last_panel_loc is None:
+            return None
+        page_idx, panel_idx = self._last_panel_loc
+        if not (0 <= page_idx < len(self._script.pages)):
+            return None
+        if not (0 <= panel_idx < len(self._script.pages[page_idx].panels)):
+            return None
+        return (self._scene_id, page_idx, panel_idx)
 
     # ------------------------------------------------------ focus preservation
     def _focused_location(self) -> tuple | None:
@@ -317,6 +343,7 @@ class GraphicNovelManuscriptView(QWidget):
         """Scroll to / focus a panel's script block (Outline deep-link)."""
         editor = self._field_editors.get(("panel", page_idx, panel_idx))
         if editor is not None:
+            self._note_panel_focus(page_idx, panel_idx)
             self._scroll.ensureWidgetVisible(editor)
             editor.setFocus()
 
@@ -480,6 +507,8 @@ class GraphicNovelManuscriptView(QWidget):
         ed.setObjectName("gnPanelScript")
         ed.setPlaceholderText(_SCRIPT_PLACEHOLDER)
         ed.setPlainText(gnb.panel_script_text(panel))
+        ed.focused.connect(
+            lambda p=pi, c=ci: self._note_panel_focus(p, c))
         ed.committed.connect(
             lambda e=ed, p=pi, c=ci:
             self._commit_panel_script(p, c, e.toPlainText()))

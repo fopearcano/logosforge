@@ -71,12 +71,21 @@ class VoicePanel(QWidget):
     def __init__(self, *, settings_get: Callable[[str], object] | None = None,
                  settings_set: Callable[[str, object], None] | None = None,
                  commit_target: EditorCommitTarget | None = None,
+                 context_provider: Callable[[], object] | None = None,
+                 on_data_changed: Callable[[], None] | None = None,
                  parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("voicePanel")
         self._settings_get = settings_get
         self._settings_set = settings_set
         self._commit = commit_target or EditorCommitTarget()
+        # Phase 2: mode-aware commit routing (optional — without a context
+        # provider the panel behaves exactly as the cursor-only MVP).
+        self._context_provider = context_provider
+        self._on_data_changed = on_data_changed
+        self._transcript_project_id: int | None = None
+        self._had_transcript = False
+        self._targets_active = False     # True once the router populated targets
         self._controller = None
         self._status = VoiceStatus.OFF
 
@@ -115,6 +124,35 @@ class VoicePanel(QWidget):
         layout.addLayout(cfg)
         self._sync_backend_row()
 
+        # -- Commit target row (Phase 2; shown only with a context provider) --
+        target_row = QHBoxLayout()
+        self._target_label = QLabel("Send to:")
+        self._target_label.setObjectName("voiceTargetLabel")
+        target_row.addWidget(self._target_label)
+        self._target_combo = QComboBox()
+        self._target_combo.setObjectName("voiceTargetCombo")
+        self._target_combo.currentIndexChanged.connect(
+            self._on_target_changed)
+        target_row.addWidget(self._target_combo, stretch=1)
+        self._psyke_type = QComboBox()
+        self._psyke_type.setObjectName("voicePsykeType")
+        from storyplanner.voice.commit_router import PSYKE_ENTRY_TYPES
+        for value in PSYKE_ENTRY_TYPES:                  # "other" first/default
+            self._psyke_type.addItem(value.capitalize(), value)
+        self._psyke_type.setToolTip(
+            "PSYKE entry type — chosen by you, never guessed.")
+        target_row.addWidget(self._psyke_type)
+        self._char_combo = QComboBox()
+        self._char_combo.setObjectName("voiceCharacterCombo")
+        self._char_combo.setEditable(True)               # manual entry allowed
+        self._char_combo.setToolTip(
+            "Character cue for the dialogue — chosen by you, never guessed.")
+        target_row.addWidget(self._char_combo)
+        layout.addLayout(target_row)
+        for w in (self._target_label, self._target_combo,
+                  self._psyke_type, self._char_combo):
+            w.setVisible(False)          # inert without a context provider
+
         self._preview = QPlainTextEdit()
         self._preview.setObjectName("voiceTranscriptPreview")
         self._preview.setPlaceholderText(
@@ -135,13 +173,16 @@ class VoicePanel(QWidget):
         self._clear_btn = QPushButton("Clear")
         self._clear_btn.setObjectName("voiceClear")
         self._clear_btn.clicked.connect(self.clear_preview)
+        self._copy_btn = QPushButton("Copy")
+        self._copy_btn.setObjectName("voiceCopy")
+        self._copy_btn.clicked.connect(self._copy_transcript)
         self._auto_commit = QCheckBox("Auto-commit after pause")
         self._auto_commit.setObjectName("voiceAutoCommit")
         self._hide_btn = QPushButton("Hide")
         self._hide_btn.setObjectName("voiceHide")
         self._hide_btn.clicked.connect(self.hide_requested.emit)
         for w in (self._start_btn, self._stop_btn, self._commit_btn,
-                  self._clear_btn):
+                  self._clear_btn, self._copy_btn):
             row.addWidget(w)
         row.addWidget(self._auto_commit)
         row.addStretch()
@@ -271,6 +312,83 @@ class VoicePanel(QWidget):
             self._sync_backend_row()
             self._set_controls_enabled(True)
             self._refresh_buttons()
+        self._refresh_targets()
+
+    # -- Phase 2: mode-aware commit targets ----------------------------------
+    def _build_context(self):
+        """The live VoiceCommitContext + the user's explicit selections."""
+        if self._context_provider is None:
+            return None
+        try:
+            ctx = self._context_provider()
+        except Exception:
+            return None
+        if ctx is None:
+            return None
+        ctx.psyke_entry_type = self._psyke_type.currentData() or "other"
+        ctx.character_name = self._char_combo.currentText().strip()
+        ctx.transcript_project_id = self._transcript_project_id
+        return ctx
+
+    def _selected_target_id(self) -> str:
+        from storyplanner.voice.commit_router import T_CURSOR
+        if not self._targets_active or self._target_combo.currentIndex() < 0:
+            return T_CURSOR
+        return self._target_combo.currentData() or T_CURSOR
+
+    def _refresh_targets(self) -> None:
+        """Rebuild the target list from the router (read-only; no mutation)."""
+        ctx = self._build_context()
+        if ctx is None:
+            return                       # cursor-only MVP behavior (row hidden)
+        from storyplanner.voice.commit_router import (
+            get_available_voice_commit_targets)
+        targets = get_available_voice_commit_targets(ctx)
+        keep = self._target_combo.currentData()
+        self._target_combo.blockSignals(True)
+        self._target_combo.clear()
+        for target in targets:
+            self._target_combo.addItem(target.label, target.id)
+            i = self._target_combo.count() - 1
+            item = self._target_combo.model().item(i)
+            if not target.enabled:
+                item.setEnabled(False)
+                item.setToolTip(target.reason_if_disabled)
+                self._target_combo.setItemData(
+                    i, target.reason_if_disabled, Qt.ItemDataRole.ToolTipRole)
+        idx = self._target_combo.findData(keep)
+        self._target_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self._target_combo.blockSignals(False)
+        self._targets_active = True
+        has_text = bool(self._preview.toPlainText().strip())
+        for w in (self._target_label, self._target_combo):
+            w.setVisible(True)
+        self._target_combo.setEnabled(has_text)
+        self._sync_target_subcontrols(ctx)
+
+    def _sync_target_subcontrols(self, ctx=None) -> None:
+        from storyplanner.voice.commit_router import (
+            T_PSYKE, T_SP_DIALOGUE, T_STAGE_DIALOGUE)
+        tid = self._target_combo.currentData()
+        self._psyke_type.setVisible(tid == T_PSYKE)
+        wants_char = tid in (T_SP_DIALOGUE, T_STAGE_DIALOGUE)
+        self._char_combo.setVisible(wants_char)
+        if wants_char and ctx is not None and self._char_combo.count() == 0:
+            try:                          # existing characters only; no guessing
+                for c in ctx.db.get_all_characters(ctx.project_id):
+                    self._char_combo.addItem(c.name)
+                self._char_combo.setCurrentText("")
+            except Exception:
+                pass
+
+    def _on_target_changed(self, _index: int) -> None:
+        ctx = self._build_context()
+        self._sync_target_subcontrols(ctx)
+
+    def _copy_transcript(self) -> None:
+        from PySide6.QtWidgets import QApplication
+        QApplication.clipboard().setText(self._preview.toPlainText())
+        self._status_label.setText("Voice: transcript copied")
 
     def stop_if_active(self) -> None:
         """Hide/close policy (Alpha): stop a live session safely, keep the
@@ -313,16 +431,32 @@ class VoicePanel(QWidget):
         if not text.strip():
             self._status_label.setText("Voice: nothing to commit")
             return False
-        ok = self._commit.insert_as_plain_text(text)
-        if ok:
-            self._status_label.setText("Voice: committed to editor")
-        else:
-            self._status_label.setText(
-                "Voice: no active editor — click into the editor, then Commit")
+        from storyplanner.voice.commit_router import T_CURSOR
+        target_id = self._selected_target_id()
+        ctx = self._build_context()
+        if ctx is None or target_id == T_CURSOR:
+            # The original MVP path: plain text at the active editor's cursor.
+            ok = self._commit.insert_as_plain_text(text)
+            if ok:
+                self._status_label.setText("Voice: committed to editor")
+            else:
+                self._status_label.setText(
+                    "Voice: no active editor — click into the editor, "
+                    "then Commit")
+            return ok
+        from storyplanner.voice.commit_router import commit_transcript
+        ok, message = commit_transcript(text, target_id, ctx)
+        self._status_label.setText(
+            message or ("Voice: transcript committed"
+                        if ok else "Voice: commit failed"))
+        if ok and self._on_data_changed is not None:
+            self._on_data_changed()       # project dirty only AFTER commit
         return ok
 
     def clear_preview(self) -> None:
         self._preview.clear()
+        self._transcript_project_id = None
+        self._refresh_targets()
 
     # -- slots (UI thread) ---------------------------------------------------
     def _apply_status_str(self, status_value: str) -> None:
@@ -340,6 +474,17 @@ class VoicePanel(QWidget):
         if not text:
             return
         existing = self._preview.toPlainText()
+        if not existing.strip():
+            # Capture the project this transcript belongs to: a later project
+            # switch blocks the commit (never into the wrong project).
+            ctx = None
+            if self._context_provider is not None:
+                try:
+                    ctx = self._context_provider()
+                except Exception:
+                    ctx = None
+            self._transcript_project_id = (
+                getattr(ctx, "project_id", None) if ctx is not None else None)
         self._preview.setPlainText((existing + " " + text).strip()
                                    if existing else text)
         if self._auto_commit.isChecked():
@@ -353,10 +498,15 @@ class VoicePanel(QWidget):
     def _refresh_buttons(self) -> None:
         listening = self._status in (VoiceStatus.LISTENING,
                                      VoiceStatus.PROCESSING)
+        has_text = bool(self._preview.toPlainText().strip())
         self._start_btn.setEnabled(not listening)
         self._stop_btn.setEnabled(listening)
-        self._commit_btn.setEnabled(bool(self._preview.toPlainText().strip()))
+        self._commit_btn.setEnabled(has_text)
         self._clear_btn.setEnabled(bool(self._preview.toPlainText()))
+        self._copy_btn.setEnabled(has_text)
+        if has_text != self._had_transcript:
+            self._had_transcript = has_text
+            self._refresh_targets()       # empty <-> ready transition only
 
 
 class VoiceDictationWindow(QDialog):

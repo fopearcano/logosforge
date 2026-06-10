@@ -122,7 +122,12 @@ per-mode export tests.)
       parented to the main window (one instance; menu / Ctrl+Shift+V toggles
       show↔hide; Hide/close/Esc hide it with the transcript preview preserved;
       hiding while recording stops the session safely; never auto-shown, never
-      auto-recording, no parentless top-level window).
+      auto-recording, no parentless top-level window). **Commit targets are
+      explicit and mode-aware** (cursor / Note / PSYKE-draft-with-chosen-type /
+      Screenplay Action–Dialogue / Stage Direction–Dialogue / GN Panel fields
+      for the selected Panel): no auto-classification, no character or panel
+      guessing, no voice commands; unavailable targets show disabled with a
+      reason; stale transcripts cannot commit into a different project.
       Backends: **Local PC** (faster-whisper, local model path, no auto-download)
       and **Local LAN Server** (private/loopback URLs only — public URLs/ngrok/
       tunnels blocked, redirects refused). Missing/misconfigured backend shows a
