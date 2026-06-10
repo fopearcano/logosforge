@@ -341,6 +341,41 @@ def test_panel_lan_row_visible_only_in_lan_mode():
     assert p2._lan_check_btn.isHidden() is True
 
 
+def test_switching_backend_mode_while_recording_stops_session():
+    # §3: changing backend mode mid-session must stop the active recorder (the
+    # old backend must not keep recording after the switch).
+    p = _panel(voice_backend_mode="mock")
+    p.start()
+    rec = p._controller._recorder
+    assert rec.is_recording
+    idx = next(i for i in range(p._backend_combo.count())
+               if p._backend_combo.itemData(i) == "local_process")
+    p._backend_combo.setCurrentIndex(idx)
+    assert not rec.is_recording                    # old session stopped safely
+    assert p._status == VoiceStatus.OFF
+    assert p._test_saved.get("voice_backend_mode") == "local_process"
+
+
+def test_voice_package_uses_no_temp_files():
+    # Segments are wrapped as in-memory WAV (BytesIO) — no temp-file litter.
+    import os
+    import re
+    import storyplanner.voice as vp
+    pkg_dir = list(vp.__path__)[0]
+    tmp_re = re.compile(r"^\s*(import|from)\s+tempfile\b", re.M)
+    for name in os.listdir(pkg_dir):
+        if name.endswith(".py"):
+            src = open(os.path.join(pkg_dir, name), encoding="utf-8").read()
+            assert not tmp_re.search(src), f"tempfile usage in {name}"
+
+
+def test_no_hardcoded_machine_paths_in_voice_defaults():
+    from storyplanner.settings import DEFAULTS
+    for key in ("voice_whisper_model_path", "voice_whisper_executable_path",
+                "voice_lan_base_url", "voice_lan_auth_token"):
+        assert DEFAULTS[key] == ""                 # user-configured, never baked in
+
+
 def test_panel_creates_no_top_level_window():
     before = set(QApplication.topLevelWidgets())
     p = _panel(voice_backend_mode="lan_server",

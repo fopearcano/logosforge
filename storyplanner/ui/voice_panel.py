@@ -191,6 +191,12 @@ class VoicePanel(QWidget):
             self._lan_check_btn.setVisible(False)
 
     def _on_backend_changed(self, index: int) -> None:
+        # Changing the backend mode mid-session must not leave the previous
+        # backend recording: stop the active session safely first (finalizes a
+        # valid pending segment; transcript stays uncommitted for review).
+        if self._controller is not None and self._controller.status in (
+                VoiceStatus.LISTENING, VoiceStatus.PROCESSING):
+            self.stop()
         value = self._backend_combo.itemData(index) or "disabled"
         self._store_set("voice_backend_mode", value)
         self._sync_backend_row()
