@@ -87,6 +87,22 @@ retest gate** (see `docs/ALPHA_RC_STATUS.md`).
 
 ### Added (feature-flagged, off by default)
 
+- **Voice Phase 9 — end-to-end Alpha hardening gate (audit + certification;
+  no production code changed).** The complete voice stack (Phases 1–8)
+  passed the cross-cutting gate `tests/test_voice_alpha_gate.py` (9): a
+  one-pass dictate→correct→commit→undo pipeline; **uncommitted voice
+  history never locks the writing mode while committed voice text does**;
+  app close while recording stops the session safely; 30-segment sessions
+  stay ordered with audio dropped on discard/clear; mock-based latency
+  guardrails (backend/mic checks and a short segment each < 1 s; real-model
+  latency varies by hardware); exports and the diagnostics summary contain
+  no transcript history, glossary internals, audio or secrets; every voice
+  module imports cleanly without the optional dependencies; exactly one
+  backend per resolved mode. Privacy audit: `lan_server.py` is the only
+  network-touching voice module (private hosts enforced); zero logging
+  statements in the voice stack. Full matrix: voice 427 + writing-mode/
+  structural regression 449 — **0 failures**. Manual QA checklist extended
+  to V49. **Classification: A — Voice MVP is Alpha-safe.**
 - **Voice Phase 8 — local Whisper setup, diagnostics, backend profiles,
   guardrails.** A parented modeless **Voice Setup** panel
   (`ui/voice_setup_dialog.py`, opened from the voice panel) over a new

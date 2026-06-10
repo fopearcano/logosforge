@@ -128,6 +128,8 @@ per-mode export tests.)
       for the selected Panel): no auto-classification, no character or panel
       guessing, no voice commands; unavailable targets show disabled with a
       reason; stale transcripts cannot commit into a different project.
+      **Phase 9 hardening gate passed** (voice matrix 427 + regression 449,
+      0 failures; privacy audit clean — see `docs/ALPHA_RC_STATUS.md`).
       Backends: **Local PC** (faster-whisper, local model path, no auto-download)
       and **Local LAN Server** (private/loopback URLs only — public URLs/ngrok/
       tunnels blocked, redirects refused). Missing/misconfigured backend shows a

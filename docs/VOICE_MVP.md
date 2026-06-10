@@ -367,6 +367,23 @@ Open Voice Setup to enable Voice Mode."* Dictation still works with Whisper
 alone — Billy actions disable without an AI provider, and glossary
 suggestions are simply absent without terms.
 
+## Alpha hardening gate (Phase 9 — certified)
+
+The whole stack passed the end-to-end hardening gate
+(`tests/test_voice_alpha_gate.py` + the full voice matrix): one-pass
+dictate→correct→commit→undo pipeline; **uncommitted voice history never
+locks the writing mode, committed voice text does**; closing the app while
+recording stops the session safely; 30-segment sessions stay ordered with
+audio dropped on discard/clear; mock-based latency guardrails (backend
+check, mic check and a short segment each well under a second; real-model
+latency varies by hardware); exports and the diagnostics summary contain no
+transcript history, glossary internals, audio or secrets; every voice
+module imports cleanly without the optional dependencies; and exactly one
+backend is active per resolved mode by construction. The privacy audit
+found `lan_server.py` to be the only network-touching voice module
+(private-host enforced) and **zero logging statements** anywhere in the
+voice stack.
+
 ## Future hooks (anchor points, not implemented)
 
 `EditorCommitTarget` defines (and deliberately stubs) the later shape:

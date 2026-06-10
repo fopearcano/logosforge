@@ -69,6 +69,7 @@ manual UI check). Command form:
 | `tests/test_voice_room.py` (Phase 6 Voice Room shell: state/queue/modes) | **26 passed** |
 | `tests/test_voice_glossary.py` (Phase 7 project glossary + corrections) | **28 passed** |
 | `tests/test_voice_setup.py` (Phase 8 setup/diagnostics/backend profiles) | **28 passed** |
+| `tests/test_voice_alpha_gate.py` (Phase 9 end-to-end hardening gate) | **9 passed** |
 | `tests/test_voice_lan.py` (backend modes + LAN Whisper server) | **43 passed** |
 | `tests/test_voice_lan_server.py` (LAN companion server + client integration) | **22 passed** |
 | `tests/test_gn_pages_manuscript_sync.py` (GN shared body) | **30 passed** |
@@ -76,7 +77,7 @@ manual UI check). Command form:
 | `tests/test_series_navigator.py` (Navigator + deps) | **26 passed** |
 | `tests/test_writing_mode_lock.py` (mode lock) | **22 passed** |
 | `tests/test_export_safety.py` (export privacy) | **4 passed** |
-| **Total** | **728 passed, 0 failed** |
+| **Total** | **737 passed, 0 failed** |
 
 > Environment note: PDF/DOCX export tests fail only where `reportlab` /
 > `python-docx` are not installed (pre-existing, graceful-degradation behavior),
@@ -226,6 +227,9 @@ this behavior as supporting evidence (the manual UI check is still required).
 | V44 | Configure faster-whisper (model dir) or whisper.cpp (executable + model) → Test backend reports ready; Test transcription on a short WAV shows text in the panel (not committed) | PENDING MANUAL RETEST | |
 | V45 | Performance profile (Fast draft / Balanced / Accurate) updates silence/segment/beam; Custom exposes the fields; no GPU required | PENDING MANUAL RETEST | ✓ |
 | V46 | With no valid backend, Voice Room Start is disabled with "Local Whisper is not configured. Open Voice Setup…"; Copy diagnostics has no secrets | PENDING MANUAL RETEST | ✓ |
+| V47 | Full pipeline: speak → transcript → glossary correction → commit as dictation → Undo; then Send to Billy → Apply one proposal, Cancel another | PENDING MANUAL RETEST | ✓ |
+| V48 | Close the app while recording — the session stops safely (reopen: app normal) | PENDING MANUAL RETEST | ✓ |
+| V49 | Export the project — no transcript history, glossary internals, audio or voice temp data in the export | PENDING MANUAL RETEST | ✓ |
 | L1 | Backend selector shows Disabled / Local PC / Local LAN Server / Mock; default Disabled | PENDING MANUAL RETEST | ✓ |
 | L2 | Start a Whisper server on another LAN machine (`docs/LOCAL_LAN_WHISPER.md`) | PENDING MANUAL RETEST | |
 | L3 | Select **Local LAN Server**; enter the private LAN URL (e.g. `http://192.168.x.x:8765`) | PENDING MANUAL RETEST | ✓ |

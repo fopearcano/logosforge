@@ -113,8 +113,9 @@ panel** yet:
   automatic mode detection, automatic command execution, automatic
   screenplay role guessing or character attribution, automatic PSYKE
   classification, speaker diarization, or an image-generation bridge; no
-  shell/system commands; cloud realtime remains deferred. See
-  `docs/VOICE_MVP.md`.
+  shell/system commands; cloud realtime remains deferred. **Phase 9
+  hardening gate passed** (privacy audit clean; real-model latency
+  varies by hardware). See `docs/VOICE_MVP.md`.
 
 ## Model / feature limits
 

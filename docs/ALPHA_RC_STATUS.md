@@ -231,3 +231,23 @@ commercial products are **separate, later packaging/distribution targets**:
 both of which should **call or attach to this Python core / API** rather than
 re-implement it. This Alpha RC is the Python core milestone and **should not be
 conflated** with final Electron/Web commercial packaging.
+
+## Voice MVP Phases 1–9 — Alpha hardening gate (2026-06-10)
+
+The complete local voice stack — flag/capture/buffering (1), mode-aware
+Commit Router (2), transcript history with edit/undo/retry (3), preview-first
+Intent Router (4), Billy Voice Bridge (5), Voice Room shell with state
+machine + proposal queue (6), project Voice Glossary corrections (7), Voice
+Setup/diagnostics/backend profiles incl. whisper.cpp (8) — passed the Phase 9
+end-to-end hardening gate. Privacy audit: `voice/lan_server.py` is the only
+network-touching voice module (private/loopback hosts enforced); **zero
+logging statements** in the voice stack; exports and diagnostics carry no
+transcripts, glossary internals, audio or secrets. Cross-cutting pins:
+uncommitted voice history never locks the writing mode (committed text
+does); app close while recording stops safely; 30-segment sessions stay
+ordered with audio dropped on discard/clear; one active backend per mode by
+construction; every voice module imports without the optional dependencies.
+Suites: 13 voice files **427 passed** (incl. `tests/test_voice_alpha_gate.py`,
+9) + writing-mode/structural regression **449 passed** — 0 failures.
+Real-microphone/fullscreen items remain in the manual checklist (V1–V49).
+**Classification: A — Voice MVP is Alpha-safe.**
