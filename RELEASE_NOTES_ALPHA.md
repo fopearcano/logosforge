@@ -106,6 +106,14 @@ stays Project → Act → Chapter → Scene):
   future anchor point for visual-production integrations. Both surfaces are embedded
   child widgets (no separate route, no top-level window), addressing the earlier macOS
   fullscreen minimize. See `docs/KNOWN_LIMITATIONS_ALPHA.md`.
+- **Local voice-to-script (MVP, off by default):** an opt-in, **local-first**
+  dictation foundation (`enable_voice_mode`) — buffered microphone capture, simple
+  pause detection, **local Whisper** transcription (optional `faster-whisper` +
+  `sounddevice`, local model path required, **no automatic downloads**), a transcript
+  preview, and **manual plain-text commit** at the editor cursor. **No cloud speech
+  API; audio never leaves the device.** Not cloud realtime, no voice commands, no
+  automatic dialogue/action classification (deferred hooks exist). View → Voice
+  Dictation (Ctrl/Cmd+Shift+V). See `docs/VOICE_MVP.md`.
 
 **Verification:** the final global multi-mode integrity audit (Alpha Release Gate)
 returned **A**. Focused gate `tests/test_alpha_release_gate.py` = **35 passed**;

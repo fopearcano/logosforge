@@ -82,6 +82,8 @@ class SoundDeviceRecorder(VoiceRecorder):
         return (True, "")
 
     def start(self, on_chunk: Callable[[bytes], None]) -> bool:
+        if self._stream is not None:       # never open a second mic stream
+            self.stop()
         ok, _ = self.availability()
         if not ok:
             return False

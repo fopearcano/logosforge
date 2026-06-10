@@ -112,6 +112,74 @@ def test_status_transitions_off_listening_processing_ready_off():
     assert finals == ["hello"]
 
 
+def test_double_start_is_idempotent_no_overlapping_recorder():
+    ctl = VoiceSessionController(_settings(), MockRecorder(), MockTranscriber())
+    assert ctl.start_voice_session() is True
+    rec = ctl._recorder
+    assert ctl.start_voice_session() is True       # idempotent no-op
+    assert ctl.status == VoiceStatus.LISTENING
+    assert rec.is_recording                        # single recorder state
+
+
+def test_panel_double_start_does_not_leak_recorder():
+    from storyplanner.ui.voice_panel import VoicePanel
+    p = VoicePanel(settings_get=_get(dict(enable_voice_mode=True,
+                   voice_whisper_backend="mock", voice_silence_ms=300)),
+                   commit_target=EditorCommitTarget())
+    p.start()
+    c1, r1 = p._controller, p._controller._recorder
+    p.start()                                      # second start while listening
+    assert p._controller is c1                     # controller kept, no orphan
+    p.stop()
+    assert not r1.is_recording
+
+
+def test_repeated_start_stop_cycles_are_clean():
+    from storyplanner.ui.voice_panel import VoicePanel
+    p = VoicePanel(settings_get=_get(dict(enable_voice_mode=True,
+                   voice_whisper_backend="mock", voice_silence_ms=300)),
+                   commit_target=EditorCommitTarget())
+    for _ in range(3):
+        p.start()
+        rec = p._controller._recorder
+        assert rec.is_recording
+        p.stop()
+        assert not rec.is_recording
+    assert p._status == VoiceStatus.OFF
+
+
+def test_stop_finalizes_valid_segment():
+    finals = []
+    ctl = VoiceSessionController(
+        _settings(silence_ms=999999), MockRecorder(), MockTranscriber("tail"),
+        on_final_transcript=lambda seg: finals.append(seg.text))
+    ctl.start_voice_session()
+    ctl._recorder.feed_chunk(_speech(500))          # no silence boundary yet
+    ctl.stop_voice_session()                        # Stop flushes the remainder
+    assert finals == ["tail"]
+    assert ctl.status == VoiceStatus.OFF
+
+
+def test_buffer_is_bounded_by_max_segment_duration():
+    buf = AudioBuffer(_SR, silence_ms=999999, max_segment_seconds=1)
+    max_bytes = 0
+    for _ in range(50):                             # 5 s of speech
+        buf.feed(_speech(100))
+        max_bytes = max(max_bytes, buf._bytes)
+    # Internal accumulation never exceeds one max-duration segment (1 s + chunk).
+    assert max_bytes <= int(_SR * 1.2) * 2
+
+
+def test_backend_availability_check_needs_no_network(monkeypatch):
+    import socket
+    def _no_net(*a, **k):
+        raise AssertionError("network access attempted")
+    monkeypatch.setattr(socket, "create_connection", _no_net)
+    ok, msg = FasterWhisperTranscriber(model_path="").availability()
+    assert ok is False and msg                      # offline check only
+    assert MockTranscriber().availability() == (True, "")
+
+
 # ==========================================================================
 # 3-4  Missing backend / model path -> disabled/setup, no crash
 # ==========================================================================
@@ -332,6 +400,24 @@ def test_main_window_builds_with_voice_panel_hidden():
     assert win._voice_panel is not None
     assert win._voice_panel.isVisible() is False           # flag off by default
     assert win._voice_panel.window() is win                # embedded child
+
+
+def test_voice_shortcut_has_no_conflicts():
+    # Ctrl+Shift+V must be unique across all menu actions (no clash with the
+    # existing Ctrl+L / Ctrl+B / Ctrl+Shift+{D,H,F} or paste variants).
+    from PySide6.QtGui import QAction
+    from storyplanner.ui.main_window import MainWindow
+    db = Database()
+    pid = db.create_project("N", narrative_engine="novel").id
+    win = MainWindow(db, pid)
+    shortcuts: dict[str, list[str]] = {}
+    for action in win.findChildren(QAction):
+        for ks in action.shortcuts():
+            key = ks.toString()
+            if key:
+                shortcuts.setdefault(key, []).append(action.text())
+    assert any("Voice" in t for t in shortcuts.get("Ctrl+Shift+V", []))
+    assert len(shortcuts.get("Ctrl+Shift+V", [])) == 1      # unique
 
 
 def test_toggle_voice_panel_when_disabled_is_safe():

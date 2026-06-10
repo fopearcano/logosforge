@@ -148,6 +148,13 @@ class VoicePanel(QWidget):
         self.setVisible(not self.isVisible())
 
     def start(self) -> None:
+        # Never create an overlapping session: if a controller is already
+        # listening, keep it; otherwise stop/cleanup the previous one before
+        # building a fresh controller (prevents an orphaned open mic stream).
+        if self._controller is not None and self._controller.status in (
+                VoiceStatus.LISTENING, VoiceStatus.PROCESSING):
+            return
+        self.stop_session()
         ok, msg = self._ensure_controller()
         if not ok:
             self._apply_status(VoiceStatus.DISABLED)

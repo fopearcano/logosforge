@@ -72,6 +72,9 @@ class VoiceSessionController:
 
     # -- lifecycle -----------------------------------------------------------
     def start_voice_session(self) -> bool:
+        # Idempotent: never start a second, overlapping recorder state.
+        if self._status in (VoiceStatus.LISTENING, VoiceStatus.PROCESSING):
+            return True
         ok, _msg = self.availability()
         if not ok:
             self._set_status(VoiceStatus.DISABLED)

@@ -58,13 +58,13 @@ manual UI check). Command form:
 | `tests/test_gn_embedded_navigator.py` (Manuscript Page/Panel Navigator) | **33 passed** |
 | `tests/test_gn_outline.py` (GN Outline Pages/Panels) | **38 passed** |
 | `tests/test_gn_outline_integrity_gate.py` (GN Outline integrity gate) | **13 passed** |
-| `tests/test_voice_mvp.py` (local voice-to-script MVP) | **28 passed** |
+| `tests/test_voice_mvp.py` (local voice-to-script MVP) | **35 passed** |
 | `tests/test_gn_pages_manuscript_sync.py` (GN shared body) | **30 passed** |
 | `tests/test_series_hierarchy.py` (Series hierarchy) | **70 passed** |
 | `tests/test_series_navigator.py` (Navigator + deps) | **26 passed** |
 | `tests/test_writing_mode_lock.py` (mode lock) | **22 passed** |
 | `tests/test_export_safety.py` (export privacy) | **4 passed** |
-| **Total** | **350 passed, 0 failed** |
+| **Total** | **357 passed, 0 failed** |
 
 > Environment note: PDF/DOCX export tests fail only where `reportlab` /
 > `python-docx` are not installed (pre-existing, graceful-degradation behavior),
@@ -175,6 +175,10 @@ this behavior as supporting evidence (the manual UI check is still required).
 | V8 | No crash when the microphone is unavailable / permission denied | PENDING MANUAL RETEST | ✓ |
 | V9 | App does not freeze while transcribing; closing while recording stops safely | PENDING MANUAL RETEST | partial |
 | V10 | No audio leaves the device (local-first) | PENDING MANUAL RETEST | ✓ |
+| V11 | Save/reopen the project — committed dictation text persists | PENDING MANUAL RETEST | ✓ |
+| V12 | Stop during Processing — no hang; status returns to off | PENDING MANUAL RETEST | ✓ |
+| V13 | Switch project while recording — session stops; transcript is NOT committed into the other project | PENDING MANUAL RETEST | ✓ |
+| V14 | Open the voice panel in macOS fullscreen — app does not minimize (embedded strip, no floating window) | PENDING MANUAL RETEST | partial |
 
 ### Stage Script
 
@@ -311,7 +315,7 @@ These are already documented in `docs/KNOWN_LIMITATIONS_ALPHA.md` and are
 
 ## Decision
 
-**PENDING MANUAL RETEST.** Automated focused suites are green (350 passed), but
+**PENDING MANUAL RETEST.** Automated focused suites are green (357 passed), but
 the manual UI checklist above has not been executed. **Do not tag** the Alpha RC
 until the manual checklist is completed and this decision is updated to one of:
 
