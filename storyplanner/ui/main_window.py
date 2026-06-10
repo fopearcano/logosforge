@@ -3315,6 +3315,10 @@ class MainWindow(QMainWindow):
         vp = getattr(self, "_voice_panel", None)
         if vp is not None:
             vp.stop_session()
+            # Freeze (don't lose) the visible transcript history; per-entry
+            # project ids block commits into the new project regardless.
+            if hasattr(vp, "note_project_switched"):
+                vp.note_project_switched(new_id)
         vc = getattr(self, "_voice_commit", None)
         if vc is not None:
             vc.clear()

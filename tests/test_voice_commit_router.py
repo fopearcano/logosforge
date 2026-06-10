@@ -593,12 +593,17 @@ def test_ui_copy_button_and_no_new_windows():
     assert new_visible == []                             # no extra windows
 
 
-def test_segment_model_has_phase2_fields_and_no_audio():
+def test_segment_model_fields_and_audio_retention():
     seg = TranscriptSegment(text="hello")
     assert seg.id and seg.created_at > 0
     assert seg.source == "local_whisper"
     assert seg.committed is False and seg.committed_target == ""
-    assert not any("audio" in f for f in vars(seg))      # no audio stored
+    # Phase 3 retry keeps the PCM in MEMORY only (session-scoped): default
+    # None, repr-suppressed, and no path/file fields exist that could ever
+    # persist audio to disk.
+    assert seg.audio_bytes is None
+    assert "audio_bytes" not in repr(seg)
+    assert not any("path" in f or "file" in f for f in vars(seg))
 
 
 def test_router_module_has_no_cloud_or_llm_refs():

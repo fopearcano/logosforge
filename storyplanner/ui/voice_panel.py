@@ -32,11 +32,15 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
+
+from storyplanner.voice.history import VoiceTranscriptHistory
 
 from storyplanner.voice.editor_commit import EditorCommitTarget
 from storyplanner.voice.types import PRIVACY_NOTE, SETUP_MESSAGE, VoiceStatus
@@ -65,6 +69,7 @@ class VoicePanel(QWidget):
     # Marshal controller callbacks (possibly off-thread) to the UI thread.
     _status_changed = Signal(str)
     _final_text = Signal(str)
+    _final_segment = Signal(object)      # full TranscriptSegment (history)
     # Emitted by the panel's Hide button; the hosting window hides safely.
     hide_requested = Signal()
 
@@ -86,6 +91,9 @@ class VoicePanel(QWidget):
         self._transcript_project_id: int | None = None
         self._had_transcript = False
         self._targets_active = False     # True once the router populated targets
+        # Phase 3: local, session-only transcript history (review layer).
+        self._history = VoiceTranscriptHistory()
+        self._editing_entry_id: str | None = None
         self._controller = None
         self._status = VoiceStatus.OFF
 
@@ -160,6 +168,43 @@ class VoicePanel(QWidget):
         self._preview.setMinimumHeight(120)   # readable; grows with the window
         layout.addWidget(self._preview, stretch=1)
 
+        # -- Transcript history (Phase 3): session-only, local review layer --
+        self._history_list = QListWidget()
+        self._history_list.setObjectName("voiceHistoryList")
+        self._history_list.setMaximumHeight(110)
+        self._history_list.setToolTip(
+            "This session's transcript segments — check segments to commit "
+            "them together. History is local and temporary.")
+        layout.addWidget(self._history_list)
+
+        hist_row = QHBoxLayout()
+        for label, slot, name in (
+            ("Edit", self._on_hist_edit, "voiceHistEdit"),
+            ("Apply Edit", self._on_hist_apply_edit, "voiceHistApplyEdit"),
+            ("Restore", self._on_hist_restore, "voiceHistRestore"),
+            ("Discard", self._on_hist_discard, "voiceHistDiscard"),
+            ("Retry", self._on_hist_retry, "voiceHistRetry"),
+            ("Merge", self._on_hist_merge, "voiceHistMerge"),
+            ("Split at cursor", self._on_hist_split, "voiceHistSplit"),
+        ):
+            b = QPushButton(label)
+            b.setObjectName(name)
+            b.setFlat(True)
+            b.clicked.connect(slot)
+            hist_row.addWidget(b)
+        hist_row.addStretch()
+        self._undo_btn = QPushButton("Undo last commit")
+        self._undo_btn.setObjectName("voiceUndoCommit")
+        self._undo_btn.setFlat(True)
+        self._undo_btn.clicked.connect(self._on_undo_commit)
+        hist_row.addWidget(self._undo_btn)
+        self._clear_pending_btn = QPushButton("Clear uncommitted")
+        self._clear_pending_btn.setObjectName("voiceHistClearPending")
+        self._clear_pending_btn.setFlat(True)
+        self._clear_pending_btn.clicked.connect(self._on_clear_uncommitted)
+        hist_row.addWidget(self._clear_pending_btn)
+        layout.addLayout(hist_row)
+
         row = QHBoxLayout()
         self._start_btn = QPushButton("Start")
         self._start_btn.setObjectName("voiceStart")
@@ -191,6 +236,7 @@ class VoicePanel(QWidget):
 
         self._status_changed.connect(self._apply_status_str)
         self._final_text.connect(self._apply_final_text)
+        self._final_segment.connect(self._apply_final_segment)
         self._preview.textChanged.connect(self._refresh_buttons)
 
         self.setVisible(False)               # hidden until toggled / enabled
@@ -283,7 +329,7 @@ class VoicePanel(QWidget):
         self._controller = VoiceSessionController(
             settings, recorder, transcriber,
             on_status=lambda s: self._status_changed.emit(s.value),
-            on_final_transcript=lambda seg: self._final_text.emit(seg.text))
+            on_final_transcript=lambda seg: self._final_segment.emit(seg))
         return self._controller.availability()
 
     # -- lifecycle -----------------------------------------------------------
@@ -390,6 +436,221 @@ class VoicePanel(QWidget):
         QApplication.clipboard().setText(self._preview.toPlainText())
         self._status_label.setText("Voice: transcript copied")
 
+    # -- Phase 3: transcript history -----------------------------------------
+    def _apply_final_segment(self, seg) -> None:
+        """A finalized segment: record it in the local history, then feed the
+        live preview exactly as before."""
+        ctx = self._build_context()
+        self._history.add_final_segment(
+            seg,
+            project_id=getattr(ctx, "project_id", 0) if ctx else 0,
+            writing_mode=getattr(ctx, "writing_mode", "") if ctx else "")
+        self._refresh_history_ui()
+        self._apply_final_text(seg.text)
+
+    def _checked_entry_ids(self) -> list[str]:
+        ids = []
+        for i in range(self._history_list.count()):
+            item = self._history_list.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                ids.append(item.data(Qt.ItemDataRole.UserRole))
+        return ids
+
+    def _current_entry(self):
+        item = self._history_list.currentItem()
+        if item is None:
+            return None
+        return self._history.get(item.data(Qt.ItemDataRole.UserRole))
+
+    def _refresh_history_ui(self) -> None:
+        keep_current = None
+        if self._history_list.currentItem() is not None:
+            keep_current = self._history_list.currentItem().data(
+                Qt.ItemDataRole.UserRole)
+        checked = set(self._checked_entry_ids())
+        self._history_list.blockSignals(True)
+        self._history_list.clear()
+        for entry in self._history.visible_entries():
+            label = f"[{entry.status}] {entry.preview()}"
+            if entry.committed_target:
+                label += f"  → {entry.committed_target}"
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, entry.id)
+            item.setToolTip(entry.text)
+            if self._history.committable(entry):
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(
+                    Qt.CheckState.Checked if entry.id in checked
+                    else Qt.CheckState.Unchecked)
+            self._history_list.addItem(item)
+            if entry.id == keep_current:
+                self._history_list.setCurrentItem(item)
+        self._history_list.blockSignals(False)
+        # Undo button reflects the live can_undo state (with the reason).
+        from storyplanner.voice.commit_router import can_undo
+        ctx = self._build_context()
+        if ctx is None:
+            self._undo_btn.setEnabled(False)
+            self._undo_btn.setToolTip("Nothing to undo.")
+        else:
+            ok, reason = can_undo(self._history.last_commit_op, ctx)
+            self._undo_btn.setEnabled(ok)
+            self._undo_btn.setToolTip("" if ok else reason)
+
+    def _on_hist_edit(self) -> None:
+        entry = self._current_entry()
+        if entry is None:
+            self._status_label.setText("Voice: select a segment first")
+            return
+        self._editing_entry_id = entry.id
+        self._preview.setPlainText(entry.text)
+        self._status_label.setText(
+            "Voice: editing segment — change the text, then Apply Edit")
+
+    def _on_hist_apply_edit(self) -> None:
+        if self._editing_entry_id is None:
+            self._status_label.setText("Voice: click Edit on a segment first")
+            return
+        ok = self._history.edit(self._editing_entry_id,
+                                self._preview.toPlainText())
+        self._status_label.setText(
+            "Voice: segment updated" if ok
+            else "Voice: this segment can no longer be edited")
+        if ok:
+            self._editing_entry_id = None
+        self._refresh_history_ui()
+
+    def _on_hist_restore(self) -> None:
+        entry = self._current_entry()
+        if entry is not None and self._history.restore_original(entry.id):
+            self._status_label.setText("Voice: original text restored")
+            if self._editing_entry_id == entry.id:
+                self._preview.setPlainText(entry.text)
+        self._refresh_history_ui()
+
+    def _on_hist_discard(self) -> None:
+        ids = self._checked_entry_ids()
+        entry = self._current_entry()
+        if not ids and entry is not None:
+            ids = [entry.id]
+        discarded = sum(1 for eid in ids if self._history.discard(eid))
+        if discarded:
+            self._status_label.setText(f"Voice: {discarded} segment(s) "
+                                       "discarded")
+        self._refresh_history_ui()
+
+    def _on_hist_retry(self) -> None:
+        entry = self._current_entry()
+        if entry is None:
+            self._status_label.setText("Voice: select a segment first")
+            return
+        ok, reason = self._history.can_retry(entry)
+        if not ok:
+            self._status_label.setText(f"Voice: {reason}")
+            return
+        from storyplanner.voice.transcriber import build_transcriber
+        transcriber = build_transcriber(self._load_settings())
+        ok, msg = self._history.retry_transcription(entry.id, transcriber)
+        self._status_label.setText(f"Voice: {msg}")
+        if ok and self._editing_entry_id == entry.id:
+            self._preview.setPlainText(entry.text)
+        self._refresh_history_ui()
+
+    def _on_hist_merge(self) -> None:
+        ids = self._checked_entry_ids()
+        merged = self._history.merge(ids)
+        self._status_label.setText(
+            "Voice: segments merged" if merged is not None
+            else "Voice: select 2+ adjacent uncommitted segments to merge")
+        self._refresh_history_ui()
+
+    def _on_hist_split(self) -> None:
+        if self._editing_entry_id is None:
+            self._status_label.setText(
+                "Voice: click Edit on a segment, place the cursor, then Split")
+            return
+        # Apply any pending edit first so the split sees the visible text.
+        self._history.edit(self._editing_entry_id, self._preview.toPlainText())
+        pos = self._preview.textCursor().position()
+        result = self._history.split(self._editing_entry_id, pos)
+        self._status_label.setText(
+            "Voice: segment split" if result is not None
+            else "Voice: both halves must be non-empty")
+        if result is not None:
+            self._editing_entry_id = None
+        self._refresh_history_ui()
+
+    def _on_undo_commit(self) -> None:
+        ctx = self._build_context()
+        if ctx is None:
+            self._status_label.setText("Voice: nothing to undo")
+            return
+        from storyplanner.voice.commit_router import undo_commit
+        ok, msg = undo_commit(self._history.last_commit_op, ctx)
+        self._status_label.setText(f"Voice: {msg}")
+        if ok:
+            self._history.last_commit_op = None
+            if self._on_data_changed is not None:
+                self._on_data_changed()
+        self._refresh_history_ui()
+
+    def _on_clear_uncommitted(self) -> None:
+        removed = self._history.clear_uncommitted()
+        self._editing_entry_id = None
+        self._status_label.setText(f"Voice: {removed} uncommitted segment(s) "
+                                   "cleared")
+        self._refresh_history_ui()
+
+    def note_project_switched(self, new_project_id: int) -> None:
+        """Project changed: freeze (don't lose) the visible history — every
+        commit re-validates per-entry project ids, so stale segments can
+        never land in the new project."""
+        self._history.mark_session_stale()
+        if any(e.status in ("pending", "edited")
+               for e in self._history.entries):
+            self._status_label.setText(
+                "Voice: project changed — transcript history is from "
+                "another project")
+        self._refresh_history_ui()
+
+    def _commit_selected(self, entry_ids: list[str]) -> bool:
+        text = self._history.concat_text(entry_ids)
+        if not text:
+            self._status_label.setText("Voice: selected segments are empty")
+            return False
+        ctx = self._build_context()
+        from storyplanner.voice.commit_router import (
+            T_CURSOR, commit_transcript_op)
+        target_id = self._selected_target_id()
+        if ctx is None:
+            ok = self._commit.insert_as_plain_text(text)
+            if ok:
+                self._history.mark_committed(entry_ids, T_CURSOR)
+                self._status_label.setText("Voice: committed to editor")
+            else:
+                self._status_label.setText(
+                    "Voice: no active editor — click into the editor, "
+                    "then Commit")
+            self._refresh_history_ui()
+            return ok
+        ok_p, msg_p = self._history.check_same_project(entry_ids,
+                                                       ctx.project_id)
+        if not ok_p:
+            self._status_label.setText(msg_p)
+            return False
+        ok, msg, op = commit_transcript_op(text, target_id, ctx)
+        self._status_label.setText(
+            msg or ("Voice: transcript committed" if ok
+                    else "Voice: commit failed"))
+        if ok:
+            self._history.last_commit_op = op
+            self._history.mark_committed(entry_ids, target_id,
+                                         op.id if op is not None else "")
+            if self._on_data_changed is not None:
+                self._on_data_changed()
+        self._refresh_history_ui()
+        return ok
+
     def stop_if_active(self) -> None:
         """Hide/close policy (Alpha): stop a live session safely, keep the
         transcript preview. Never silently discards or auto-commits."""
@@ -412,6 +673,16 @@ class VoicePanel(QWidget):
             return
         if self._controller.start_voice_session():
             self._apply_status(VoiceStatus.LISTENING)
+            # One active history session at a time (no secrets — model label
+            # is just the path tail). Existing entries are kept.
+            settings = self._load_settings()
+            ctx = self._build_context()
+            import os
+            self._history.start_session(
+                getattr(ctx, "project_id", 0) if ctx else 0,
+                backend=settings.backend_mode,
+                model_label=os.path.basename(settings.model_path or ""),
+                language=settings.language or "")
 
     def stop(self) -> None:
         if self._controller is not None:
@@ -427,35 +698,56 @@ class VoicePanel(QWidget):
             pass
 
     def commit(self) -> bool:
+        # Checked history segments are the explicit selection — they commit
+        # together (in visible order) through the router.
+        checked = self._checked_entry_ids()
+        if checked:
+            return self._commit_selected(checked)
         text = self._preview.toPlainText()
         if not text.strip():
             self._status_label.setText("Voice: nothing to commit")
             return False
-        from storyplanner.voice.commit_router import T_CURSOR
-        target_id = self._selected_target_id()
         ctx = self._build_context()
-        if ctx is None or target_id == T_CURSOR:
+        if ctx is None:
             # The original MVP path: plain text at the active editor's cursor.
+            from storyplanner.voice.commit_router import T_CURSOR
             ok = self._commit.insert_as_plain_text(text)
             if ok:
                 self._status_label.setText("Voice: committed to editor")
+                self._mark_preview_entries_committed(T_CURSOR, "")
             else:
                 self._status_label.setText(
                     "Voice: no active editor — click into the editor, "
                     "then Commit")
             return ok
-        from storyplanner.voice.commit_router import commit_transcript
-        ok, message = commit_transcript(text, target_id, ctx)
+        from storyplanner.voice.commit_router import commit_transcript_op
+        target_id = self._selected_target_id()
+        ok, message, op = commit_transcript_op(text, target_id, ctx)
         self._status_label.setText(
             message or ("Voice: transcript committed"
                         if ok else "Voice: commit failed"))
-        if ok and self._on_data_changed is not None:
-            self._on_data_changed()       # project dirty only AFTER commit
+        if ok:
+            self._history.last_commit_op = op
+            self._mark_preview_entries_committed(
+                target_id, op.id if op is not None else "")
+            if self._on_data_changed is not None:
+                self._on_data_changed()   # project dirty only AFTER commit
         return ok
+
+    def _mark_preview_entries_committed(self, target_id: str,
+                                        op_id: str) -> None:
+        """A preview commit consumed the live dictation: mark the segments
+        that fed it (all still-committable entries) as committed."""
+        ids = [e.id for e in self._history.entries
+               if self._history.committable(e)]
+        if ids:
+            self._history.mark_committed(ids, target_id, op_id)
+        self._refresh_history_ui()
 
     def clear_preview(self) -> None:
         self._preview.clear()
         self._transcript_project_id = None
+        self._editing_entry_id = None
         self._refresh_targets()
 
     # -- slots (UI thread) ---------------------------------------------------

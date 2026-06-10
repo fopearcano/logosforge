@@ -126,6 +126,11 @@ class VoiceSessionController:
         seg = self._transcriber.transcribe(
             pcm, sample_rate=self._settings.sample_rate,
             language=self._settings.language)
+        # Keep the segment's local PCM in memory (session-only) so the history
+        # panel can offer "Retry transcription". Local-first: the bytes never
+        # touch disk and are dropped on discard/clear.
+        seg.audio_bytes = pcm
+        seg.sample_rate = self._settings.sample_rate
         if seg.error:
             self._set_status(VoiceStatus.ERROR)
         elif not seg.is_empty():

@@ -27,6 +27,7 @@ cursor target covers that flow).
 from __future__ import annotations
 
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -91,6 +92,8 @@ class VoiceCommitContext:
     # Cursor insertion (the existing EditorCommitTarget path).
     has_active_editor: bool = False
     insert_at_cursor: Callable[[str], bool] | None = None
+    # Optional: returns the live editor widget (for undo support only).
+    active_editor_getter: Callable[[], object] | None = None
     # Graphic Novel: the panel whose script block was last focused —
     # (scene_id, page_idx, panel_idx) — or None.
     gn_panel_ref: tuple[int, int, int] | None = None
@@ -217,72 +220,124 @@ def preview_commit_target(target_id: str, ctx: VoiceCommitContext) -> str:
 def commit_transcript(segment: TranscriptSegment | str, target_id: str,
                       ctx: VoiceCommitContext) -> tuple[bool, str]:
     """Execute ONE explicit commit. Returns (ok, status message)."""
+    ok, message, _op = commit_transcript_op(segment, target_id, ctx)
+    return ok, message
+
+
+def commit_transcript_op(
+        segment: TranscriptSegment | str, target_id: str,
+        ctx: VoiceCommitContext) -> tuple[bool, str, "CommitOperation | None"]:
+    """Like :func:`commit_transcript`, but also returns the undo record."""
     seg = (segment if isinstance(segment, TranscriptSegment)
            else TranscriptSegment(text=str(segment)))
     text = (seg.text or "").strip()
     if not text:
-        return False, "Nothing to commit."
+        return False, "Nothing to commit.", None
     ok, reason = validate_voice_commit_target(target_id, ctx)
     if not ok:
-        return False, reason
+        return False, reason, None
 
     target = next(t for t in get_available_voice_commit_targets(ctx)
                   if t.id == target_id)
-    done, message = _execute(text, target, ctx)
+    done, message, op = _execute(text, target, ctx)
     if done:
         seg.committed = True
         seg.committed_target = target_id
         seg.committed_at = time.time()
         message = message or f"Transcript committed to {target.label}."
-    return done, message
+    return done, message, op
 
 
-def _execute(text: str, target: CommitTarget,
-             ctx: VoiceCommitContext) -> tuple[bool, str]:
+@dataclass
+class CommitOperation:
+    """Undo record for ONE voice commit (single-level; target-scoped)."""
+
+    id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    target_id: str = ""
+    label: str = ""
+    project_id: int = 0
+    kind: str = ""                       # cursor | gn_field | note | psyke
+    # cursor-family
+    editor: object = None
+    doc_revision: int | None = None
+    inserted_text: str = ""
+    # gn_field
+    gn_ref: tuple | None = None
+    gn_field: str = ""
+    gn_prev_value: str = ""
+    gn_new_value: str = ""
+    # note / psyke
+    created_id: int | None = None
+    created_text: str = ""
+
+
+UNDO_UNAVAILABLE = "Undo is not available for this target."
+UNDO_CHANGED = "Undo blocked: the target changed since the commit."
+UNDO_PROJECT = "Undo blocked: project changed since the commit."
+
+
+def _cursor_insert_op(ctx: VoiceCommitContext, target: CommitTarget,
+                      rendered: str) -> tuple[bool, str, CommitOperation | None]:
+    """Insert *rendered* at the cursor and build the cursor undo record."""
+    editor = None
+    if ctx.active_editor_getter is not None:
+        try:
+            editor = ctx.active_editor_getter()
+        except Exception:
+            editor = None
+    ok = bool(ctx.insert_at_cursor and ctx.insert_at_cursor(rendered))
+    if not ok:
+        return False, "No active editor — click into the editor, then Commit.", None
+    op = CommitOperation(target_id=target.id, label=target.label,
+                         project_id=ctx.project_id, kind="cursor",
+                         editor=editor, inserted_text=rendered)
+    try:                                  # one insertText call == one undo step
+        op.doc_revision = editor.document().revision()
+    except Exception:
+        op.doc_revision = None            # QLineEdit / gone -> undo unsupported
+    return True, "", op
+
+
+def _execute(text: str, target: CommitTarget, ctx: VoiceCommitContext
+             ) -> tuple[bool, str, CommitOperation | None]:
     tid = target.id
 
     if tid == T_CURSOR:
-        ok = bool(ctx.insert_at_cursor and ctx.insert_at_cursor(text))
-        return (ok, "" if ok
-                else "No active editor — click into the editor, then Commit.")
-
+        return _cursor_insert_op(ctx, target, text)
     if tid == T_SP_ACTION:
-        ok = bool(ctx.insert_at_cursor
-                  and ctx.insert_at_cursor(f"\n\n{text}\n\n"))
-        return ok, "" if ok else "No active editor."
-
+        return _cursor_insert_op(ctx, target, f"\n\n{text}\n\n")
     if tid == T_SP_DIALOGUE:
         name = (ctx.character_name or "").strip().upper()
-        ok = bool(ctx.insert_at_cursor
-                  and ctx.insert_at_cursor(f"\n\n{name}\n{text}\n\n"))
-        return ok, "" if ok else "No active editor."
-
+        return _cursor_insert_op(ctx, target, f"\n\n{name}\n{text}\n\n")
     if tid == T_STAGE_DIRECTION:
-        ok = bool(ctx.insert_at_cursor
-                  and ctx.insert_at_cursor(f"\n\nSTAGE: {text}\n\n"))
-        return ok, "" if ok else "No active editor."
-
+        return _cursor_insert_op(ctx, target, f"\n\nSTAGE: {text}\n\n")
     if tid == T_STAGE_DIALOGUE:
         name = (ctx.character_name or "").strip().upper()
-        ok = bool(ctx.insert_at_cursor
-                  and ctx.insert_at_cursor(f"\n\nCHARACTER: {name}\n{text}\n\n"))
-        return ok, "" if ok else "No active editor."
+        return _cursor_insert_op(ctx, target,
+                                 f"\n\nCHARACTER: {name}\n{text}\n\n")
 
     if tid == T_NOTE:
-        ctx.db.create_note(ctx.project_id, _note_title(text), content=text)
-        return True, ""
+        note = ctx.db.create_note(ctx.project_id, _note_title(text),
+                                  content=text)
+        op = CommitOperation(target_id=tid, label=target.label,
+                             project_id=ctx.project_id, kind="note",
+                             created_id=note.id, created_text=text)
+        return True, "", op
 
     if tid == T_PSYKE:
         entry_type = (ctx.psyke_entry_type or "other").lower()
         if entry_type not in PSYKE_ENTRY_TYPES:
             entry_type = "other"        # never guessed, never widened
-        ctx.db.create_psyke_entry(ctx.project_id, _note_title(text),
-                                  entry_type=entry_type, notes=text)
-        return True, ""
+        entry = ctx.db.create_psyke_entry(ctx.project_id, _note_title(text),
+                                          entry_type=entry_type, notes=text)
+        op = CommitOperation(target_id=tid, label=target.label,
+                             project_id=ctx.project_id, kind="psyke",
+                             created_id=entry.id, created_text=text)
+        return True, "", op
 
     if tid in _GN_FIELD_BY_TARGET:
         if target.target_ref is None:
-            return False, _REASON_NO_PANEL
+            return False, _REASON_NO_PANEL, None
         scene_id, page_idx, panel_idx = target.target_ref
         field_name = _GN_FIELD_BY_TARGET[tid]
         from storyplanner import graphic_novel_blocks as gnb
@@ -292,10 +347,87 @@ def _execute(text: str, target: CommitTarget,
             existing = getattr(script.pages[page_idx].panels[panel_idx],
                                field_name, "")
         except IndexError:
-            return False, _REASON_NO_PANEL
+            return False, _REASON_NO_PANEL, None
         value = f"{existing}\n{text}" if (existing or "").strip() else text
         done = gno.set_panel_field(ctx.db, scene_id, page_idx, panel_idx,
                                    field_name, value)
-        return (bool(done), "" if done else _REASON_NO_PANEL)
+        if not done:
+            return False, _REASON_NO_PANEL, None
+        op = CommitOperation(target_id=tid, label=target.label,
+                             project_id=ctx.project_id, kind="gn_field",
+                             gn_ref=(scene_id, page_idx, panel_idx),
+                             gn_field=field_name, gn_prev_value=existing,
+                             gn_new_value=value)
+        return True, "", op
 
-    return False, "Target unavailable."
+    return False, "Target unavailable.", None
+
+
+# ----------------------------------------------------------------- undo
+def can_undo(op: CommitOperation | None,
+             ctx: VoiceCommitContext) -> tuple[bool, str]:
+    """Whether the LAST voice commit can be undone safely (read-only)."""
+    if op is None:
+        return False, "Nothing to undo."
+    if op.project_id != ctx.project_id:
+        return False, UNDO_PROJECT
+    if op.kind == "cursor":
+        if op.editor is None or op.doc_revision is None:
+            return False, UNDO_UNAVAILABLE
+        try:
+            current = op.editor.document().revision()
+        except Exception:
+            return False, UNDO_UNAVAILABLE
+        if current != op.doc_revision:
+            return False, UNDO_CHANGED    # never undo unrelated user edits
+        return True, ""
+    if op.kind == "gn_field":
+        try:
+            from storyplanner import graphic_novel_blocks as gnb
+            scene_id, page_idx, panel_idx = op.gn_ref
+            script = gnb.load_scene_script(ctx.db, scene_id)
+            current = getattr(script.pages[page_idx].panels[panel_idx],
+                              op.gn_field, None)
+        except Exception:
+            return False, UNDO_CHANGED
+        return ((True, "") if current == op.gn_new_value
+                else (False, UNDO_CHANGED))
+    if op.kind == "note":
+        note = ctx.db.get_note_by_id(op.created_id)
+        if note is None or note.content != op.created_text:
+            return False, UNDO_CHANGED
+        return True, ""
+    if op.kind == "psyke":
+        entry = ctx.db.get_psyke_entry_by_id(op.created_id)
+        if entry is None or entry.notes != op.created_text:
+            return False, UNDO_CHANGED
+        return True, ""
+    return False, UNDO_UNAVAILABLE
+
+
+def undo_commit(op: CommitOperation | None,
+                ctx: VoiceCommitContext) -> tuple[bool, str]:
+    """Undo the LAST voice commit (validated; never touches anything else)."""
+    ok, reason = can_undo(op, ctx)
+    if not ok:
+        return False, reason
+    if op.kind == "cursor":
+        try:
+            op.editor.undo()              # exactly our single insert step
+        except Exception:
+            return False, UNDO_UNAVAILABLE
+        return True, "Voice commit undone."
+    if op.kind == "gn_field":
+        from storyplanner import graphic_novel_outline as gno
+        scene_id, page_idx, panel_idx = op.gn_ref
+        done = gno.set_panel_field(ctx.db, scene_id, page_idx, panel_idx,
+                                   op.gn_field, op.gn_prev_value)
+        return ((True, "Voice commit undone.") if done
+                else (False, UNDO_CHANGED))
+    if op.kind == "note":
+        ctx.db.delete_note(op.created_id)
+        return True, "Voice commit undone."
+    if op.kind == "psyke":
+        ctx.db.delete_psyke_entry(op.created_id)
+        return True, "Voice commit undone."
+    return False, UNDO_UNAVAILABLE

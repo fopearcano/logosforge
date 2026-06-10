@@ -52,6 +52,10 @@ class TranscriptSegment:
     committed: bool = False
     committed_target: str = ""
     committed_at: float | None = None
+    # -- retry support (Phase 3): the segment's local PCM, session-only.
+    # Never written to disk, never sent anywhere; dropped on discard/clear.
+    audio_bytes: bytes | None = field(default=None, repr=False)
+    sample_rate: int = 16000
 
     def is_empty(self) -> bool:
         return not (self.text or "").strip()

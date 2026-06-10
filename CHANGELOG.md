@@ -87,6 +87,20 @@ retest gate** (see `docs/ALPHA_RC_STATUS.md`).
 
 ### Added (feature-flagged, off by default)
 
+- **Voice Phase 3 — transcript history, correction, undo, retry.** A local,
+  session-only history of dictated segments in the voice panel: edit before
+  commit (original kept + restorable; empty segments never commit), select
+  and commit multiple segments together (visible order, edited text, through
+  the Commit Router only), merge adjacent / split at the cursor, retry
+  transcription on the segment's locally-held audio (in-memory only, never
+  on disk, dropped on discard/clear), discard / clear uncommitted, and a
+  single-level **Undo last voice commit** that is target-scoped and refuses
+  to touch anything else (editor document-revision guard; GN field previous
+  value; created Note/PSYKE deleted only if unchanged; otherwise disabled
+  with the reason). Per-segment project capture freezes history on project
+  switch and blocks cross-project commits. Nothing persists across restarts;
+  no telemetry; no cloud. `storyplanner/voice/history.py` + undo layer in
+  `commit_router.py`; `tests/test_voice_history.py` (37 passed).
 - **Voice Phase 2 — mode-aware commit targets (Voice Commit Router).** After
   reviewing the transcript the user picks an explicit *Send to* target:
   cursor insert; **New Note**; **PSYKE draft entry** (type chosen by the

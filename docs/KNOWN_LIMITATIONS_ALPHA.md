@@ -58,8 +58,16 @@ panel** yet:
   project changed since transcription; the project goes dirty only after a
   successful commit. **Deferred:** Outline / Series-episode draft items
   ("Outline voice target not available yet.") and Append-to-Manuscript (the
-  open editor owns the scene body — use cursor insert). See
-  `docs/VOICE_MVP.md`.
+  open editor owns the scene body — use cursor insert). **Phase 3 transcript
+  history (local, session-only):** segments can be edited (original kept),
+  selected and committed together (visible order, edited text, via the
+  router), merged/split, retried on the locally-held audio (in-memory only,
+  dropped on discard/clear — "Audio segment no longer available." after),
+  discarded/cleared, and the **last** voice commit can be undone where safe
+  (editor revision guard / GN previous value / created Note-PSYKE deletion —
+  otherwise disabled with the reason). History does not persist across app
+  restarts; no automatic cleanup/correction, no diarization, no voice
+  commands, no Live Writer Room. See `docs/VOICE_MVP.md`.
 
 ## Model / feature limits
 

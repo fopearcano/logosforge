@@ -63,6 +63,7 @@ manual UI check). Command form:
 | `tests/test_preferences_dialog.py` (scrollable General Preferences) | **11 passed** |
 | `tests/test_voice_prefs_integrity_gate.py` (post-fix integrity gate) | **17 passed** |
 | `tests/test_voice_commit_router.py` (Phase 2 mode-aware commit targets) | **41 passed** |
+| `tests/test_voice_history.py` (Phase 3 history/edit/undo/retry/segments) | **37 passed** |
 | `tests/test_voice_lan.py` (backend modes + LAN Whisper server) | **43 passed** |
 | `tests/test_voice_lan_server.py` (LAN companion server + client integration) | **22 passed** |
 | `tests/test_gn_pages_manuscript_sync.py` (GN shared body) | **30 passed** |
@@ -70,7 +71,7 @@ manual UI check). Command form:
 | `tests/test_series_navigator.py` (Navigator + deps) | **26 passed** |
 | `tests/test_writing_mode_lock.py` (mode lock) | **22 passed** |
 | `tests/test_export_safety.py` (export privacy) | **4 passed** |
-| **Total** | **537 passed, 0 failed** |
+| **Total** | **574 passed, 0 failed** |
 
 > Environment note: PDF/DOCX export tests fail only where `reportlab` /
 > `python-docx` are not installed (pre-existing, graceful-degradation behavior),
@@ -196,6 +197,11 @@ this behavior as supporting evidence (the manual UI check is still required).
 | V20 | GN: focus a Panel script block → Panel field targets enable; commit appends to that panel; no panel selected → "Select a Panel first." | PENDING MANUAL RETEST | ✓ |
 | V21 | Screenplay/Stage Dialogue target requires picking a character (never guessed from the transcript) | PENDING MANUAL RETEST | ✓ |
 | V22 | Switch project with a pending transcript → commit is blocked ("Project changed since transcription…") | PENDING MANUAL RETEST | ✓ |
+| V23 | History list shows each dictated segment with status; Edit → Apply Edit corrects a segment (original restorable) | PENDING MANUAL RETEST | ✓ |
+| V24 | Check 2+ segments → Commit inserts them once, in order, with edited text; rows flip to committed → target | PENDING MANUAL RETEST | ✓ |
+| V25 | **Undo last commit** reverts the insertion/created entry; disabled with a reason after unrelated edits | PENDING MANUAL RETEST | ✓ |
+| V26 | **Retry** re-transcribes locally while segment audio is held; says "Audio segment no longer available." after | PENDING MANUAL RETEST | ✓ |
+| V27 | Merge adjacent segments / Split at cursor behave; Discard + Clear uncommitted never touch the project | PENDING MANUAL RETEST | ✓ |
 | L1 | Backend selector shows Disabled / Local PC / Local LAN Server / Mock; default Disabled | PENDING MANUAL RETEST | ✓ |
 | L2 | Start a Whisper server on another LAN machine (`docs/LOCAL_LAN_WHISPER.md`) | PENDING MANUAL RETEST | |
 | L3 | Select **Local LAN Server**; enter the private LAN URL (e.g. `http://192.168.x.x:8765`) | PENDING MANUAL RETEST | ✓ |

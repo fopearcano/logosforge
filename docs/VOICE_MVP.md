@@ -154,6 +154,37 @@ Segments now carry explicit-commit metadata (`id`, `created_at`, `source`,
 The project is marked dirty **only after** a successful commit; Clear
 mutates nothing.
 
+## Transcript history & review (Phase 3)
+
+Finalized segments also land in a **local, session-only transcript history**
+inside the panel (`storyplanner/voice/history.py` — nothing is persisted, no
+telemetry; per-segment audio is kept **in memory only** for *Retry* and is
+dropped on discard/clear). For each segment the user can, explicitly:
+
+- **Edit** (load into the preview → *Apply Edit*; `original_text` is kept and
+  *Restore* brings it back; an emptied segment can never be committed);
+- **Select** (checkboxes) and **Commit selected** — segments concatenate in
+  visible order with their **edited** text and go through the Commit Router
+  (never around it); successful commits mark the segments
+  `committed → target`, failures leave them pending;
+- **Merge** adjacent uncommitted segments / **Split** one at the preview
+  cursor (text-level only; audio is not split, so Retry lapses);
+- **Retry transcription** when the segment's local audio is still held —
+  re-runs the LOCAL transcriber only; a failed retry keeps the old text;
+  otherwise the button explains: *"Audio segment no longer available."*;
+- **Discard** / **Clear uncommitted** / clear the session;
+- **Undo last voice commit** (single level, target-scoped): cursor-family
+  inserts undo via the editor's own undo stack **only if nothing changed
+  since** (document-revision guard — unrelated edits are never reverted);
+  Graphic Novel field commits restore the captured previous value; Note /
+  PSYKE commits delete the created entry only if it is unchanged. When undo
+  is not safe the button is disabled with the reason.
+
+Project safety is per-segment: each entry records the project (and writing
+mode) it was captured in; switching projects freezes the visible history and
+any commit of foreign segments is blocked: *"This transcript was captured in
+another project. Switch back or explicitly retarget."*
+
 ## Future hooks (anchor points, not implemented)
 
 `EditorCommitTarget` defines (and deliberately stubs) the later shape:
