@@ -229,6 +229,38 @@ Phase 3, so **Undo last commit** covers them (editor revision guard, GN
 previous-value restore, created Note/PSYKE deletion). No shell/system
 commands, no voice-command execution, no unrestricted agent.
 
+## Billy Voice Bridge (Phase 5)
+
+A **Billy** row in the panel bridges selected transcript segments to Billy —
+the app's Assistant chat agent — as a question or an editing instruction.
+Billy receives **transcript text + a minimal safe context only** (project
+title, writing mode, selection snippet, selected GN panel fields — never
+audio, never API keys/provider settings, never other-project data), through
+the app's **existing provider configuration** (nothing is chosen silently;
+unconfigured ⇒ every Billy action disables with *"Billy is not configured.
+Voice-to-Billy actions are unavailable."*).
+
+Operations (fixed allowlist; unavailable ones disable with a reason):
+**Ask Billy** (chat-only answer, nothing to apply), **Rewrite selected
+text**, **Continue from cursor**, **Summarize to Note**, **Propose PSYKE
+draft** (user-chosen type, default Other), **Propose Panel field update**
+(GN, selected panel + chosen field, replace with before/after diff;
+Outline/Manuscript mirror), and **Propose Outline item** (still listed
+disabled). Every proposal is **preview-first**: Generate → review
+(before/after + diff or entity preview) → explicit **Apply** (routed through
+the existing Intent/Commit routers, inheriting live re-validation and the
+Phase 3 undo records) or **Cancel** (zero mutation). Stale proposals are
+blocked: *"Target changed since Billy generated this proposal. Regenerate
+before applying."* / *"Project changed since this proposal was generated.
+Switch back or regenerate."*
+
+**Not voice commands:** dangerous spoken instructions ("delete the
+project", "run this command", "send to ComfyUI", "open terminal", …) are
+never executed and never even reach the provider — Billy answers chat-only:
+*"I can't perform that action from voice in Alpha."* Transcript history
+tracks `sent_to_billy` / proposal id / applied-or-cancelled per segment (no
+secrets, no audio).
+
 ## Future hooks (anchor points, not implemented)
 
 `EditorCommitTarget` defines (and deliberately stubs) the later shape:

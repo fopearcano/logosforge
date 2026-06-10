@@ -203,6 +203,46 @@ class VoicePanel(QWidget):
         self._intent_preview_area.setMaximumHeight(110)
         layout.addWidget(self._intent_preview_area)
         self._pending_intent_preview = None
+
+        # -- Billy Voice Bridge (Phase 5) -------------------------------------
+        billy_row = QHBoxLayout()
+        self._billy_label = QLabel("Billy:")
+        self._billy_label.setObjectName("voiceBillyLabel")
+        billy_row.addWidget(self._billy_label)
+        self._billy_op_combo = QComboBox()
+        self._billy_op_combo.setObjectName("voiceBillyOpCombo")
+        billy_row.addWidget(self._billy_op_combo, stretch=1)
+        self._billy_generate_btn = QPushButton("Generate Proposal")
+        self._billy_generate_btn.setObjectName("voiceBillyGenerate")
+        self._billy_generate_btn.clicked.connect(self._on_billy_generate)
+        billy_row.addWidget(self._billy_generate_btn)
+        self._billy_apply_btn = QPushButton("Apply")
+        self._billy_apply_btn.setObjectName("voiceBillyApply")
+        self._billy_apply_btn.clicked.connect(self._on_billy_apply)
+        self._billy_apply_btn.setEnabled(False)
+        billy_row.addWidget(self._billy_apply_btn)
+        self._billy_cancel_btn = QPushButton("Cancel")
+        self._billy_cancel_btn.setObjectName("voiceBillyCancel")
+        self._billy_cancel_btn.clicked.connect(self._on_billy_cancel)
+        billy_row.addWidget(self._billy_cancel_btn)
+        self._billy_copy_btn = QPushButton("Copy")
+        self._billy_copy_btn.setObjectName("voiceBillyCopy")
+        self._billy_copy_btn.clicked.connect(self._on_billy_copy)
+        billy_row.addWidget(self._billy_copy_btn)
+        layout.addLayout(billy_row)
+        self._billy_preview_area = QPlainTextEdit()
+        self._billy_preview_area.setObjectName("voiceBillyPreviewArea")
+        self._billy_preview_area.setReadOnly(True)
+        self._billy_preview_area.setMaximumHeight(110)
+        layout.addWidget(self._billy_preview_area)
+        self._pending_billy_proposal = None
+        self._billy_widgets = (self._billy_label, self._billy_op_combo,
+                               self._billy_generate_btn,
+                               self._billy_apply_btn,
+                               self._billy_cancel_btn, self._billy_copy_btn,
+                               self._billy_preview_area)
+        for w in self._billy_widgets:
+            w.setVisible(False)          # inert without a context provider
         self._intent_widgets = (self._intent_label, self._intent_combo,
                                 self._gn_field_combo,
                                 self._intent_preview_btn,
@@ -470,6 +510,10 @@ class VoicePanel(QWidget):
         self._sync_target_subcontrols(ctx)
         if self.voice_mode() == "intent":
             self._refresh_intents()
+        for w in self._billy_widgets:
+            if w is not self._billy_preview_area:
+                w.setVisible(True)
+        self._refresh_billy_ops()
 
     def _sync_target_subcontrols(self, ctx=None) -> None:
         from storyplanner.voice.commit_router import (
@@ -798,15 +842,146 @@ class VoicePanel(QWidget):
         self._intent_preview_area.setVisible(False)
         self._status_label.setText("Voice: intent preview cancelled")
 
+    # -- Phase 5: Billy Voice Bridge ------------------------------------------
+    def _refresh_billy_ops(self) -> None:
+        ctx = self._build_context()
+        if ctx is None:
+            return
+        from storyplanner.voice.billy_bridge import (
+            get_available_billy_operations)
+        keep = self._billy_op_combo.currentData()
+        self._billy_op_combo.blockSignals(True)
+        self._billy_op_combo.clear()
+        for op_id, label, enabled, reason in \
+                get_available_billy_operations(ctx):
+            self._billy_op_combo.addItem(label, op_id)
+            i = self._billy_op_combo.count() - 1
+            item = self._billy_op_combo.model().item(i)
+            if not enabled:
+                item.setEnabled(False)
+                item.setToolTip(reason)
+        idx = self._billy_op_combo.findData(keep)
+        self._billy_op_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self._billy_op_combo.blockSignals(False)
+        from storyplanner.voice.billy_bridge import BILLY_UNCONFIGURED
+        has_billy = getattr(ctx, "ai_complete", None) is not None
+        self._billy_generate_btn.setEnabled(has_billy)
+        self._billy_generate_btn.setToolTip(
+            "" if has_billy else BILLY_UNCONFIGURED)
+
+    def _on_billy_generate(self) -> None:
+        ctx = self._build_context()
+        if ctx is None:
+            return
+        from storyplanner.voice.billy_bridge import request_billy_proposal
+        text, source_ids = self._intent_source_text()
+        proposal = request_billy_proposal(
+            self._billy_op_combo.currentData(), text, ctx,
+            source_segment_ids=source_ids)
+        self._pending_billy_proposal = proposal
+        for eid in source_ids:            # history: text-only Billy tracking
+            entry = self._history.get(eid)
+            if entry is not None:
+                entry.sent_to_billy = True
+                entry.billy_proposal_id = proposal.id
+                entry.billy_state = "proposed"
+        if proposal.reason_if_blocked:
+            self._billy_preview_area.setVisible(True)
+            self._billy_preview_area.setPlainText(proposal.reason_if_blocked)
+            self._billy_apply_btn.setEnabled(False)
+            self._status_label.setText(
+                f"Voice: {proposal.reason_if_blocked}")
+            return
+        parts = [f"Target: {proposal.target_summary}"]
+        if proposal.proposal_type == "chat_only":
+            parts.append(f"— BILLY —\n{proposal.response_text}")
+        elif proposal.note_preview:
+            parts.append("— NOTE PREVIEW —\n"
+                         f"{proposal.note_preview['title']}\n"
+                         f"{proposal.note_preview['content']}")
+        elif proposal.psyke_preview:
+            data = proposal.psyke_preview
+            parts.append("— PSYKE ENTRY PREVIEW —\n"
+                         f"[{data['entry_type']}] {data['name']}\n"
+                         f"{data['notes']}")
+        else:
+            if proposal.before_text is not None:
+                parts.append(f"— BEFORE —\n{proposal.before_text}")
+            parts.append(f"— AFTER —\n{proposal.after_text or ''}")
+        self._billy_preview_area.setVisible(True)
+        self._billy_preview_area.setPlainText("\n\n".join(parts))
+        self._billy_apply_btn.setEnabled(proposal.can_apply)
+        self._status_label.setText(
+            "Voice: Billy proposal ready — review, then Apply"
+            if proposal.can_apply else "Voice: Billy answered (chat only)")
+        self._refresh_history_ui()
+
+    def _on_billy_apply(self) -> None:
+        proposal = self._pending_billy_proposal
+        ctx = self._build_context()
+        if proposal is None or ctx is None:
+            self._status_label.setText("Voice: generate a proposal first")
+            return
+        from storyplanner.voice.billy_bridge import apply_billy_voice_proposal
+        ok, msg, op = apply_billy_voice_proposal(proposal, ctx)
+        self._status_label.setText(f"Voice: {msg}")
+        if not ok:
+            self._billy_apply_btn.setEnabled(False)
+            return
+        if op is not None:
+            self._history.last_commit_op = op
+        for eid in proposal.source_segment_ids:
+            entry = self._history.get(eid)
+            if entry is not None:
+                entry.billy_state = "applied"
+        if proposal.source_segment_ids:
+            self._history.mark_committed(proposal.source_segment_ids,
+                                         proposal.operation,
+                                         op.id if op is not None else "")
+        if self._on_data_changed is not None:
+            self._on_data_changed()       # dirty only after real mutation
+        self._pending_billy_proposal = None
+        self._billy_apply_btn.setEnabled(False)
+        self._refresh_history_ui()
+
+    def _on_billy_cancel(self) -> None:
+        from storyplanner.voice.billy_bridge import (
+            cancel_billy_voice_proposal)
+        proposal = self._pending_billy_proposal
+        cancel_billy_voice_proposal(proposal)
+        if proposal is not None:
+            for eid in proposal.source_segment_ids:
+                entry = self._history.get(eid)
+                if entry is not None and entry.billy_state == "proposed":
+                    entry.billy_state = "cancelled"
+        self._pending_billy_proposal = None
+        self._billy_apply_btn.setEnabled(False)
+        self._billy_preview_area.clear()
+        self._billy_preview_area.setVisible(False)
+        self._status_label.setText("Voice: Billy proposal cancelled")
+        self._refresh_history_ui()
+
+    def _on_billy_copy(self) -> None:
+        from PySide6.QtWidgets import QApplication
+        proposal = self._pending_billy_proposal
+        text = (proposal.response_text if proposal is not None
+                else self._billy_preview_area.toPlainText())
+        QApplication.clipboard().setText(text or "")
+        self._status_label.setText("Voice: Billy proposal copied")
+
     def note_project_switched(self, new_project_id: int) -> None:
         """Project changed: freeze (don't lose) the visible history — every
         commit re-validates per-entry project ids, so stale segments can
         never land in the new project."""
         self._history.mark_session_stale()
-        # Pending intent previews are project-bound: invalidate on switch.
+        # Pending intent previews / Billy proposals are project-bound:
+        # invalidate them on switch.
         self._pending_intent_preview = None
         self._intent_apply_btn.setEnabled(False)
         self._intent_preview_area.clear()
+        self._pending_billy_proposal = None
+        self._billy_apply_btn.setEnabled(False)
+        self._billy_preview_area.clear()
         if any(e.status in ("pending", "edited")
                for e in self._history.entries):
             self._status_label.setText(

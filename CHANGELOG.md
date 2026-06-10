@@ -87,6 +87,28 @@ retest gate** (see `docs/ALPHA_RC_STATUS.md`).
 
 ### Added (feature-flagged, off by default)
 
+- **Voice Phase 5 — Billy Voice Bridge (voice → Billy proposal → confirmed
+  apply).** Selected transcript segments can be sent to **Billy** (the
+  Assistant chat agent) as a question or editing instruction. Billy receives
+  **text only** — transcript + a minimal safe context (project title,
+  writing mode, selection snippet, selected GN panel fields; never audio,
+  never API keys/provider settings, never other-project data) — via the
+  app's existing provider configuration (no provider ⇒ all Billy actions
+  disabled with "Billy is not configured. Voice-to-Billy actions are
+  unavailable."). Fixed operation allowlist: Ask (chat-only), Rewrite
+  selected text, Continue from cursor, Summarize to Note, PSYKE draft
+  (user-chosen type, default Other), GN Panel-field update (selected panel,
+  chosen field, replace with diff; Outline/Manuscript mirror), Outline item
+  still listed disabled. Every proposal is preview-first with explicit
+  Apply (routed through the existing Intent/Commit routers → live
+  re-validation + shared Undo) and Cancel (zero mutation); stale proposals
+  block with regenerate messages; project switch invalidates them.
+  Dangerous spoken "commands" ("delete the project", "run this command",
+  "send to ComfyUI", …) never execute and never reach the provider —
+  chat-only: "I can't perform that action from voice in Alpha." Transcript
+  history tracks sent_to_billy / proposal id / applied-cancelled (no
+  secrets, no audio). `storyplanner/voice/billy_bridge.py` +
+  `tests/test_voice_billy_bridge.py` (35 passed).
 - **Voice Phase 4 — Voice Intent Router (preview-first confirmed text
   operations).** An explicit **Dictation / Intent** mode selector in the
   voice panel (Dictation stays the default; Intent is opt-in — command mode

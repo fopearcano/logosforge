@@ -78,6 +78,10 @@ class HistoryEntry:
     # Provenance for merge/split.
     merged_from: list[str] = field(default_factory=list)
     split_from: str = ""
+    # Billy Voice Bridge (Phase 5): text-only; never audio, never secrets.
+    sent_to_billy: bool = False
+    billy_proposal_id: str = ""
+    billy_state: str = ""                # "" | proposed | applied | cancelled
     # Session-only local audio for Retry (never persisted, never uploaded).
     audio_bytes: bytes | None = field(default=None, repr=False)
     sample_rate: int = 16000

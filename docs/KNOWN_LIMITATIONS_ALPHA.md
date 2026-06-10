@@ -74,12 +74,21 @@ panel** yet:
   when no provider is configured), PSYKE draft (user-chosen type) and GN
   Panel-field send. Every intent previews before/after and applies only on
   explicit confirm; stale previews (project/target/before-text drift) are
-  blocked; applied intents are covered by the same Undo. **Still not:** a
-  realtime conversation, an unrestricted voice agent, automatic command
-  execution, speaker diarization, automatic character attribution, or any
-  production/image workflow; no shell/system commands; no voice commands; no
-  Live Writer Room; cloud realtime remains deferred. See
-  `docs/VOICE_MVP.md`.
+  blocked; applied intents are covered by the same Undo. **Phase 5 Billy
+  Voice Bridge:** selected transcript segments can be sent to Billy (the
+  Assistant) as a question or editing instruction — **text + minimal safe
+  context only, never audio, never secrets**, via the existing provider
+  configuration (all Billy actions disable with a clear message when no
+  provider is set). Proposals (chat answer, rewrite-selection,
+  continue-from-cursor, Note draft, PSYKE draft with user-chosen type, GN
+  Panel-field update with mirror) are preview-first with explicit
+  Apply/Cancel, stale-proposal blocking and the shared Undo; dangerous
+  spoken "commands" are refused chat-only without reaching the provider.
+  **Still not:** a Live Writer Room, voice-to-voice conversation, automatic
+  command execution, automatic screenplay role guessing, automatic PSYKE
+  classification, an image-generation bridge, or a continuous realtime
+  agent loop; no shell/system commands; cloud realtime remains deferred.
+  See `docs/VOICE_MVP.md`.
 
 ## Model / feature limits
 

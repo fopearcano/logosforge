@@ -2956,6 +2956,8 @@ class MainWindow(QMainWindow):
             active_editor_getter=self._voice_commit.active_editor,
             gn_panel_ref=gn_ref,
             ai_complete=self._voice_ai_complete_callable(),
+            extras={"project_title": getattr(
+                self._db.get_project_by_id(self._project_id), "title", "")},
         )
 
     def _voice_ai_complete_callable(self):
