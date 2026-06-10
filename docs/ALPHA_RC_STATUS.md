@@ -251,3 +251,41 @@ Suites: 13 voice files **427 passed** (incl. `tests/test_voice_alpha_gate.py`,
 9) + writing-mode/structural regression **449 passed** — 0 failures.
 Real-microphone/fullscreen items remain in the manual checklist (V1–V49).
 **Classification: A — Voice MVP is Alpha-safe.**
+
+## FINAL ALPHA RC INTEGRATION GATE (2026-06-10) — PASSED
+
+One integration audit across everything that ships in the Alpha: core app +
+five writing modes + corrected Graphic Novel architecture (standalone Pages
+disabled; Outline manages Pages/Panels; the Manuscript is the mirrored
+comics script editor) + corrected Series hierarchy (Season → Episode → Act →
+Chapter → Scene; old shortcut deprecated) + the complete Voice MVP
+(Phases 1–9, review-first everywhere, local-only) + exports/requirements +
+privacy. **No release blockers found; no production code changed in this
+gate.**
+
+Evidence (all green, 0 failures):
+
+- **Authoritative broad certification sweep** (`docs/ALPHA_TEST_COMMANDS.md`
+  §2, 49 files): **1527 passed** — identical to its historical baseline, in
+  a single process.
+- **Post-sweep voice + preferences batch** (14 files, Phases 1–9 incl. the
+  Phase 9 hardening gate): **392 passed**.
+- **Post-sweep GN/Series/lock/lifecycle/export batch** (15 files): **392
+  passed**.
+- Total this gate: **2311 passed, 0 failed.**
+
+Requirements audit: `reportlab` + `python-docx` present for exports; **no
+voice dependencies baked in** (faster-whisper / sounddevice / whisper.cpp
+remain optional, lazy and documented); graceful degradation pinned by
+tests. Privacy: exports and diagnostics carry no API keys, provider
+secrets, transcripts, audio or temp voice data (test-pinned); the only
+network-touching voice module is the private-host-enforced LAN client.
+
+Remaining before tag: the **manual smoke test** (V1–V49 + P/F items — real
+microphone, macOS fullscreen, optional-dep exports) and maintainer
+sign-off. The full ~120-file suite stays infeasible under the gate time
+cap (documented combined-run caveat); the sweep + post-sweep batches above
+are the authoritative automated check.
+
+**Classification: A — final Alpha RC integration gate passed; ready for
+manual release confirmation.**

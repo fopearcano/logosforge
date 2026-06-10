@@ -134,6 +134,11 @@ stays Project → Act → Chapter → Scene):
   the bottom controls are always reachable) and clamps its height to ~85% of
   the available screen.
 
+**Final Alpha RC integration gate (2026-06-10): PASSED** — authoritative
+sweep 1527 + voice stack 392 + GN/Series/export 392 = **2311 passed, 0
+failed**; no blockers, no production changes; manual smoke test (V1–V49)
+remains before tagging. See `docs/ALPHA_RC_STATUS.md`.
+
 **Verification:** the final global multi-mode integrity audit (Alpha Release Gate)
 returned **A**. Focused gate `tests/test_alpha_release_gate.py` = **35 passed**;
 the broad certification sweep = **1527 passed, 0 failures**

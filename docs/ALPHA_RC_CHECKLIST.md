@@ -19,7 +19,10 @@ This file is the **multi-mode RC** checklist used before tagging.
 
 - [x] Focused gate — `pytest tests/test_alpha_release_gate.py` → **35 passed**.
 - [x] Broad certification sweep → **1527 passed, 0 failures** (see
-      [ALPHA_TEST_COMMANDS.md](ALPHA_TEST_COMMANDS.md)).
+      [ALPHA_TEST_COMMANDS.md](ALPHA_TEST_COMMANDS.md)) — re-verified at the
+      FINAL integration gate (2026-06-10) together with the post-sweep voice
+      (392) and GN/Series/export (392) batches: **2311 passed, 0 failed**
+      (see [ALPHA_RC_STATUS.md](ALPHA_RC_STATUS.md)).
 - [x] Per-mode phase suites green (Screenplay 1–10, Graphic Novel 1–8, Stage
       Script 1–8, Series 1–8).
 - [x] Cross-cutting green (structure invariant, project + PSYKE isolation,

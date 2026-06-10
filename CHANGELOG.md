@@ -9,6 +9,18 @@ Blocker fixes and structural corrections found by manual Alpha testing, plus a
 feature-flagged local voice foundation. Verified by the **final combined Alpha
 retest gate** (see `docs/ALPHA_RC_STATUS.md`).
 
+### Final Alpha RC integration gate — PASSED (2026-06-10)
+
+One audit-only integration gate across core, all five modes, the corrected
+Graphic Novel + Series architectures, the complete Voice MVP (Phases 1–9),
+exports/requirements and privacy. **No blockers found; no production code
+changed.** Evidence: authoritative broad certification sweep **1527 passed**
+(identical to its historical baseline, single process) + post-sweep voice/
+preferences batch **392 passed** + GN/Series/lock/lifecycle/export batch
+**392 passed** — **2311 passed, 0 failed**. Manual smoke test (V1–V49 +
+P/F items) and maintainer sign-off remain before tagging.
+**Classification: A — ready for manual release confirmation.**
+
 ### Structural corrections
 
 - **Series — real hierarchy.** The Alpha shortcut (Act = Season, Chapter =
