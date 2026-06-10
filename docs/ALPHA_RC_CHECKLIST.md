@@ -84,6 +84,11 @@ per-mode export tests.)
 - [ ] Theme change propagates live to Assistant and the Logos toolbar.
 - [ ] Usable at small window width; no obsolete "Classical" header / extra
       Navigator panel; Manuscript summary/navigation rail intact.
+- [ ] **General Preferences fits small screens:** settings content scrolls
+      vertically inside the dialog; the **Close row is sticky outside the
+      scroll area** (bottom controls always reachable); dialog height is
+      clamped to ~85% of the available screen; opening it never minimizes the
+      app (parented to the main window).
 
 ## Series Navigator + export deps
 
@@ -112,6 +117,11 @@ per-mode export tests.)
       script editor and does **not** minimize.
 - [ ] **Local voice-to-script (MVP)** — **off by default** (`enable_voice_mode`;
       backend mode defaults to **Disabled**). App starts normally with voice off.
+      The Voice Dictation surface is a **floating, modeless, resizable window**
+      parented to the main window (one instance; menu / Ctrl+Shift+V toggles
+      show↔hide; Hide/close/Esc hide it with the transcript preview preserved;
+      hiding while recording stops the session safely; never auto-shown, never
+      auto-recording, no parentless top-level window).
       Backends: **Local PC** (faster-whisper, local model path, no auto-download)
       and **Local LAN Server** (private/loopback URLs only — public URLs/ngrok/
       tunnels blocked, redirects refused). Missing/misconfigured backend shows a

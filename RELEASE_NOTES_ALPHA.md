@@ -122,8 +122,15 @@ stays Project → Act → Chapter → Scene):
   at `scripts/local_whisper_server.py`). **No cloud speech API, no OpenAI
   Realtime; audio never leaves the device/trusted LAN.** No voice commands, no
   automatic dialogue/action classification (deferred hooks exist). View → Voice
-  Dictation (Ctrl/Cmd+Shift+V). See `docs/VOICE_MVP.md` +
-  `docs/LOCAL_LAN_WHISPER.md`.
+  Dictation (Ctrl/Cmd+Shift+V) toggles a **floating, modeless, resizable**
+  dictation window (parented to the main window; one instance; Hide/close/Esc
+  hide it with the transcript preview preserved; hiding while recording stops
+  the session safely; commit stays manual, auto-commit off by default). See
+  `docs/VOICE_MVP.md` + `docs/LOCAL_LAN_WHISPER.md`.
+- **General Preferences usable on small screens:** the Preferences dialog now
+  scrolls its content vertically (sticky Close row outside the scroll area, so
+  the bottom controls are always reachable) and clamps its height to ~85% of
+  the available screen.
 
 **Verification:** the final global multi-mode integrity audit (Alpha Release Gate)
 returned **A**. Focused gate `tests/test_alpha_release_gate.py` = **35 passed**;

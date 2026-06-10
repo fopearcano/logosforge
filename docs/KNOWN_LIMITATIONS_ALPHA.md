@@ -43,8 +43,12 @@ panel** yet:
   misconfigured, the panel shows a non-blocking setup message and the app stays
   usable. **Deferred:** cloud realtime / speech-to-speech, automatic
   dialogue/action/note classification, Fountain auto-formatting, voice commands,
-  speaker diarization, Live Writer Room, and any ComfyUI/visual link. The panel is
-  an **embedded** bottom strip (never a floating/top-level window). See
+  speaker diarization, Live Writer Room, and any ComfyUI/visual link. The panel
+  is a **floating, modeless, resizable Voice Dictation window** parented to the
+  main window (one instance; toggled show/hide via the menu action /
+  Ctrl+Shift+V; close/Hide/Esc hide it with the transcript preview preserved;
+  hiding while recording stops the session safely; never a parentless
+  top-level window, never auto-shown, never auto-recording). See
   `docs/VOICE_MVP.md`.
 
 ## Model / feature limits

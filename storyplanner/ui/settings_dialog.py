@@ -1,4 +1,11 @@
-"""Global settings dialog — appearance and AI provider configuration."""
+"""Global settings dialog — appearance and AI provider configuration.
+
+Layout contract (small-screen safe): all settings content lives inside a
+vertical ``QScrollArea`` and the Close button row is **sticky outside** the
+scroll area, so the bottom controls stay reachable no matter how tall the
+content grows. The dialog clamps its height to the available screen geometry
+(~85%), so it works on small laptops, at high UI scale and in fullscreen.
+"""
 
 from __future__ import annotations
 
@@ -18,10 +25,12 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
+    QWidget,
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtCore import QUrl
 
 import storyplanner.connector_actions  # noqa: F401 — registers actions
@@ -44,8 +53,22 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("Preferences")
         self.setMinimumWidth(480)
         self.setMaximumWidth(600)
+        self.setMinimumHeight(320)
+        # Never grow past the available screen height — on small screens the
+        # content scrolls instead, and the bottom buttons stay reachable.
+        avail_h = self._available_screen_height()
+        if avail_h:
+            self.setMaximumHeight(self._max_dialog_height(avail_h))
+            self.resize(560, min(640, self.maximumHeight()))
 
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # -- Scrollable settings content --------------------------------------
+        content = QWidget()
+        content.setObjectName("prefsContent")
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(10)
 
@@ -181,13 +204,39 @@ class SettingsDialog(QDialog):
 
         layout.addStretch()
 
-        # -- Close button -------------------------------------------------------
+        scroll = QScrollArea()
+        scroll.setObjectName("prefsScrollArea")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(content)
+        outer.addWidget(scroll, stretch=1)
+
+        # -- Sticky bottom button row (outside the scroll area) ---------------
+        outer.addWidget(self._separator())
         close_row = QHBoxLayout()
+        close_row.setContentsMargins(16, 8, 16, 10)
         close_row.addStretch()
         close_btn = QPushButton("Close")
+        close_btn.setObjectName("prefsCloseButton")
+        close_btn.setDefault(True)
         close_btn.clicked.connect(self.accept)
         close_row.addWidget(close_btn)
-        layout.addLayout(close_row)
+        outer.addLayout(close_row)
+
+    # -- screen-aware sizing ---------------------------------------------------
+    @staticmethod
+    def _max_dialog_height(available_height: int) -> int:
+        """Clamp to ~85% of the available screen height (never below the
+        dialog's minimum, so tiny/odd geometries still get a usable window)."""
+        return max(320, int(available_height * 0.85))
+
+    def _available_screen_height(self) -> int:
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        if screen is None:
+            return 0
+        return screen.availableGeometry().height()
 
     def _restore_ai_settings(self) -> None:
         mgr = get_settings()

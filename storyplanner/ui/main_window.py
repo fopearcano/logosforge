@@ -684,15 +684,20 @@ class MainWindow(QMainWindow):
         self._diagnostics_drawer.setVisible(False)
         outer_layout.addWidget(self._diagnostics_drawer, stretch=0)
 
-        # -- Local voice dictation (MVP) — hidden bottom strip, flag-gated -----
-        # Same safe embedded pattern as the drawers above (never a floating /
-        # top-level window). The panel builds its local backends lazily on Start;
-        # with the feature flag off it stays hidden and inert. Local-first.
+        # -- Local voice dictation (MVP) — floating modeless window, flag-gated
+        # One VoiceDictationWindow instance, parented to this window (never a
+        # parentless top-level window, no unsafe flags) and hidden until the
+        # menu action / Ctrl+Shift+V toggles it. Resizable so the transcript
+        # preview is comfortable to review; hiding/closing stops a live session
+        # safely and keeps the preview. The panel builds its local backends
+        # lazily on Start; with the feature flag off it shows an inert setup
+        # message. Local-first; commit stays manual.
         from storyplanner.voice.editor_commit import EditorCommitTarget
-        from storyplanner.ui.voice_panel import VoicePanel
+        from storyplanner.ui.voice_panel import VoiceDictationWindow, VoicePanel
         self._voice_commit = EditorCommitTarget()
         self._voice_panel = VoicePanel(commit_target=self._voice_commit)
-        outer_layout.addWidget(self._voice_panel, stretch=0)
+        self._voice_window = VoiceDictationWindow(self._voice_panel,
+                                                  parent=self)
 
         # -- Narrative Health (Phase 6) --------------------------------------
         from storyplanner.logos.health import HealthEngine
@@ -2908,10 +2913,11 @@ class MainWindow(QMainWindow):
         self._run_edit_op("selectAll")
 
     def _toggle_voice_panel(self) -> None:
-        """Show/hide the local voice dictation panel (feature-flagged)."""
-        panel = getattr(self, "_voice_panel", None)
-        if panel is not None:
-            panel.toggle_panel()
+        """Toggle the floating Voice Dictation window (single shared entry
+        point for the menu action and the Ctrl+Shift+V shortcut)."""
+        win = getattr(self, "_voice_window", None)
+        if win is not None:
+            win.toggle()
 
     def _menu_toggle_focus(self) -> None:
         if (

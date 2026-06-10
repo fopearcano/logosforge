@@ -47,6 +47,23 @@ retest gate** (see `docs/ALPHA_RC_STATUS.md`).
 
 ### Fixes / packaging
 
+- **Voice Dictation is a floating window that actually toggles.** The voice
+  surface was an embedded bottom strip that, with the feature flag off, could
+  be shown but **never hidden again**; it was also too small to review
+  transcripts. It is now a **floating, modeless, resizable** Voice Dictation
+  window (`VoiceDictationWindow`) parented to the main window — one instance,
+  toggled show↔hide from the menu / Ctrl+Shift+V; the Hide button, title-bar
+  close and Esc all hide it with the transcript preview preserved; hiding
+  while recording stops the session safely; never auto-shown, never
+  auto-recording, commit stays manual (auto-commit off by default), no
+  parentless top-level windows (the Pages-bug rules). Backends unchanged.
+- **General Preferences scrolls on small screens.** The Preferences dialog
+  put everything (including Close) in one fixed column, so tall content
+  pushed the bottom controls off-screen. Settings content now lives in a
+  vertical scroll area with a **sticky Close row outside it**, and the dialog
+  clamps its height to ~85% of the available screen. Persistence and
+  validation unchanged.
+
 - `requirements.txt` lists the optional export libs (`reportlab`,
   `python-docx`); PDF/DOCX degrade gracefully when absent.
 - Fullscreen-safe dialog helper (`ui/safe_dialogs.py`): window-modal,

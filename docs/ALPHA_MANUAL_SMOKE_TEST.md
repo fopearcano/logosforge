@@ -59,6 +59,8 @@ manual UI check). Command form:
 | `tests/test_gn_outline.py` (GN Outline Pages/Panels) | **38 passed** |
 | `tests/test_gn_outline_integrity_gate.py` (GN Outline integrity gate) | **13 passed** |
 | `tests/test_voice_mvp.py` (local voice-to-script MVP) | **35 passed** |
+| `tests/test_voice_dictation_window.py` (floating Voice Dictation window) | **23 passed** |
+| `tests/test_preferences_dialog.py` (scrollable General Preferences) | **11 passed** |
 | `tests/test_voice_lan.py` (backend modes + LAN Whisper server) | **43 passed** |
 | `tests/test_voice_lan_server.py` (LAN companion server + client integration) | **22 passed** |
 | `tests/test_gn_pages_manuscript_sync.py` (GN shared body) | **30 passed** |
@@ -66,7 +68,7 @@ manual UI check). Command form:
 | `tests/test_series_navigator.py` (Navigator + deps) | **26 passed** |
 | `tests/test_writing_mode_lock.py` (mode lock) | **22 passed** |
 | `tests/test_export_safety.py` (export privacy) | **4 passed** |
-| **Total** | **455 passed, 0 failed** |
+| **Total** | **489 passed, 0 failed** |
 
 > Environment note: PDF/DOCX export tests fail only where `reportlab` /
 > `python-docx` are not installed (pre-existing, graceful-degradation behavior),
@@ -162,9 +164,11 @@ this behavior as supporting evidence (the manual UI check is still required).
 ### Local voice-to-script (MVP) — OFF by default
 
 > Local-first dictation; **no cloud, no audio upload**. Requires optional local
-> backends (`faster-whisper`, `sounddevice`) + a local model path. Headless tests
-> cover the logic + panel (`tests/test_voice_mvp.py`, 28 passed). Confirm with a real
-> microphone manually:
+> backends (`faster-whisper`, `sounddevice`) + a local model path. The dictation
+> surface is a **floating, modeless, resizable window** (one instance, toggled
+> show/hide). Headless tests cover the logic + panel + window
+> (`tests/test_voice_mvp.py`, `tests/test_voice_dictation_window.py`). Confirm
+> with a real microphone manually:
 
 | # | Item | Result | Auto |
 |---|------|--------|------|
@@ -181,7 +185,10 @@ this behavior as supporting evidence (the manual UI check is still required).
 | V11 | Save/reopen the project — committed dictation text persists | PENDING MANUAL RETEST | ✓ |
 | V12 | Stop during Processing — no hang; status returns to off | PENDING MANUAL RETEST | ✓ |
 | V13 | Switch project while recording — session stops; transcript is NOT committed into the other project | PENDING MANUAL RETEST | ✓ |
-| V14 | Open the voice panel in macOS fullscreen — app does not minimize (embedded strip, no floating window) | PENDING MANUAL RETEST | partial |
+| V14 | Open the Voice Dictation window in macOS fullscreen — app does not minimize (modeless window parented to the main window) | PENDING MANUAL RETEST | partial |
+| V15 | Voice Dictation opens as a **floating, resizable** window; toggle (menu/Ctrl+Shift+V) hides and reopens it repeatedly with **no duplicates** | PENDING MANUAL RETEST | ✓ |
+| V16 | Hide/Close/Esc hide the window; transcript preview is still there on reopen (until Clear) | PENDING MANUAL RETEST | ✓ |
+| V17 | Hiding/closing while recording stops the session safely and keeps the preview | PENDING MANUAL RETEST | ✓ |
 | L1 | Backend selector shows Disabled / Local PC / Local LAN Server / Mock; default Disabled | PENDING MANUAL RETEST | ✓ |
 | L2 | Start a Whisper server on another LAN machine (`docs/LOCAL_LAN_WHISPER.md`) | PENDING MANUAL RETEST | |
 | L3 | Select **Local LAN Server**; enter the private LAN URL (e.g. `http://192.168.x.x:8765`) | PENDING MANUAL RETEST | ✓ |
@@ -279,6 +286,17 @@ this behavior as supporting evidence (the manual UI check is still required).
 | 82 | Save As works | PENDING MANUAL RETEST | |
 | 83 | Open works | PENDING MANUAL RETEST | |
 | 84 | Refresh project list works | PENDING MANUAL RETEST | |
+
+### General Preferences (scrollable, small-screen safe)
+
+| # | Item | Result | Auto |
+|---|------|--------|------|
+| P1 | Open Preferences (Ctrl/Cmd+,) — window fits the screen (height clamped) | PENDING MANUAL RETEST | ✓ |
+| P2 | Content scrolls vertically when taller than the window | PENDING MANUAL RETEST | ✓ |
+| P3 | Close button row is sticky at the bottom and always reachable (outside the scroll area) | PENDING MANUAL RETEST | ✓ |
+| P4 | Works on a small laptop screen / high UI scale — bottom controls still reachable | PENDING MANUAL RETEST | partial |
+| P5 | Open Preferences in macOS fullscreen — app does not minimize | PENDING MANUAL RETEST | partial |
+| P6 | Settings still persist on Close (theme, AI provider, Connector, storage folder) | PENDING MANUAL RETEST | ✓ |
 
 ### UI / scope
 

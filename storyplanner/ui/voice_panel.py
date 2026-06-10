@@ -1,15 +1,23 @@
-"""Voice dictation panel — minimal, embedded, local-first.
+"""Voice dictation — local-first panel + floating Voice Dictation window.
 
-A small embedded panel (added as a hidden bottom strip in the main window, the
-same safe pattern as the Logos suggestions / diagnostics drawers — never a
-floating/top-level window, so it cannot trigger the fullscreen-minimize bug). It
-drives :class:`VoiceSessionController` and shows status + a transcript preview with
-Start / Stop / Commit / Clear. Transcription runs off the UI thread (on the
-recorder's callback thread); results are marshaled back via Qt signals.
+:class:`VoicePanel` is the dictation surface (status, backend row, transcript
+preview, Start / Stop / Commit / Clear / Hide). It drives
+:class:`VoiceSessionController`; transcription runs off the UI thread (on the
+recorder's callback thread) and results are marshaled back via Qt signals.
 
-Local-first: the panel only ever uses the local backends; audio is processed on
-this device. Feature-flagged OFF by default; when the backend is not configured it
-shows a non-blocking setup message and stays out of the way.
+:class:`VoiceDictationWindow` is the panel's host: a **floating, modeless,
+resizable** window so the transcript can be reviewed comfortably while
+writing. It is always **parented to the main window** (never a parentless
+top-level window, no unsafe window flags — the rules that keep it clear of
+the old standalone-Pages fullscreen-minimize bug). Showing/hiding it never
+touches project state; closing/hiding while recording stops the session
+safely and keeps the transcript preview (nothing is silently discarded, and
+nothing is ever auto-committed).
+
+Local-first: only the local backends are ever used; audio is processed on
+this device (or, in LAN mode, sent only to the configured local-network
+Whisper server). Feature-flagged OFF by default; when the backend is not
+configured the panel shows a non-blocking setup message and stays inert.
 """
 
 from __future__ import annotations
@@ -20,6 +28,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -56,6 +65,8 @@ class VoicePanel(QWidget):
     # Marshal controller callbacks (possibly off-thread) to the UI thread.
     _status_changed = Signal(str)
     _final_text = Signal(str)
+    # Emitted by the panel's Hide button; the hosting window hides safely.
+    hide_requested = Signal()
 
     def __init__(self, *, settings_get: Callable[[str], object] | None = None,
                  settings_set: Callable[[str, object], None] | None = None,
@@ -108,8 +119,8 @@ class VoicePanel(QWidget):
         self._preview.setObjectName("voiceTranscriptPreview")
         self._preview.setPlaceholderText(
             "Transcript preview — review, then Commit to the editor.")
-        self._preview.setFixedHeight(64)
-        layout.addWidget(self._preview)
+        self._preview.setMinimumHeight(120)   # readable; grows with the window
+        layout.addWidget(self._preview, stretch=1)
 
         row = QHBoxLayout()
         self._start_btn = QPushButton("Start")
@@ -126,11 +137,15 @@ class VoicePanel(QWidget):
         self._clear_btn.clicked.connect(self.clear_preview)
         self._auto_commit = QCheckBox("Auto-commit after pause")
         self._auto_commit.setObjectName("voiceAutoCommit")
+        self._hide_btn = QPushButton("Hide")
+        self._hide_btn.setObjectName("voiceHide")
+        self._hide_btn.clicked.connect(self.hide_requested.emit)
         for w in (self._start_btn, self._stop_btn, self._commit_btn,
                   self._clear_btn):
             row.addWidget(w)
         row.addWidget(self._auto_commit)
         row.addStretch()
+        row.addWidget(self._hide_btn)
         layout.addLayout(row)
 
         self._status_changed.connect(self._apply_status_str)
@@ -232,15 +247,37 @@ class VoicePanel(QWidget):
 
     # -- lifecycle -----------------------------------------------------------
     def toggle_panel(self) -> None:
-        """Show/hide the panel (called by the menu action / shortcut)."""
+        """Show/hide the panel widget itself (legacy/widget-level toggle).
+
+        Hiding must always work — even with the feature flag off (the old
+        behavior pinned the panel visible in that state, which is exactly the
+        "panel never hides again" bug). The flag only controls whether the
+        controls are live, never whether the panel can be dismissed.
+        """
+        if self.isVisible():
+            self.setVisible(False)
+            return
+        self.sync_enabled_state()
+        self.setVisible(True)
+
+    def sync_enabled_state(self) -> None:
+        """Reflect the feature flag: inert message when off, live when on."""
         if not self.is_enabled():
             self._apply_status(VoiceStatus.DISABLED)
             self._status_label.setText(
                 "Voice mode is off — enable it in Settings.")
-            self.setVisible(True)            # show the message, but inert
             self._set_controls_enabled(False)
-            return
-        self.setVisible(not self.isVisible())
+        else:
+            self._sync_backend_row()
+            self._set_controls_enabled(True)
+            self._refresh_buttons()
+
+    def stop_if_active(self) -> None:
+        """Hide/close policy (Alpha): stop a live session safely, keep the
+        transcript preview. Never silently discards or auto-commits."""
+        if self._controller is not None and self._controller.status in (
+                VoiceStatus.LISTENING, VoiceStatus.PROCESSING):
+            self.stop()
 
     def start(self) -> None:
         # Never create an overlapping session: if a controller is already
@@ -320,3 +357,69 @@ class VoicePanel(QWidget):
         self._stop_btn.setEnabled(listening)
         self._commit_btn.setEnabled(bool(self._preview.toPlainText().strip()))
         self._clear_btn.setEnabled(bool(self._preview.toPlainText()))
+
+
+class VoiceDictationWindow(QDialog):
+    """Floating, modeless, resizable host for the Voice Dictation panel.
+
+    Window-safety rules (the ones that keep this clear of the old
+    standalone-Pages fullscreen-minimize bug):
+
+    * always **parented to the main window** — never a parentless top-level
+      window, no extra window flags, no ``Qt.Tool``;
+    * **modeless** (shown with ``show()``, never ``exec()``) — writing in the
+      main editor continues while it is open;
+    * one instance, toggled show/hide; the title-bar close button, the
+      panel's **Hide** button and **Esc** all *hide* it (state preserved —
+      reopening shows the same transcript preview);
+    * hiding while recording stops the session safely first and keeps the
+      preview (never silently discards, never auto-commits);
+    * never calls ``showMinimized``/``hide``/``close`` on the main window and
+      never auto-shows at launch or auto-starts recording.
+    """
+
+    def __init__(self, panel: VoicePanel, parent: QWidget | None = None
+                 ) -> None:
+        super().__init__(parent)
+        self.setObjectName("voiceDictationWindow")
+        self.setWindowTitle("Voice Dictation (local)")
+        self.setModal(False)
+        self.setSizeGripEnabled(True)        # resizable, with a visible grip
+        self.setMinimumSize(460, 280)
+        self.resize(600, 340)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        self._panel = panel
+        panel.setParent(self)
+        panel.setVisible(True)               # visibility is window-level now
+        layout.addWidget(panel)
+        panel.hide_requested.connect(self.hide_safely)
+
+    @property
+    def panel(self) -> VoicePanel:
+        return self._panel
+
+    def toggle(self) -> None:
+        """Single shared toggle for every entry point (menu / shortcut)."""
+        if self.isVisible():
+            self.hide_safely()
+        else:
+            self._panel.sync_enabled_state()
+            self.show()
+            self.raise_()
+
+    def hide_safely(self) -> None:
+        """Hide, stopping a live session first; transcript preview is kept."""
+        self._panel.stop_if_active()
+        self.hide()
+
+    def reject(self) -> None:                # Esc while the window is focused
+        self._panel.stop_if_active()
+        super().reject()                     # modeless reject == hide
+
+    def closeEvent(self, event) -> None:     # noqa: N802 (Qt signature)
+        # Title-bar close hides (instance + transcript preserved, session
+        # stopped safely) — it never destroys state or touches the parent.
+        self._panel.stop_if_active()
+        event.accept()

@@ -398,8 +398,13 @@ def test_main_window_builds_with_voice_panel_hidden():
     pid = db.create_project("N", narrative_engine="novel").id
     win = MainWindow(db, pid)
     assert win._voice_panel is not None
-    assert win._voice_panel.isVisible() is False           # flag off by default
-    assert win._voice_panel.window() is win                # embedded child
+    assert win._voice_panel.isVisible() is False           # never auto-shown
+    # The panel lives inside the floating Voice Dictation window, which is
+    # parented to the main window (never a parentless top-level window) and
+    # stays hidden until toggled.
+    assert win._voice_panel.window() is win._voice_window
+    assert win._voice_window.parent() is win
+    assert win._voice_window.isVisible() is False
 
 
 def test_voice_shortcut_has_no_conflicts():

@@ -56,9 +56,16 @@ Voice mode is **OFF by default**. To use it:
      `docs/LOCAL_LAN_WHISPER.md`)
    - optionally `voice_language` (`"auto"`/`"en"`/`"it"`), `voice_silence_ms`,
      `voice_max_segment_seconds`, `voice_auto_commit`.
-4. Open **View → Voice Dictation (local)** (or **Ctrl/Cmd+Shift+V**). The panel
-   has the backend selector, a contextual field (model path / LAN URL) and a
-   **Check LAN server** health button in LAN mode.
+4. Open **View → Voice Dictation (local)** (or **Ctrl/Cmd+Shift+V**). This
+   toggles a **floating, modeless, resizable** Voice Dictation window (show →
+   hide → show again; the title-bar close, the **Hide** button and **Esc** all
+   hide it without losing state). The panel has the status indicator, backend
+   selector, a contextual field (model path / LAN URL), a **Check LAN server**
+   health button in LAN mode, a scrollable transcript preview that grows with
+   the window, and Start / Stop / Commit to editor / Clear / Hide. Hiding or
+   closing while recording **stops the session safely and keeps the transcript
+   preview** — nothing is silently discarded, and commit stays manual
+   (auto-commit is an explicit opt-in, off by default).
 
 If the flag is on but the backend/model is missing, the panel shows a
 **non-blocking** setup message and the app stays fully usable.
@@ -84,12 +91,16 @@ If the flag is on but the backend/model is missing, the panel shows a
 - `editor_commit.py` — `EditorCommitTarget` (plain-text insert at the active
   editor's cursor; mode-agnostic via focus tracking; future hooks stubbed).
 
-UI: `storyplanner/ui/voice_panel.py` — `VoicePanel`, an **embedded** bottom strip
-(same safe pattern as the Logos suggestions / diagnostics drawers — never a
-floating / top-level window, so it cannot trigger the fullscreen-minimize bug).
-Transcription runs off the UI thread (recorder callback thread) and results are
-marshaled back via Qt signals. Wired in `MainWindow` (flag-gated, stop-on-switch,
-stop-on-close).
+UI: `storyplanner/ui/voice_panel.py` — `VoicePanel` (the dictation surface)
+hosted in `VoiceDictationWindow`, a **floating, modeless, resizable** window
+that is always **parented to the main window** (never a parentless top-level
+window, no extra window flags — the rules that keep it clear of the old
+standalone-Pages fullscreen-minimize bug). One instance; the menu action /
+shortcut toggles show↔hide; close/Hide/Esc hide it with state preserved, and
+it never minimizes/hides/closes the main window, never auto-shows at launch
+and never auto-starts recording. Transcription runs off the UI thread
+(recorder callback thread) and results are marshaled back via Qt signals.
+Wired in `MainWindow` (flag-gated, stop-on-switch, stop-on-close).
 
 ## Editor insertion (Alpha)
 
