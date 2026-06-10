@@ -3,6 +3,59 @@
 All notable changes to Logosforge. This project uses semantic-ish versioning;
 dates are release-readiness milestones, not packaged builds.
 
+## [0.9.0-alpha] — post-RC corrections & additions — 2026-06-10
+
+Blocker fixes and structural corrections found by manual Alpha testing, plus a
+feature-flagged local voice foundation. Verified by the **final combined Alpha
+retest gate** (see `docs/ALPHA_RC_STATUS.md`).
+
+### Structural corrections
+
+- **Series — real hierarchy.** The Alpha shortcut (Act = Season, Chapter =
+  Episode) is replaced by **Series → Season → Episode → Act → Chapter → Scene**:
+  `Season`/`Episode` are stored rows, each Series scene links via a new nullable
+  `Scene.episode_id` (NULL elsewhere — other modes unaffected), and the
+  Act→Chapter→Scene outline is episode-scoped. The Series Navigator is the
+  structural editor (full CRUD + non-destructive, confirmed legacy migration).
+  The global Outline/Manuscript/Timeline stay episode-agnostic (documented
+  Phase-1 boundary).
+- **Graphic Novel — Pages/Panels in the Outline + Manuscript.** The standalone
+  left-panel **Pages** route proved fullscreen-hostile (clicking it minimized
+  the app in macOS fullscreen) and is **disabled for Alpha** (hidden; inert
+  route). Page/Panel management lives in two mirrored surfaces over the shared
+  `Scene.content` body: the **GN Outline** (Scenes tab `Act → Chapter → Scene →
+  Page → Panel` + a chapter-level Pages cross-reference; full editing,
+  assign-panel-to-page) and the **Manuscript** (embedded Scene → Page → Panel
+  navigator). Model: Chapter owns Pages, Scene owns Panels, Panel assigned to a
+  Page, a Scene can span Pages.
+- **Writing-mode lock.** Mode is chosen at creation and **locks once a project
+  has meaningful content** (body text, planning data, Timeline/Notes/PSYKE,
+  user structure, Season/Episode rows); blocked changes mutate nothing.
+  Conversion wizard deferred.
+
+### Fixes / packaging
+
+- `requirements.txt` lists the optional export libs (`reportlab`,
+  `python-docx`); PDF/DOCX degrade gracefully when absent.
+- Fullscreen-safe dialog helper (`ui/safe_dialogs.py`): window-modal,
+  top-level-parented confirmations (macOS sheets) used by the GN surfaces.
+
+### Added (feature-flagged, off by default)
+
+- **Local voice-to-script MVP** (`enable_voice_mode`; backend mode defaults to
+  *Disabled*): local mic capture, buffered silence-segmented dictation,
+  transcript preview, **manual plain-text commit** at the editor cursor.
+  Backends: **Local PC** (faster-whisper, optional/lazy, local model path, no
+  auto-downloads) and **Local LAN Server** (segments go only to a Whisper
+  server on the trusted LAN — private/loopback URLs enforced, public/ngrok/
+  tunnel URLs blocked, redirects refused). No cloud speech, no OpenAI Realtime,
+  no voice commands, no auto-classification.
+- **LAN Whisper companion** (`scripts/local_whisper_server.py`): optional,
+  manually-started stdlib server (faster-whisper; `/health`,
+  `/v1/audio/transcriptions`, `/inference`); binds 127.0.0.1 by default, LAN
+  bind is explicit with a warning; optional Bearer token (never logged).
+  External whisper.cpp servers documented (`docs/LOCAL_LAN_WHISPER.md`).
+
 ## [0.9.0-alpha] — Alpha Release Candidate (multi-mode) — 2026-06-08
 
 Release-candidate milestone for the five-mode writing system on the **universal

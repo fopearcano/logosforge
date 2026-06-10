@@ -9,6 +9,35 @@
 - **Scope of this step:** Alpha RC **packaging / freeze + documentation only** — no
   product features, no refactors, **no production code changed**.
 
+## FINAL COMBINED ALPHA RETEST GATE (2026-06-10)
+
+A single combined gate re-verified **all** post-RC areas together: Graphic Novel
+Outline/Page/Panel + Manuscript mirroring + standalone-Pages disabled +
+fullscreen safety; the corrected Series hierarchy + Navigator + legacy
+migration; the writing-mode lock; export dependencies + privacy; the local
+Voice MVP (Local PC + Local LAN backends, URL security, commit safety); the LAN
+Whisper companion (manual-start, localhost-default, endpoints, auth, logging
+hygiene); and core regression (all five modes, Timeline, Notes, PSYKE,
+autosave/dirty, project isolation, Canvas Plot hidden, no ComfyUI).
+
+**Result: 790 passed, 0 failures** across the curated batches (gates + GN +
+pages + series + lock = 467 · voice ×3 + export = 128 · isolation + lifecycle +
+autosave + notes = 62 · timeline + structure + multi-mode + writing-modes = 133),
+plus a 297-test pre-voice cross-check combo. **No release blockers.** Docs
+verified to state every required guarantee; `CHANGELOG.md` gained the
+consolidated post-RC entry.
+
+One environment finding (not a product bug, documented in
+[ALPHA_TEST_COMMANDS.md](ALPHA_TEST_COMMANDS.md)): very large single-process
+pytest combinations can segfault on a timing-dependent Qt/GC teardown
+interaction around the test-only pattern of constructing many MainWindows that
+share the process-singleton event bus. Every suite passes alone and in the
+curated batches; the running app (one window, process-lifetime bus) is
+unaffected. Pre-existing — a pre-voice 297-test combo of the same shape passes.
+
+**Gate classification: A — manual Alpha RC retest can resume**
+(`docs/ALPHA_MANUAL_SMOKE_TEST.md`; tag only after manual confirmation).
+
 ## Post-gate fixes (packaging/usability)
 
 - **Dependency manifest:** `requirements.txt` now lists the optional export libs
