@@ -84,11 +84,18 @@ panel** yet:
   Panel-field update with mirror) are preview-first with explicit
   Apply/Cancel, stale-proposal blocking and the shared Undo; dangerous
   spoken "commands" are refused chat-only without reaching the provider.
-  **Still not:** a Live Writer Room, voice-to-voice conversation, automatic
-  command execution, automatic screenplay role guessing, automatic PSYKE
-  classification, an image-generation bridge, or a continuous realtime
-  agent loop; no shell/system commands; cloud realtime remains deferred.
-  See `docs/VOICE_MVP.md`.
+  **Phase 6 Voice Room (Alpha shell):** one local review-first session
+  workflow — explicit crash-proof state machine, a context summary line, a
+  session-scoped proposal queue (draft/ready/applied/cancelled/stale/failed;
+  stale can never apply; double-click re-activates a ready item) and four
+  explicit workflow modes (Dictation default / Intent / Ask Billy / Edit
+  with Billy — never auto-detected), plus Pause that keeps session, history
+  and queue. **Still not:** full Live Writer Room, voice-to-voice
+  conversation, a continuous autonomous agent loop, automatic mode
+  detection, automatic command execution, automatic screenplay role
+  guessing, automatic PSYKE classification, speaker diarization, or an
+  image-generation bridge; no shell/system commands; cloud realtime remains
+  deferred. See `docs/VOICE_MVP.md`.
 
 ## Model / feature limits
 

@@ -94,12 +94,23 @@ class VoicePanel(QWidget):
         # Phase 3: local, session-only transcript history (review layer).
         self._history = VoiceTranscriptHistory()
         self._editing_entry_id: str | None = None
+        # Phase 6: Live Writer Room shell — session state + proposal queue.
+        from storyplanner.voice.room import (ProposalQueue,
+                                             VoiceRoomStateMachine)
+        self._room = VoiceRoomStateMachine()
+        self._queue = ProposalQueue()
         self._controller = None
         self._status = VoiceStatus.OFF
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 6, 10, 6)
         layout.setSpacing(4)
+
+        # Voice Room (Alpha) shell header: session state + context summary.
+        self._room_label = QLabel("Voice Room (Alpha) · idle")
+        self._room_label.setObjectName("voiceRoomStatus")
+        self._room_label.setStyleSheet("color: #94a3b8; font-size: 11px;")
+        layout.addWidget(self._room_label)
 
         top = QHBoxLayout()
         self._status_label = QLabel(_STATUS_TEXT[VoiceStatus.OFF])
@@ -138,6 +149,8 @@ class VoicePanel(QWidget):
         self._mode_combo.setObjectName("voiceModeSelect")
         self._mode_combo.addItem("Dictation", "dictation")   # default
         self._mode_combo.addItem("Intent", "intent")
+        self._mode_combo.addItem("Ask Billy", "ask_billy")
+        self._mode_combo.addItem("Edit with Billy", "edit_billy")
         self._mode_combo.setToolTip(
             "Dictation: the transcript is content. Intent: the transcript "
             "is an instruction — preview first, apply only on confirm.")
@@ -236,6 +249,16 @@ class VoicePanel(QWidget):
         self._billy_preview_area.setMaximumHeight(110)
         layout.addWidget(self._billy_preview_area)
         self._pending_billy_proposal = None
+        # Proposal queue (session-scoped; preview-first; stale-guarded).
+        self._queue_list = QListWidget()
+        self._queue_list.setObjectName("voiceProposalQueue")
+        self._queue_list.setMaximumHeight(64)
+        self._queue_list.setToolTip(
+            "This session's proposals — double-click a ready one to make it "
+            "the active proposal again. Stale proposals cannot be applied.")
+        self._queue_list.itemDoubleClicked.connect(self._on_queue_activate)
+        self._queue_list.setVisible(False)
+        layout.addWidget(self._queue_list)
         self._billy_widgets = (self._billy_label, self._billy_op_combo,
                                self._billy_generate_btn,
                                self._billy_apply_btn,
@@ -307,6 +330,12 @@ class VoicePanel(QWidget):
         self._stop_btn = QPushButton("Stop")
         self._stop_btn.setObjectName("voiceStop")
         self._stop_btn.clicked.connect(self.stop)
+        self._pause_btn = QPushButton("Pause")
+        self._pause_btn.setObjectName("voicePause")
+        self._pause_btn.setToolTip(
+            "Pause listening — the session, transcript history and queue "
+            "are kept.")
+        self._pause_btn.clicked.connect(self._on_pause)
         self._commit_btn = QPushButton("Commit to editor")
         self._commit_btn.setObjectName("voiceCommit")
         self._commit_btn.clicked.connect(self.commit)
@@ -321,8 +350,8 @@ class VoicePanel(QWidget):
         self._hide_btn = QPushButton("Hide")
         self._hide_btn.setObjectName("voiceHide")
         self._hide_btn.clicked.connect(self.hide_requested.emit)
-        for w in (self._start_btn, self._stop_btn, self._commit_btn,
-                  self._clear_btn, self._copy_btn):
+        for w in (self._start_btn, self._stop_btn, self._pause_btn,
+                  self._commit_btn, self._clear_btn, self._copy_btn):
             row.addWidget(w)
         row.addWidget(self._auto_commit)
         row.addStretch()
@@ -513,7 +542,9 @@ class VoicePanel(QWidget):
         for w in self._billy_widgets:
             if w is not self._billy_preview_area:
                 w.setVisible(True)
+        self._queue_list.setVisible(True)
         self._refresh_billy_ops()
+        self._update_room_label()
 
     def _sync_target_subcontrols(self, ctx=None) -> None:
         from storyplanner.voice.commit_router import (
@@ -709,14 +740,24 @@ class VoicePanel(QWidget):
         return self._mode_combo.currentData() or "dictation"
 
     def _on_mode_changed(self, _index: int) -> None:
-        intent_mode = self.voice_mode() == "intent"
+        mode = self.voice_mode()
+        intent_mode = mode == "intent"
         for w in self._intent_widgets:
             w.setVisible(intent_mode)
         self._intent_preview_area.setVisible(
             intent_mode and self._pending_intent_preview is not None)
         if intent_mode:
             self._refresh_intents()
+        # Workflow presets for the Billy modes (explicit, never inferred).
+        if mode in ("ask_billy", "edit_billy"):
+            from storyplanner.voice.billy_bridge import (
+                OP_ASK, OP_REWRITE_SELECTION)
+            preset = OP_ASK if mode == "ask_billy" else OP_REWRITE_SELECTION
+            idx = self._billy_op_combo.findData(preset)
+            if idx >= 0:
+                self._billy_op_combo.setCurrentIndex(idx)
         self._sync_target_subcontrols(self._build_context())
+        self._update_room_label()
 
     def _refresh_intents(self) -> None:
         ctx = self._build_context()
@@ -773,6 +814,9 @@ class VoicePanel(QWidget):
             commit_target_id=self._selected_target_id(),
             source_segment_ids=source_ids)
         self._pending_intent_preview = preview
+        self._queue.add_intent(preview)
+        self._room_step("choosing_target")
+        self._refresh_queue_ui()
         if not preview.can_apply:
             self._intent_preview_area.setVisible(True)
             self._intent_preview_area.setPlainText(preview.reason_if_blocked)
@@ -808,11 +852,17 @@ class VoicePanel(QWidget):
             return
         from storyplanner.voice.intent_router import (
             I_CLEANUP, apply_intent_preview)
+        self._room_to("applying")
         ok, msg, op = apply_intent_preview(preview, ctx)
         self._status_label.setText(f"Voice: {msg}")
         if not ok:
             self._intent_apply_btn.setEnabled(False)
+            from storyplanner.voice.room import Q_STALE
+            self._queue_sync(preview, Q_STALE)
             return
+        self._room_to("applied")
+        from storyplanner.voice.room import Q_APPLIED
+        self._queue_sync(preview, Q_APPLIED, op)
         if preview.intent_type == I_CLEANUP:
             # Transcript-only: update the source segments / live preview.
             if preview.source_segment_ids:
@@ -835,12 +885,78 @@ class VoicePanel(QWidget):
 
     def _on_intent_cancel(self) -> None:
         from storyplanner.voice.intent_router import cancel_voice_intent
+        if self._pending_intent_preview is not None:
+            from storyplanner.voice.room import Q_CANCELLED
+            self._queue_sync(self._pending_intent_preview, Q_CANCELLED)
         cancel_voice_intent(self._pending_intent_preview)
         self._pending_intent_preview = None
         self._intent_apply_btn.setEnabled(False)
         self._intent_preview_area.clear()
         self._intent_preview_area.setVisible(False)
         self._status_label.setText("Voice: intent preview cancelled")
+
+    # -- Phase 6: Voice Room shell (state + queue + summary) ------------------
+    def _room_to(self, state: str) -> None:
+        self._room.to(state)              # invalid transitions are no-ops
+        self._update_room_label()
+
+    def _room_step(self, state: str) -> None:
+        """Reach *state*, hopping through ``ready`` when needed (e.g. the
+        user works from history without ever starting the microphone)."""
+        if not self._room.can(state):
+            self._room.to("ready")
+        self._room_to(state)
+
+    def _update_room_label(self) -> None:
+        from storyplanner.voice.room import (build_voice_room_context,
+                                             context_summary_line)
+        ctx = self._build_context()
+        line = f"Voice Room (Alpha) · {self._room.state}"
+        if ctx is not None:
+            room = build_voice_room_context(ctx, self._history, self._queue)
+            line += f" · {context_summary_line(room)}"
+        self._room_label.setText(line)
+
+    def _refresh_queue_ui(self) -> None:
+        self._queue_list.clear()
+        for item in self._queue.items:
+            row = QListWidgetItem(f"[{item.status}] {item.kind}: {item.label}")
+            row.setData(Qt.ItemDataRole.UserRole, item.id)
+            if item.reason:
+                row.setToolTip(item.reason)
+            self._queue_list.addItem(row)
+        self._update_room_label()
+
+    def _queue_sync(self, payload, status: str, op=None) -> None:
+        for item in self._queue.items:
+            if item.payload is payload:
+                item.status = status
+                if op is not None:
+                    item.operation_id = getattr(op, "id", "")
+        self._refresh_queue_ui()
+
+    def _on_queue_activate(self, row) -> None:
+        from storyplanner.voice.room import Q_READY
+        item = self._queue.get(row.data(Qt.ItemDataRole.UserRole))
+        if item is None or item.status != Q_READY:
+            self._status_label.setText(
+                "Voice: that proposal can no longer be applied"
+                if item is not None else "Voice: proposal not found")
+            return
+        if item.kind == "billy":
+            self._pending_billy_proposal = item.payload
+            self._billy_apply_btn.setEnabled(True)
+            self._status_label.setText("Voice: Billy proposal re-activated")
+        else:
+            self._pending_intent_preview = item.payload
+            self._intent_apply_btn.setEnabled(True)
+            self._status_label.setText("Voice: intent preview re-activated")
+
+    def _on_pause(self) -> None:
+        self.stop()                       # safe stop; history/queue kept
+        self._room_to("ready")
+        self._status_label.setText(
+            "Voice: paused — session, history and proposals kept")
 
     # -- Phase 5: Billy Voice Bridge ------------------------------------------
     def _refresh_billy_ops(self) -> None:
@@ -875,10 +991,15 @@ class VoicePanel(QWidget):
             return
         from storyplanner.voice.billy_bridge import request_billy_proposal
         text, source_ids = self._intent_source_text()
+        self._room_step("sending_to_billy")
         proposal = request_billy_proposal(
             self._billy_op_combo.currentData(), text, ctx,
             source_segment_ids=source_ids)
         self._pending_billy_proposal = proposal
+        self._queue.add_billy(proposal)
+        self._room_to("proposal_ready" if proposal.can_apply
+                      else "transcript_ready")
+        self._refresh_queue_ui()
         for eid in source_ids:            # history: text-only Billy tracking
             entry = self._history.get(eid)
             if entry is not None:
@@ -923,11 +1044,18 @@ class VoicePanel(QWidget):
             self._status_label.setText("Voice: generate a proposal first")
             return
         from storyplanner.voice.billy_bridge import apply_billy_voice_proposal
+        self._room_to("applying")
         ok, msg, op = apply_billy_voice_proposal(proposal, ctx)
         self._status_label.setText(f"Voice: {msg}")
         if not ok:
             self._billy_apply_btn.setEnabled(False)
+            from storyplanner.voice.room import Q_STALE
+            self._queue_sync(proposal, Q_STALE)
+            self._room_to("proposal_ready")
             return
+        self._room_to("applied")
+        from storyplanner.voice.room import Q_APPLIED
+        self._queue_sync(proposal, Q_APPLIED, op)
         if op is not None:
             self._history.last_commit_op = op
         for eid in proposal.source_segment_ids:
@@ -949,6 +1077,9 @@ class VoicePanel(QWidget):
             cancel_billy_voice_proposal)
         proposal = self._pending_billy_proposal
         cancel_billy_voice_proposal(proposal)
+        if proposal is not None:
+            from storyplanner.voice.room import Q_CANCELLED
+            self._queue_sync(proposal, Q_CANCELLED)
         if proposal is not None:
             for eid in proposal.source_segment_ids:
                 entry = self._history.get(eid)
@@ -982,6 +1113,10 @@ class VoicePanel(QWidget):
         self._pending_billy_proposal = None
         self._billy_apply_btn.setEnabled(False)
         self._billy_preview_area.clear()
+        # Queue: proposals from the previous project become stale.
+        self._queue.on_project_switch(new_project_id)
+        self._refresh_queue_ui()
+        self._room_to("ready")
         if any(e.status in ("pending", "edited")
                for e in self._history.entries):
             self._status_label.setText(
@@ -1042,11 +1177,14 @@ class VoicePanel(QWidget):
                 VoiceStatus.LISTENING, VoiceStatus.PROCESSING):
             return
         self.stop_session()
+        self._room_to("checking_backend")
         ok, msg = self._ensure_controller()
         if not ok:
+            self._room_to("error")
             self._apply_status(VoiceStatus.DISABLED)
             self._status_label.setText(msg or SETUP_MESSAGE)
             return
+        self._room_to("ready")
         if self._controller.start_voice_session():
             self._apply_status(VoiceStatus.LISTENING)
             # One active history session at a time (no secrets — model label
@@ -1063,6 +1201,8 @@ class VoicePanel(QWidget):
     def stop(self) -> None:
         if self._controller is not None:
             self._controller.stop_voice_session()
+        if hasattr(self, "_room"):
+            self._room_to("stopped")
         self._apply_status(VoiceStatus.OFF)
 
     def stop_session(self) -> None:
@@ -1136,6 +1276,15 @@ class VoicePanel(QWidget):
     def _apply_status(self, status: VoiceStatus) -> None:
         self._status = status
         self._status_label.setText(_STATUS_TEXT.get(status, "Voice"))
+        # Mirror the controller status into the Voice Room state machine.
+        room_state = {
+            VoiceStatus.LISTENING: "listening",
+            VoiceStatus.PROCESSING: "transcribing",
+            VoiceStatus.TRANSCRIPT_READY: "transcript_ready",
+            VoiceStatus.ERROR: "error",
+        }.get(status)
+        if room_state is not None and hasattr(self, "_room"):
+            self._room_to(room_state)
         self._refresh_buttons()
 
     def _apply_final_text(self, text: str) -> None:

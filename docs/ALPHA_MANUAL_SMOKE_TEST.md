@@ -66,6 +66,7 @@ manual UI check). Command form:
 | `tests/test_voice_history.py` (Phase 3 history/edit/undo/retry/segments) | **37 passed** |
 | `tests/test_voice_intents.py` (Phase 4 intent router, preview-first ops) | **37 passed** |
 | `tests/test_voice_billy_bridge.py` (Phase 5 Billy Voice Bridge) | **35 passed** |
+| `tests/test_voice_room.py` (Phase 6 Voice Room shell: state/queue/modes) | **26 passed** |
 | `tests/test_voice_lan.py` (backend modes + LAN Whisper server) | **43 passed** |
 | `tests/test_voice_lan_server.py` (LAN companion server + client integration) | **22 passed** |
 | `tests/test_gn_pages_manuscript_sync.py` (GN shared body) | **30 passed** |
@@ -73,7 +74,7 @@ manual UI check). Command form:
 | `tests/test_series_navigator.py` (Navigator + deps) | **26 passed** |
 | `tests/test_writing_mode_lock.py` (mode lock) | **22 passed** |
 | `tests/test_export_safety.py` (export privacy) | **4 passed** |
-| **Total** | **646 passed, 0 failed** |
+| **Total** | **672 passed, 0 failed** |
 
 > Environment note: PDF/DOCX export tests fail only where `reportlab` /
 > `python-docx` are not installed (pre-existing, graceful-degradation behavior),
@@ -212,6 +213,9 @@ this behavior as supporting evidence (the manual UI check is still required).
 | V33 | Speak an instruction → select the segment → Generate Proposal → before/after preview appears; Apply mutates once; Cancel mutates nothing | PENDING MANUAL RETEST | ✓ |
 | V34 | GN: with a Panel selected, Billy's Panel-field proposal applies to the chosen field and Outline/Manuscript mirror; Undo restores | PENDING MANUAL RETEST | ✓ |
 | V35 | Dangerous spoken "commands" ("delete the project", "run this command", …) get the chat-only refusal — nothing executes | PENDING MANUAL RETEST | ✓ |
+| V36 | **Voice Room header** shows the session state + context summary (project · mode · section · panel · selection) and updates as you work | PENDING MANUAL RETEST | ✓ |
+| V37 | Four workflow modes (Dictation default / Intent / Ask Billy / Edit with Billy); Billy modes preset the operation; mode is never auto-detected | PENDING MANUAL RETEST | ✓ |
+| V38 | Proposal queue lists every proposal with status; stale items refuse Apply; double-click re-activates a ready one; Pause keeps session/history/queue | PENDING MANUAL RETEST | ✓ |
 | L1 | Backend selector shows Disabled / Local PC / Local LAN Server / Mock; default Disabled | PENDING MANUAL RETEST | ✓ |
 | L2 | Start a Whisper server on another LAN machine (`docs/LOCAL_LAN_WHISPER.md`) | PENDING MANUAL RETEST | |
 | L3 | Select **Local LAN Server**; enter the private LAN URL (e.g. `http://192.168.x.x:8765`) | PENDING MANUAL RETEST | ✓ |

@@ -87,6 +87,25 @@ retest gate** (see `docs/ALPHA_RC_STATUS.md`).
 
 ### Added (feature-flagged, off by default)
 
+- **Voice Phase 6 — Live Writer Room Alpha Shell (Voice Room).** One local,
+  buffered, review-first session workflow unifying the whole voice stack:
+  an explicit crash-proof **session state machine** (idle → checking
+  backend → ready → listening → transcribing → transcript ready → choosing
+  target / sending to Billy → proposal ready → applying → applied; error/
+  stopped reachable from anywhere; invalid transitions refused), a **Voice
+  Room header** with state + safe context summary (project, mode, section,
+  selected Panel/field, selection — no keys, no audio, no other projects),
+  a session-scoped **proposal queue** for Intent previews and Billy
+  proposals (draft/ready/applied/cancelled/stale/failed; stale —
+  project switch, deleted target, drifted selection — can never apply;
+  double-click re-activates a ready item; applied items keep the operation
+  id for the shared Undo), four **explicit workflow modes** (Dictation
+  default / Intent / Ask Billy / Edit with Billy — never inferred from the
+  transcript; Billy modes preset the bridge operation), and a **Pause**
+  control that keeps session, history and queue. All inside the existing
+  safe floating panel; dictation still works with Whisper alone; nothing
+  mutates without confirmation. `storyplanner/voice/room.py` +
+  `tests/test_voice_room.py` (26 passed).
 - **Voice Phase 5 — Billy Voice Bridge (voice → Billy proposal → confirmed
   apply).** Selected transcript segments can be sent to **Billy** (the
   Assistant chat agent) as a question or editing instruction. Billy receives

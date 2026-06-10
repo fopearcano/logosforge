@@ -261,6 +261,38 @@ never executed and never even reach the provider — Billy answers chat-only:
 tracks `sent_to_billy` / proposal id / applied-or-cancelled per segment (no
 secrets, no audio).
 
+## Voice Room — Live Writer Room Alpha shell (Phase 6)
+
+The panel is organized as a **Voice Room (Alpha)** shell — one local,
+buffered, **review-first** session workflow over the whole stack. It is not
+full Live Writer Room, not cloud realtime, not voice-to-voice, and not an
+autonomous agent.
+
+- **Session header**: a status line showing the room state (idle → checking
+  backend → ready → listening → transcribing → transcript ready → choosing
+  target / sending to Billy → proposal ready → applying → applied; error /
+  stopped reachable from anywhere) plus a context summary (project, mode,
+  active section, selected Panel/field, selection status). The state
+  machine (`storyplanner/voice/room.py`) is explicit and crash-proof —
+  invalid transitions are refused, the app can stop safely from any state.
+- **Workflow modes** (explicit; never inferred from the transcript):
+  **Dictation** (default — Commit Router targets), **Intent** (Intent
+  Router, preview-first), **Ask Billy** (chat-only answer) and **Edit with
+  Billy** (selection rewrite proposal) — the Billy modes preset the bridge
+  operation.
+- **Proposal queue**: every Intent preview and Billy proposal is queued
+  with a status (draft / ready / applied / cancelled / **stale** / failed).
+  Stale items — project switch, deleted target, drifted selection — can
+  never be applied; a ready item can be re-activated by double-click.
+  Applied items keep their operation id for the shared Undo.
+- **Controls**: Start / Stop / **Pause** (keeps session, history and
+  queue) / Clear / Commit selected / Send to Billy / Generate / Apply /
+  Cancel / Undo last commit.
+
+Privacy unchanged: local transcription, raw audio never reaches Billy/AI,
+no telemetry; dictation works with Whisper alone (Billy actions simply
+disable without a provider).
+
 ## Future hooks (anchor points, not implemented)
 
 `EditorCommitTarget` defines (and deliberately stubs) the later shape:
