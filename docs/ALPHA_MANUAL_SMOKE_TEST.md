@@ -61,6 +61,7 @@ manual UI check). Command form:
 | `tests/test_voice_mvp.py` (local voice-to-script MVP) | **35 passed** |
 | `tests/test_voice_dictation_window.py` (floating Voice Dictation window) | **23 passed** |
 | `tests/test_preferences_dialog.py` (scrollable General Preferences) | **11 passed** |
+| `tests/test_voice_prefs_integrity_gate.py` (post-fix integrity gate) | **17 passed** |
 | `tests/test_voice_lan.py` (backend modes + LAN Whisper server) | **43 passed** |
 | `tests/test_voice_lan_server.py` (LAN companion server + client integration) | **22 passed** |
 | `tests/test_gn_pages_manuscript_sync.py` (GN shared body) | **30 passed** |
@@ -68,7 +69,7 @@ manual UI check). Command form:
 | `tests/test_series_navigator.py` (Navigator + deps) | **26 passed** |
 | `tests/test_writing_mode_lock.py` (mode lock) | **22 passed** |
 | `tests/test_export_safety.py` (export privacy) | **4 passed** |
-| **Total** | **489 passed, 0 failed** |
+| **Total** | **506 passed, 0 failed** |
 
 > Environment note: PDF/DOCX export tests fail only where `reportlab` /
 > `python-docx` are not installed (pre-existing, graceful-degradation behavior),
