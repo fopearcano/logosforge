@@ -3,8 +3,8 @@
 The standalone left-panel Pages route was fullscreen-hostile, so it is **disabled
 for Alpha** (hidden in every mode; its handler is inert and never mounts the old
 standalone Pages widget). Graphic Novel Page/Panel navigation lives **inside the
-Manuscript** as the embedded Page/Panel Navigator (``GraphicNovelManuscriptView``)
-over the shared ``Scene.content`` body — see ``test_gn_embedded_navigator.py`` for
+Manuscript** as the inline comics script editor (``GraphicNovelManuscriptView``)
+over the shared ``Scene.content`` body — see ``test_gn_manuscript_script_editor.py`` for
 the navigator's behaviour.
 
 These tests assert the sidebar/route safety (Pages hidden everywhere, route inert
@@ -101,7 +101,7 @@ def test_pages_route_redirects_gn_to_embedded_navigator():
     _scene(db, pid)
     win = MainWindow(db, pid)
     win._show_gn_pages()
-    # Routes to the Manuscript, which hosts the embedded Page/Panel Navigator.
+    # Routes to the Manuscript, which is the GN comics script editor.
     assert isinstance(win.content_area, GraphicNovelManuscriptView)
 
 
@@ -164,7 +164,7 @@ def test_manuscript_hosts_embedded_page_panel_navigator():
     win = MainWindow(db, pid)
     win._show_manuscript()
     view = win.content_area
-    # In Graphic Novel mode the Manuscript hosts the embedded Page/Panel Navigator.
+    # In Graphic Novel mode the Manuscript is the comics script editor.
     assert isinstance(view, GraphicNovelManuscriptView)
     # Add Page / Add Panel are available in the navigator.
     assert hasattr(view, "_add_page") and hasattr(view, "_add_panel")

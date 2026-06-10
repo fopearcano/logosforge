@@ -55,7 +55,7 @@ manual UI check). Command form:
 | `tests/test_post_fix_regression_gate.py` | **20 passed** |
 | `tests/test_pages_fullscreen_safe.py` (Pages fullscreen-safe dialogs) | **16 passed** |
 | `tests/test_pages_alpha_fallback.py` (standalone Pages deferred) | **15 passed** |
-| `tests/test_gn_embedded_navigator.py` (Manuscript Page/Panel Navigator) | **33 passed** |
+| `tests/test_gn_manuscript_script_editor.py` (Manuscript comics script editor) | **66 passed** |
 | `tests/test_gn_outline.py` (GN Outline Pages/Panels) | **38 passed** |
 | `tests/test_gn_outline_integrity_gate.py` (GN Outline integrity gate) | **13 passed** |
 | `tests/test_voice_mvp.py` (local voice-to-script MVP) | **35 passed** |
@@ -66,7 +66,7 @@ manual UI check). Command form:
 | `tests/test_series_navigator.py` (Navigator + deps) | **26 passed** |
 | `tests/test_writing_mode_lock.py` (mode lock) | **22 passed** |
 | `tests/test_export_safety.py` (export privacy) | **4 passed** |
-| **Total** | **422 passed, 0 failed** |
+| **Total** | **455 passed, 0 failed** |
 
 > Environment note: PDF/DOCX export tests fail only where `reportlab` /
 > `python-docx` are not installed (pre-existing, graceful-degradation behavior),
@@ -123,15 +123,15 @@ this behavior as supporting evidence (the manual UI check is still required).
 
 | # | Item | Result | Auto |
 |---|------|--------|------|
-| 22 | Manuscript opens Page/Panel structured editor | PENDING MANUAL RETEST | |
-| 23 | Pages section shows the same Pages/Panels as Manuscript | PENDING MANUAL RETEST | ✓ |
-| 24 | Editing Manuscript updates Pages/Panels | PENDING MANUAL RETEST | ✓ |
-| 25 | Editing Pages/Panels updates Manuscript | PENDING MANUAL RETEST | ✓ |
-| 26 | Add Page updates both views | PENDING MANUAL RETEST | ✓ |
-| 27 | Add Panel updates both views | PENDING MANUAL RETEST | ✓ |
-| 28 | Delete Panel updates both (after confirm) | PENDING MANUAL RETEST | ✓ |
+| 22 | Manuscript opens the **comics script editor** — inline PAGE blocks → Panel cards with Visual/Caption/Dialogue/SFX/Notes all editable in place (no tree) | PENDING MANUAL RETEST | ✓ |
+| 23 | Outline shows the same Pages/Panels as the Manuscript | PENDING MANUAL RETEST | ✓ |
+| 24 | Editing in the Manuscript updates the Outline (shared body) | PENDING MANUAL RETEST | ✓ |
+| 25 | Editing in the Outline updates the Manuscript (shared body) | PENDING MANUAL RETEST | ✓ |
+| 26 | Add Page updates both surfaces | PENDING MANUAL RETEST | ✓ |
+| 27 | Add Panel (per-page button) updates both surfaces | PENDING MANUAL RETEST | ✓ |
+| 28 | Delete Panel / Page updates both (after confirm) | PENDING MANUAL RETEST | ✓ |
 | 29 | Reorder Panel updates both | PENDING MANUAL RETEST | ✓ |
-| 30 | Panels collapsible/hideable, layout usable | PENDING MANUAL RETEST | ✓ |
+| 30 | Script editor stays readable/usable with many pages & panels (scrolling) | PENDING MANUAL RETEST | |
 | 31 | Export uses shared Pages/Panels body | PENDING MANUAL RETEST | ✓ |
 | 32 | No image-generation / ComfyUI fields appear | PENDING MANUAL RETEST | ✓ |
 
@@ -140,10 +140,11 @@ this behavior as supporting evidence (the manual UI check is still required).
 > The standalone **Pages** sidebar section is **disabled for Alpha** (it was
 > fullscreen-hostile). Graphic Novel Page/Panel management lives in the **Outline**
 > (Scenes tab `Act → Chapter → Scene → Page → Panel` + a chapter-level Pages
-> cross-reference tab) **and** the **Manuscript** (embedded Scene → Page → Panel
-> editor), both over the shared `Scene.content` body (child-widget-only; no separate
+> cross-reference tab) **and** the **Manuscript** (a **comics script editor**:
+> inline PAGE blocks → Panel cards, all fields editable in place — not a tree),
+> both over the shared `Scene.content` body (child-widget-only; no separate
 > route, no top-level window). Headless tests cover both surfaces + route safety
-> (`tests/test_gn_outline.py`, `tests/test_gn_embedded_navigator.py`,
+> (`tests/test_gn_outline.py`, `tests/test_gn_manuscript_script_editor.py`,
 > `tests/test_pages_alpha_fallback.py`, `tests/test_pages_fullscreen_safe.py`).
 > **Confirm the fullscreen behavior manually** — especially that opening the GN
 > Outline/Manuscript does not minimize the app:
@@ -155,7 +156,7 @@ this behavior as supporting evidence (the manual UI check is still required).
 | F3 | Click **Outline** — the GN Page/Panel Outline appears; app does **not** minimize/flicker | PENDING MANUAL RETEST | partial |
 | F4 | Outline **Scenes** tab shows `Act → Chapter → Scene → Page → Panel`; **Pages** tab groups panels by chapter page | PENDING MANUAL RETEST | ✓ |
 | F5 | Add Scene / Page / Panel in the Outline; edit Visual / Caption / Dialogue / SFX / Notes | PENDING MANUAL RETEST | ✓ |
-| F6 | Open the **Manuscript** — the same Pages/Panels appear (mirrored); app stays fullscreen | PENDING MANUAL RETEST | ✓ |
+| F6 | Open the **Manuscript** — the comics script editor shows the same Pages/Panels inline (mirrored); app stays fullscreen | PENDING MANUAL RETEST | ✓ |
 | F7 | Export Graphic Novel text / Markdown (shared body; shows Panel → Page and Panel → Scene) | PENDING MANUAL RETEST | ✓ |
 
 ### Local voice-to-script (MVP) — OFF by default

@@ -145,7 +145,7 @@ def test_add_page_opens_no_dialog(monkeypatch):
 
 def test_pages_route_lands_on_editor_without_minimizing_main_window():
     # The standalone Pages nav item is disabled; the Pages route redirects to the
-    # Manuscript, which for Graphic Novel hosts the embedded Page/Panel Navigator.
+    # Manuscript, which for Graphic Novel is the inline comics script editor.
     # It mounts via the fullscreen-safe Manuscript path and must never minimize/hide.
     from storyplanner.ui.main_window import MainWindow
     from storyplanner.ui.graphic_novel_manuscript_view import (
@@ -157,7 +157,7 @@ def test_pages_route_lands_on_editor_without_minimizing_main_window():
     calls = {"min": 0, "hide": 0}
     win.showMinimized = lambda: calls.__setitem__("min", calls["min"] + 1)  # type: ignore
     win.hide = lambda: calls.__setitem__("hide", calls["hide"] + 1)         # type: ignore
-    win._show_gn_pages()                       # -> Manuscript embedded navigator
+    win._show_gn_pages()                       # -> Manuscript script editor
     assert isinstance(win.content_area, GraphicNovelManuscriptView)
     assert calls == {"min": 0, "hide": 0}
 

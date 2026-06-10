@@ -314,7 +314,7 @@ def test_ui_routing_mounts_correct_views(tmp_path):
     _scene(db, pid, "S", "PAGE 1\n\nPANEL 1\nVisual: In the room, x.")
     win = MainWindow(db, pid)
 
-    # Alpha: GN Manuscript hosts the embedded Page/Panel Navigator (standalone Pages
+    # Alpha: GN Manuscript is the inline comics script editor (standalone Pages
     # section disabled for fullscreen safety).
     win._show_manuscript()
     assert isinstance(win.content_area, GraphicNovelManuscriptView)

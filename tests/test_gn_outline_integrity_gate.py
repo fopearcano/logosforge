@@ -3,7 +3,7 @@
 A focused gate that re-verifies the corrected Graphic Novel architecture
 (Chapter owns Pages, Scene owns Panels, Panel assigned to Page, Scene spans Pages,
 Outline ⇄ Manuscript mirror the same shared body, standalone Pages disabled). It
-complements the detailed suites (`test_gn_outline.py`, `test_gn_embedded_navigator.py`,
+complements the detailed suites (`test_gn_outline.py`, `test_gn_manuscript_script_editor.py`,
 `test_gn_pages_manuscript_sync.py`) with the audit's specific data-integrity,
 standalone-Pages-safety, export, and no-image-generation invariants.
 """

@@ -41,7 +41,7 @@ def _db_two():
 def test_pages_stays_hidden_when_switching_into_graphic_novel():
     # Alpha: the standalone Pages section is disabled (fullscreen-hostile). It is
     # hidden in every mode, including Graphic Novel — Page/Panel navigation lives
-    # in the GN Manuscript (embedded navigator).
+    # in the GN Manuscript (comics script editor).
     db = Database()
     novel = db.create_project("Novel", narrative_engine="novel").id
     gn = db.create_project("GN", narrative_engine="graphic_novel").id

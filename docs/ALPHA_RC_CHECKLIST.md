@@ -104,10 +104,12 @@ per-mode export tests.)
       **Pages** item is hidden in every mode and its route is inert (never mounts
       the old standalone Pages widget). Graphic Novel Page/Panel management lives in
       the **Outline** (Scenes tab `Act → Chapter → Scene → Page → Panel` + a
-      chapter-level Pages cross-reference tab) **and** the **Manuscript** (embedded
-      Scene → Page → Panel editor), both over the shared `Scene.content` body
-      (mirrored). **Verify in macOS fullscreen** (smoke-test F-items) that opening
-      the GN Outline/Manuscript shows the navigator and does **not** minimize.
+      chapter-level Pages cross-reference tab) **and** the **Manuscript** (a
+      **comics script editor**: inline PAGE blocks → Panel cards with editable
+      Visual/Caption/Dialogue/SFX/Notes fields — not a tree), both over the
+      shared `Scene.content` body (mirrored). **Verify in macOS fullscreen**
+      (smoke-test F-items) that opening the GN Outline/Manuscript shows the
+      script editor and does **not** minimize.
 - [ ] **Local voice-to-script (MVP)** — **off by default** (`enable_voice_mode`;
       backend mode defaults to **Disabled**). App starts normally with voice off.
       Backends: **Local PC** (faster-whisper, local model path, no auto-download)

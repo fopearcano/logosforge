@@ -273,7 +273,7 @@ def test_novel_view_is_inert():
 def test_main_window_disables_standalone_pages_navigation_in_manuscript():
     # Alpha: the standalone "Pages" section is disabled (fullscreen-hostile) and
     # hidden in every mode. Graphic Novel Page/Panel navigation lives in the
-    # Manuscript as the embedded navigator (GraphicNovelManuscriptView).
+    # Manuscript as the comics script editor (GraphicNovelManuscriptView).
     from storyplanner.ui.main_window import MainWindow
     from storyplanner.ui.graphic_novel_manuscript_view import (
         GraphicNovelManuscriptView)

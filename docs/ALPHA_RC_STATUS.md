@@ -108,8 +108,14 @@ mirrored surfaces** over the shared `Scene.content` body:
   number — a page can show panels from multiple scenes), with a selected-Panel editor
   (Visual / Caption / Dialogue / SFX / Notes), add/move/delete, assign-panel-to-page,
   and double-click → Manuscript;
-- the **Manuscript** (`GraphicNovelManuscriptView`) — the embedded Scene → Page →
-  Panel editor.
+- the **Manuscript** (`GraphicNovelManuscriptView`) — the **comics script
+  editor**: the selected scene's whole script rendered inline as PAGE blocks
+  containing Panel cards with all five fields (Visual / Caption / Dialogue /
+  SFX / Notes) always visible and editable in place, with per-page **+ Panel** /
+  **Delete Page**, per-panel move/delete (confirmed), and a flat scene dropdown
+  (no tree — structural navigation stays in the Outline; double-click there
+  opens the scene here, and the editor preserves focus across the app-wide
+  refresh that follows each save).
 
 Both read/write the same body (single source of truth), so they mirror. Model:
 Chapter owns Pages (via scenes), Scene owns Panels, Panel assigned to a Page, Scene
@@ -123,7 +129,9 @@ Single source: `MainWindow._show_plan` (GN → `GraphicNovelOutlineView`) +
 `_show_manuscript` (GN → `GraphicNovelManuscriptView`) + `_apply_pages_availability`
 (hides standalone Pages) + `_show_gn_pages` (inert). Data layer:
 `storyplanner/graphic_novel_outline.py`. Tests: `tests/test_gn_outline.py`
-(**38 passed**), `tests/test_gn_embedded_navigator.py` (**33 passed**), plus
+(**38 passed**), `tests/test_gn_manuscript_script_editor.py` (**66 passed** —
+replaces `test_gn_embedded_navigator.py` after the Manuscript was reshaped from
+a tree+detail navigator into the inline comics script editor), plus
 pages/lifecycle/phase suites. True macOS fullscreen behavior must still be confirmed
 manually (smoke-test F-items). **Classification: A — Graphic Novel Outline manages
 Pages/Panels and mirrors the Manuscript; standalone Pages disabled.**

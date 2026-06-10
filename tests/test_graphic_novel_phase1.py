@@ -80,7 +80,7 @@ def test_novel_and_screenplay_modes_unchanged():
 def test_universal_manuscript_reused_no_separate_gn_section(tmp_path):
     # Alpha: the standalone Pages section is disabled (macOS fullscreen bug), so in
     # Graphic Novel mode the single "Manuscript" nav section hosts the embedded
-    # Page/Panel Navigator over the SAME shared Scene.content body. There is still
+    # comics script editor over the SAME shared Scene.content body. There is still
     # ONE Manuscript nav entry — no separate "Graphic Novel Manuscript" section.
     from storyplanner.ui.main_window import MainWindow
     from storyplanner.ui.graphic_novel_manuscript_view import (
@@ -90,7 +90,7 @@ def test_universal_manuscript_reused_no_separate_gn_section(tmp_path):
     ss.create_scene(db, pid, act="Act I", chapter="Ch1", title="S", content=_BODY)
     win = MainWindow(db, pid)
     win.sidebar_buttons["Manuscript"].click()
-    # The single Manuscript section hosts the GN Page/Panel Navigator.
+    # The single Manuscript section hosts the GN comics script editor.
     assert isinstance(win.content_area, GraphicNovelManuscriptView)
     assert "Manuscript" in win._nav_labels
     assert not any("graphic" in lbl.lower() and "manuscript" in lbl.lower()

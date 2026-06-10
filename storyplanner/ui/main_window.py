@@ -956,17 +956,18 @@ class MainWindow(QMainWindow):
         if isinstance(view, WritingCoreView):
             view.scroll_to_scene(scene_id)
         elif isinstance(view, GraphicNovelManuscriptView):
-            # GN Manuscript hosts the embedded Page/Panel Navigator — focus scene.
+            # GN Manuscript is the comics script editor — show this scene's script.
             view.select_scene(scene_id)
         self._assistant_panel.set_active_scene(scene_id)
 
     def _show_manuscript(self) -> None:
-        # Graphic Novel: the Manuscript hosts the embedded Page/Panel Navigator
-        # (Scene -> Page -> Panel tree + selected-item editor) over the shared
-        # Scene.content body. The standalone left-panel Pages route is disabled for
-        # Alpha (it was fullscreen-hostile); this embedded navigator is a single
-        # child widget mounted via the standard _set_content path — no separate
-        # Pages route, no top-level window — so it is fullscreen-safe.
+        # Graphic Novel: the Manuscript is the comics SCRIPT editor — the scene's
+        # whole script inline as PAGE blocks -> Panel cards (Visual/Caption/
+        # Dialogue/SFX/Notes editable in place) over the shared Scene.content
+        # body; structure stays in the GN Outline. The standalone left-panel
+        # Pages route is disabled for Alpha (it was fullscreen-hostile); this
+        # editor is a single child widget mounted via the standard _set_content
+        # path — no separate Pages route, no top-level window — fullscreen-safe.
         if self._project_is_graphic_novel():
             from storyplanner.ui.graphic_novel_manuscript_view import (
                 GraphicNovelManuscriptView,
@@ -1472,8 +1473,8 @@ class MainWindow(QMainWindow):
         The standalone Pages route was fullscreen-hostile (clicking it minimized
         the app in macOS fullscreen, across multiple attempted fixes), so it is
         **hidden in every mode** and its route is made **inert** — it never mounts
-        the old standalone Pages widget. Graphic Novel Page/Panel navigation lives
-        in the **Manuscript** as an embedded Page/Panel Navigator
+        the old standalone Pages widget. Graphic Novel Page/Panel writing lives
+        in the **Manuscript** as an inline comics script editor
         (``GraphicNovelManuscriptView``) over the shared ``Scene.content`` body.
         The handler stays registered but only redirects to the Manuscript.
         Idempotent; called at startup and on every project switch."""
@@ -1551,8 +1552,8 @@ class MainWindow(QMainWindow):
     def _show_gn_pages(self) -> None:
         # The standalone Pages route is disabled for Alpha (fullscreen-hostile).
         # It is kept registered but INERT — it never mounts the old standalone
-        # Pages widget. Graphic Novel Page/Panel navigation lives in the Manuscript
-        # (the embedded Page/Panel Navigator), so route there safely; non-GN
+        # Pages widget. Graphic Novel Page/Panel writing lives in the Manuscript
+        # (the inline comics script editor), so route there safely; non-GN
         # projects fall back to the Dashboard.
         if self._project_is_graphic_novel():
             self._set_active_section("Manuscript")

@@ -100,7 +100,11 @@ stays Project → Act → Chapter → Scene):
   (`Act → Chapter → Scene → Page → Panel`) and a chapter-level **Pages** cross-reference
   view (panels grouped across a chapter's scenes by page number) with a selected-Panel
   editor (**Visual / Caption / Dialogue / SFX / Notes**), add/move/delete, and
-  assign-panel-to-page — and the **Manuscript** embeds the Scene → Page → Panel editor.
+  assign-panel-to-page — and the **Manuscript** is the **comics script editor**:
+  the selected scene's whole script inline as PAGE blocks → Panel cards with all
+  five fields (**Visual / Caption / Dialogue / SFX / Notes**) always visible and
+  editable in place (not a tree; scene selection is a flat dropdown, structure
+  stays in the Outline).
   Model: Chapter owns Pages, Scene owns Panels, Panel assigned to a Page, Scene can
   span Pages. Pages/Panels are script structure, not image generation; this is the
   future anchor point for visual-production integrations. Both surfaces are embedded

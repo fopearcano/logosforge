@@ -25,9 +25,21 @@ retest gate** (see `docs/ALPHA_RC_STATUS.md`).
   route). Page/Panel management lives in two mirrored surfaces over the shared
   `Scene.content` body: the **GN Outline** (Scenes tab `Act → Chapter → Scene →
   Page → Panel` + a chapter-level Pages cross-reference; full editing,
-  assign-panel-to-page) and the **Manuscript** (embedded Scene → Page → Panel
-  navigator). Model: Chapter owns Pages, Scene owns Panels, Panel assigned to a
-  Page, a Scene can span Pages.
+  assign-panel-to-page) and the **Manuscript**. Model: Chapter owns Pages,
+  Scene owns Panels, Panel assigned to a Page, a Scene can span Pages.
+- **Graphic Novel — Manuscript is a comics script editor, not an outliner.**
+  The GN Manuscript initially shipped as a tree + selected-item detail editor
+  (an outliner shape). It is now a true **comics script editor**: the selected
+  scene's whole script renders inline as PAGE blocks containing Panel cards
+  with all five fields (**Visual / Caption / Dialogue / SFX / Notes**) always
+  visible and editable in place (commit on focus-out, focus preserved across
+  the app-wide refresh that follows each save), per-page **+ Panel** / **Delete
+  Page**, per-panel move/delete (confirmed via fullscreen-safe dialogs), an
+  empty-state ladder (Create Scene → Add Page → Add Panel → script), and a flat
+  scene dropdown. Structure stays in the GN Outline (double-click opens the
+  scene in the Manuscript); both still mirror over the same `Scene.content`
+  body. Suite: `tests/test_gn_manuscript_script_editor.py` (66 passed, replaces
+  `test_gn_embedded_navigator.py`).
 - **Writing-mode lock.** Mode is chosen at creation and **locks once a project
   has meaningful content** (body text, planning data, Timeline/Notes/PSYKE,
   user structure, Season/Episode rows); blocked changes mutate nothing.

@@ -173,8 +173,14 @@ limitations for this RC:
     Pages are renamed via the page detail (title field). **Panel** reorder (within a
     scene) and **move-panel-to-page** are supported; **Page reorder** (move Page
     up/down) is deferred for Alpha (pages are scene-scoped and authored in order).
-  - the **Manuscript** (`GraphicNovelManuscriptView`) is the embedded
-    Scene → Page → Panel editor.
+  - the **Manuscript** (`GraphicNovelManuscriptView`) is the **comics script
+    editor** — the selected scene's whole script rendered inline as PAGE blocks
+    containing Panel cards with all five fields (**Visual / Caption / Dialogue /
+    SFX / Notes**) always visible and editable in place (commit on focus-out),
+    plus per-page **+ Panel** / **Delete Page** and per-panel move / delete
+    (confirmed). It is **not** a tree/outliner: scene selection is a flat
+    dropdown, and structural navigation stays in the Outline (double-click
+    there opens the scene here).
   Both read/write the **same** `Scene.content` (single source of truth — no separate
   Pages storage), so edits mirror. Relationships: **Chapter owns Pages** (via its
   scenes), **Scene owns Panels**, **Panel is assigned to a Page** (its containing
