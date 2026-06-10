@@ -150,6 +150,8 @@ def build_transcriber(settings) -> Transcriber:
     if mode == "lan_server":
         from storyplanner.voice.lan_server import LanWhisperTranscriber
         return LanWhisperTranscriber(settings)
+    if mode == "whisper_cpp":
+        return WhisperCppTranscriber(settings)
     # local_process — the local PC backend (faster-whisper kind for Alpha;
     # a "mock" kind keeps the dependency-free path available).
     kind = (getattr(settings, "backend", "") or "faster-whisper").lower()
@@ -159,3 +161,77 @@ def build_transcriber(settings) -> Transcriber:
         getattr(settings, "model_path", "") or "",
         device=(getattr(settings, "local_device", "auto") or "auto"),
         compute_type=(getattr(settings, "local_compute_type", "int8") or "int8"))
+
+
+class WhisperCppTranscriber(Transcriber):
+    """Local whisper.cpp backend (Phase 8): runs the USER-CONFIGURED
+    executable on a temporary WAV per segment. Nothing is installed or
+    downloaded; the binary and model paths come from Voice Setup. The temp
+    file is always deleted; audio never leaves the machine."""
+
+    def __init__(self, settings) -> None:
+        self._exe = (getattr(settings, "executable_path", "") or "").strip()
+        self._model = (getattr(settings, "model_path", "") or "").strip()
+        self._language = (getattr(settings, "language", "") or "auto")
+        self._beam_size = int(getattr(settings, "beam_size", 0) or 0)
+
+    def availability(self) -> tuple[bool, str]:
+        import os
+        if not self._exe:
+            return False, ("whisper.cpp executable is not configured. "
+                           "Open Voice Setup.")
+        if not os.path.isfile(self._exe):
+            return False, "whisper.cpp executable not found at the set path."
+        if not os.access(self._exe, os.X_OK):
+            return False, "whisper.cpp executable is not runnable."
+        if not self._model:
+            return False, "whisper.cpp model path is not configured."
+        if not os.path.exists(self._model):
+            return False, "whisper.cpp model not found at the set path."
+        return True, "whisper.cpp ready."
+
+    def transcribe(self, pcm: bytes, *, sample_rate: int,
+                   language: str | None = None) -> TranscriptSegment:
+        ok, msg = self.availability()
+        if not ok:
+            return TranscriptSegment(text="", error=msg)
+        import os
+        import subprocess
+        import tempfile
+        import wave
+        wav_path = ""
+        try:
+            fd, wav_path = tempfile.mkstemp(suffix=".wav")
+            with os.fdopen(fd, "wb") as handle:
+                with wave.open(handle, "wb") as wav:
+                    wav.setnchannels(1)
+                    wav.setsampwidth(2)
+                    wav.setframerate(sample_rate)
+                    wav.writeframes(pcm)
+            cmd = [self._exe, "-m", self._model, "-f", wav_path, "-nt"]
+            lang = (language or self._language or "auto")
+            if lang and lang != "auto":
+                cmd += ["-l", lang]
+            if self._beam_size > 0:
+                cmd += ["-bs", str(self._beam_size)]
+            result = subprocess.run(cmd, capture_output=True, text=True,
+                                    timeout=120)
+            if result.returncode != 0:
+                err = (result.stderr or "").strip().splitlines()
+                return TranscriptSegment(
+                    text="", error="whisper.cpp failed: "
+                    + (err[-1] if err else f"exit {result.returncode}"))
+            text = (result.stdout or "").strip()
+            return TranscriptSegment(text=text, language=lang,
+                                     source="whisper_cpp")
+        except subprocess.TimeoutExpired:
+            return TranscriptSegment(text="", error="whisper.cpp timed out.")
+        except Exception as exc:
+            return TranscriptSegment(text="",
+                                     error=f"whisper.cpp error: {exc}")
+        finally:
+            if wav_path:
+                try:
+                    os.unlink(wav_path)       # never retain audio
+                except OSError:
+                    pass

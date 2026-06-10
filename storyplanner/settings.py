@@ -97,7 +97,9 @@ DEFAULTS: dict[str, object] = {
     # Local PC backend (local_process): kind + local model (no auto-download).
     "voice_whisper_backend": "faster-whisper",   # local kind: "faster-whisper" | "mock"
     "voice_whisper_model_path": "",              # local model dir/file (no auto-download)
-    "voice_whisper_executable_path": "",          # reserved for whisper.cpp (future)
+    "voice_whisper_executable_path": "",          # whisper.cpp binary (Phase 8)
+    "voice_performance_profile": "balanced",      # fast_draft|balanced|accurate|custom
+    "voice_beam_size": 0,                         # 0 = backend default
     "voice_local_device": "auto",                 # "auto" | "cpu" | "cuda"
     "voice_local_compute_type": "int8",
     "voice_language": "auto",                     # "auto" | "en" | "it" | ...

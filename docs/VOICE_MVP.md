@@ -329,6 +329,44 @@ words, and nothing is changed silently.
 This is not acoustic-model training or Whisper fine-tuning — it is a text
 correction layer; imported terms may still need manual spoken forms.
 
+## Voice Setup & diagnostics (Phase 8)
+
+**View → Voice Dictation → Voice Setup…** opens a parented, modeless setup
+panel (`storyplanner/ui/voice_setup_dialog.py`; safe-window rules, never a
+parentless/floating window). It covers the whole local backend story —
+nothing is installed or downloaded, no GPU is required, and invalid paths
+show clear messages instead of crashing.
+
+- **Enable Voice Mode** + the local-only note.
+- **Backend** (one active at a time): *faster-whisper (local PC)* /
+  *whisper.cpp (local executable)* / *Local LAN server* / *Mock/Test*. A
+  status chip shows `not_configured / ready / missing_dependency /
+  missing_executable / missing_model / error / disabled`.
+- **Model path** (+ Browse — directory for faster-whisper, file for
+  whisper.cpp) and, for whisper.cpp, the **executable path** (+ Browse and
+  a safe `--help` probe). To configure whisper.cpp: build whisper.cpp,
+  point the executable at its binary (e.g. `./main`) and the model at a
+  `ggml-*.bin`; the app shells out per segment to a temp WAV that is
+  always deleted.
+- **Language** (auto / English / Italiano) and a **performance profile**:
+  *Fast draft* (short segments, beam 1), *Balanced* (the default),
+  *Accurate* (longer segments, beam 5 — latency may rise), *Custom* (edit
+  silence/segment/beam directly). Profiles only set CPU-safe segmentation +
+  beam values; no model is downloaded.
+- **Diagnostics**: *Test microphone*, *Test backend* (with the whisper.cpp
+  probe), *Test transcription* (pick a short local WAV — or the Mock
+  backend needs no file; the result is shown in the panel only, never
+  committed, never sent to Billy/AI, audio never retained), and *Copy
+  diagnostics* (a secrets-free summary: app/platform, backend + status,
+  model/executable *present yes/no*, microphone, language, profile, last
+  error, and the local-only statement).
+
+Voice Room gating: **Start is enabled only when the selected backend is
+ready**; otherwise it is disabled with *"Local Whisper is not configured.
+Open Voice Setup to enable Voice Mode."* Dictation still works with Whisper
+alone — Billy actions disable without an AI provider, and glossary
+suggestions are simply absent without terms.
+
 ## Future hooks (anchor points, not implemented)
 
 `EditorCommitTarget` defines (and deliberately stubs) the later shape:

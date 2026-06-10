@@ -87,6 +87,28 @@ retest gate** (see `docs/ALPHA_RC_STATUS.md`).
 
 ### Added (feature-flagged, off by default)
 
+- **Voice Phase 8 — local Whisper setup, diagnostics, backend profiles,
+  guardrails.** A parented modeless **Voice Setup** panel
+  (`ui/voice_setup_dialog.py`, opened from the voice panel) over a new
+  diagnostics layer (`voice/setup.py`): enable Voice Mode; pick **one**
+  local backend — faster-whisper / **whisper.cpp** (new local
+  `WhisperCppTranscriber` shelling out to the user-set binary on a temp WAV
+  that is always deleted) / Local LAN / Mock-test — with a validated status
+  chip (`not_configured / ready / missing_dependency / missing_executable /
+  missing_model / error / disabled`); model & executable paths with Browse;
+  language; **performance profiles** (Fast draft / Balanced / Accurate /
+  Custom → CPU-safe silence/segment/beam values, no model download, no GPU
+  required); and safe **diagnostics** — microphone test, backend test (with
+  a whisper.cpp `--help` probe), **file-based local test transcription**
+  (shown in the panel only — never committed, never sent to Billy/AI, audio
+  never retained) and a **copyable diagnostics summary** that excludes API
+  keys, provider secrets, transcript history and raw paths. The **Voice Room
+  gates Start** on a ready backend ("Local Whisper is not configured. Open
+  Voice Setup to enable Voice Mode."); dictation still works with Whisper
+  alone. Nothing is installed or downloaded; invalid paths degrade to clear
+  messages, never crashes. New settings: `voice_performance_profile`,
+  `voice_beam_size` (additive, safe defaults). `tests/test_voice_setup.py`
+  (28 passed).
 - **Voice Phase 7 — Project Voice Glossary + local correction layer.** A
   project-scoped `VoiceGlossaryTerm` table (additive schema; existing DBs
   gain it automatically) stores canonical spellings, spoken forms, known

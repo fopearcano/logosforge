@@ -97,12 +97,24 @@ panel** yet:
   import behind a confirmation; fuzzy matching conservative and off by
   default; auto-apply off by default). Not acoustic-model training or
   Whisper fine-tuning; imported terms may need manual spoken forms.
-  **Still not:** full Live Writer Room, voice-to-voice conversation, a
-  continuous autonomous agent loop, automatic mode detection, automatic
-  command execution, automatic screenplay role guessing or character
-  attribution, automatic PSYKE classification, speaker diarization, or an
-  image-generation bridge; no shell/system commands; cloud realtime remains
-  deferred. See `docs/VOICE_MVP.md`.
+  **Phase 8 Voice Setup & diagnostics:** a parented, modeless setup panel
+  (enable Voice Mode; pick one local backend — faster-whisper / whisper.cpp
+  / LAN / mock-test — with a status chip; model & executable paths with
+  Browse; language; Fast draft / Balanced / Accurate / Custom performance
+  profiles; microphone test, backend test, file-based local test
+  transcription, copyable secrets-free diagnostics). The Voice Room gates
+  Start on a ready backend; nothing is installed or downloaded, no GPU is
+  required, invalid paths show clear messages instead of crashing.
+  **Model setup is manual** — no automatic backend installation, no model
+  download; microphone device selection is the system default (per-device
+  selection deferred); GPU acceleration is optional and not required;
+  performance varies by hardware. **Still not:** full Live Writer Room,
+  voice-to-voice conversation, a continuous autonomous agent loop,
+  automatic mode detection, automatic command execution, automatic
+  screenplay role guessing or character attribution, automatic PSYKE
+  classification, speaker diarization, or an image-generation bridge; no
+  shell/system commands; cloud realtime remains deferred. See
+  `docs/VOICE_MVP.md`.
 
 ## Model / feature limits
 

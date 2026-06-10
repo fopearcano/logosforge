@@ -49,6 +49,7 @@ from storyplanner.voice.types import PRIVACY_NOTE, SETUP_MESSAGE, VoiceStatus
 _BACKEND_MODES = (
     ("disabled", "Disabled"),
     ("local_process", "Local PC"),
+    ("whisper_cpp", "whisper.cpp"),
     ("lan_server", "Local LAN Server"),
     ("mock", "Mock / Test"),
 )
@@ -140,7 +141,12 @@ class VoicePanel(QWidget):
         self._lan_check_btn.setObjectName("voiceLanCheck")
         self._lan_check_btn.clicked.connect(self._on_check_lan)
         cfg.addWidget(self._lan_check_btn)
+        self._setup_btn = QPushButton("Voice Setup…")
+        self._setup_btn.setObjectName("voiceSetupOpen")
+        self._setup_btn.clicked.connect(self._on_setup_open)
+        cfg.addWidget(self._setup_btn)
         layout.addLayout(cfg)
+        self._setup_dialog = None
         self._sync_backend_row()
 
         # -- Commit target row (Phase 2; shown only with a context provider) --
@@ -442,6 +448,15 @@ class VoicePanel(QWidget):
             self._config_edit.setText(settings.model_path)
             self._config_edit.setToolTip(
                 "Path to a local faster-whisper model directory.")
+        elif mode == "whisper_cpp":
+            self._config_edit.setVisible(True)
+            self._lan_check_btn.setVisible(False)
+            self._config_edit.setPlaceholderText(
+                "whisper.cpp model file (executable set in Voice Setup)")
+            self._config_edit.setText(settings.model_path)
+            self._config_edit.setToolTip(
+                "Path to a local whisper.cpp model file; the executable "
+                "path is configured in Voice Setup.")
         else:
             self._config_edit.setVisible(False)
             self._lan_check_btn.setVisible(False)
@@ -462,7 +477,7 @@ class VoicePanel(QWidget):
         text = self._config_edit.text().strip()
         if mode == "lan_server":
             self._store_set("voice_lan_base_url", text)
-        elif mode == "local_process":
+        elif mode in ("local_process", "whisper_cpp"):
             self._store_set("voice_whisper_model_path", text)
 
     def _on_check_lan(self) -> None:
@@ -512,6 +527,7 @@ class VoicePanel(QWidget):
             self._sync_backend_row()
             self._set_controls_enabled(True)
             self._refresh_buttons()
+            self._apply_setup_gate()
         self._refresh_targets()
 
     # -- Phase 2: mode-aware commit targets ----------------------------------
@@ -990,6 +1006,34 @@ class VoicePanel(QWidget):
         self._room_to("ready")
         self._status_label.setText(
             "Voice: paused — session, history and proposals kept")
+
+    # -- Phase 8: Voice Setup integration --------------------------------------
+    def _apply_setup_gate(self) -> None:
+        """Start is enabled only when the selected backend is ready; an
+        invalid setup shows the Open-Voice-Setup message instead."""
+        from storyplanner.voice import setup as vsetup
+        try:
+            profile = vsetup.build_backend_profile(self._load_settings())
+        except Exception:
+            return
+        listening = self._status in (VoiceStatus.LISTENING,
+                                     VoiceStatus.PROCESSING)
+        self._start_btn.setEnabled(profile.ready and not listening)
+        self._start_btn.setToolTip(
+            "" if profile.ready else vsetup.SETUP_REQUIRED_MESSAGE)
+        if not profile.ready:
+            self._status_label.setText(vsetup.SETUP_REQUIRED_MESSAGE)
+
+    def _on_setup_open(self) -> None:
+        if self._setup_dialog is None:
+            from storyplanner.ui.voice_setup_dialog import VoiceSetupDialog
+            self._setup_dialog = VoiceSetupDialog(
+                settings_get=self._settings_get,
+                settings_set=self._settings_set, parent=self.window())
+        else:
+            self._setup_dialog.refresh()
+        self._setup_dialog.show()
+        self._setup_dialog.raise_()
 
     # -- Phase 5: Billy Voice Bridge ------------------------------------------
     def _refresh_billy_ops(self) -> None:

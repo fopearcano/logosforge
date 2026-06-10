@@ -73,6 +73,8 @@ class VoiceSettings:
     backend: str = "faster-whisper"     # local PC kind ("faster-whisper"|"mock")
     model_path: str = ""
     executable_path: str = ""
+    beam_size: int = 0                # 0 = backend default (profiles may set)
+    performance_profile: str = "balanced"
     local_device: str = "auto"
     local_compute_type: str = "int8"
     language: str = "auto"
@@ -115,6 +117,9 @@ class VoiceSettings:
             backend=str(get("voice_whisper_backend") or "faster-whisper"),
             model_path=str(get("voice_whisper_model_path") or ""),
             executable_path=str(get("voice_whisper_executable_path") or ""),
+            beam_size=_int("voice_beam_size", 0),
+            performance_profile=str(get("voice_performance_profile")
+                                    or "balanced"),
             local_device=str(get("voice_local_device") or "auto"),
             local_compute_type=str(get("voice_local_compute_type") or "int8"),
             language=str(get("voice_language") or "auto"),

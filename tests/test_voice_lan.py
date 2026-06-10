@@ -301,7 +301,8 @@ def test_panel_backend_selector_lists_all_modes():
     p = _panel(voice_backend_mode="disabled")
     values = [p._backend_combo.itemData(i)
               for i in range(p._backend_combo.count())]
-    assert values == ["disabled", "local_process", "lan_server", "mock"]
+    assert values == ["disabled", "local_process", "whisper_cpp",
+                      "lan_server", "mock"]
     assert p._backend_combo.currentData() == "disabled"
 
 
@@ -358,13 +359,16 @@ def test_switching_backend_mode_while_recording_stops_session():
 
 def test_voice_package_uses_no_temp_files():
     # Segments are wrapped as in-memory WAV (BytesIO) — no temp-file litter.
+    # Phase 8 exception: transcriber.py's whisper.cpp backend must hand the
+    # binary a file; its temp WAV is always deleted (pinned by
+    # test_voice_setup.py::test_whisper_cpp_transcriber_deletes_temp_audio).
     import os
     import re
     import storyplanner.voice as vp
     pkg_dir = list(vp.__path__)[0]
     tmp_re = re.compile(r"^\s*(import|from)\s+tempfile\b", re.M)
     for name in os.listdir(pkg_dir):
-        if name.endswith(".py"):
+        if name.endswith(".py") and name != "transcriber.py":
             src = open(os.path.join(pkg_dir, name), encoding="utf-8").read()
             assert not tmp_re.search(src), f"tempfile usage in {name}"
 
