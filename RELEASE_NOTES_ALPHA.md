@@ -107,13 +107,19 @@ stays Project → Act → Chapter → Scene):
   child widgets (no separate route, no top-level window), addressing the earlier macOS
   fullscreen minimize. See `docs/KNOWN_LIMITATIONS_ALPHA.md`.
 - **Local voice-to-script (MVP, off by default):** an opt-in, **local-first**
-  dictation foundation (`enable_voice_mode`) — buffered microphone capture, simple
-  pause detection, **local Whisper** transcription (optional `faster-whisper` +
-  `sounddevice`, local model path required, **no automatic downloads**), a transcript
-  preview, and **manual plain-text commit** at the editor cursor. **No cloud speech
-  API; audio never leaves the device.** Not cloud realtime, no voice commands, no
+  dictation foundation (`enable_voice_mode`; backend mode defaults to Disabled) —
+  buffered microphone capture, simple pause detection, transcript preview, and
+  **manual plain-text commit** at the editor cursor. Two backends: **Local PC**
+  (`faster-whisper` + `sounddevice`, optional installs; local model path required,
+  **no automatic downloads**) and **Local LAN Server** (capture stays local;
+  finalized segments go only to a Whisper server you configured on the **trusted
+  local network** — private/loopback addresses enforced, public URLs / ngrok /
+  tunnels **blocked**, redirects refused; an opt-in companion server script ships
+  at `scripts/local_whisper_server.py`). **No cloud speech API, no OpenAI
+  Realtime; audio never leaves the device/trusted LAN.** No voice commands, no
   automatic dialogue/action classification (deferred hooks exist). View → Voice
-  Dictation (Ctrl/Cmd+Shift+V). See `docs/VOICE_MVP.md`.
+  Dictation (Ctrl/Cmd+Shift+V). See `docs/VOICE_MVP.md` +
+  `docs/LOCAL_LAN_WHISPER.md`.
 
 **Verification:** the final global multi-mode integrity audit (Alpha Release Gate)
 returned **A**. Focused gate `tests/test_alpha_release_gate.py` = **35 passed**;

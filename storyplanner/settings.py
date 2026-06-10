@@ -88,18 +88,35 @@ DEFAULTS: dict[str, object] = {
     "open_anyway_on_lock": False,
     "graph_state": {},
     "graph_presets": {},
-    # -- Local voice-to-script (MVP) — OFF by default; local-first; no cloud --
-    # When enabled but the local Whisper backend / model path is not configured,
-    # the voice UI shows a non-blocking setup message (the app stays usable).
+    # -- Local voice-to-script (MVP) — OFF by default; local/LAN-first; no cloud --
+    # When enabled but the selected backend is not configured, the voice UI shows
+    # a non-blocking setup message (the app stays usable).
     "enable_voice_mode": False,
-    "voice_whisper_backend": "faster-whisper",   # "faster-whisper" | "mock"
+    # Backend mode: "disabled" | "mock" | "local_process" | "lan_server".
+    "voice_backend_mode": "disabled",
+    # Local PC backend (local_process): kind + local model (no auto-download).
+    "voice_whisper_backend": "faster-whisper",   # local kind: "faster-whisper" | "mock"
     "voice_whisper_model_path": "",              # local model dir/file (no auto-download)
     "voice_whisper_executable_path": "",          # reserved for whisper.cpp (future)
+    "voice_local_device": "auto",                 # "auto" | "cpu" | "cuda"
+    "voice_local_compute_type": "int8",
     "voice_language": "auto",                     # "auto" | "en" | "it" | ...
     "voice_auto_commit": False,                   # commit transcript without click
     "voice_silence_ms": 900,
     "voice_max_segment_seconds": 25,
     "voice_overlap_ms": 0,
+    # LAN backend (lan_server): a trusted Whisper server on the LOCAL network.
+    # Private/loopback hosts only by default — public URLs are blocked for Alpha.
+    "voice_lan_base_url": "",
+    "voice_lan_api_type": "openai_compatible",   # | "whisper_cpp" | "custom"
+    "voice_lan_transcription_endpoint": "",       # custom api_type only
+    "voice_lan_health_endpoint": "",              # default: /health
+    "voice_lan_timeout_seconds": 60,
+    "voice_lan_auth_header_name": "",             # optional static local token
+    "voice_lan_auth_token": "",                   # never logged
+    "voice_lan_allow_only_private_hosts": True,
+    "voice_lan_max_audio_seconds": 60,
+    "voice_lan_max_payload_mb": 25,
 }
 
 

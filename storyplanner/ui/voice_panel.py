@@ -19,8 +19,10 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -29,6 +31,14 @@ from PySide6.QtWidgets import (
 
 from storyplanner.voice.editor_commit import EditorCommitTarget
 from storyplanner.voice.types import PRIVACY_NOTE, SETUP_MESSAGE, VoiceStatus
+
+# (value stored in settings, label shown in the selector)
+_BACKEND_MODES = (
+    ("disabled", "Disabled"),
+    ("local_process", "Local PC"),
+    ("lan_server", "Local LAN Server"),
+    ("mock", "Mock / Test"),
+)
 
 _STATUS_TEXT = {
     VoiceStatus.DISABLED: "Voice: not configured",
@@ -48,11 +58,13 @@ class VoicePanel(QWidget):
     _final_text = Signal(str)
 
     def __init__(self, *, settings_get: Callable[[str], object] | None = None,
+                 settings_set: Callable[[str, object], None] | None = None,
                  commit_target: EditorCommitTarget | None = None,
                  parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("voicePanel")
         self._settings_get = settings_get
+        self._settings_set = settings_set
         self._commit = commit_target or EditorCommitTarget()
         self._controller = None
         self._status = VoiceStatus.OFF
@@ -71,6 +83,26 @@ class VoicePanel(QWidget):
         note.setStyleSheet("color: #94a3b8; font-size: 11px;")
         top.addWidget(note)
         layout.addLayout(top)
+
+        # -- Backend selector + contextual config (Local PC model path / LAN URL)
+        cfg = QHBoxLayout()
+        cfg.addWidget(QLabel("Backend:"))
+        self._backend_combo = QComboBox()
+        self._backend_combo.setObjectName("voiceBackendCombo")
+        for value, label in _BACKEND_MODES:
+            self._backend_combo.addItem(label, value)
+        self._backend_combo.currentIndexChanged.connect(self._on_backend_changed)
+        cfg.addWidget(self._backend_combo)
+        self._config_edit = QLineEdit()
+        self._config_edit.setObjectName("voiceConfigEdit")
+        self._config_edit.editingFinished.connect(self._on_config_edited)
+        cfg.addWidget(self._config_edit, stretch=1)
+        self._lan_check_btn = QPushButton("Check LAN server")
+        self._lan_check_btn.setObjectName("voiceLanCheck")
+        self._lan_check_btn.clicked.connect(self._on_check_lan)
+        cfg.addWidget(self._lan_check_btn)
+        layout.addLayout(cfg)
+        self._sync_backend_row()
 
         self._preview = QPlainTextEdit()
         self._preview.setObjectName("voiceTranscriptPreview")
@@ -119,6 +151,63 @@ class VoicePanel(QWidget):
 
     def is_enabled(self) -> bool:
         return bool(self._load_settings().enabled)
+
+    def _store_set(self, key: str, value) -> None:
+        setter = self._settings_set
+        if setter is None:
+            from storyplanner.settings import get_manager
+            setter = get_manager().set
+        setter(key, value)
+
+    # -- backend selector / config row ----------------------------------------
+    def _sync_backend_row(self) -> None:
+        """Reflect the stored backend mode + contextual config field."""
+        settings = self._load_settings()
+        mode = (settings.backend_mode or "disabled").strip().lower()
+        idx = next((i for i, (v, _l) in enumerate(_BACKEND_MODES) if v == mode), 0)
+        self._backend_combo.blockSignals(True)
+        self._backend_combo.setCurrentIndex(idx)
+        self._backend_combo.blockSignals(False)
+        if mode == "lan_server":
+            self._config_edit.setVisible(True)
+            self._lan_check_btn.setVisible(True)
+            self._config_edit.setPlaceholderText(
+                "LAN Whisper server URL (private address only, e.g. "
+                "http://192.168.1.50:8000)")
+            self._config_edit.setText(settings.lan_base_url)
+            self._config_edit.setToolTip(
+                "LAN mode sends audio only to the configured local network "
+                "Whisper server. Do not use public URLs.")
+        elif mode == "local_process":
+            self._config_edit.setVisible(True)
+            self._lan_check_btn.setVisible(False)
+            self._config_edit.setPlaceholderText(
+                "Local Whisper model path (no automatic downloads)")
+            self._config_edit.setText(settings.model_path)
+            self._config_edit.setToolTip(
+                "Path to a local faster-whisper model directory.")
+        else:
+            self._config_edit.setVisible(False)
+            self._lan_check_btn.setVisible(False)
+
+    def _on_backend_changed(self, index: int) -> None:
+        value = self._backend_combo.itemData(index) or "disabled"
+        self._store_set("voice_backend_mode", value)
+        self._sync_backend_row()
+
+    def _on_config_edited(self) -> None:
+        mode = self._backend_combo.currentData() or "disabled"
+        text = self._config_edit.text().strip()
+        if mode == "lan_server":
+            self._store_set("voice_lan_base_url", text)
+        elif mode == "local_process":
+            self._store_set("voice_whisper_model_path", text)
+
+    def _on_check_lan(self) -> None:
+        from storyplanner.voice.lan_server import LanWhisperTranscriber
+        settings = self._load_settings()
+        ok, msg = LanWhisperTranscriber(settings).health_check()
+        self._status_label.setText(msg)
 
     def _ensure_controller(self) -> tuple[bool, str]:
         settings = self._load_settings()

@@ -119,9 +119,43 @@ class FasterWhisperTranscriber(Transcriber):
                                      error=f"Transcription failed: {exc}")
 
 
+class DisabledTranscriber(Transcriber):
+    """Backend-mode "disabled": always unavailable with a clear message."""
+
+    name = "disabled"
+
+    def availability(self) -> tuple[bool, str]:
+        from storyplanner.voice.types import BACKEND_DISABLED_MESSAGE
+        return (False, BACKEND_DISABLED_MESSAGE)
+
+    def transcribe(self, pcm: bytes, *, sample_rate: int = 16000,
+                   language: str = "auto") -> TranscriptSegment:
+        from storyplanner.voice.types import BACKEND_DISABLED_MESSAGE
+        return TranscriptSegment(text="", is_final=True,
+                                 error=BACKEND_DISABLED_MESSAGE)
+
+
 def build_transcriber(settings) -> Transcriber:
-    """Construct the configured backend from a :class:`VoiceSettings`."""
-    backend = (getattr(settings, "backend", "") or "faster-whisper").lower()
-    if backend == "mock":
+    """Construct the backend for the *resolved* backend mode.
+
+    Modes: ``disabled`` | ``mock`` | ``local_process`` (faster-whisper, local
+    model path only) | ``lan_server`` (trusted local-network Whisper server).
+    """
+    resolver = getattr(settings, "resolved_backend_mode", None)
+    mode = resolver() if callable(resolver) else "local_process"
+    if mode == "disabled":
+        return DisabledTranscriber()
+    if mode == "mock":
         return MockTranscriber()
-    return FasterWhisperTranscriber(getattr(settings, "model_path", "") or "")
+    if mode == "lan_server":
+        from storyplanner.voice.lan_server import LanWhisperTranscriber
+        return LanWhisperTranscriber(settings)
+    # local_process — the local PC backend (faster-whisper kind for Alpha;
+    # a "mock" kind keeps the dependency-free path available).
+    kind = (getattr(settings, "backend", "") or "faster-whisper").lower()
+    if kind == "mock":
+        return MockTranscriber()
+    return FasterWhisperTranscriber(
+        getattr(settings, "model_path", "") or "",
+        device=(getattr(settings, "local_device", "auto") or "auto"),
+        compute_type=(getattr(settings, "local_compute_type", "int8") or "int8"))

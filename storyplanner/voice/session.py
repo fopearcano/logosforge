@@ -62,12 +62,15 @@ class VoiceSessionController:
         if not self._settings.enabled:
             from storyplanner.voice.types import SETUP_MESSAGE
             return (False, SETUP_MESSAGE)
-        ok_r, msg_r = self._recorder.availability()
-        if not ok_r:
-            return (False, msg_r)
+        # Backend config first: its message (choose a backend / set the model
+        # path / LAN URL invalid) is the actionable one; the microphone check
+        # surfaces once the backend is configured.
         ok_t, msg_t = self._transcriber.availability()
         if not ok_t:
             return (False, msg_t)
+        ok_r, msg_r = self._recorder.availability()
+        if not ok_r:
+            return (False, msg_r)
         return (True, "")
 
     # -- lifecycle -----------------------------------------------------------

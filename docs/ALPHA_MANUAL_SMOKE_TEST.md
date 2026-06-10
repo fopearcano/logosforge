@@ -59,12 +59,13 @@ manual UI check). Command form:
 | `tests/test_gn_outline.py` (GN Outline Pages/Panels) | **38 passed** |
 | `tests/test_gn_outline_integrity_gate.py` (GN Outline integrity gate) | **13 passed** |
 | `tests/test_voice_mvp.py` (local voice-to-script MVP) | **35 passed** |
+| `tests/test_voice_lan.py` (backend modes + LAN Whisper server) | **40 passed** |
 | `tests/test_gn_pages_manuscript_sync.py` (GN shared body) | **30 passed** |
 | `tests/test_series_hierarchy.py` (Series hierarchy) | **70 passed** |
 | `tests/test_series_navigator.py` (Navigator + deps) | **26 passed** |
 | `tests/test_writing_mode_lock.py` (mode lock) | **22 passed** |
 | `tests/test_export_safety.py` (export privacy) | **4 passed** |
-| **Total** | **357 passed, 0 failed** |
+| **Total** | **397 passed, 0 failed** |
 
 > Environment note: PDF/DOCX export tests fail only where `reportlab` /
 > `python-docx` are not installed (pre-existing, graceful-degradation behavior),
@@ -179,6 +180,15 @@ this behavior as supporting evidence (the manual UI check is still required).
 | V12 | Stop during Processing — no hang; status returns to off | PENDING MANUAL RETEST | ✓ |
 | V13 | Switch project while recording — session stops; transcript is NOT committed into the other project | PENDING MANUAL RETEST | ✓ |
 | V14 | Open the voice panel in macOS fullscreen — app does not minimize (embedded strip, no floating window) | PENDING MANUAL RETEST | partial |
+| L1 | Backend selector shows Disabled / Local PC / Local LAN Server / Mock; default Disabled | PENDING MANUAL RETEST | ✓ |
+| L2 | Start a Whisper server on another LAN machine (`docs/LOCAL_LAN_WHISPER.md`) | PENDING MANUAL RETEST | |
+| L3 | Select **Local LAN Server**; enter the private LAN URL (e.g. `http://192.168.x.x:8000`) | PENDING MANUAL RETEST | ✓ |
+| L4 | **Check LAN server** reports reachable | PENDING MANUAL RETEST | ✓ |
+| L5 | Start → speak → Stop: segment goes to the LAN server; transcript appears in preview | PENDING MANUAL RETEST | ✓ |
+| L6 | Commit inserts the LAN transcript at the cursor | PENDING MANUAL RETEST | ✓ |
+| L7 | Turn the LAN server off → unreachable warning, no crash | PENDING MANUAL RETEST | ✓ |
+| L8 | Enter a public URL (e.g. `https://example.com`) → blocked with the local-address warning | PENDING MANUAL RETEST | ✓ |
+| L9 | No audio leaves the device except to the configured private LAN server | PENDING MANUAL RETEST | ✓ |
 
 ### Stage Script
 
@@ -315,7 +325,7 @@ These are already documented in `docs/KNOWN_LIMITATIONS_ALPHA.md` and are
 
 ## Decision
 
-**PENDING MANUAL RETEST.** Automated focused suites are green (357 passed), but
+**PENDING MANUAL RETEST.** Automated focused suites are green (397 passed), but
 the manual UI checklist above has not been executed. **Do not tag** the Alpha RC
 until the manual checklist is completed and this decision is updated to one of:
 

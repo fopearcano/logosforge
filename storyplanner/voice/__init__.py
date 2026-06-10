@@ -16,15 +16,24 @@ from storyplanner.voice.recorder import (
     VoiceRecorder,
     build_recorder,
 )
+from storyplanner.voice.lan_server import (
+    LanWhisperTranscriber,
+    is_private_host,
+    validate_lan_url,
+)
 from storyplanner.voice.session import VoiceSessionController
 from storyplanner.voice.silence_detector import SimpleSilenceDetector
 from storyplanner.voice.transcriber import (
+    DisabledTranscriber,
     FasterWhisperTranscriber,
     MockTranscriber,
     Transcriber,
     build_transcriber,
 )
 from storyplanner.voice.types import (
+    BACKEND_DISABLED_MESSAGE,
+    LAN_PUBLIC_URL_MESSAGE,
+    LAN_SETUP_MESSAGE,
     PRIVACY_NOTE,
     SETUP_MESSAGE,
     TranscriptSegment,
@@ -36,10 +45,12 @@ __all__ = [
     "AudioBuffer", "SimpleSilenceDetector",
     "VoiceRecorder", "MockRecorder", "SoundDeviceRecorder", "build_recorder",
     "Transcriber", "MockTranscriber", "FasterWhisperTranscriber",
-    "build_transcriber",
+    "DisabledTranscriber", "LanWhisperTranscriber", "build_transcriber",
+    "is_private_host", "validate_lan_url",
     "VoiceSessionController", "EditorCommitTarget",
     "VoiceStatus", "TranscriptSegment", "VoiceSettings",
-    "SETUP_MESSAGE", "PRIVACY_NOTE",
+    "SETUP_MESSAGE", "LAN_SETUP_MESSAGE", "LAN_PUBLIC_URL_MESSAGE",
+    "BACKEND_DISABLED_MESSAGE", "PRIVACY_NOTE",
 ]
 
 

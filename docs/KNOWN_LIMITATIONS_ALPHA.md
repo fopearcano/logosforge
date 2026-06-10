@@ -29,17 +29,23 @@ panel** yet:
 - **HTML export** — preview-grade.
 - **HTTP API LAN / remote modes** — experimental; alpha targets desktop/localhost.
 - **Go McKee** plugin and **Connector write actions** — **off by default**.
-- **Local voice-to-script (MVP)** — **off by default** (`enable_voice_mode`).
-  Local-first **near-live segmented dictation**: local Whisper transcription, manual
-  plain-text commit to the active editor. **No cloud speech API; no audio leaves the
-  device.** The microphone (`sounddevice`) and Whisper (`faster-whisper`) backends
-  are **optional, lazy** installs and a **local model path** must be set (no
-  automatic model downloads). With the flag on but the backend/model missing, the
-  panel shows a non-blocking setup message and the app stays usable. **Deferred:**
-  cloud realtime / speech-to-speech, automatic dialogue/action/note classification,
-  Fountain auto-formatting, voice commands, speaker diarization, Live Writer Room,
-  and any ComfyUI/visual link. The panel is an **embedded** bottom strip (never a
-  floating/top-level window). See `docs/VOICE_MVP.md`.
+- **Local voice-to-script (MVP)** — **off by default** (`enable_voice_mode`;
+  `voice_backend_mode` defaults to `"disabled"`). Local-first **near-live segmented
+  dictation** with manual plain-text commit, in two backend modes: **Local PC**
+  (faster-whisper on this computer; local model path, no auto-download) and
+  **Local LAN Server** (mic capture stays local; finalized segments go only to a
+  Whisper server the user configured on the **trusted local network** — private/
+  loopback addresses enforced by default, public URLs / ngrok / cloud tunnels
+  **blocked**, redirects refused, no discovery/scanning; see
+  `docs/LOCAL_LAN_WHISPER.md`). **No cloud speech API, no OpenAI Realtime.** The
+  microphone (`sounddevice`) and Whisper (`faster-whisper`) backends are
+  **optional, lazy** installs. With the flag on but the backend missing/
+  misconfigured, the panel shows a non-blocking setup message and the app stays
+  usable. **Deferred:** cloud realtime / speech-to-speech, automatic
+  dialogue/action/note classification, Fountain auto-formatting, voice commands,
+  speaker diarization, Live Writer Room, and any ComfyUI/visual link. The panel is
+  an **embedded** bottom strip (never a floating/top-level window). See
+  `docs/VOICE_MVP.md`.
 
 ## Model / feature limits
 

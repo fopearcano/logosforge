@@ -129,8 +129,17 @@ class SoundDeviceRecorder(VoiceRecorder):
 
 
 def build_recorder(settings) -> VoiceRecorder:
-    """Construct a recorder for the given settings (mock backend -> MockRecorder)."""
-    backend = (getattr(settings, "backend", "") or "").lower()
-    if backend == "mock":
+    """Construct a recorder for the resolved backend mode.
+
+    Capture is ALWAYS local — in ``lan_server`` mode the microphone is still
+    recorded on this machine; only finalized segments go to the LAN server.
+    """
+    resolver = getattr(settings, "resolved_backend_mode", None)
+    mode = resolver() if callable(resolver) else ""
+    kind = (getattr(settings, "backend", "") or "").lower()
+    # "disabled" gets a MockRecorder so availability() surfaces the backend's
+    # "choose a backend" message instead of a microphone-install hint.
+    if mode in ("mock", "disabled") or (mode == "local_process" and kind == "mock") \
+            or (not mode and kind == "mock"):
         return MockRecorder()
     return SoundDeviceRecorder(getattr(settings, "sample_rate", 16000))

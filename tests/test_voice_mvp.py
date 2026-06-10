@@ -124,7 +124,7 @@ def test_double_start_is_idempotent_no_overlapping_recorder():
 def test_panel_double_start_does_not_leak_recorder():
     from storyplanner.ui.voice_panel import VoicePanel
     p = VoicePanel(settings_get=_get(dict(enable_voice_mode=True,
-                   voice_whisper_backend="mock", voice_silence_ms=300)),
+                   voice_backend_mode="mock", voice_silence_ms=300)),
                    commit_target=EditorCommitTarget())
     p.start()
     c1, r1 = p._controller, p._controller._recorder
@@ -137,7 +137,7 @@ def test_panel_double_start_does_not_leak_recorder():
 def test_repeated_start_stop_cycles_are_clean():
     from storyplanner.ui.voice_panel import VoicePanel
     p = VoicePanel(settings_get=_get(dict(enable_voice_mode=True,
-                   voice_whisper_backend="mock", voice_silence_ms=300)),
+                   voice_backend_mode="mock", voice_silence_ms=300)),
                    commit_target=EditorCommitTarget())
     for _ in range(3):
         p.start()
@@ -317,7 +317,7 @@ def test_classification_hooks_are_deferred():
 
 def _panel(**settings):
     from storyplanner.ui.voice_panel import VoicePanel
-    base = dict(enable_voice_mode=True, voice_whisper_backend="mock",
+    base = dict(enable_voice_mode=True, voice_backend_mode="mock",
                 voice_silence_ms=300)
     base.update(settings)
     return VoicePanel(settings_get=_get(base), commit_target=EditorCommitTarget())
@@ -367,7 +367,7 @@ def test_panel_dictation_to_preview_and_commit():
     tgt = EditorCommitTarget()
     tgt.note_focus(ed)
     p = VoicePanel(settings_get=_get(dict(enable_voice_mode=True,
-                   voice_whisper_backend="mock", voice_silence_ms=300)),
+                   voice_backend_mode="mock", voice_silence_ms=300)),
                    commit_target=tgt)
     p.start()
     rec = p._controller._recorder
@@ -442,15 +442,22 @@ def test_project_switch_stops_voice_and_clears_commit_target():
     assert win._voice_commit.has_target() is False         # cleared on switch
 
 
-def test_no_cloud_or_network_imports_in_voice_package():
-    import importlib
-    import pkgutil
+def test_no_cloud_client_imports_in_voice_package():
+    # The voice package must not import any cloud/SaaS client. Stdlib urllib is
+    # allowed ONLY in lan_server.py (trusted private-LAN transport with the
+    # public-host validator + no-redirect opener).
+    import os
+    import re
     import storyplanner.voice as vp
-    banned = ("requests", "openai", "httpx", "urllib.request", "boto3",
-              "google.cloud", "azure")
-    for mod in pkgutil.iter_modules(vp.__path__):
-        src = importlib.import_module(f"storyplanner.voice.{mod.name}")
-        text = (src.__doc__ or "")
-        for b in banned:
-            # Defensive: the voice package must not pull cloud/network clients.
-            assert b not in text.lower() or "no cloud" in text.lower()
+    pkg_dir = list(vp.__path__)[0]
+    banned = re.compile(
+        r"^\s*(import|from)\s+(requests|openai|httpx|boto3|aiohttp|websockets"
+        r"|google\.cloud|azure)\b", re.M)
+    urllib_re = re.compile(r"^\s*import\s+urllib|^\s*from\s+urllib", re.M)
+    for name in os.listdir(pkg_dir):
+        if not name.endswith(".py"):
+            continue
+        src = open(os.path.join(pkg_dir, name), encoding="utf-8").read()
+        assert not banned.search(src), f"cloud client import in {name}"
+        if name != "lan_server.py":
+            assert not urllib_re.search(src), f"network import in {name}"
