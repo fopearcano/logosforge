@@ -1,48 +1,52 @@
-"""Graphic Novel Manuscript — a comics SCRIPT editor (Pages → Panels inline).
+"""Graphic Novel Manuscript — a comics SCRIPT editor (Superscript-style blocks).
 
 The Graphic Novel writing surface, mounted as the **Manuscript** content for
-Graphic Novel projects. It is a *script editor*, not an outliner: the page is
-the writing surface. The whole scene script is rendered inline as a vertical
-flow of PAGE blocks, each containing Panel cards whose five fields
-(Visual / Caption / Dialogue / SFX / Notes) are always visible and editable in
-place — exactly like writing a comics script top to bottom. There is no
-structure tree here; structural navigation/management is the **Outline**'s job
-(`GraphicNovelOutlineView`), which mirrors this view over the same body.
+Graphic Novel projects. It is a *script editor*, not an outliner and not a
+form: the scene's script flows vertically like a document — PAGE headings,
+then one **large free-typing script block per panel** in which the writer
+types labeled sections (the Superscript-style, label-as-you-type syntax)::
 
-Layout::
+    PAGE 1   (title)                                  [+ Panel] [Delete Page]
+    ────────────────────────────────────────────────────────────────────────
+      Panel 1                                                  ▲ ▼ Delete
+      Visual:
+      A tiny chapel buried under rain. The dog stands at the threshold.
 
-    [ scene selector ▾ ]  [+ Scene] [+ Page]
-    ┌──────────────────────────────────────────────┐
-    │ PAGE 1   (title) ............... [+ Panel] x │
-    │   page notes                                 │
-    │   ┌ Panel 1 ──────────────────── ▲ ▼ Delete ┐│
-    │   │ Visual   [..............................]││
-    │   │ Caption  [..............................]││
-    │   │ Dialogue [..............................]││
-    │   │ SFX      [..............................]││
-    │   │ Notes    [..............................]││
-    │   └─────────────────────────────────────────┘│
-    │ PAGE 2 ...                                   │
-    │ [+ Add Page]                                 │
-    └──────────────────────────────────────────────┘
+      Caption:
+      The road had forgotten his name.
+
+      Dialogue:
+      ZAMPANÒ: Woof.
+
+      SFX:
+      THOOM
+
+    PAGE 2 …
+
+Labels (Visual / Caption / Dialogue / SFX / Notes) are optional — unlabeled
+leading text is the panel's Visual; speaker lines like ``NAME: …`` stay plain
+content. Each block parses back into the canonical five-field Panel on
+commit (focus-out) via :func:`graphic_novel_blocks.parse_panel_text`, so the
+structured model (Chapter owns Pages, Scene owns Panels, Panel assigned to a
+Page, a Scene can span Pages) remains intact underneath, page/panel numbers
+stay auto-numbered, and the **Outline** — the structure manager/navigator —
+mirrors every edit over the same shared ``Scene.content`` body. Line breaks
+inside a field are preserved end-to-end.
 
 Empty-state ladder: no scene → *Create Scene*; scene without pages → *Add
-Page*; page without panels → *Add Panel*; otherwise the full script.
+Page*; page without panels → *Add Panel*; otherwise the flowing script.
 
-Single source of truth: everything reads/writes the shared ``Scene.content``
-body via :mod:`storyplanner.graphic_novel_blocks` — the same body the GN
-Outline manages — so the two surfaces mirror automatically on refresh. There is
-no separate Pages storage. The standalone Pages route stays disabled (it was
-fullscreen-hostile); this view is a single embedded child widget — no top-level
-window, no dock, no dialog on mount. **No image generation / prompt / ComfyUI**
-fields exist — this is writing/script structure only.
+The standalone Pages route stays disabled (it was fullscreen-hostile); this
+view is a single embedded child widget — no top-level window, no dock, no
+dialog on mount. **No image generation / prompt / ComfyUI** fields exist —
+this is writing/script structure only.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -60,21 +64,20 @@ from PySide6.QtWidgets import (
 from storyplanner import graphic_novel_blocks as gnb
 from storyplanner.ui import safe_dialogs
 
-# (field key, label, multiline?, height)
-_PANEL_FIELDS = (
-    ("visual_description", "Visual", True, 64),
-    ("caption", "Caption", False, 0),
-    ("dialogue", "Dialogue", True, 64),
-    ("sfx", "SFX", False, 0),
-    ("notes", "Notes", True, 44),
+_SCRIPT_PLACEHOLDER = (
+    "Visual:\n"
+    "What we see in this panel…\n\n"
+    "Dialogue:\n"
+    "NAME: spoken line\n\n"
+    "Labels (Visual / Caption / Dialogue / SFX / Notes) are optional — "
+    "unlabeled text is the Visual."
 )
 
-_PAGE_STYLE = (
-    "QFrame#gnPageBlock { border: 1px solid palette(mid);"
-    " border-radius: 6px; background: palette(base); }")
-_PANEL_STYLE = (
-    "QFrame#gnPanelCard { border: 1px solid palette(midlight);"
-    " border-left: 3px solid palette(highlight); border-radius: 4px; }")
+_BORDERLESS_TEXT = (
+    "QPlainTextEdit { border: none; background: transparent;"
+    " font-size: 14px; }")
+_BORDERLESS_LINE = (
+    "QLineEdit { border: none; background: transparent; }")
 
 
 class _FocusPlainText(QPlainTextEdit):
@@ -84,15 +87,40 @@ class _FocusPlainText(QPlainTextEdit):
 
     def __init__(self, *a, **k) -> None:
         super().__init__(*a, **k)
-        self.setTabChangesFocus(True)   # Tab walks the script like a form
+        self.setTabChangesFocus(True)   # Tab walks the script like a document
 
     def focusOutEvent(self, event) -> None:  # noqa: N802 (Qt signature)
         super().focusOutEvent(event)
         self.committed.emit()
 
 
+class _AutoGrowScript(_FocusPlainText):
+    """A script block that grows with its text (no inner scrollbar), so the
+    whole scene scrolls as ONE document — manuscript flow, not form fields."""
+
+    def __init__(self, *, min_height: int = 120, parent=None) -> None:
+        super().__init__(parent)
+        self._min_height = min_height
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setStyleSheet(_BORDERLESS_TEXT)
+        self.textChanged.connect(self._grow)
+        self._grow()
+
+    def _grow(self) -> None:
+        # Block count gives a layout-independent height (the document's pixel
+        # size is unreliable before the first paint in offscreen/headless).
+        line_h = self.fontMetrics().lineSpacing()
+        px = max(self._min_height,
+                 self.document().blockCount() * (line_h + 2) + 24)
+        self.setFixedHeight(px)
+
+    def setPlainText(self, text: str) -> None:  # noqa: N802 (Qt signature)
+        super().setPlainText(text)
+        self._grow()
+
+
 class GraphicNovelManuscriptView(QWidget):
-    """Inline comics-script editor over the shared GN ``Scene.content`` body."""
+    """Comics-script editor (script blocks) over the shared GN body."""
 
     def __init__(
         self, db, project_id: int, *,
@@ -107,8 +135,9 @@ class GraphicNovelManuscriptView(QWidget):
 
         self._scene_id: int | None = None
         self._script = gnb.GraphicNovelScript()
-        # Logical location -> live editor widget (for focus restore/navigation).
-        # Keys: ("panel", page_idx, panel_idx, field) / ("page", page_idx, field)
+        # Logical location -> live editor widget (focus restore / navigation).
+        # Keys: ("panel", page_idx, panel_idx) -> the panel's script block;
+        #       ("page", page_idx, "title"|"summary") -> page header editors.
         self._field_editors: dict[tuple, QWidget] = {}
         # Fingerprint of what is currently rendered; refresh() skips the
         # rebuild when the data has not actually changed (keeps focus/clicks
@@ -144,15 +173,15 @@ class GraphicNovelManuscriptView(QWidget):
             bar.addWidget(b)
         root.addLayout(bar)
 
-        # -- Script surface: the whole scene script, inline --
+        # -- Script surface: the whole scene script, one flowing document --
         self._scroll = QScrollArea()
         self._scroll.setObjectName("gnScriptScroll")
         self._scroll.setWidgetResizable(True)
         self._host = QWidget()
         self._host.setObjectName("gnScriptHost")
         self._script_layout = QVBoxLayout(self._host)
-        self._script_layout.setContentsMargins(4, 4, 4, 4)
-        self._script_layout.setSpacing(10)
+        self._script_layout.setContentsMargins(16, 10, 16, 10)
+        self._script_layout.setSpacing(8)
         self._scroll.setWidget(self._host)
         root.addWidget(self._scroll, stretch=1)
 
@@ -178,6 +207,17 @@ class GraphicNovelManuscriptView(QWidget):
         prefix = " · ".join(p for p in (act, chapter) if p)
         return f"{prefix} · {title}" if prefix else title
 
+    def _scene_context_text(self) -> str:
+        scene = (self._db.get_scene_by_id(self._scene_id)
+                 if self._scene_id is not None else None)
+        if scene is None:
+            return ""
+        act = (getattr(scene, "act", "") or "").strip()
+        chapter = (getattr(scene, "chapter", "") or "").strip()
+        title = (getattr(scene, "title", "") or "Untitled").strip() or "Untitled"
+        path = " · ".join(p for p in (act, chapter) if p)
+        return f"{path}  —  SCENE: {title}" if path else f"SCENE: {title}"
+
     # ---------------------------------------------------------------- refresh
     def refresh(self) -> None:
         """Re-read the shared body; rebuild only if it actually changed."""
@@ -202,9 +242,9 @@ class GraphicNovelManuscriptView(QWidget):
             self._restore_focus(focus_loc)
 
     def _mark_rendered_current(self) -> None:
-        """After an in-place field commit the visible editors already show the
-        new value, so record the new state as rendered — the app-wide refresh
-        that follows the save can then skip the rebuild and the user's focus,
+        """After an in-place commit the visible blocks already show the new
+        text, so record the new state as rendered — the app-wide refresh that
+        follows the save can then skip the rebuild and the user's focus,
         cursor and pending clicks survive."""
         self._rendered_fp = (self._scenes_sig, self._scene_id,
                              gnb.serialize_graphic_novel_script(self._script))
@@ -267,16 +307,15 @@ class GraphicNovelManuscriptView(QWidget):
         self.refresh()
 
     def select_page(self, page_idx: int) -> None:
-        """Scroll to / focus a page's title field (optional deep-link)."""
+        """Scroll to / focus a page's title (Outline deep-link)."""
         editor = self._field_editors.get(("page", page_idx, "title"))
         if editor is not None:
             self._scroll.ensureWidgetVisible(editor)
             editor.setFocus()
 
     def select_panel(self, page_idx: int, panel_idx: int) -> None:
-        """Scroll to / focus a panel's Visual field (optional deep-link)."""
-        editor = self._field_editors.get(
-            ("panel", page_idx, panel_idx, "visual_description"))
+        """Scroll to / focus a panel's script block (Outline deep-link)."""
+        editor = self._field_editors.get(("panel", page_idx, panel_idx))
         if editor is not None:
             self._scroll.ensureWidgetVisible(editor)
             editor.setFocus()
@@ -291,25 +330,37 @@ class GraphicNovelManuscriptView(QWidget):
                 w.setParent(None)        # drop from the child tree right away
                 w.deleteLater()
 
+    def _muted(self, text: str, *, name: str = "") -> QLabel:
+        lbl = QLabel(text)
+        if name:
+            lbl.setObjectName(name)
+        lbl.setStyleSheet("color: palette(mid); font-size: 12px;")
+        return lbl
+
     def _rebuild_script(self, *, have_scenes: bool) -> None:
         self._clear_script()
         if not have_scenes:
             # Empty state A: no scene in the project yet.
-            msg = QLabel("No scene yet. Begin building your Graphic Novel "
-                         "scene.")
+            msg = QLabel("No Graphic Novel scene yet.")
             msg.setObjectName("gnScriptEmpty")
             self._script_layout.addWidget(msg)
-            btn = QPushButton("Create Scene")
+            btn = QPushButton("+ Create Scene")
             btn.setObjectName("gnDetailCreateScene")
             btn.clicked.connect(self._add_scene)
             self._script_layout.addWidget(btn)
             self._script_layout.addStretch()
             return
 
+        # Scene context — the script document's header line.
+        context = QLabel(self._scene_context_text())
+        context.setObjectName("gnScriptContext")
+        context.setStyleSheet(
+            "color: palette(mid); font-size: 12px; font-weight: bold;")
+        self._script_layout.addWidget(context)
+
         if not self._script.pages:
             # Empty state B: a scene with no pages yet.
-            msg = QLabel("This scene has no pages yet. Add a Page to start "
-                         "writing your comics script.")
+            msg = QLabel("Start the comics script for this scene.")
             msg.setObjectName("gnScriptEmpty")
             self._script_layout.addWidget(msg)
             btn = QPushButton("+ Add Page")
@@ -330,21 +381,21 @@ class GraphicNovelManuscriptView(QWidget):
     def _build_page_block(self, pi: int, page: gnb.Page) -> QFrame:
         box = QFrame()
         box.setObjectName("gnPageBlock")
-        box.setStyleSheet(_PAGE_STYLE)
         v = QVBoxLayout(box)
-        v.setContentsMargins(10, 8, 10, 8)
-        v.setSpacing(6)
+        v.setContentsMargins(0, 10, 0, 4)
+        v.setSpacing(4)
 
         head = QHBoxLayout()
-        head.setSpacing(6)
+        head.setSpacing(8)
         lbl = QLabel(f"PAGE {page.number}")
         lbl.setObjectName("gnPageHeader")
-        lbl.setStyleSheet("font-size: 15px; font-weight: bold;")
+        lbl.setStyleSheet("font-size: 16px; font-weight: bold;")
         head.addWidget(lbl)
 
         title = QLineEdit(page.title or "")
         title.setObjectName("gnPageTitle")
         title.setPlaceholderText("Page title (optional)")
+        title.setStyleSheet(_BORDERLESS_LINE + " QLineEdit { font-size: 13px; }")
         title._gn_loc = ("page", pi, "title")
         title.editingFinished.connect(
             lambda e=title, p=pi: self._commit_page_field(p, "title", e.text()))
@@ -353,19 +404,28 @@ class GraphicNovelManuscriptView(QWidget):
 
         add_panel = QPushButton("+ Panel")
         add_panel.setObjectName("gnDetailAddPanel")
+        add_panel.setFlat(True)
         add_panel.clicked.connect(lambda _=False, p=pi: self._add_panel(p))
         head.addWidget(add_panel)
         del_page = QPushButton("Delete Page")
         del_page.setObjectName("gnPageDelete")
+        del_page.setFlat(True)
         del_page.clicked.connect(lambda _=False, p=pi: self._delete_page(p))
         head.addWidget(del_page)
         v.addLayout(head)
+
+        rule = QFrame()
+        rule.setFrameShape(QFrame.Shape.HLine)
+        rule.setObjectName("gnPageRule")
+        v.addWidget(rule)
 
         notes = _FocusPlainText()
         notes.setObjectName("gnPageSummary")
         notes.setPlaceholderText("Page notes (optional)")
         notes.setPlainText(page.summary or "")
-        notes.setFixedHeight(40)
+        notes.setFixedHeight(34)
+        notes.setStyleSheet(_BORDERLESS_TEXT + " QPlainTextEdit {"
+                            " font-size: 12px; font-style: italic; }")
         notes._gn_loc = ("page", pi, "summary")
         notes.committed.connect(
             lambda e=notes, p=pi:
@@ -375,65 +435,58 @@ class GraphicNovelManuscriptView(QWidget):
 
         if not page.panels:
             # Empty state C: a page with no panels yet.
-            empty = QLabel("No panels yet. Add a Panel to write this page.")
-            empty.setObjectName("gnPageNoPanels")
-            v.addWidget(empty)
+            v.addWidget(self._muted("No panels yet. Add a Panel to write "
+                                    "this page.", name="gnPageNoPanels"))
         for ci, panel in enumerate(page.panels):
-            v.addWidget(self._build_panel_card(pi, ci, panel))
+            v.addWidget(self._build_panel_block(pi, ci, panel))
         return box
 
-    def _build_panel_card(self, pi: int, ci: int, panel: gnb.Panel) -> QFrame:
-        card = QFrame()
-        card.setObjectName("gnPanelCard")
-        card.setStyleSheet(_PANEL_STYLE)
-        v = QVBoxLayout(card)
-        v.setContentsMargins(8, 6, 8, 8)
-        v.setSpacing(3)
+    def _build_panel_block(self, pi: int, ci: int, panel: gnb.Panel) -> QFrame:
+        block = QFrame()
+        block.setObjectName("gnPanelCard")
+        block.setStyleSheet(
+            "QFrame#gnPanelCard { border: none;"
+            " border-left: 2px solid palette(midlight); }")
+        v = QVBoxLayout(block)
+        v.setContentsMargins(12, 2, 0, 6)
+        v.setSpacing(2)
 
         head = QHBoxLayout()
         head.setSpacing(4)
         lbl = QLabel(f"Panel {panel.number}")
         lbl.setObjectName("gnPanelHeader")
-        lbl.setStyleSheet("font-weight: bold;")
+        lbl.setStyleSheet("font-weight: bold; color: palette(mid);"
+                          " font-size: 12px;")
         head.addWidget(lbl)
         head.addStretch()
         for text, delta, name in (("▲", -1, "gnPanelMoveUp"),
                                   ("▼", +1, "gnPanelMoveDown")):
             b = QPushButton(text)
             b.setObjectName(name)
-            b.setFixedWidth(28)
+            b.setFlat(True)
+            b.setFixedWidth(26)
             b.clicked.connect(
                 lambda _=False, p=pi, c=ci, d=delta: self._move_panel(p, c, d))
             head.addWidget(b)
         delb = QPushButton("Delete")
         delb.setObjectName("gnPanelDelete")
+        delb.setFlat(True)
         delb.clicked.connect(
             lambda _=False, p=pi, c=ci: self._delete_panel(p, c))
         head.addWidget(delb)
         v.addLayout(head)
 
-        for key, label, multiline, height in _PANEL_FIELDS:
-            cap = QLabel(label)
-            cap.setObjectName("gnFieldLabel")
-            cap.setStyleSheet("font-size: 11px; font-weight: bold;")
-            v.addWidget(cap)
-            if multiline:
-                ed = _FocusPlainText()
-                ed.setPlainText(getattr(panel, key, "") or "")
-                ed.setFixedHeight(height)
-                ed.committed.connect(
-                    lambda e=ed, k=key, p=pi, c=ci:
-                    self._commit_panel_field(p, c, k, e.toPlainText()))
-            else:
-                ed = QLineEdit(getattr(panel, key, "") or "")
-                ed.editingFinished.connect(
-                    lambda e=ed, k=key, p=pi, c=ci:
-                    self._commit_panel_field(p, c, k, e.text()))
-            ed.setObjectName(f"gnPanelField_{key}")
-            ed._gn_loc = ("panel", pi, ci, key)
-            self._field_editors[("panel", pi, ci, key)] = ed
-            v.addWidget(ed)
-        return card
+        ed = _AutoGrowScript(min_height=120)
+        ed.setObjectName("gnPanelScript")
+        ed.setPlaceholderText(_SCRIPT_PLACEHOLDER)
+        ed.setPlainText(gnb.panel_script_text(panel))
+        ed.committed.connect(
+            lambda e=ed, p=pi, c=ci:
+            self._commit_panel_script(p, c, e.toPlainText()))
+        ed._gn_loc = ("panel", pi, ci)
+        self._field_editors[("panel", pi, ci)] = ed
+        v.addWidget(ed)
+        return block
 
     # ------------------------------------------------------------- mutations
     def _save(self) -> None:
@@ -443,7 +496,23 @@ class GraphicNovelManuscriptView(QWidget):
         if self._on_data_changed:
             self._on_data_changed()
 
+    def _commit_panel_script(self, page_idx, panel_idx, text) -> None:
+        """Parse one panel's script block back into the five canonical fields."""
+        try:
+            panel = self._script.pages[page_idx].panels[panel_idx]
+        except (IndexError, TypeError):
+            return
+        fields = gnb.parse_panel_text(text)
+        if all(getattr(panel, key, "") == value
+               for key, value in fields.items()):
+            return
+        for key, value in fields.items():
+            setattr(panel, key, value)
+        self._mark_rendered_current()    # the block already shows this text
+        self._save()
+
     def _commit_panel_field(self, page_idx, panel_idx, field, value) -> None:
+        """Set a single canonical field (programmatic/navigation path)."""
         try:
             panel = self._script.pages[page_idx].panels[panel_idx]
         except (IndexError, TypeError):
@@ -451,7 +520,12 @@ class GraphicNovelManuscriptView(QWidget):
         if getattr(panel, field, None) == value:
             return
         setattr(panel, field, value)
-        self._mark_rendered_current()    # editors already show the new value
+        editor = self._field_editors.get(("panel", page_idx, panel_idx))
+        if editor is not None:
+            editor.blockSignals(True)
+            editor.setPlainText(gnb.panel_script_text(panel))
+            editor.blockSignals(False)
+        self._mark_rendered_current()
         self._save()
 
     def _commit_page_field(self, page_idx, field, value) -> None:

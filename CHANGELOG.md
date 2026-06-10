@@ -40,6 +40,22 @@ retest gate** (see `docs/ALPHA_RC_STATUS.md`).
   scene in the Manuscript); both still mirror over the same `Scene.content`
   body. Suite: `tests/test_gn_manuscript_script_editor.py` (66 passed, replaces
   `test_gn_embedded_navigator.py`).
+- **Graphic Novel — Manuscript upgraded to a Superscript-style script editor.**
+  The per-field card layout still read as a form, so the writing surface is
+  now true script blocks: PAGE headings + **one large free-typing block per
+  panel** in which the writer types labeled sections (`Visual:` / `Caption:` /
+  `Dialogue:` / `SFX:` / `Notes:` — labels optional, unlabeled text is the
+  Visual, speaker lines like `NAME: …` stay content; blocks auto-grow so the
+  scene scrolls as one document). Blocks parse back into the canonical
+  five-field model on commit via `graphic_novel_blocks.parse_panel_text`;
+  the body parser/serializer now **preserves line breaks inside fields**
+  end-to-end (marker-looking lines are folded, never dropped, so structure
+  cannot drift); pages/panels stay auto-numbered; the Outline's Panel
+  double-click now **deep-links to the panel's script block**. Empty-state
+  copy per spec ("No Graphic Novel scene yet." → "+ Create Scene", scene path
+  + "Start the comics script for this scene." → "+ Add Page"). Same shared
+  body, mirroring, fullscreen safety and export; no image-generation anything.
+  Suite rewritten: 56 tests.
 - **Writing-mode lock.** Mode is chosen at creation and **locks once a project
   has meaningful content** (body text, planning data, Timeline/Notes/PSYKE,
   user structure, Season/Episode rows); blocked changes mutate nothing.

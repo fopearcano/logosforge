@@ -178,13 +178,17 @@ limitations for this RC:
     scene) and **move-panel-to-page** are supported; **Page reorder** (move Page
     up/down) is deferred for Alpha (pages are scene-scoped and authored in order).
   - the **Manuscript** (`GraphicNovelManuscriptView`) is the **comics script
-    editor** — the selected scene's whole script rendered inline as PAGE blocks
-    containing Panel cards with all five fields (**Visual / Caption / Dialogue /
-    SFX / Notes**) always visible and editable in place (commit on focus-out),
-    plus per-page **+ Panel** / **Delete Page** and per-panel move / delete
-    (confirmed). It is **not** a tree/outliner: scene selection is a flat
-    dropdown, and structural navigation stays in the Outline (double-click
-    there opens the scene here).
+    editor** (Superscript-style): the scene flows as a script document — PAGE
+    headings, then **one large free-typing script block per panel** where the
+    writer types labeled sections (**Visual / Caption / Dialogue / SFX /
+    Notes** — labels optional, unlabeled text is the Visual, speaker lines
+    like `NAME: …` stay content). Blocks parse back into the canonical
+    five-field model on commit (focus-out); line breaks inside a field are
+    preserved end-to-end; page/panel numbers stay auto-numbered. Per-page
+    **+ Panel** / **Delete Page**, per-panel move / delete (confirmed). It is
+    **not** a tree/outliner and **not** a form: scene selection is a flat
+    dropdown, structure stays in the Outline (double-clicking a Panel there
+    focuses its script block here).
   Both read/write the **same** `Scene.content` (single source of truth — no separate
   Pages storage), so edits mirror. Relationships: **Chapter owns Pages** (via its
   scenes), **Scene owns Panels**, **Panel is assigned to a Page** (its containing

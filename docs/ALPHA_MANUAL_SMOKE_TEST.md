@@ -55,7 +55,7 @@ manual UI check). Command form:
 | `tests/test_post_fix_regression_gate.py` | **20 passed** |
 | `tests/test_pages_fullscreen_safe.py` (Pages fullscreen-safe dialogs) | **16 passed** |
 | `tests/test_pages_alpha_fallback.py` (standalone Pages deferred) | **15 passed** |
-| `tests/test_gn_manuscript_script_editor.py` (Manuscript comics script editor) | **66 passed** |
+| `tests/test_gn_manuscript_script_editor.py` (Manuscript comics script editor, Superscript-style blocks) | **56 passed** |
 | `tests/test_gn_outline.py` (GN Outline Pages/Panels) | **38 passed** |
 | `tests/test_gn_outline_integrity_gate.py` (GN Outline integrity gate) | **13 passed** |
 | `tests/test_voice_mvp.py` (local voice-to-script MVP) | **35 passed** |
@@ -69,7 +69,7 @@ manual UI check). Command form:
 | `tests/test_series_navigator.py` (Navigator + deps) | **26 passed** |
 | `tests/test_writing_mode_lock.py` (mode lock) | **22 passed** |
 | `tests/test_export_safety.py` (export privacy) | **4 passed** |
-| **Total** | **506 passed, 0 failed** |
+| **Total** | **496 passed, 0 failed** |
 
 > Environment note: PDF/DOCX export tests fail only where `reportlab` /
 > `python-docx` are not installed (pre-existing, graceful-degradation behavior),
@@ -126,7 +126,7 @@ this behavior as supporting evidence (the manual UI check is still required).
 
 | # | Item | Result | Auto |
 |---|------|--------|------|
-| 22 | Manuscript opens the **comics script editor** — inline PAGE blocks → Panel cards with Visual/Caption/Dialogue/SFX/Notes all editable in place (no tree) | PENDING MANUAL RETEST | ✓ |
+| 22 | Manuscript opens the **comics script editor** — PAGE headings + one free-typing script block per panel (labeled Visual/Caption/Dialogue/SFX/Notes sections; no tree, no form fields) | PENDING MANUAL RETEST | ✓ |
 | 23 | Outline shows the same Pages/Panels as the Manuscript | PENDING MANUAL RETEST | ✓ |
 | 24 | Editing in the Manuscript updates the Outline (shared body) | PENDING MANUAL RETEST | ✓ |
 | 25 | Editing in the Outline updates the Manuscript (shared body) | PENDING MANUAL RETEST | ✓ |

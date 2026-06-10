@@ -930,6 +930,7 @@ class MainWindow(QMainWindow):
                     self._project_id,
                     on_data_changed=self._on_data_changed,
                     on_open_manuscript=self._open_unit_in_manuscript,
+                    on_open_panel=self._open_gn_panel_in_manuscript,
                 )
             )
             return
@@ -964,6 +965,17 @@ class MainWindow(QMainWindow):
             # GN Manuscript is the comics script editor — show this scene's script.
             view.select_scene(scene_id)
         self._assistant_panel.set_active_scene(scene_id)
+
+    def _open_gn_panel_in_manuscript(self, scene_id: int, page_idx: int,
+                                     panel_idx: int) -> None:
+        """Outline deep-link: focus a Panel's script block in the Manuscript."""
+        self._open_unit_in_manuscript(scene_id)
+        view = self.content_area
+        from storyplanner.ui.graphic_novel_manuscript_view import (
+            GraphicNovelManuscriptView,
+        )
+        if isinstance(view, GraphicNovelManuscriptView):
+            view.select_panel(page_idx, panel_idx)
 
     def _show_manuscript(self) -> None:
         # Graphic Novel: the Manuscript is the comics SCRIPT editor — the scene's

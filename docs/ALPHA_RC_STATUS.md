@@ -109,13 +109,16 @@ mirrored surfaces** over the shared `Scene.content` body:
   (Visual / Caption / Dialogue / SFX / Notes), add/move/delete, assign-panel-to-page,
   and double-click → Manuscript;
 - the **Manuscript** (`GraphicNovelManuscriptView`) — the **comics script
-  editor**: the selected scene's whole script rendered inline as PAGE blocks
-  containing Panel cards with all five fields (Visual / Caption / Dialogue /
-  SFX / Notes) always visible and editable in place, with per-page **+ Panel** /
-  **Delete Page**, per-panel move/delete (confirmed), and a flat scene dropdown
-  (no tree — structural navigation stays in the Outline; double-click there
-  opens the scene here, and the editor preserves focus across the app-wide
-  refresh that follows each save).
+  editor** (Superscript-style blocks): PAGE headings + one large free-typing
+  script block per panel where the writer types labeled sections (Visual /
+  Caption / Dialogue / SFX / Notes — labels optional; unlabeled text is the
+  Visual; speaker lines stay content). Blocks parse back into the canonical
+  five-field model on commit (focus-out) with line breaks preserved
+  end-to-end and auto-numbered pages/panels; per-page **+ Panel** / **Delete
+  Page**, per-panel move/delete (confirmed); flat scene dropdown (no tree, no
+  form — structure stays in the Outline, whose Panel double-click deep-links
+  to the script block here; focus survives the app-wide refresh that follows
+  each save).
 
 Both read/write the same body (single source of truth), so they mirror. Model:
 Chapter owns Pages (via scenes), Scene owns Panels, Panel assigned to a Page, Scene

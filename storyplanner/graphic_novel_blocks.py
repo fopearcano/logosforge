@@ -185,15 +185,17 @@ def parse_graphic_novel_text(text: str) -> GraphicNovelScript:
         if cur_field == "summary" and cur_page is not None:
             cur_page.summary = (cur_page.summary + " " + stripped).strip()
         elif cur_panel is not None and cur_field is not None:
+            # Keep the writer's line breaks inside a field (script-first
+            # editing): continuation lines join with a newline, not a space.
             prev = getattr(cur_panel, cur_field)
-            setattr(cur_panel, cur_field, (prev + " " + stripped).strip()
+            setattr(cur_panel, cur_field, (prev + "\n" + stripped)
                     if prev else stripped)
         else:
             # Unlabeled body with no field context -> treat as visual (preserve).
             if cur_panel is None:
                 new_panel(1)
             cur_panel.visual_description = (
-                cur_panel.visual_description + " " + stripped).strip() \
+                cur_panel.visual_description + "\n" + stripped) \
                 if cur_panel.visual_description else stripped
             cur_field = "visual_description"
 
@@ -205,19 +207,93 @@ def parse_graphic_novel_text(text: str) -> GraphicNovelScript:
 # ===========================================================================
 
 
+def _ambiguous_line(line: str) -> bool:
+    """Would *line*, on its own, re-parse as structure or a field label?"""
+    if _PAGE_RE.match(line) or _PANEL_RE.match(line) or _SUMMARY_RE.match(line):
+        return True
+    fm = _FIELD_RE.match(line)
+    return bool(fm and fm.group(1).lower() in _FIELD_ALIASES)
+
+
+def _field_lines(label: str, value: str) -> list[str]:
+    """Serialize one field, keeping the writer's line breaks. Interior blank
+    lines are dropped (a blank line ends a field on parse) and a continuation
+    line that would re-parse as a PAGE/PANEL marker or field label is folded
+    into the previous line (content preserved; structure cannot drift), so
+    the result round-trips exactly."""
+    lines = [ln.rstrip() for ln in value.split("\n") if ln.strip()]
+    if not lines:
+        return []
+    out = [f"{label}: {lines[0]}"]
+    for ln in lines[1:]:
+        if _ambiguous_line(ln):
+            out[-1] = f"{out[-1]} {ln}"
+        else:
+            out.append(ln)
+    return out
+
+
 def _panel_text(panel: Panel) -> list[str]:
     lines = [f"PANEL {panel.number}"]
-    if panel.visual_description.strip():
-        lines.append(f"Visual: {panel.visual_description.strip()}")
-    if panel.caption.strip():
-        lines.append(f"Caption: {panel.caption.strip()}")
-    if panel.dialogue.strip():
-        lines.append(f"Dialogue: {panel.dialogue.strip()}")
-    if panel.sfx.strip():
-        lines.append(f"SFX: {panel.sfx.strip()}")
-    if panel.notes.strip():
-        lines.append(f"Notes: {panel.notes.strip()}")
+    lines.extend(_field_lines("Visual", panel.visual_description))
+    lines.extend(_field_lines("Caption", panel.caption))
+    lines.extend(_field_lines("Dialogue", panel.dialogue))
+    lines.extend(_field_lines("SFX", panel.sfx))
+    lines.extend(_field_lines("Notes", panel.notes))
     return lines
+
+
+# Display order + labels for the Manuscript's panel script blocks.
+_PANEL_FIELD_ORDER = (
+    ("visual_description", "Visual"),
+    ("caption", "Caption"),
+    ("dialogue", "Dialogue"),
+    ("sfx", "SFX"),
+    ("notes", "Notes"),
+)
+
+
+def panel_script_text(panel: Panel) -> str:
+    """One panel's text for the Manuscript script block: labeled sections,
+    line breaks preserved, empty fields omitted (the writer types labels)."""
+    chunks = []
+    for key, label in _PANEL_FIELD_ORDER:
+        value = (getattr(panel, key, "") or "").strip()
+        if value:
+            chunks.append(f"{label}:\n{value}")
+    return "\n\n".join(chunks)
+
+
+def parse_panel_text(text: str) -> dict[str, str]:
+    """Parse ONE panel script block back into the five fields.
+
+    Same conservative rules as the scene parser: a known label line
+    (``Visual:`` / ``Caption:`` / ``Dialogue:`` / ``SFX:`` / ``Notes:`` +
+    aliases) switches the current field; anything else — including speaker
+    lines like ``NAME: …``, unknown labels and PAGE/PANEL-looking lines — is
+    plain content appended to the current field (leading unlabeled text goes
+    to Visual). Nothing is ever dropped; a repeated label appends."""
+    fields = {key: "" for key, _label in _PANEL_FIELD_ORDER}
+    cur: str | None = None
+    raw = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    for line in raw.split("\n"):
+        fm = _FIELD_RE.match(line)
+        if fm and fm.group(1).lower() in _FIELD_ALIASES:
+            cur = _FIELD_ALIASES[fm.group(1).lower()]
+            inline = fm.group(2).strip()
+            if inline:
+                fields[cur] = (fields[cur] + "\n" + inline) \
+                    if fields[cur] else inline
+            continue
+        stripped = line.strip()
+        if not stripped:
+            cur = None
+            continue
+        if cur is None:
+            cur = "visual_description"
+        fields[cur] = (fields[cur] + "\n" + stripped) \
+            if fields[cur] else stripped
+    return fields
 
 
 def serialize_graphic_novel_script(script: GraphicNovelScript) -> str:

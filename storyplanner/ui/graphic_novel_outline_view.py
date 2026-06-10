@@ -64,6 +64,7 @@ class GraphicNovelOutlineView(QWidget):
         self, db, project_id: int, *,
         on_data_changed: Callable[[], None] | None = None,
         on_open_manuscript: Callable[[int], None] | None = None,
+        on_open_panel: Callable[[int, int, int], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -72,6 +73,9 @@ class GraphicNovelOutlineView(QWidget):
         self._project_id = project_id
         self._on_data_changed = on_data_changed
         self._on_open_manuscript = on_open_manuscript
+        # Optional deep-link: double-clicking a Panel focuses its script
+        # block in the Manuscript (scene_id, page_idx, panel_idx).
+        self._on_open_panel = on_open_panel
         self._sel: dict = {}
 
         root = QHBoxLayout(self)
@@ -243,6 +247,11 @@ class GraphicNovelOutlineView(QWidget):
     def _activate(self, item) -> None:
         data = item.data(0, _ROLE) if item is not None else None
         if not isinstance(data, dict):
+            return
+        if data.get("kind") == "panel" and self._on_open_panel is not None:
+            # Deep-link: focus the panel's script block in the Manuscript.
+            self._on_open_panel(int(data["scene_id"]),
+                                int(data["page"]), int(data["panel"]))
             return
         if data.get("kind") in ("scene", "panel") and self._on_open_manuscript:
             self._on_open_manuscript(int(data["scene_id"]))

@@ -110,11 +110,12 @@ per-mode export tests.)
       the old standalone Pages widget). Graphic Novel Page/Panel management lives in
       the **Outline** (Scenes tab `Act → Chapter → Scene → Page → Panel` + a
       chapter-level Pages cross-reference tab) **and** the **Manuscript** (a
-      **comics script editor**: inline PAGE blocks → Panel cards with editable
-      Visual/Caption/Dialogue/SFX/Notes fields — not a tree), both over the
-      shared `Scene.content` body (mirrored). **Verify in macOS fullscreen**
-      (smoke-test F-items) that opening the GN Outline/Manuscript shows the
-      script editor and does **not** minimize.
+      **comics script editor**: PAGE headings + one free-typing script block
+      per panel with labeled Visual/Caption/Dialogue/SFX/Notes sections — not
+      a tree, not a form), both over the shared `Scene.content` body
+      (mirrored; Outline Panel double-click deep-links to the script block).
+      **Verify in macOS fullscreen** (smoke-test F-items) that opening the GN
+      Outline/Manuscript shows the script editor and does **not** minimize.
 - [ ] **Local voice-to-script (MVP)** — **off by default** (`enable_voice_mode`;
       backend mode defaults to **Disabled**). App starts normally with voice off.
       The Voice Dictation surface is a **floating, modeless, resizable window**
