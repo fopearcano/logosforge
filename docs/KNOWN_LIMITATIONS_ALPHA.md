@@ -90,10 +90,17 @@ panel** yet:
   stale can never apply; double-click re-activates a ready item) and four
   explicit workflow modes (Dictation default / Intent / Ask Billy / Edit
   with Billy — never auto-detected), plus Pause that keeps session, history
-  and queue. **Still not:** full Live Writer Room, voice-to-voice
-  conversation, a continuous autonomous agent loop, automatic mode
-  detection, automatic command execution, automatic screenplay role
-  guessing, automatic PSYKE classification, speaker diarization, or an
+  and queue. **Phase 7 Project Voice Glossary:** local, project-scoped
+  correction suggestions for names/places/lore terms/invented words +
+  spoken punctuation (review-first; checkable suggestions; transcript-only
+  apply; confirmed learning of correction pairs; read-only PSYKE/Outline
+  import behind a confirmation; fuzzy matching conservative and off by
+  default; auto-apply off by default). Not acoustic-model training or
+  Whisper fine-tuning; imported terms may need manual spoken forms.
+  **Still not:** full Live Writer Room, voice-to-voice conversation, a
+  continuous autonomous agent loop, automatic mode detection, automatic
+  command execution, automatic screenplay role guessing or character
+  attribution, automatic PSYKE classification, speaker diarization, or an
   image-generation bridge; no shell/system commands; cloud realtime remains
   deferred. See `docs/VOICE_MVP.md`.
 

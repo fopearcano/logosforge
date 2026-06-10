@@ -189,6 +189,31 @@ class PsykeEntry(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
 
 
+class VoiceGlossaryTerm(SQLModel, table=True):
+    """Project-scoped voice glossary term (Phase 7) — local correction data
+    for dictation: character/place/lore names, invented words, spoken
+    punctuation. No audio, no secrets; never leaks across projects."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id")
+    canonical_text: str
+    spoken_forms: str = ""               # newline-separated variants
+    common_misrecognitions: str = ""     # newline-separated Whisper slips
+    category: str = "custom"             # character/place/object/lore/theme/
+                                         # style/custom/punctuation/formatting
+    source: str = "manual"               # manual/imported_from_psyke/
+                                         # imported_from_outline/
+                                         # learned_from_correction/system_default
+    case_sensitive: bool = False
+    whole_word_only: bool = True
+    enabled: bool = True
+    priority: int = 0
+    notes: str = ""
+    language: str = ""
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
+
+
 class PsykeRelation(SQLModel, table=True):
     """Links two PSYKE entries (bidirectional, stored both ways).
 

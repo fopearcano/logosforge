@@ -293,6 +293,42 @@ Privacy unchanged: local transcription, raw audio never reaches Billy/AI,
 no telemetry; dictation works with Whisper alone (Billy actions simply
 disable without a provider).
 
+## Project Voice Glossary (Phase 7 — local correction layer)
+
+A **project-scoped, local** glossary (`VoiceGlossaryTerm` rows; no audio,
+no secrets, no cross-project leakage) improves dictation of character/
+place/object/lore names, invented words and repeated Whisper slips, plus
+spoken punctuation. Everything is **review-first**: after each final
+transcript the engine (`storyplanner/voice/glossary.py`) generates
+*suggestions* — exact misrecognitions → exact spoken forms → canonical
+capitalization → spoken punctuation phrases → cautious fuzzy matches
+(disabled by default) — whole-word matched so nothing mutates inside
+words, and nothing is changed silently.
+
+- The selected segment shows its suggestions as a checkable list with
+  **Apply corrections** (transcript text only — the document is still
+  reached solely via the Commit Router on commit; original text kept,
+  segment marked `corrected`) and **Reject**.
+- **Learn correction…** turns a manual segment edit into glossary pairs
+  (e.g. *Bagnaskis → Bagnaskiz*) — always **confirmed first**, never
+  silent, project-scoped.
+- **Glossary…** opens a parented, modeless manager (add/edit/delete/
+  enable/search) with **Import project terms** — a read-only candidate
+  scan over PSYKE entries, characters and scene titles, created only after
+  confirmation; PSYKE and the Outline are never modified.
+- Corrected text is what Intent mode interprets and what Billy receives.
+- Settings (review-first defaults): `enable_voice_glossary` on,
+  `voice_spoken_punctuation` on, `voice_fuzzy_suggestions` **off**,
+  `voice_auto_apply_exact` / `voice_auto_apply_punctuation` **off**
+  (explicit opt-in rules), `voice_learn_corrections = ask`.
+- Project safety: suggestions carry the project id; applying to a segment
+  captured in another project is blocked ("Project changed since this
+  transcript was captured. Switch back or retarget before applying
+  corrections."); the glossary dialog follows project switches.
+
+This is not acoustic-model training or Whisper fine-tuning — it is a text
+correction layer; imported terms may still need manual spoken forms.
+
 ## Future hooks (anchor points, not implemented)
 
 `EditorCommitTarget` defines (and deliberately stubs) the later shape:

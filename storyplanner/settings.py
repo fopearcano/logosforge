@@ -102,6 +102,13 @@ DEFAULTS: dict[str, object] = {
     "voice_local_compute_type": "int8",
     "voice_language": "auto",                     # "auto" | "en" | "it" | ...
     "voice_auto_commit": False,                   # commit transcript without click
+    # -- Voice glossary / corrections (Phase 7) — local, project-scoped --
+    "enable_voice_glossary": True,
+    "voice_spoken_punctuation": True,
+    "voice_fuzzy_suggestions": False,             # conservative default
+    "voice_auto_apply_exact": False,              # Alpha: review-first
+    "voice_auto_apply_punctuation": False,
+    "voice_learn_corrections": "ask",
     "voice_silence_ms": 900,
     "voice_max_segment_seconds": 25,
     "voice_overlap_ms": 0,

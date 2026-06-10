@@ -87,6 +87,27 @@ retest gate** (see `docs/ALPHA_RC_STATUS.md`).
 
 ### Added (feature-flagged, off by default)
 
+- **Voice Phase 7 — Project Voice Glossary + local correction layer.** A
+  project-scoped `VoiceGlossaryTerm` table (additive schema; existing DBs
+  gain it automatically) stores canonical spellings, spoken forms, known
+  Whisper misrecognitions, category/source/enabled — no audio, no secrets,
+  no cross-project leakage. A local correction engine
+  (`storyplanner/voice/glossary.py`) generates **review-first suggestions**
+  after each final transcript (exact misrecognitions → spoken forms →
+  canonical capitalization → spoken punctuation phrases → cautious fuzzy
+  matches, off by default; whole-word matching, drift-guarded apply).
+  Panel UI: per-segment checkable suggestion list with Apply (transcript
+  text only; original kept; status `corrected`; commits still via the
+  router) / Reject, **Learn correction…** (confirmed, project-scoped
+  pairs), and a parented modeless **Glossary manager** with confirmed
+  read-only **Import project terms** from PSYKE/characters/scene titles
+  (sources never mutated, no duplicates). Corrected text is what Intent
+  mode and Billy receive. Settings (review-first defaults):
+  `enable_voice_glossary` on, `voice_spoken_punctuation` on, fuzzy and both
+  auto-apply rules **off**, `voice_learn_corrections="ask"`. Project
+  safety: corrections from another project are blocked with a clear
+  message; the dialog follows project switches.
+  `tests/test_voice_glossary.py` (28 passed).
 - **Voice Phase 6 — Live Writer Room Alpha Shell (Voice Room).** One local,
   buffered, review-first session workflow unifying the whole voice stack:
   an explicit crash-proof **session state machine** (idle → checking

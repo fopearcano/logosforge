@@ -259,6 +259,34 @@ class VoicePanel(QWidget):
         self._queue_list.itemDoubleClicked.connect(self._on_queue_activate)
         self._queue_list.setVisible(False)
         layout.addWidget(self._queue_list)
+
+        # -- Voice glossary corrections (Phase 7; local, review-first) --------
+        corr_row = QHBoxLayout()
+        self._glossary_info = QLabel("")
+        self._glossary_info.setObjectName("voiceGlossaryInfo")
+        self._glossary_info.setStyleSheet("color: #94a3b8; font-size: 11px;")
+        corr_row.addWidget(self._glossary_info, stretch=1)
+        for label, slot, name in (
+            ("Apply corrections", self._on_corrections_apply,
+             "voiceGlossaryApply"),
+            ("Reject", self._on_corrections_reject, "voiceGlossaryReject"),
+            ("Learn correction…", self._on_glossary_learn,
+             "voiceGlossaryLearn"),
+            ("Glossary…", self._on_glossary_open, "voiceGlossaryOpen"),
+        ):
+            button = QPushButton(label)
+            button.setObjectName(name)
+            button.setFlat(True)
+            button.clicked.connect(slot)
+            corr_row.addWidget(button)
+        layout.addLayout(corr_row)
+        self._correction_list = QListWidget()
+        self._correction_list.setObjectName("voiceCorrectionList")
+        self._correction_list.setMaximumHeight(56)
+        self._correction_list.setVisible(False)
+        layout.addWidget(self._correction_list)
+        self._glossary_dialog = None
+        self._glossary_widgets = (self._glossary_info, self._correction_list)
         self._billy_widgets = (self._billy_label, self._billy_op_combo,
                                self._billy_generate_btn,
                                self._billy_apply_btn,
@@ -293,6 +321,8 @@ class VoicePanel(QWidget):
         self._history_list.setToolTip(
             "This session's transcript segments — check segments to commit "
             "them together. History is local and temporary.")
+        self._history_list.currentItemChanged.connect(
+            lambda *_: self._refresh_corrections_ui())
         layout.addWidget(self._history_list)
 
         hist_row = QHBoxLayout()
@@ -575,10 +605,11 @@ class VoicePanel(QWidget):
         """A finalized segment: record it in the local history, then feed the
         live preview exactly as before."""
         ctx = self._build_context()
-        self._history.add_final_segment(
+        entry = self._history.add_final_segment(
             seg,
             project_id=getattr(ctx, "project_id", 0) if ctx else 0,
             writing_mode=getattr(ctx, "writing_mode", "") if ctx else "")
+        self._generate_corrections(entry, ctx)
         self._refresh_history_ui()
         self._apply_final_text(seg.text)
 
@@ -608,6 +639,8 @@ class VoicePanel(QWidget):
             label = f"[{entry.status}] {entry.preview()}"
             if entry.committed_target:
                 label += f"  → {entry.committed_target}"
+            if getattr(entry, "corrections", None):
+                label += f"  · {len(entry.corrections)} suggestion(s)"
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, entry.id)
             item.setToolTip(entry.text)
@@ -1100,6 +1133,150 @@ class VoicePanel(QWidget):
         QApplication.clipboard().setText(text or "")
         self._status_label.setText("Voice: Billy proposal copied")
 
+    # -- Phase 7: project voice glossary corrections --------------------------
+    def _glossary_settings(self):
+        get = self._settings_get
+        if get is None:
+            from storyplanner.settings import get_manager
+            get = get_manager().get
+        return {
+            "enabled": bool(get("enable_voice_glossary")),
+            "punctuation": bool(get("voice_spoken_punctuation")),
+            "fuzzy": bool(get("voice_fuzzy_suggestions")),
+            "auto_exact": bool(get("voice_auto_apply_exact")),
+            "auto_punct": bool(get("voice_auto_apply_punctuation")),
+        }
+
+    def _generate_corrections(self, entry, ctx) -> None:
+        """Suggestions after transcription (read-only; transcript-level)."""
+        if ctx is None:
+            return
+        cfg = self._glossary_settings()
+        if not cfg["enabled"]:
+            return
+        from storyplanner.voice import glossary as vg
+        try:
+            suggestions = vg.suggest_transcript_corrections(
+                ctx.db, ctx.project_id, entry.text,
+                spoken_punctuation=cfg["punctuation"], fuzzy=cfg["fuzzy"])
+        except Exception:
+            return
+        # Explicitly-enabled auto-apply classes (Alpha default: OFF).
+        auto = [s for s in suggestions
+                if (cfg["auto_exact"] and s.source in (
+                    "misrecognition", "spoken_form", "canonical_case"))
+                or (cfg["auto_punct"] and s.source == "punctuation")]
+        if auto:
+            new_text = vg.apply_selected_corrections(entry.text, auto)
+            self._history.apply_corrections(entry.id, new_text)
+            suggestions = vg.suggest_transcript_corrections(
+                ctx.db, ctx.project_id, entry.text,
+                spoken_punctuation=cfg["punctuation"], fuzzy=cfg["fuzzy"])
+        entry.corrections = [s for s in suggestions if not s.applied]
+
+    def _refresh_corrections_ui(self) -> None:
+        entry = self._current_entry()
+        self._correction_list.clear()
+        if entry is None or not entry.corrections:
+            self._glossary_info.setText("")
+            self._correction_list.setVisible(False)
+            return
+        count = len(entry.corrections)
+        self._glossary_info.setText(
+            f"{count} glossary suggestion(s) for the selected segment")
+        for suggestion in entry.corrections:
+            item = QListWidgetItem(
+                f"{suggestion.original_text} → "
+                f"{suggestion.replacement_text!r}"
+                if suggestion.source == "punctuation" else
+                f"{suggestion.original_text} → {suggestion.replacement_text}")
+            item.setToolTip(suggestion.reason)
+            item.setData(Qt.ItemDataRole.UserRole, suggestion.id)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked)
+            self._correction_list.addItem(item)
+        self._correction_list.setVisible(True)
+
+    def _on_corrections_apply(self) -> None:
+        entry = self._current_entry()
+        ctx = self._build_context()
+        if entry is None or not entry.corrections:
+            self._status_label.setText("Voice: no suggestions for this "
+                                       "segment")
+            return
+        from storyplanner.voice import glossary as vg
+        if ctx is not None and                 entry.project_id_at_capture != ctx.project_id:
+            self._status_label.setText(vg.PROJECT_MISMATCH_CORRECTIONS)
+            return
+        checked_ids = set()
+        for i in range(self._correction_list.count()):
+            item = self._correction_list.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                checked_ids.add(item.data(Qt.ItemDataRole.UserRole))
+        selected = [s for s in entry.corrections if s.id in checked_ids]
+        if not selected:
+            self._status_label.setText("Voice: no suggestions selected")
+            return
+        new_text = vg.apply_selected_corrections(entry.text, selected)
+        self._history.apply_corrections(entry.id, new_text)
+        entry.corrections = [s for s in entry.corrections
+                             if s.id not in checked_ids]
+        if self._editing_entry_id == entry.id:
+            self._preview.setPlainText(entry.text)
+        self._status_label.setText(
+            f"Voice: {len(selected)} correction(s) applied to the "
+            "transcript")
+        self._refresh_history_ui()
+        self._refresh_corrections_ui()
+
+    def _on_corrections_reject(self) -> None:
+        entry = self._current_entry()
+        if entry is not None and entry.corrections:
+            entry.corrections = []
+            self._status_label.setText("Voice: suggestions rejected")
+        self._refresh_history_ui()
+        self._refresh_corrections_ui()
+
+    def _on_glossary_learn(self) -> None:
+        entry = self._current_entry()
+        ctx = self._build_context()
+        if entry is None or ctx is None:
+            self._status_label.setText("Voice: select a segment first")
+            return
+        from storyplanner.voice import glossary as vg
+        pairs = vg.diff_correction_pairs(entry.original_text, entry.text)
+        if not pairs:
+            self._status_label.setText(
+                "Voice: edit the segment first — no correction pair found")
+            return
+        pairs = pairs[:3]
+        from storyplanner.ui import safe_dialogs
+        listing = "\n".join(f"{a} → {b}" for a, b in pairs)
+        if not safe_dialogs.question(
+                self, "Remember correction",
+                "Remember for this project?\n\n" + listing):
+            return
+        for original, corrected in pairs:
+            vg.learn_correction(ctx.db, ctx.project_id, original, corrected)
+        self._status_label.setText(
+            f"Voice: {len(pairs)} correction(s) learned for this project")
+
+    def _on_glossary_open(self) -> None:
+        ctx = self._build_context()
+        if ctx is None:
+            self._status_label.setText("Voice: glossary needs an open "
+                                       "project")
+            return
+        if self._glossary_dialog is None:
+            from storyplanner.ui.voice_glossary_dialog import (
+                VoiceGlossaryDialog)
+            self._glossary_dialog = VoiceGlossaryDialog(
+                ctx.db, ctx.project_id, parent=self.window())
+        else:
+            self._glossary_dialog.set_project(ctx.project_id)
+        self._glossary_dialog.show()
+        self._glossary_dialog.raise_()
+
     def note_project_switched(self, new_project_id: int) -> None:
         """Project changed: freeze (don't lose) the visible history — every
         commit re-validates per-entry project ids, so stale segments can
@@ -1117,6 +1294,9 @@ class VoicePanel(QWidget):
         self._queue.on_project_switch(new_project_id)
         self._refresh_queue_ui()
         self._room_to("ready")
+        if self._glossary_dialog is not None:
+            self._glossary_dialog.set_project(new_project_id)
+        self._refresh_corrections_ui()
         if any(e.status in ("pending", "edited")
                for e in self._history.entries):
             self._status_label.setText(

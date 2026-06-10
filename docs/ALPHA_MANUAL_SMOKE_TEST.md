@@ -67,6 +67,7 @@ manual UI check). Command form:
 | `tests/test_voice_intents.py` (Phase 4 intent router, preview-first ops) | **37 passed** |
 | `tests/test_voice_billy_bridge.py` (Phase 5 Billy Voice Bridge) | **35 passed** |
 | `tests/test_voice_room.py` (Phase 6 Voice Room shell: state/queue/modes) | **26 passed** |
+| `tests/test_voice_glossary.py` (Phase 7 project glossary + corrections) | **28 passed** |
 | `tests/test_voice_lan.py` (backend modes + LAN Whisper server) | **43 passed** |
 | `tests/test_voice_lan_server.py` (LAN companion server + client integration) | **22 passed** |
 | `tests/test_gn_pages_manuscript_sync.py` (GN shared body) | **30 passed** |
@@ -74,7 +75,7 @@ manual UI check). Command form:
 | `tests/test_series_navigator.py` (Navigator + deps) | **26 passed** |
 | `tests/test_writing_mode_lock.py` (mode lock) | **22 passed** |
 | `tests/test_export_safety.py` (export privacy) | **4 passed** |
-| **Total** | **672 passed, 0 failed** |
+| **Total** | **700 passed, 0 failed** |
 
 > Environment note: PDF/DOCX export tests fail only where `reportlab` /
 > `python-docx` are not installed (pre-existing, graceful-degradation behavior),
@@ -216,6 +217,10 @@ this behavior as supporting evidence (the manual UI check is still required).
 | V36 | **Voice Room header** shows the session state + context summary (project · mode · section · panel · selection) and updates as you work | PENDING MANUAL RETEST | ✓ |
 | V37 | Four workflow modes (Dictation default / Intent / Ask Billy / Edit with Billy); Billy modes preset the operation; mode is never auto-detected | PENDING MANUAL RETEST | ✓ |
 | V38 | Proposal queue lists every proposal with status; stale items refuse Apply; double-click re-activates a ready one; Pause keeps session/history/queue | PENDING MANUAL RETEST | ✓ |
+| V39 | Glossary: add a term with a misrecognition → dictate it → segment shows "N suggestion(s)"; Apply fixes the transcript only; Reject leaves it | PENDING MANUAL RETEST | ✓ |
+| V40 | Edit a segment, **Learn correction…** → confirmation lists the pair; confirmed pair appears in the Glossary and corrects future dictation | PENDING MANUAL RETEST | ✓ |
+| V41 | **Glossary…** manager (parented window): add/delete/enable/search; **Import project terms** previews and asks before creating; PSYKE/Outline unchanged | PENDING MANUAL RETEST | ✓ |
+| V42 | Spoken punctuation ("comma", "period", "new paragraph") suggested and applied correctly; project switch blocks applying old-project corrections | PENDING MANUAL RETEST | ✓ |
 | L1 | Backend selector shows Disabled / Local PC / Local LAN Server / Mock; default Disabled | PENDING MANUAL RETEST | ✓ |
 | L2 | Start a Whisper server on another LAN machine (`docs/LOCAL_LAN_WHISPER.md`) | PENDING MANUAL RETEST | |
 | L3 | Select **Local LAN Server**; enter the private LAN URL (e.g. `http://192.168.x.x:8765`) | PENDING MANUAL RETEST | ✓ |

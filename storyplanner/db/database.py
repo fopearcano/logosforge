@@ -31,6 +31,7 @@ from storyplanner.models import (
     Place,
     Project,
     PsykeEntry,
+    VoiceGlossaryTerm,
     PsykeProgression,
     PsykeRelation,
     QuantumStateRecord,
@@ -3084,6 +3085,58 @@ class Database:
                 PsykeEntry.project_id == project_id
             )
             return list(session.exec(stmt).all())
+
+    # -- Voice glossary (Phase 7): project-scoped dictation terms ----------
+    def get_voice_glossary_terms(self, project_id: int) -> list[VoiceGlossaryTerm]:
+        with Session(self._engine) as session:
+            stmt = select(VoiceGlossaryTerm).where(
+                VoiceGlossaryTerm.project_id == project_id)
+            return list(session.exec(stmt).all())
+
+    def create_voice_glossary_term(
+        self, project_id: int, canonical_text: str, *,
+        spoken_forms: str = "", common_misrecognitions: str = "",
+        category: str = "custom", source: str = "manual",
+        case_sensitive: bool = False, whole_word_only: bool = True,
+        enabled: bool = True, priority: int = 0, notes: str = "",
+        language: str = "",
+    ) -> VoiceGlossaryTerm:
+        with Session(self._engine) as session:
+            term = VoiceGlossaryTerm(
+                project_id=project_id, canonical_text=canonical_text,
+                spoken_forms=spoken_forms,
+                common_misrecognitions=common_misrecognitions,
+                category=category, source=source,
+                case_sensitive=case_sensitive,
+                whole_word_only=whole_word_only, enabled=enabled,
+                priority=priority, notes=notes, language=language)
+            session.add(term)
+            session.commit()
+            session.refresh(term)
+            return term
+
+    def update_voice_glossary_term(self, term_id: int,
+                                   **fields) -> VoiceGlossaryTerm | None:
+        from datetime import datetime, timezone
+        with Session(self._engine) as session:
+            term = session.get(VoiceGlossaryTerm, term_id)
+            if term is None:
+                return None
+            for key, value in fields.items():
+                if hasattr(term, key) and key not in ("id", "project_id",
+                                                      "created_at"):
+                    setattr(term, key, value)
+            term.updated_at = datetime.now(timezone.utc)
+            session.commit()
+            session.refresh(term)
+            return term
+
+    def delete_voice_glossary_term(self, term_id: int) -> None:
+        with Session(self._engine) as session:
+            term = session.get(VoiceGlossaryTerm, term_id)
+            if term is not None:
+                session.delete(term)
+                session.commit()
 
     def create_psyke_entry(
         self,

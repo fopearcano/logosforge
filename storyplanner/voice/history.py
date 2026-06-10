@@ -30,9 +30,10 @@ S_EDITED = "edited"
 S_COMMITTED = "committed"
 S_DISCARDED = "discarded"
 S_FAILED = "failed"
+S_CORRECTED = "corrected"          # glossary corrections applied (Phase 7)
 
-_EDITABLE = (S_PENDING, S_EDITED, S_FAILED)
-_COMMITTABLE = (S_PENDING, S_EDITED)
+_EDITABLE = (S_PENDING, S_EDITED, S_FAILED, S_CORRECTED)
+_COMMITTABLE = (S_PENDING, S_EDITED, S_CORRECTED)
 
 RETRY_UNAVAILABLE = "Audio segment no longer available."
 PROJECT_MISMATCH = ("This transcript was captured in another project. "
@@ -78,6 +79,8 @@ class HistoryEntry:
     # Provenance for merge/split.
     merged_from: list[str] = field(default_factory=list)
     split_from: str = ""
+    # Voice glossary (Phase 7): pending correction suggestions (local).
+    corrections: list = field(default_factory=list)
     # Billy Voice Bridge (Phase 5): text-only; never audio, never secrets.
     sent_to_billy: bool = False
     billy_proposal_id: str = ""
@@ -174,6 +177,18 @@ class VoiceTranscriptHistory:
         entry.text = new_text
         entry.status = (S_PENDING if new_text == entry.original_text
                         else S_EDITED)
+        entry.updated_at = time.time()
+        return True
+
+    def apply_corrections(self, entry_id: str, corrected_text: str) -> bool:
+        """Glossary corrections applied to the TRANSCRIPT text only (the
+        document is reached solely via the Commit Router on commit)."""
+        entry = self.get(entry_id)
+        if entry is None or entry.status not in _EDITABLE:
+            return False
+        entry.text = corrected_text
+        entry.status = (S_PENDING if corrected_text == entry.original_text
+                        else S_CORRECTED)
         entry.updated_at = time.time()
         return True
 
