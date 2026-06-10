@@ -271,6 +271,46 @@ def test_client_still_blocks_public_urls():
     assert ok is False and msg == LAN_PUBLIC_URL_MESSAGE
 
 
+def test_model_not_loaded_returns_503(server):
+    cfg, base = server
+    fn = cfg.transcribe_fn
+    cfg.transcribe_fn = None
+    body, ctype = _multipart(_wav(0.5))
+    status, raw = _post(base + "/v1/audio/transcriptions", body, ctype)
+    cfg.transcribe_fn = fn
+    assert status == 503 and b"model not loaded" in raw
+
+
+# ==========================================================================
+# CLI / startup behavior (subprocess — the real entry point)
+# ==========================================================================
+
+
+def test_cli_defaults_localhost_and_full_flag_set():
+    import subprocess
+    import sys
+    out = subprocess.run([sys.executable, _SCRIPT, "--help"],
+                         capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0
+    text = out.stdout
+    assert "127.0.0.1" in text                  # default bind is localhost
+    for flag in ("--model", "--host", "--port", "--device", "--compute-type",
+                 "--language", "--auth-token", "--max-audio-seconds",
+                 "--max-payload-mb", "--debug"):
+        assert flag in text, flag
+
+
+def test_missing_faster_whisper_exits_with_clear_setup_message():
+    # CI has no faster-whisper, so the real startup path must exit cleanly
+    # with the install hint — never start a half-configured server.
+    import subprocess
+    import sys
+    out = subprocess.run([sys.executable, _SCRIPT, "--model", "/fake/model"],
+                         capture_output=True, text=True, timeout=30)
+    assert out.returncode == 2
+    assert "faster-whisper is not installed" in out.stderr
+
+
 # ==========================================================================
 # Pure helpers + opt-in guarantee
 # ==========================================================================
