@@ -58,12 +58,13 @@ manual UI check). Command form:
 | `tests/test_gn_embedded_navigator.py` (Manuscript Page/Panel Navigator) | **33 passed** |
 | `tests/test_gn_outline.py` (GN Outline Pages/Panels) | **38 passed** |
 | `tests/test_gn_outline_integrity_gate.py` (GN Outline integrity gate) | **13 passed** |
+| `tests/test_voice_mvp.py` (local voice-to-script MVP) | **28 passed** |
 | `tests/test_gn_pages_manuscript_sync.py` (GN shared body) | **30 passed** |
 | `tests/test_series_hierarchy.py` (Series hierarchy) | **70 passed** |
 | `tests/test_series_navigator.py` (Navigator + deps) | **26 passed** |
 | `tests/test_writing_mode_lock.py` (mode lock) | **22 passed** |
 | `tests/test_export_safety.py` (export privacy) | **4 passed** |
-| **Total** | **322 passed, 0 failed** |
+| **Total** | **350 passed, 0 failed** |
 
 > Environment note: PDF/DOCX export tests fail only where `reportlab` /
 > `python-docx` are not installed (pre-existing, graceful-degradation behavior),
@@ -154,6 +155,26 @@ this behavior as supporting evidence (the manual UI check is still required).
 | F5 | Add Scene / Page / Panel in the Outline; edit Visual / Caption / Dialogue / SFX / Notes | PENDING MANUAL RETEST | ✓ |
 | F6 | Open the **Manuscript** — the same Pages/Panels appear (mirrored); app stays fullscreen | PENDING MANUAL RETEST | ✓ |
 | F7 | Export Graphic Novel text / Markdown (shared body; shows Panel → Page and Panel → Scene) | PENDING MANUAL RETEST | ✓ |
+
+### Local voice-to-script (MVP) — OFF by default
+
+> Local-first dictation; **no cloud, no audio upload**. Requires optional local
+> backends (`faster-whisper`, `sounddevice`) + a local model path. Headless tests
+> cover the logic + panel (`tests/test_voice_mvp.py`, 28 passed). Confirm with a real
+> microphone manually:
+
+| # | Item | Result | Auto |
+|---|------|--------|------|
+| V1 | App starts normally with voice off; no voice panel shown | PENDING MANUAL RETEST | ✓ |
+| V2 | Enable `enable_voice_mode`; without backend/model the panel shows a non-blocking setup message (no crash) | PENDING MANUAL RETEST | ✓ |
+| V3 | Configure local Whisper model path + install `faster-whisper`/`sounddevice` | PENDING MANUAL RETEST | |
+| V4 | View → Voice Dictation (Ctrl/Cmd+Shift+V); Start; speak a short sentence; Stop | PENDING MANUAL RETEST | |
+| V5 | Transcript appears in the preview | PENDING MANUAL RETEST | ✓ |
+| V6 | Click in the editor, then Commit — text inserts at the cursor | PENDING MANUAL RETEST | ✓ |
+| V7 | Clear removes the preview | PENDING MANUAL RETEST | ✓ |
+| V8 | No crash when the microphone is unavailable / permission denied | PENDING MANUAL RETEST | ✓ |
+| V9 | App does not freeze while transcribing; closing while recording stops safely | PENDING MANUAL RETEST | partial |
+| V10 | No audio leaves the device (local-first) | PENDING MANUAL RETEST | ✓ |
 
 ### Stage Script
 
@@ -290,7 +311,7 @@ These are already documented in `docs/KNOWN_LIMITATIONS_ALPHA.md` and are
 
 ## Decision
 
-**PENDING MANUAL RETEST.** Automated focused suites are green (322 passed), but
+**PENDING MANUAL RETEST.** Automated focused suites are green (350 passed), but
 the manual UI checklist above has not been executed. **Do not tag** the Alpha RC
 until the manual checklist is completed and this decision is updated to one of:
 

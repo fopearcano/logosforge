@@ -108,6 +108,11 @@ per-mode export tests.)
       Scene → Page → Panel editor), both over the shared `Scene.content` body
       (mirrored). **Verify in macOS fullscreen** (smoke-test F-items) that opening
       the GN Outline/Manuscript shows the navigator and does **not** minimize.
+- [ ] **Local voice-to-script (MVP)** — **off by default** (`enable_voice_mode`).
+      App starts normally with voice off; the panel is hidden. Enabling it without
+      the local backend/model shows a non-blocking setup message (no crash). Local
+      transcription only — **no cloud, no audio upload**; backends optional/lazy; no
+      auto model download. Manual plain-text commit only. See `docs/VOICE_MVP.md`.
 - [ ] No **ComfyUI / image-generation** module, action, or settings.
 - [ ] No **production scheduling / rehearsal / writers-room** management.
 - [ ] No **showrunner automation** that mutates data.

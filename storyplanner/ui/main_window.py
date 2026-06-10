@@ -684,6 +684,16 @@ class MainWindow(QMainWindow):
         self._diagnostics_drawer.setVisible(False)
         outer_layout.addWidget(self._diagnostics_drawer, stretch=0)
 
+        # -- Local voice dictation (MVP) — hidden bottom strip, flag-gated -----
+        # Same safe embedded pattern as the drawers above (never a floating /
+        # top-level window). The panel builds its local backends lazily on Start;
+        # with the feature flag off it stays hidden and inert. Local-first.
+        from storyplanner.voice.editor_commit import EditorCommitTarget
+        from storyplanner.ui.voice_panel import VoicePanel
+        self._voice_commit = EditorCommitTarget()
+        self._voice_panel = VoicePanel(commit_target=self._voice_commit)
+        outer_layout.addWidget(self._voice_panel, stretch=0)
+
         # -- Narrative Health (Phase 6) --------------------------------------
         from storyplanner.logos.health import HealthEngine
         from storyplanner.ui.logos.logos_health import LogosHealthDrawer
@@ -2651,6 +2661,11 @@ class MainWindow(QMainWindow):
         focus_action.triggered.connect(self._menu_toggle_focus)
         view_menu.addAction(focus_action)
 
+        voice_action = QAction("Voice Dictation (local)", self)
+        voice_action.setShortcut(QKeySequence("Ctrl+Shift+V"))
+        voice_action.triggered.connect(self._toggle_voice_panel)
+        view_menu.addAction(voice_action)
+
         view_menu.addSeparator()
 
         appearance_menu = view_menu.addMenu("Appearance")
@@ -2852,6 +2867,10 @@ class MainWindow(QMainWindow):
     def _on_focus_changed(self, _old, now) -> None:
         if self._is_editable_widget(now):
             self._last_edit_widget = now
+            # Track the editor the voice transcript should commit into.
+            vc = getattr(self, "_voice_commit", None)
+            if vc is not None:
+                vc.note_focus(now)
 
     def _focused_editable(self):
         w = QApplication.focusWidget()
@@ -2886,6 +2905,12 @@ class MainWindow(QMainWindow):
 
     def _edit_select_all(self) -> None:
         self._run_edit_op("selectAll")
+
+    def _toggle_voice_panel(self) -> None:
+        """Show/hide the local voice dictation panel (feature-flagged)."""
+        panel = getattr(self, "_voice_panel", None)
+        if panel is not None:
+            panel.toggle_panel()
 
     def _menu_toggle_focus(self) -> None:
         if (
@@ -3241,6 +3266,14 @@ class MainWindow(QMainWindow):
         which listen to *both* lifecycle signals) from recomputing twice.
         """
         old_id = self._project_id
+        # Stop any active voice session and forget the previous project's editor
+        # so a pending transcript can never be committed into the wrong project.
+        vp = getattr(self, "_voice_panel", None)
+        if vp is not None:
+            vp.stop_session()
+        vc = getattr(self, "_voice_commit", None)
+        if vc is not None:
+            vc.clear()
         # Release the lock on whatever project we were on before switching.
         if self._current_file and self._current_file != file_path:
             release_lock(self._current_file)
@@ -3576,6 +3609,10 @@ class MainWindow(QMainWindow):
                     return
             # Discard → fall through and close without saving.
 
+        # Stop any active voice recording/transcription safely on close.
+        vp = getattr(self, "_voice_panel", None)
+        if vp is not None:
+            vp.stop_session()
         self._versions.stop()
         self._assistant_panel.save_settings()
         if self._current_file:

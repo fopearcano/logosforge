@@ -29,6 +29,17 @@ panel** yet:
 - **HTML export** — preview-grade.
 - **HTTP API LAN / remote modes** — experimental; alpha targets desktop/localhost.
 - **Go McKee** plugin and **Connector write actions** — **off by default**.
+- **Local voice-to-script (MVP)** — **off by default** (`enable_voice_mode`).
+  Local-first **near-live segmented dictation**: local Whisper transcription, manual
+  plain-text commit to the active editor. **No cloud speech API; no audio leaves the
+  device.** The microphone (`sounddevice`) and Whisper (`faster-whisper`) backends
+  are **optional, lazy** installs and a **local model path** must be set (no
+  automatic model downloads). With the flag on but the backend/model missing, the
+  panel shows a non-blocking setup message and the app stays usable. **Deferred:**
+  cloud realtime / speech-to-speech, automatic dialogue/action/note classification,
+  Fountain auto-formatting, voice commands, speaker diarization, Live Writer Room,
+  and any ComfyUI/visual link. The panel is an **embedded** bottom strip (never a
+  floating/top-level window). See `docs/VOICE_MVP.md`.
 
 ## Model / feature limits
 

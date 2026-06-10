@@ -88,6 +88,18 @@ DEFAULTS: dict[str, object] = {
     "open_anyway_on_lock": False,
     "graph_state": {},
     "graph_presets": {},
+    # -- Local voice-to-script (MVP) — OFF by default; local-first; no cloud --
+    # When enabled but the local Whisper backend / model path is not configured,
+    # the voice UI shows a non-blocking setup message (the app stays usable).
+    "enable_voice_mode": False,
+    "voice_whisper_backend": "faster-whisper",   # "faster-whisper" | "mock"
+    "voice_whisper_model_path": "",              # local model dir/file (no auto-download)
+    "voice_whisper_executable_path": "",          # reserved for whisper.cpp (future)
+    "voice_language": "auto",                     # "auto" | "en" | "it" | ...
+    "voice_auto_commit": False,                   # commit transcript without click
+    "voice_silence_ms": 900,
+    "voice_max_segment_seconds": 25,
+    "voice_overlap_ms": 0,
 }
 
 
