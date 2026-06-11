@@ -5,6 +5,16 @@ dates are release-readiness milestones, not packaged builds.
 
 ## [0.9.0-alpha] — pre-finalization refactor — 2026-06-11
 
+### FINAL ALPHA RC RE-CERTIFICATION (post GN shared-renderer fix) — PASSED (2026-06-11)
+
+Audit-only capstone at `4437cbe`: the GN renderer blocker is resolved
+(shared WritingCoreView/PlanView mounts pinned; legacy unreachable);
+full Alpha scope re-verified (modes, lock, Dexter, language/Unicode,
+deferrals, exports, requirements, blocker policy, porting contract).
+Evidence: 1527 + 638 + 740 = **2905 passed, 0 failures**. **No changes.
+Classification: A — ready for manual release confirmation; no tag until
+the manual checklist passes.**
+
 ### Phase 2 verification gate — PASSED (2026-06-11)
 
 Audit-only: routing proof (shared mounts, legacy `not isinstance` pins),

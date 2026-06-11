@@ -417,6 +417,27 @@ passed, 0 failures** + the Phase-2 commit's runs at this tree (501 + 270
 + 183 + 319 + broad sweep **1527**). **No production code changed.
 Classification: A — Final Alpha RC re-certification can resume.**
 
+## FINAL ALPHA RC RE-CERTIFICATION after the GN shared-renderer fix (2026-06-11): PASSED
+
+The complete Desktop Alpha re-certified at `4437cbe` (0.9.0-alpha, no
+tags) after the Graphic Novel renderer replacement. The former release
+blocker is resolved and pinned: GN Manuscript = shared `WritingCoreView`
+(GN grammar, full text/block editor, no page-manager chrome, no Comics
+Script); GN Outline = shared `PlanView` GN schema (Act → Page → Scene →
+Panel cards, continued spans, adds/moves/deletes, panel → Manuscript
+cursor); legacy renderers LEGACY-labelled and proven unconstructed in
+production; Pages inert. All other scope re-verified: five modes, mode
+lock, Dexter (writing room, preview-first, cursor-resolved Panel targets,
+no cloud/raw audio), Writing Language + Whisper list + Unicode/CJK/RTL,
+grammar + UI localization deferred, exports clean, requirements clean,
+blocker policy current, porting contract current. Evidence at this tree:
+broad certification sweep **1527** + full voice/Dexter + language **638**
++ verification matrix **740** = **2905 passed, 0 failures**.
+**Classification: A — ready for manual release confirmation** (real
+microphone, macOS fullscreen, GN/Dexter real-UI, optional-export and
+Unicode/PDF visual checks remain; do not tag until the manual checklist
+passes).
+
 ## Last audit summary
 
 The final global multi-mode integrity audit (the **Alpha Release Gate**, see
