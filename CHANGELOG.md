@@ -5,6 +5,18 @@ dates are release-readiness milestones, not packaged builds.
 
 ## [0.9.0-alpha] — pre-finalization refactor — 2026-06-11
 
+### Dexter scope-cleanup certification gate — PASSED (2026-06-11)
+
+Audit-only certification of the scope cleanup: Dexter capabilities and
+forbidden-label scan, grammar deferral (forced-off load, disabled
+placeholder, no startup dependency), English-only UI, writing/Dexter
+language and Unicode support intact, blocker policy. Three permanent pins
+added (suite → 69): Dexter works with the grammar module unimportable; the
+required Writing Language help text; the blocker-policy doc pin. No scope
+leaks; **no production code changed**. Evidence: 633 + 429 + 1527 =
+**2589 passed, 0 failures**. **Classification: A.** GN post-refactor
+re-certification can resume, then Final Alpha RC re-certification.
+
 ### Final pre-Alpha scope cleanup — Dexter = voice writing room; grammar & UI localization deferred (2026-06-11)
 
 Scope decision before Alpha RC re-certification: **Dexter's Room is the

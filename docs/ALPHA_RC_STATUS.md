@@ -275,6 +275,24 @@ GN/Series/lock/isolation/export **390**, broad certification sweep
 writing/interaction only; grammar and UI translation are cleanly deferred;
 Alpha scope is clean** (dormant deferred code documented).
 
+**Scope-cleanup certification gate (2026-06-11): PASSED.** A dedicated
+post-implementation audit re-certified the cleanup with targeted probes and
+three new permanent pins (`tests/test_language_system.py` → **69**): Dexter
+constructs and resolves its language even with the grammar module made
+unimportable (zero dependency, not just zero usage); the Project Settings
+Writing Language help text carries the required wording ("Used for AI
+writing context and Dexter transcription defaults. It does not change the
+app interface language."); and the smoke-test blocker policy is pinned
+(grammar absent from hard blockers; grammar/UI-localization/transcription-
+quality explicitly non-blocking; the Unicode-corruption / language-leak /
+raw-audio / auto-apply / fullscreen-minimize / Panel-data-loss /
+secret-leak hard blockers all present). No scope leaks found; **no
+production code changed**. Evidence: language/grammar/editor + voice
+**633**, GN/Series/lock/isolation/export **429**, broad certification
+sweep **1527** = **2589 passed, 0 failures**. **Gate result: A.**
+Graphic Novel post-refactor re-certification can resume, followed by
+Final Alpha RC re-certification.
+
 ## Last audit summary
 
 The final global multi-mode integrity audit (the **Alpha Release Gate**, see

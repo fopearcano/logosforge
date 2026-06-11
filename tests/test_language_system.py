@@ -942,3 +942,63 @@ def test_docs_state_dexter_scope_and_deferrals():
     limits = " ".join(open("docs/KNOWN_LIMITATIONS_ALPHA.md").read().split())
     assert "deferred to a later Review/Correction phase" in limits
     assert "English-only" in limits
+
+
+# ==========================================================================
+# Dexter scope-cleanup certification gate pins (2026-06-11)
+# ==========================================================================
+
+
+def test_gate_dexter_unaffected_by_missing_grammar_module():
+    """Dexter has no grammar dependency: even with the grammar module made
+    unimportable, the voice panel constructs and resolves its language."""
+    import sys
+    from storyplanner.settings import get_manager
+    get_manager().set("enable_voice_mode", True)
+    get_manager().set("voice_backend_mode", "mock")
+    saved = sys.modules.get("storyplanner.grammar_checker")
+    sys.modules["storyplanner.grammar_checker"] = None   # import would fail
+    try:
+        from storyplanner.ui.voice_panel import VoicePanel
+        panel = VoicePanel(project_language_getter=lambda: "it")
+        settings = panel._load_settings()
+        assert settings.effective_language() == "it"
+        assert panel.is_enabled() is True
+    finally:
+        if saved is not None:
+            sys.modules["storyplanner.grammar_checker"] = saved
+        else:
+            sys.modules.pop("storyplanner.grammar_checker", None)
+
+
+def test_gate_writing_language_help_text_required_wording():
+    from PySide6.QtWidgets import QLabel
+    db = Database()
+    pid = _project(db)
+    from storyplanner.ui.project_settings_dialog import ProjectSettingsDialog
+    dlg = ProjectSettingsDialog(db, pid)
+    texts = [w.text() for w in dlg.findChildren(QLabel)]
+    hits = [t for t in texts
+            if "AI writing context and Dexter transcription defaults" in t]
+    assert hits, texts
+    assert any("does not change the app interface language" in t
+               for t in hits)
+
+
+def test_gate_blocker_list_reflects_scope_policy():
+    raw = open("docs/ALPHA_MANUAL_SMOKE_TEST.md").read()
+    smoke = " ".join(raw.replace("*", "").split())
+    blockers = smoke[smoke.index("release blocker if any of these FAIL"):
+                     smoke.index("Non-blocking")]
+    nonblocking = smoke[smoke.index("Non-blocking"):
+                        smoke.index("Blocker list")]
+    # Deferred items are explicitly NON-blocking…
+    assert "grammar" not in blockers.lower()
+    assert "grammar checking deferred" in nonblocking
+    assert "UI localization deferred" in nonblocking
+    assert "Whisper transcription quality" in nonblocking
+    # …while the hard safety blockers from the scope decision remain.
+    for kept in ("Unicode text corrupts", "project language leaks",
+                 "raw audio", "auto-applies", "fullscreen minimize",
+                 "loses Panel data", "leaks API/provider secrets"):
+        assert kept in blockers, kept
