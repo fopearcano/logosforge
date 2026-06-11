@@ -121,7 +121,7 @@ per-mode export tests.)
       Outline/Manuscript shows the script editor and does **not** minimize.
 - [ ] **Local voice-to-script (MVP)** — **off by default** (`enable_voice_mode`;
       backend mode defaults to **Disabled**). App starts normally with voice off.
-      The Voice Dictation surface is a **floating, modeless, resizable window**
+      The voice surface — **Dexter's Room** (View → Dexter's Room) — is a **floating, modeless, resizable window**
       parented to the main window (one instance; menu / Ctrl+Shift+V toggles
       show↔hide; Hide/close/Esc hide it with the transcript preview preserved;
       hiding while recording stops the session safely; never auto-shown, never

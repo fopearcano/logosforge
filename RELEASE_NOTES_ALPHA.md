@@ -123,9 +123,9 @@ stays Project → Act → Chapter → Scene):
   tunnels **blocked**, redirects refused; an opt-in companion server script ships
   at `scripts/local_whisper_server.py`). **No cloud speech API, no OpenAI
   Realtime; audio never leaves the device/trusted LAN.** No voice commands, no
-  automatic dialogue/action classification (deferred hooks exist). View → Voice
-  Dictation (Ctrl/Cmd+Shift+V) toggles a **floating, modeless, resizable**
-  dictation window (parented to the main window; one instance; Hide/close/Esc
+  automatic dialogue/action classification (deferred hooks exist). **View →
+  Dexter's Room** (Ctrl/Cmd+Shift+V) toggles the floating, modeless,
+  resizable **Dexter's Room** voice workspace (parented to the main window; one instance; Hide/close/Esc
   hide it with the transcript preview preserved; hiding while recording stops
   the session safely; commit stays manual, auto-commit off by default). See
   `docs/VOICE_MVP.md` + `docs/LOCAL_LAN_WHISPER.md`.

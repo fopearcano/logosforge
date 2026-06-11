@@ -56,7 +56,7 @@ Voice mode is **OFF by default**. To use it:
      `docs/LOCAL_LAN_WHISPER.md`)
    - optionally `voice_language` (`"auto"`/`"en"`/`"it"`), `voice_silence_ms`,
      `voice_max_segment_seconds`, `voice_auto_commit`.
-4. Open **View → Voice Dictation (local)** (or **Ctrl/Cmd+Shift+V**). This
+4. Open **View → Dexter's Room** (or **Ctrl/Cmd+Shift+V**). This
    toggles a **floating, modeless, resizable** Voice Dictation window (show →
    hide → show again; the title-bar close, the **Hide** button and **Esc** all
    hide it without losing state). The panel has the status indicator, backend
@@ -338,7 +338,7 @@ correction layer; imported terms may still need manual spoken forms.
 
 ## Voice Setup & diagnostics (Phase 8)
 
-**View → Voice Dictation → Voice Setup…** opens a parented, modeless setup
+**View → Dexter's Room → Voice Setup…** opens a parented, modeless setup
 panel (`storyplanner/ui/voice_setup_dialog.py`; safe-window rules, never a
 parentless/floating window). It covers the whole local backend story —
 nothing is installed or downloaded, no GPU is required, and invalid paths
