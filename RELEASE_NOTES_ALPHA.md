@@ -172,6 +172,19 @@ sweep 1527 + voice stack 392 + GN/Series/export 392 = **2311 passed, 0
 failed**; no blockers, no production changes; manual smoke test (V1–V49)
 remains before tagging. See `docs/ALPHA_RC_STATUS.md`.
 
+**FINAL ALPHA RC RE-CERTIFICATION (2026-06-11): PASSED — classification
+A.** After the Graphic Novel `Act → Page → Scene → Panel` refactor, the
+multi-language system (project Writing Language + Dexter language + full
+Whisper list + Unicode/CJK/RTL writing) and the final scope cleanup
+(Dexter = local voice writing room; grammar/text correction and UI
+localization deferred; Alpha UI English-only), the complete Desktop Alpha
+was re-certified with **zero changes**: broad sweep **1527** + full
+voice/Dexter **569** + language/editor **359** + Graphic Novel **358** +
+Series/lock/lifecycle/export **254** = **3067 passed, 0 failures**.
+Manual smoke checks (microphone, macOS fullscreen, language/Unicode
+UI, optional-export visuals) remain before tagging. See
+`docs/ALPHA_RC_STATUS.md`.
+
 **Verification:** the final global multi-mode integrity audit (Alpha Release Gate)
 returned **A**. Focused gate `tests/test_alpha_release_gate.py` = **35 passed**;
 the broad certification sweep = **1527 passed, 0 failures**

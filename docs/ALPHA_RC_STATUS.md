@@ -315,6 +315,47 @@ voice/Dexter **355** + GN engine/Series/lock/isolation/backup **298** +
 broad certification sweep **1527** = **2556 passed, 0 failures**.
 **Gate result: A — Final Alpha RC re-certification can resume.**
 
+## FINAL ALPHA RC RE-CERTIFICATION (2026-06-11): PASSED
+
+The complete Desktop Alpha was re-certified end-to-end after the Graphic
+Novel refactor, the multi-language system, and the final scope cleanup —
+**no blockers found; zero production or test changes needed** (a clean
+certification run at commit `044f675`, version **0.9.0-alpha**, no tags).
+
+**Certified scope:** five writing modes (Novel Act→Chapter→Scene;
+Screenplay; **Graphic Novel Act→Page→Scene→Panel with the Manuscript
+deriving from the Outline**; Stage Script; **Series
+Season→Episode→Act→Chapter→Scene**); **Dexter's Room** as the local voice
+writing/formatting/routing room (review-first, explicit Apply, undo, no
+grammar coupling, no cloud speech, no raw audio off-machine); **project
+Writing Language** + full Whisper list + Dexter language modes + AI
+preserve-language context; **Unicode/CJK/RTL** writing across every
+surface and export; exports clean of secrets/image/grammar/translation
+metadata; writing-mode lock, project isolation, dirty close-save,
+autosave; startup verified for all five modes with Pages/Plot hidden,
+voice off, UI English-only, grammar off, ComfyUI stub inert; requirements
+clean (10 deps, no dupes, no grammar/cloud packages).
+
+**Deferred (documented, not exposed as complete):** grammar checking and
+deep text correction (future Review/Correction phase), UI localization
+(English-only Alpha; dormant scaffolding), cloud realtime voice/speech,
+ComfyUI/image generation, Canvas Plot, standalone Pages, cloud/web/sync.
+
+**Evidence (fresh, this gate):** authoritative broad certification sweep
+**1527** + full voice/Dexter matrix **569** + language/grammar/editor
+**359** + GN + pages safety **358** + Series/backup/lock/lifecycle/export
+gates **254** = **3067 passed, 0 failures**. (Curated-batch methodology
+per `docs/ALPHA_TEST_COMMANDS.md`; the combined-single-run Qt/GC teardown
+caveat remains documented and environmental.)
+
+**Manual checks still required before tagging** (see
+`docs/ALPHA_MANUAL_SMOKE_TEST.md`): real microphone (V-items), macOS
+fullscreen (F-items), language/Unicode UI pass (L-items), optional
+PDF/DOCX export visual checks, Dexter and Graphic Novel real-UI passes.
+
+**Classification: A — Final Alpha RC re-certification passed; ready for
+manual release confirmation.**
+
 ## Last audit summary
 
 The final global multi-mode integrity audit (the **Alpha Release Gate**, see

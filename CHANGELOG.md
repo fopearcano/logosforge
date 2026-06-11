@@ -5,6 +5,24 @@ dates are release-readiness milestones, not packaged builds.
 
 ## [0.9.0-alpha] — pre-finalization refactor — 2026-06-11
 
+### FINAL ALPHA RC RE-CERTIFICATION — PASSED (2026-06-11)
+
+The complete Desktop Alpha re-certified end-to-end after the GN refactor,
+multi-language system and scope cleanup — **no blockers; zero production
+or test changes** (clean run at `044f675`, version 0.9.0-alpha, no tags).
+Certified: five modes (incl. GN Act → Page → Scene → Panel with derived
+Manuscript and Series Season → Episode → Act → Chapter → Scene), Dexter's
+Room as the local voice writing room (review-first, explicit Apply, no
+grammar, no cloud/raw-audio), project Writing Language + Dexter language
++ Unicode/CJK/RTL writing and exports, mode lock, isolation, dirty
+close-save, startup scope lock (Pages/Plot hidden, voice off, UI
+English-only, grammar off, ComfyUI stub), clean requirements. Deferred
+items documented and not exposed as complete. Evidence: 1527 + 569 + 359
++ 358 + 254 = **3067 passed, 0 failures**. **Classification: A — ready
+for manual release confirmation** (microphone, macOS fullscreen,
+language/Unicode UI and optional-export manual checks remain; do not tag
+until the manual checklist passes).
+
 ### Graphic Novel post-refactor RE-certification — PASSED (2026-06-11)
 
 Combined gate after the scope cleanup: canonical Act → Page → Scene → Panel
