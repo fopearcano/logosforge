@@ -120,14 +120,18 @@ _FULL_BLOCK = ("Visual:\nA tiny chapel buried under rain.\n"
 # ==========================================================================
 
 
-def test_gn_manuscript_mounts_script_editor():
+def test_gn_manuscript_mounts_shared_editor():
     from storyplanner.ui.main_window import MainWindow
+    from storyplanner.ui.writing_core_view import WritingCoreView
     from storyplanner.ui.graphic_novel_manuscript_view import (
         GraphicNovelManuscriptView)
     db = Database()
     win = MainWindow(db, _gn(db))
     win._show_manuscript()
-    assert isinstance(win.content_area, GraphicNovelManuscriptView)
+    # GN uses the SAME shared Manuscript editor as Screenplay; the legacy
+    # page/panel renderer is no longer routed.
+    assert isinstance(win.content_area, WritingCoreView)
+    assert not isinstance(win.content_area, GraphicNovelManuscriptView)
 
 
 @pytest.mark.parametrize("engine", ["novel", "screenplay", "stage_script",
@@ -504,32 +508,31 @@ def test_outline_panel_double_click_deep_links_to_block():
 
 
 
-def test_main_window_panel_deep_link_focuses_block(monkeypatch):
+def test_main_window_panel_deep_link_focuses_block():
     from storyplanner.ui.main_window import MainWindow
-    from storyplanner.ui.graphic_novel_manuscript_view import (
-        GraphicNovelManuscriptView)
+    from storyplanner.ui.writing_core_view import WritingCoreView
     db = Database()
     pid = _gn(db)
     sid = _scene(db, pid)
     gno.add_page(db, sid); gno.add_panel(db, sid, 0); gno.add_panel(db, sid, 0)
     win = MainWindow(db, pid)
-    calls = []
-    monkeypatch.setattr(GraphicNovelManuscriptView, "select_panel",
-                        lambda self, p, c: calls.append((p, c)))
     win._open_gn_panel_in_manuscript(sid, 0, 1)
-    assert isinstance(win.content_area, GraphicNovelManuscriptView)
-    assert win.content_area._active_scene_id == sid
-    assert calls == [(0, 1)]
+    view = win.content_area
+    assert isinstance(view, WritingCoreView)
+    editor = view._editors[sid]
+    # The shared editor's cursor lands inside PANEL 2 (cursor->panel map).
+    assert gnb.panel_at_offset(editor.toPlainText(),
+                               editor.textCursor().position()) == (0, 1)
 
 
 def test_outline_view_still_mounts_for_plan_section():
     from storyplanner.ui.main_window import MainWindow
-    from storyplanner.ui.graphic_novel_outline_view import (
-        GraphicNovelOutlineView)
+    from storyplanner.ui.plan_view import PlanView
     db = Database()
     win = MainWindow(db, _gn(db))
     win._show_plan()
-    assert isinstance(win.content_area, GraphicNovelOutlineView)
+    assert isinstance(win.content_area, PlanView)   # shared planner, GN schema
+
 
 
 # ==========================================================================
@@ -671,7 +674,8 @@ def test_pages_sidebar_hidden_and_route_inert():
     assert "Pages" not in win.sidebar_buttons
     win._show_gn_pages()
     assert not isinstance(win.content_area, GraphicNovelScenePagesView)
-    assert isinstance(win.content_area, GraphicNovelManuscriptView)
+    from storyplanner.ui.writing_core_view import WritingCoreView
+    assert isinstance(win.content_area, WritingCoreView)   # shared editor
 
 
 def test_mount_creates_no_new_top_level_window():

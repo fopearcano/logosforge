@@ -1006,3 +1006,157 @@ def test_gate_screenplay_outline_and_manuscript_untouched():
         "outline_target_block_card_planner_view"
     win._show_manuscript()
     assert isinstance(win.content_area, WritingCoreView)
+
+
+def test_phase2_shared_editor_routing_and_clean_chrome():
+    """Phase 2: GN mounts the SHARED editor family — WritingCoreView for
+    Manuscript (no page-manager chrome, chapters hidden) and PlanView for
+    Outline (GN schema cards); legacy GN views are not routed."""
+    from storyplanner.ui.main_window import MainWindow
+    from storyplanner.ui.writing_core_view import WritingCoreView
+    from storyplanner.ui.plan_view import PlanView
+    from PySide6.QtWidgets import QFrame
+    db = Database()
+    pid, _a, b = _shared_page_project(db)
+    win = MainWindow(db, pid)
+    win._show_manuscript()
+    assert isinstance(win.content_area, WritingCoreView)
+    texts = [w.text() for w in win.content_area.findChildren(QLabel)]
+    assert not any(t in ("Delete Page", "+ Panel", "Comics Script")
+                   for t in texts)
+    assert not any("Chapter" in t for t in texts)
+    win._show_plan()
+    pv = win.content_area
+    assert isinstance(pv, PlanView)
+    pages = [w.text() for w in pv.findChildren(QLabel)
+             if w.objectName() == "planGnPageLabel"]
+    assert pages == ["Page 1", "Page 2", "Page 3"]
+    scenes = [w.text() for w in pv.findChildren(QLabel)
+              if w.objectName() == "planGnSceneLabel"]
+    assert any("(continued)" in t for t in scenes)
+    assert len([w for w in pv.findChildren(QFrame)
+                if w.objectName() == "planGnPanel"]) == 4
+    # Deep-link: cursor lands in the Panel inside the shared editor.
+    win._open_gn_panel_in_manuscript(b, 1, 0)
+    ed = win.content_area._editors[b]
+    assert gnb.panel_at_offset(ed.toPlainText(),
+                               ed.textCursor().position()) == (1, 0)
+
+
+# ==========================================================================
+# Phase 2 routing pins (2026-06-11): GN mounts the SHARED editor family.
+# ==========================================================================
+
+
+def test_p2_manuscript_route_mounts_shared_editor_not_legacy():
+    from storyplanner.ui.main_window import MainWindow
+    from storyplanner.ui.writing_core_view import WritingCoreView
+    from storyplanner.ui.graphic_novel_manuscript_view import (
+        GraphicNovelManuscriptView)
+    db = Database()
+    pid, _a, _b = _shared_page_project(db)
+    win = MainWindow(db, pid)
+    win._show_manuscript()
+    view = win.content_area
+    assert isinstance(view, WritingCoreView)             # shared family
+    assert not isinstance(view, GraphicNovelManuscriptView)
+    texts = [w.text() for w in view.findChildren(QLabel)]
+    # No page-manager chrome, no legacy markers, no chapters.
+    for banned in ("Comics Script", "Delete Page", "+ Panel", "+ Add Page"):
+        assert banned not in texts, banned
+    assert not any("Chapter" in t for t in texts)
+
+
+def test_p2_outline_route_mounts_shared_planner_with_gn_schema():
+    from PySide6.QtWidgets import QFrame
+    from storyplanner.ui.main_window import MainWindow
+    from storyplanner.ui.plan_view import PlanView
+    from storyplanner.ui.graphic_novel_outline_view import (
+        GraphicNovelOutlineView)
+    db = Database()
+    pid, _a, _b = _shared_page_project(db)
+    win = MainWindow(db, pid)
+    win._show_plan()
+    pv = win.content_area
+    assert isinstance(pv, PlanView)                      # shared family
+    assert not isinstance(pv, GraphicNovelOutlineView)
+    assert pv.objectName() == "outline_target_block_card_planner_view"
+    pages = [w.text() for w in pv.findChildren(QLabel)
+             if w.objectName() == "planGnPageLabel"]
+    assert pages == ["Page 1", "Page 2", "Page 3"]       # GN schema
+    scenes = [w.text() for w in pv.findChildren(QLabel)
+              if w.objectName() == "planGnSceneLabel"]
+    assert any("(continued)" in t for t in scenes)       # span rendering
+    panels = [w for w in pv.findChildren(QFrame)
+              if w.objectName() == "planGnPanel"]
+    assert len(panels) == 4
+    assert not any("Chapter" in w.text() for w in pv.findChildren(QLabel))
+    # No page-form-manager as primary UX: no per-page title/notes inputs,
+    # no starts-on-page spinners in the shared planner.
+    from PySide6.QtWidgets import QLineEdit, QSpinBox
+    assert pv.findChildren(QSpinBox) == []
+    assert not [e for e in pv.findChildren(QLineEdit)
+                if e.objectName().startswith("gnOutline")]
+
+
+def test_p2_shared_planner_gn_add_actions_work():
+    from storyplanner.ui.plan_view import PlanView
+    db = Database()
+    pid = _gn(db)
+    pv = PlanView(db, pid, on_data_changed=lambda: None)
+    assert pv.findChild(QPushButton, "planGnAddAct") is not None  # state A
+    pv._gn_add_act()
+    assert ss.list_acts(db, pid) == ["Act 1"]
+    pv._gn_add_page()
+    sid = ss.list_scenes(db, pid)[0].id
+    assert len(gnb.load_scene_script(db, sid).pages) == 1
+    pv._gn_add_panel()
+    assert gnb.load_scene_script(db, sid).panel_count() == 1
+    pv._gn_add_scene()
+    assert len(ss.list_scenes(db, pid)) == 2
+    bar = [pv.findChild(QPushButton, n) for n in
+           ("planGnAddAct", "planGnAddPage", "planGnAddScene",
+            "planGnAddPanel")]
+    assert all(b is not None for b in bar)               # action bar
+
+
+def test_p2_outline_panel_double_click_places_manuscript_cursor():
+    from storyplanner.ui.main_window import MainWindow
+    from storyplanner.ui.writing_core_view import WritingCoreView
+    db = Database()
+    pid, _a, b = _shared_page_project(db)
+    win = MainWindow(db, pid)
+    win._open_gn_panel_in_manuscript(b, 1, 0)            # PlanView deep-link
+    view = win.content_area
+    assert isinstance(view, WritingCoreView)
+    editor = view._editors[b]
+    assert gnb.panel_at_offset(editor.toPlainText(),
+                               editor.textCursor().position()) == (1, 0)
+
+
+def test_p2_voice_panel_ref_resolves_from_shared_editor_cursor(monkeypatch):
+    from PySide6.QtWidgets import QApplication
+    from storyplanner.ui.main_window import MainWindow
+    db = Database()
+    pid, _a, b = _shared_page_project(db)
+    win = MainWindow(db, pid)
+    win._open_gn_panel_in_manuscript(b, 1, 0)    # opens + positions cursor
+    editor = win.content_area._editors[b]
+    monkeypatch.setattr(QApplication, "focusWidget",
+                        staticmethod(lambda: editor))
+    assert win._gn_panel_ref_at_cursor() == (b, 1, 0)
+    # Outside GN mode the resolver stays silent.
+    np = db.create_project("n", narrative_engine="novel").id
+    win2 = MainWindow(db, np)
+    assert win2._gn_panel_ref_at_cursor() is None
+
+
+def test_p2_cursor_panel_mapping_round_trips():
+    text = ("PAGE 1\n\nPANEL 1\nVisual: a\n\nPANEL 2\nVisual: b\n\n"
+            "PAGE 2\n\nPANEL 1\nVisual: c\n")
+    for (pi, ci) in ((0, 0), (0, 1), (1, 0)):
+        off = gnb.panel_offset(text, pi, ci)
+        assert off is not None
+        assert gnb.panel_at_offset(text, off) == (pi, ci)
+    assert gnb.panel_at_offset(text, 0) is None          # before first panel
+    assert gnb.panel_offset(text, 5, 0) is None          # missing → None

@@ -137,13 +137,17 @@ def test_no_duplicate_panel_body():
 # ==========================================================================
 
 
-def test_outline_mounts_gn_outline_for_graphic_novel():
+def test_outline_mounts_shared_planner_for_graphic_novel():
     from storyplanner.ui.main_window import MainWindow
+    from storyplanner.ui.plan_view import PlanView
     from storyplanner.ui.graphic_novel_outline_view import GraphicNovelOutlineView
     db = Database()
     win = MainWindow(db, _gn(db))
     win._show_plan()
-    assert isinstance(win.content_area, GraphicNovelOutlineView)
+    # The SHARED block/card planner renders the GN schema; the legacy
+    # GraphicNovelOutlineView is no longer routed.
+    assert isinstance(win.content_area, PlanView)
+    assert not isinstance(win.content_area, GraphicNovelOutlineView)
 
 
 @pytest.mark.parametrize("engine", ["novel", "screenplay", "stage_script",

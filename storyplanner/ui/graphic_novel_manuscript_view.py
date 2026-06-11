@@ -1,4 +1,10 @@
-"""Graphic Novel Manuscript — the full block-based writing editor.
+"""LEGACY — NOT ROUTED (kept for compatibility only).
+
+Graphic Novel Manuscript now mounts the SHARED editor family (see
+main_window routing + docs/PORTING_ARCHITECTURE_ALPHA.md); this module is
+no longer reachable from Alpha navigation and must not be ported.
+
+Graphic Novel Manuscript — the full block-based writing editor.
 
 The Graphic Novel writing surface, mounted as the **Manuscript** for Graphic
 Novel projects. It uses the SAME UX paradigm as the other modes' Manuscript:

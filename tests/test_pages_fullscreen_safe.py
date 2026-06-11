@@ -158,7 +158,8 @@ def test_pages_route_lands_on_editor_without_minimizing_main_window():
     win.showMinimized = lambda: calls.__setitem__("min", calls["min"] + 1)  # type: ignore
     win.hide = lambda: calls.__setitem__("hide", calls["hide"] + 1)         # type: ignore
     win._show_gn_pages()                       # -> Manuscript script editor
-    assert isinstance(win.content_area, GraphicNovelManuscriptView)
+    from storyplanner.ui.writing_core_view import WritingCoreView
+    assert isinstance(win.content_area, WritingCoreView)
     assert calls == {"min": 0, "hide": 0}
 
 

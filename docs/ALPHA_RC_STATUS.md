@@ -387,6 +387,22 @@ Series 205, broad sweep **1527**). **No production code changed.
 Classification: A — Final Alpha RC re-certification can resume** (manual
 GN real-UI smoke pass remains).
 
+## Phase 2 — GN shared-editor routing (2026-06-11): PASSED
+
+GN Manuscript route → shared `WritingCoreView` (full text/block editor; GN
+grammar; chapters hidden); GN Outline route → shared `PlanView` GN schema
+(Act → Page → Scene → Panel cards, continued spans, add actions, panel
+deep-link to the Manuscript cursor); legacy `GraphicNovel*View` labelled
+LEGACY — NOT ROUTED and unreachable; Dexter's Panel targeting now resolves
+from the shared editor's cursor (`panel_at_offset`); Pages stays inert;
+Screenplay/Novel/Stage/Series byte-identical paths. Evidence: GN +
+shared-editor + pages + voice-gate suites **501**, GN phase suites **270**,
+voice batch **183**, gates/isolation/lock/language **319**, broad
+certification sweep re-run green after flipping two stale mount pins.
+(The one observed combined-run crash reproduced only in an oversized
+18-file batch — the documented Qt teardown flake; both halves pass alone.)
+**Classification: A.**
+
 ## Last audit summary
 
 The final global multi-mode integrity audit (the **Alpha Release Gate**, see

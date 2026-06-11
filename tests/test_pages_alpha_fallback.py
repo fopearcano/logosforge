@@ -95,14 +95,15 @@ def test_pages_route_does_not_mount_old_standalone_widget():
 def test_pages_route_redirects_gn_to_embedded_navigator():
     from storyplanner.ui.main_window import MainWindow
     from storyplanner.ui.graphic_novel_manuscript_view import (
-        GraphicNovelManuscriptView)
+        GraphicNovelManuscriptView)  # noqa: F401 (legacy, not routed)
     db = Database()
     pid = _gn(db)
     _scene(db, pid)
     win = MainWindow(db, pid)
     win._show_gn_pages()
     # Routes to the Manuscript, which is the GN comics script editor.
-    assert isinstance(win.content_area, GraphicNovelManuscriptView)
+    from storyplanner.ui.writing_core_view import WritingCoreView
+    assert isinstance(win.content_area, WritingCoreView)
 
 
 # ==========================================================================
@@ -154,20 +155,19 @@ def test_pages_content_is_embedded_in_central_dock():
 # ==========================================================================
 
 
-def test_manuscript_hosts_embedded_page_panel_navigator():
+def test_manuscript_hosts_shared_editor_for_gn():
+    """The GN Manuscript route hosts the SHARED full editor (the embedded
+    page/panel navigator was replaced by schema-driven shared components)."""
     from storyplanner.ui.main_window import MainWindow
-    from storyplanner.ui.graphic_novel_manuscript_view import (
-        GraphicNovelManuscriptView)
+    from storyplanner.ui.writing_core_view import WritingCoreView
     db = Database()
     pid = _gn(db)
     _scene(db, pid)
     win = MainWindow(db, pid)
     win._show_manuscript()
     view = win.content_area
-    # In Graphic Novel mode the Manuscript is the comics script editor.
-    assert isinstance(view, GraphicNovelManuscriptView)
-    # Add Page / Add Panel are available in the navigator.
-    assert hasattr(view, "_add_page") and hasattr(view, "_add_panel")
+    assert isinstance(view, WritingCoreView)
+    assert view.window() is win                   # embedded, fullscreen-safe
 
 
 def test_page_panel_editing_round_trips_through_shared_body():

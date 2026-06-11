@@ -368,6 +368,24 @@ class _SceneCard(QFrame):
             event.acceptProposedAction()
 
 
+class _GnPanelBlock(QFrame):
+    """Graphic Novel schema leaf block: double-click opens the Panel's
+    position in the shared Manuscript editor."""
+
+    def __init__(self, view: "PlanView", sid: int, local_idx: int,
+                 ci: int) -> None:
+        super().__init__()
+        self._view = view
+        self._ref = (sid, local_idx, ci)
+        self.setObjectName("planGnPanel")
+        self.setStyleSheet(
+            f"QFrame#planGnPanel {{ border: 1px solid {theme.BORDER};"
+            f" border-radius: 6px; background: rgba(255,255,255,0.02); }}")
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
+        self._view._gn_open_panel(*self._ref)
+
+
 class _ChapterColumn(QFrame):
     """Compact, draggable Chapter column. Drop a Scene to move it here; drag
     the column onto another column/Act to move/reorder the chapter."""
@@ -479,6 +497,7 @@ class PlanView(QWidget):
         on_open_scene: Callable[[int], None] | None = None,
         on_logos_action: Callable[[dict, str], None] | None = None,
         on_open_in_manuscript: Callable[[int], None] | None = None,
+        on_open_gn_panel: Callable[[int, int, int], None] | None = None,
     ) -> None:
         super().__init__()
         # Diagnostic marker: confirms the running app uses the block/card
@@ -493,6 +512,9 @@ class PlanView(QWidget):
         # Double-click / "Open in Manuscript" → open the unit in the Manuscript
         # writing surface (falls back to on_open_scene if not provided).
         self._on_open_in_manuscript = on_open_in_manuscript
+        # Graphic Novel schema deep-link: open a Panel's position in the
+        # shared Manuscript editor (scene_id, local_page_idx, panel_idx).
+        self._on_open_gn_panel = on_open_gn_panel
         # Structural numbers, recomputed each refresh (Act 1 · Chapter 1.2 · …).
         self._numbers: dict = {"acts": {}, "chapters": {}, "scenes": {}}
         # Optional inline-Logos hook: (node_descriptor, action_name) -> None.
@@ -684,6 +706,12 @@ class PlanView(QWidget):
             if w:
                 w.deleteLater()
 
+        if (self._engine or "") == "graphic_novel":
+            # Graphic Novel mode schema: the SAME shared block/card planner
+            # renders Act -> Page -> Scene -> Panel (chapters hidden).
+            self._build_gn_outline()
+            return
+
         tree = build_plan_tree(self._db, self._project_id)
         act_summaries = _act_summaries(self._db, self._project_id)
         chapter_summaries = _chapter_summaries(self._db, self._project_id)
@@ -762,6 +790,197 @@ class PlanView(QWidget):
             f" border-radius: 3px; padding: 1px 5px; background: transparent;"
         )
         return badge
+
+    # -- Graphic Novel schema (Act -> Page -> Scene -> Panel) -----------------
+
+    _GN_BADGES = {"PAGE": theme.TEXT_PRIMARY, "PANEL": theme.TEXT_MUTED}
+
+    def _gn_badge(self, kind: str) -> QLabel:
+        badge = QLabel(kind)
+        badge.setObjectName("planTypeBadge")
+        color = self._GN_BADGES.get(kind, theme.TEXT_MUTED)
+        badge.setStyleSheet(
+            f"color: {color}; font-size: 9px; font-weight: bold;"
+            f" border: 1px solid {theme.BORDER};"
+            f" border-radius: 3px; padding: 1px 5px; background: transparent;"
+        )
+        return badge
+
+    def _build_gn_outline(self) -> None:
+        """Render the Graphic Novel schema through the shared planner:
+        Act cards containing Page blocks, Scene groups ("continued" when a
+        scene spans pages) and Panel blocks — same data as the Manuscript
+        (scene bodies + act-wide coordinates from graphic_novel_structure);
+        double-click opens the block in the shared Manuscript editor."""
+        from storyplanner import graphic_novel_structure as gns
+        view = gns.act_view(self._db, self._project_id)
+        if not view:
+            empty = QLabel("Create an Act to begin your Graphic Novel.")
+            empty.setObjectName("planGnEmpty")
+            empty.setStyleSheet(f"color: {theme.TEXT_MUTED}; padding: 24px;")
+            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._content_layout.addWidget(empty)
+            btn = QPushButton("+ Act")
+            btn.setObjectName("planGnAddAct")
+            btn.clicked.connect(self._gn_add_act)
+            self._content_layout.addWidget(btn)
+            self._content_layout.addStretch()
+            return
+        bar = QHBoxLayout()
+        for label, slot, name in (
+            ("+ Act", self._gn_add_act, "planGnAddAct"),
+            ("+ Page", self._gn_add_page, "planGnAddPage"),
+            ("+ Scene", self._gn_add_scene, "planGnAddScene"),
+            ("+ Panel", self._gn_add_panel, "planGnAddPanel"),
+        ):
+            b = QPushButton(label)
+            b.setObjectName(name)
+            b.clicked.connect(slot)
+            bar.addWidget(b)
+        bar.addStretch()
+        holder = QWidget()
+        holder.setLayout(bar)
+        self._content_layout.addWidget(holder)
+        for idx, (act_name, pages, placements) in enumerate(view, start=1):
+            self._content_layout.addWidget(
+                self._build_gn_act_section(idx, act_name, pages, placements))
+        self._content_layout.addStretch()
+
+    def _build_gn_act_section(self, idx, act_name, pages,
+                              placements) -> QFrame:
+        section = QFrame()
+        section.setObjectName("planAct")            # shared act-card chrome
+        section.setStyleSheet(
+            f"QFrame#planAct {{ background: {theme.BG_PANEL}; "
+            f"border: 1px solid {theme.BORDER}; border-radius: 10px; }}")
+        v = QVBoxLayout(section)
+        v.setContentsMargins(12, 10, 12, 10)
+        v.setSpacing(6)
+        head = QHBoxLayout()
+        head.addWidget(self._type_badge("ACT"))
+        title = QLabel(act_name or f"Act {idx}")
+        title.setObjectName("planGnActTitle")
+        title.setStyleSheet(
+            f"font-size: 14px; font-weight: bold;"
+            f" color: {theme.TEXT_PRIMARY};")
+        head.addWidget(title)
+        head.addStretch()
+        v.addLayout(head)
+        for page_no, slices in pages:
+            v.addWidget(self._build_gn_page_block(page_no, slices))
+        for placement in placements:
+            if placement.page_count == 0:
+                row = QHBoxLayout()
+                row.addWidget(self._gn_badge("SCENE"))
+                lbl = QLabel(f"{(placement.scene.title or 'Untitled')} "
+                             f"(no pages yet)")
+                lbl.setObjectName("planGnSceneLabel")
+                row.addWidget(lbl)
+                row.addStretch()
+                holder = QWidget()
+                holder.setLayout(row)
+                v.addWidget(holder)
+        return section
+
+    def _build_gn_page_block(self, page_no, slices) -> QFrame:
+        block = QFrame()
+        block.setObjectName("planGnPage")
+        block.setStyleSheet(
+            f"QFrame#planGnPage {{ border: 1px solid {theme.BORDER};"
+            f" border-radius: 8px; background: rgba(255,255,255,0.03); }}")
+        v = QVBoxLayout(block)
+        v.setContentsMargins(10, 6, 10, 6)
+        v.setSpacing(4)
+        head = QHBoxLayout()
+        head.addWidget(self._gn_badge("PAGE"))
+        lbl = QLabel(f"Page {page_no}")
+        lbl.setObjectName("planGnPageLabel")
+        lbl.setStyleSheet("font-weight: bold;")
+        head.addWidget(lbl)
+        head.addStretch()
+        v.addLayout(head)
+        for sl in slices:
+            row = QHBoxLayout()
+            row.addWidget(self._gn_badge("SCENE"))
+            marker = " (continued)" if sl.continued else ""
+            s_lbl = QLabel(
+                f"{(sl.placement.scene.title or 'Untitled')}{marker}")
+            s_lbl.setObjectName("planGnSceneLabel")
+            s_lbl.setStyleSheet("font-weight: bold; font-size: 12px;")
+            row.addWidget(s_lbl)
+            row.addStretch()
+            holder = QWidget()
+            holder.setLayout(row)
+            v.addWidget(holder)
+            for ci, panel in enumerate(sl.page.panels):
+                v.addWidget(self._build_gn_panel_block(
+                    sl.placement.scene.id, sl.local_idx, ci, panel))
+        return block
+
+    def _build_gn_panel_block(self, sid, local_idx, ci, panel) -> QFrame:
+        from storyplanner import graphic_novel_outline as gno
+        card = _GnPanelBlock(self, sid, local_idx, ci)
+        row = QHBoxLayout(card)
+        row.setContentsMargins(8, 3, 8, 3)
+        row.addWidget(self._gn_badge("PANEL"))
+        lbl = QLabel(f"{panel.number} · {gno.panel_snippet(panel)}")
+        lbl.setObjectName("planGnPanelSnippet")
+        lbl.setStyleSheet("font-size: 11px;")
+        row.addWidget(lbl, stretch=1)
+        return card
+
+    def _gn_open_panel(self, sid, local_idx, ci) -> None:
+        if self._on_open_gn_panel is not None:
+            self._on_open_gn_panel(sid, local_idx, ci)
+        else:
+            self._open_in_manuscript(sid)
+
+    def _gn_last_scene_id(self):
+        from storyplanner import graphic_novel_structure as gns
+        acts = gns.acts_with_scenes(self._db, self._project_id)
+        for _act, scenes in reversed(acts):
+            if scenes:
+                return scenes[-1].id
+        return None
+
+    def _gn_add_act(self) -> None:
+        from storyplanner import story_structure as ss
+        ss.create_act(self._db, self._project_id)
+        self._gn_notify_changed()
+
+    def _gn_add_scene(self) -> None:
+        from storyplanner import graphic_novel_structure as gns
+        from storyplanner import story_structure as ss
+        acts = [a for a, _s in gns.acts_with_scenes(self._db,
+                                                    self._project_id)]
+        ss.create_scene(self._db, self._project_id,
+                        act=acts[-1] if acts else None,
+                        title="Untitled Scene")
+        self._gn_notify_changed()
+
+    def _gn_add_page(self) -> None:
+        from storyplanner import graphic_novel_outline as gno
+        sid = self._gn_last_scene_id()
+        if sid is None:
+            self._gn_add_act()
+            sid = self._gn_last_scene_id()
+            if sid is None:
+                return
+        gno.add_page(self._db, sid)
+        self._gn_notify_changed()
+
+    def _gn_add_panel(self) -> None:
+        from storyplanner import graphic_novel_outline as gno
+        sid = self._gn_last_scene_id()
+        if sid is None:
+            return
+        gno.add_panel(self._db, sid, None)
+        self._gn_notify_changed()
+
+    def _gn_notify_changed(self) -> None:
+        self.refresh()
+        if self._on_data_changed:
+            self._on_data_changed()
 
     # -- Act section ----------------------------------------------------------
 

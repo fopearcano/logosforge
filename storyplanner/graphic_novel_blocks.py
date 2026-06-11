@@ -381,6 +381,59 @@ def delete_page(script: GraphicNovelScript, index: int) -> None:
 
 
 # ===========================================================================
+# Cursor <-> panel mapping (shared editor + Dexter panel targeting)
+# ===========================================================================
+
+
+def panel_at_offset(text: str, pos: int) -> tuple[int, int] | None:
+    """(page_idx, panel_idx) of the panel containing character *pos* in a GN
+    scene body — None before the first PANEL line. Lets the SHARED text
+    editor (and the Voice Commit Router) resolve "the selected Panel" from
+    the cursor position alone."""
+    raw = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    pos = max(0, min(pos, len(raw)))
+    page_idx, panel_idx = -1, -1
+    offset = 0
+    current: tuple[int, int] | None = None
+    for line in raw.split("\n"):
+        end = offset + len(line)
+        if offset > pos:
+            break
+        if _PAGE_RE.match(line):
+            page_idx += 1
+            panel_idx = -1
+        elif _PANEL_RE.match(line):
+            if page_idx < 0:
+                page_idx = 0
+            panel_idx += 1
+            current = None              # set below once pos check passes
+        if pos >= offset and (panel_idx >= 0):
+            current = (max(page_idx, 0), panel_idx)
+        offset = end + 1
+    return current
+
+
+def panel_offset(text: str, page_idx: int, panel_idx: int) -> int | None:
+    """Character offset of the line FOLLOWING the requested PANEL heading
+    (i.e. where its script content starts) — None if it does not exist."""
+    raw = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    pi, ci = -1, -1
+    offset = 0
+    for line in raw.split("\n"):
+        if _PAGE_RE.match(line):
+            pi += 1
+            ci = -1
+        elif _PANEL_RE.match(line):
+            if pi < 0:
+                pi = 0
+            ci += 1
+            if pi == page_idx and ci == panel_idx:
+                return offset + len(line) + 1
+        offset += len(line) + 1
+    return None
+
+
+# ===========================================================================
 # Scene-body DB adapter (the Scene body IS the storage — no schema change)
 # ===========================================================================
 

@@ -1,4 +1,10 @@
-"""Graphic Novel Outline — block/card planner (Act → Page → Scene → Panel).
+"""LEGACY — NOT ROUTED (kept for compatibility only).
+
+Graphic Novel Outline now mounts the SHARED editor family (see
+main_window routing + docs/PORTING_ARCHITECTURE_ALPHA.md); this module is
+no longer reachable from Alpha navigation and must not be ported.
+
+Graphic Novel Outline — block/card planner (Act → Page → Scene → Panel).
 
 Mounted as the **Outline** for Graphic Novel projects. Uses the same
 block-card UX paradigm as the shared Outline planner (full-width dark

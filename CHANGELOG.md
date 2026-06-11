@@ -5,6 +5,24 @@ dates are release-readiness milestones, not packaged builds.
 
 ## [0.9.0-alpha] — pre-finalization refactor — 2026-06-11
 
+### Phase 2 — GN routes through SHARED editors (legacy renderers bypassed) (2026-06-11)
+
+Graphic Novel Manuscript now mounts the **shared `WritingCoreView`** (same
+family as Screenplay; GN block grammar already registered; chapter headers
+hidden in GN) and Graphic Novel Outline mounts the **shared `PlanView`**
+with a built-in GN mode schema (Act → Page → Scene → Panel cards,
+`(continued)` spans, add-action bar, Panel double-click → Manuscript
+cursor). New `graphic_novel_blocks.panel_at_offset/panel_offset` map the
+editor cursor to (page, panel) — Outline deep-links and **Dexter's
+"selected Panel"** now resolve from the shared editor's cursor (no widget
+coupling; voice GN targets unchanged in behavior). The legacy
+`GraphicNovel*View` modules are labelled **LEGACY — NOT ROUTED** and are
+unreachable from navigation; standalone Pages stays inert (its route now
+shows the shared editor). No data changes; same storage, mirroring and
+exports. Tests: routing/marker pins flipped to the shared classes + 6 new
+Phase-2 pins (mount families, no page-manager chrome, GN schema cards,
+cursor deep-link, voice cursor resolver, cursor mapping round-trip).
+
 ### GN block-UX post-fix gate — PASSED (2026-06-11)
 
 Audit-only: old-UI leak scan clean (no "Comics Script"/tree/dropdown in

@@ -314,10 +314,13 @@ def test_ui_routing_mounts_correct_views(tmp_path):
     _scene(db, pid, "S", "PAGE 1\n\nPANEL 1\nVisual: In the room, x.")
     win = MainWindow(db, pid)
 
-    # Alpha: GN Manuscript is the inline comics script editor (standalone Pages
-    # section disabled for fullscreen safety).
+    # GN Manuscript now mounts the SHARED editor family (the legacy
+    # GraphicNovelManuscriptView is no longer routed); standalone Pages
+    # stays disabled for fullscreen safety.
+    from storyplanner.ui.writing_core_view import WritingCoreView
     win._show_manuscript()
-    assert isinstance(win.content_area, GraphicNovelManuscriptView)
+    assert isinstance(win.content_area, WritingCoreView)
+    assert not isinstance(win.content_area, GraphicNovelManuscriptView)
 
     win._show_timeline()
     assert isinstance(win.content_area, PlotTimelineView)

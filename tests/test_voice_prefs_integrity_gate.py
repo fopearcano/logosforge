@@ -176,25 +176,32 @@ def test_commit_into_writing_core_scene_editor():
 
 
 def test_commit_into_graphic_novel_field_keeps_field_working():
-    # GN comics editor: insert into the focused panel field; the field's
-    # commit-on-focus-out persistence must still work afterwards (the rule:
-    # voice insertion must not break focused fields).
+    # GN now uses the SHARED Manuscript editor: voice inserts at the cursor
+    # inside the focused scene editor; the panel position resolves from the
+    # cursor (gnb.panel_at_offset) and the body still persists afterwards.
     _enable_voice()
     db, pid, win = _main_window("graphic_novel")
+    from storyplanner import graphic_novel_outline as gno
     sid = ss.create_scene(db, pid, act="Act 1", chapter="Chapter 1",
                           title="S").id
+    gno.add_page(db, sid)
+    gno.add_panel(db, sid, 0)
     win._show_manuscript()
+    from storyplanner.ui.writing_core_view import WritingCoreView
     view = win.content_area
-    view.select_scene(sid)
-    view._add_page(sid); view._add_panel(sid)
-    field = view._field_editors[("panel", sid, 0, 0)]    # panel script block
-    win._voice_commit.note_focus(field)
+    assert isinstance(view, WritingCoreView)             # shared editor
+    editor = view._editors[sid]
+    from storyplanner import graphic_novel_blocks as gnb
+    offset = gnb.panel_offset(editor.toPlainText(), 0, 0)
+    cursor = editor.textCursor()
+    cursor.setPosition(offset)
+    editor.setTextCursor(cursor)
+    win._voice_commit.note_focus(editor)
     panel = win._voice_panel
     panel._preview.setPlainText("a windswept rooftop")
     assert panel.commit() is True
-    assert "a windswept rooftop" in field.toPlainText()  # inserted in place
-    field.committed.emit()                               # block still commits
-    from storyplanner import graphic_novel_blocks as gnb
+    assert "a windswept rooftop" in editor.toPlainText() # inserted in place
+    view._save_scene(sid)                                # editor persists
     body = gnb.load_scene_script(db, sid)
     assert "a windswept rooftop" in body.pages[0].panels[0].visual_description
 

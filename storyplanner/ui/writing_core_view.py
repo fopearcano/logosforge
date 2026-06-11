@@ -1895,13 +1895,29 @@ class WritingCoreView(QWidget):
                 self._add_act_header(act)
             if chapter and chapter != current_chapter:
                 current_chapter = chapter
-                self._add_chapter_header(chapter)
+                # Graphic Novel hides chapters (compat labels only) — the
+                # canonical GN hierarchy is Act -> Page -> Scene -> Panel.
+                if (self._engine_name() or "") != "graphic_novel":
+                    self._add_chapter_header(chapter)
             self._add_scene_block(scene, is_first=first_scene)
             first_scene = False
         if scenes:
             self._add_end_action(scenes[-1].id)
         else:
             self._add_empty_state()
+
+    def _engine_name(self) -> str:
+        cached = getattr(self, "_engine_name_cache", None)
+        if cached is None:
+            try:
+                from storyplanner.project_compat import (
+                    get_project_narrative_engine)
+                project = self._db.get_project_by_id(self._project_id)
+                cached = get_project_narrative_engine(project) or "novel"
+            except Exception:
+                cached = "novel"
+            self._engine_name_cache = cached
+        return cached
 
     def _clear_canvas(self) -> None:
         self._format_toolbar.untrack_all()
@@ -1955,7 +1971,10 @@ class WritingCoreView(QWidget):
                     f"Act {an} · {act_name}" if an else act_name, a_key)
             for ch_name, ch_scenes in chapters:
                 c_key = chapter_key(ch_name)
-                if ch_name != UNASSIGNED_CHAPTER:
+                # Graphic Novel hides chapters (compat labels only): the GN
+                # schema is Act -> Page -> Scene -> Panel.
+                if (ch_name != UNASSIGNED_CHAPTER
+                        and self._engine_name() != "graphic_novel"):
                     cn = numbers["chapters"].get((act_name, ch_name), "")
                     self._add_page_chapter_header(
                         f"Chapter {cn} · {ch_name}" if cn else ch_name, ch_name)

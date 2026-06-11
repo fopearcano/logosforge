@@ -21,28 +21,25 @@ Writing-mode behavior is **schema-driven** over shared editor components:
 | Stage Script  | Act → Chapter → Scene / stage blocks                |
 | Series        | Season → Episode → Act → Chapter → Scene            |
 
-## Current Python Alpha state (audit 2026-06-11, commit `e7cfd00`)
+## Current Python Alpha state (Phase 2 complete, 2026-06-11)
 
-* The genuinely shared components are `WritingCoreView` (Manuscript for
-  Novel/Screenplay/Stage/Series — one text/block editor whose block grammar
-  comes from `writing_formats`; a `GRAPHIC_NOVEL` grammar **already exists**
-  and is registered) and `PlanView` (Outline block/card planner —
-  `_ActSection`/`_ChapterColumn`/`_SceneCard`).
-* Graphic Novel mode still routes to **mode-specific classes**
-  (`GraphicNovelManuscriptView`, `GraphicNovelOutlineView`). The 2026-06-11
-  bugfix aligned their *visuals* with the shared paradigm (full-document
-  flow, block cards, shared theme) but they remain a **separate component
-  family** — the Manuscript still renders PAGE containers with per-page
-  "+ Panel"/"Delete Page" management controls as primary UI.
-* Data model is canonical and correct: `graphic_novel_structure` computes
-  Act → Page → Scene → Panel (act-wide page coordinates, scene spans,
-  shared pages) over scene-local bodies; Outline/Manuscript/exports share
-  one storage; save/reload, isolation and Unicode are certified.
-
-**Conclusion: the remaining problem is component routing/family, not data
-and not styling.** The next Python phase routes Graphic Novel through the
-shared families with a schema adapter (see `docs/ALPHA_RC_STATUS.md` audit
-entry for the file-level plan).
+* **Routing is now schema-driven through the shared families.** Graphic
+  Novel Manuscript mounts the SHARED `WritingCoreView` (the same editor as
+  Screenplay; the registered `writing_formats.GRAPHIC_NOVEL` block grammar
+  styles `PAGE n` / `PANEL n` / field lines; chapter headers are hidden in
+  GN mode). Graphic Novel Outline mounts the SHARED `PlanView`, which
+  renders the GN mode schema itself (Act cards → Page blocks → Scene
+  groups with `(continued)` → Panel blocks; `+ Act/+ Page/+ Scene/+ Panel`
+  action bar; Panel double-click deep-links to the Manuscript cursor).
+* The cursor↔panel mapping (`graphic_novel_blocks.panel_at_offset` /
+  `panel_offset`) gives Outline deep-links and Dexter's "selected Panel"
+  resolution on the shared editor (no widget coupling).
+* The legacy `GraphicNovelManuscriptView` / `GraphicNovelOutlineView`
+  modules are **LEGACY — NOT ROUTED** (labelled; unreachable from Alpha
+  navigation; kept only until safe deletion) — never port them.
+* Data model unchanged and certified: `graphic_novel_structure` computes
+  Act → Page → Scene → Panel over scene-local bodies (one storage for
+  Outline/Manuscript/exports).
 
 ## Hard rules for every port and release
 

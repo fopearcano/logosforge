@@ -90,8 +90,11 @@ def test_universal_manuscript_reused_no_separate_gn_section(tmp_path):
     ss.create_scene(db, pid, act="Act I", chapter="Ch1", title="S", content=_BODY)
     win = MainWindow(db, pid)
     win.sidebar_buttons["Manuscript"].click()
-    # The single Manuscript section hosts the GN comics script editor.
-    assert isinstance(win.content_area, GraphicNovelManuscriptView)
+    # The single Manuscript section hosts the SHARED editor (the legacy
+    # GN-specific renderer is no longer routed).
+    from storyplanner.ui.writing_core_view import WritingCoreView
+    assert isinstance(win.content_area, WritingCoreView)
+    assert not isinstance(win.content_area, GraphicNovelManuscriptView)
     assert "Manuscript" in win._nav_labels
     assert not any("graphic" in lbl.lower() and "manuscript" in lbl.lower()
                    for lbl in win._nav_labels)

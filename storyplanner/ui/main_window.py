@@ -927,17 +927,19 @@ class MainWindow(QMainWindow):
         # standalone Pages section is disabled for Alpha). It manages Pages/Panels
         # over the same shared Scene.content body the Manuscript uses, so the two
         # mirror each other. Embedded child widget — fullscreen-safe.
+        # Graphic Novel uses the SAME shared block/card planner — PlanView
+        # renders the GN mode schema (Act -> Page -> Scene -> Panel) itself;
+        # the legacy GraphicNovelOutlineView is no longer routed.
         if self._project_is_graphic_novel():
-            from storyplanner.ui.graphic_novel_outline_view import (
-                GraphicNovelOutlineView,
-            )
             self._set_content(
-                GraphicNovelOutlineView(
+                PlanView(
                     self._db,
                     self._project_id,
                     on_data_changed=self._on_data_changed,
-                    on_open_manuscript=self._open_unit_in_manuscript,
-                    on_open_panel=self._open_gn_panel_in_manuscript,
+                    on_open_scene=self._open_scene_in_editor,
+                    on_logos_action=self._run_logos_outline,
+                    on_open_in_manuscript=self._open_unit_in_manuscript,
+                    on_open_gn_panel=self._open_gn_panel_in_manuscript,
                 )
             )
             return
@@ -963,47 +965,39 @@ class MainWindow(QMainWindow):
         self._show_manuscript()
         view = self.content_area
         from storyplanner.ui.writing_core_view import WritingCoreView
-        from storyplanner.ui.graphic_novel_manuscript_view import (
-            GraphicNovelManuscriptView,
-        )
         if isinstance(view, WritingCoreView):
             view.scroll_to_scene(scene_id)
-        elif isinstance(view, GraphicNovelManuscriptView):
-            # GN Manuscript is the comics script editor — show this scene's script.
-            view.select_scene(scene_id)
         self._assistant_panel.set_active_scene(scene_id)
 
     def _open_gn_panel_in_manuscript(self, scene_id: int, page_idx: int,
                                      panel_idx: int) -> None:
-        """Outline deep-link: focus a Panel's script block in the Manuscript."""
+        """Outline deep-link: place the shared editor's cursor at the
+        Panel's position in the scene body (Act -> Page -> Scene -> Panel
+        schema over the one shared Manuscript editor)."""
         self._open_unit_in_manuscript(scene_id)
         view = self.content_area
-        from storyplanner.ui.graphic_novel_manuscript_view import (
-            GraphicNovelManuscriptView,
-        )
-        if isinstance(view, GraphicNovelManuscriptView):
-            view.select_panel(page_idx, panel_idx)
+        from storyplanner.ui.writing_core_view import WritingCoreView
+        if not isinstance(view, WritingCoreView):
+            return
+        editor = view._editors.get(scene_id)
+        if editor is None:
+            return
+        from storyplanner import graphic_novel_blocks as gnb
+        offset = gnb.panel_offset(editor.toPlainText(), page_idx, panel_idx)
+        if offset is None:
+            return
+        cursor = editor.textCursor()
+        cursor.setPosition(min(offset, len(editor.toPlainText())))
+        editor.setTextCursor(cursor)
+        editor.setFocus()
 
     def _show_manuscript(self) -> None:
-        # Graphic Novel: the Manuscript is the comics SCRIPT editor — the scene's
-        # whole script inline as PAGE blocks -> Panel cards (Visual/Caption/
-        # Dialogue/SFX/Notes editable in place) over the shared Scene.content
-        # body; structure stays in the GN Outline. The standalone left-panel
-        # Pages route is disabled for Alpha (it was fullscreen-hostile); this
-        # editor is a single child widget mounted via the standard _set_content
-        # path — no separate Pages route, no top-level window — fullscreen-safe.
-        if self._project_is_graphic_novel():
-            from storyplanner.ui.graphic_novel_manuscript_view import (
-                GraphicNovelManuscriptView,
-            )
-            self._set_content(
-                GraphicNovelManuscriptView(
-                    self._db,
-                    self._project_id,
-                    on_data_changed=self._on_data_changed,
-                )
-            )
-            return
+        # Graphic Novel uses the SAME shared Manuscript editor as every
+        # other mode (WritingCoreView; the GRAPHIC_NOVEL block grammar in
+        # writing_formats styles PAGE/PANEL/field lines, chapters hidden) —
+        # a full text/block editor, not a page manager. The legacy
+        # GraphicNovelManuscriptView is no longer routed; the standalone
+        # Pages route stays disabled (fullscreen-hostile).
         # Manuscript is a focused writing surface: a compact selectable structure
         # list on the left, and the editor on the right opens ONLY the selected
         # writing unit (no inline whole-project structure). Storage is unchanged
@@ -2951,17 +2945,34 @@ class MainWindow(QMainWindow):
         if win is not None:
             win.toggle()
 
+    def _gn_panel_ref_at_cursor(self):
+        """Dexter's "selected Panel" on the SHARED editor: resolve
+        (scene_id, page_idx, panel_idx) from the focused scene editor's
+        cursor position in the GN body grammar — None outside GN mode or
+        outside a panel."""
+        if not self._project_is_graphic_novel():
+            return None
+        from storyplanner.ui.writing_core_view import WritingCoreView
+        view = self.content_area
+        if not isinstance(view, WritingCoreView):
+            return None
+        from PySide6.QtWidgets import QApplication
+        focus = QApplication.focusWidget()
+        for sid, editor in getattr(view, "_editors", {}).items():
+            if editor is focus or (focus is not None
+                                   and editor.isAncestorOf(focus)):
+                from storyplanner import graphic_novel_blocks as gnb
+                loc = gnb.panel_at_offset(editor.toPlainText(),
+                                          editor.textCursor().position())
+                return (sid, loc[0], loc[1]) if loc else None
+        return None
+
     def _voice_commit_context(self):
         """Live context for the Voice Commit Router (read-only snapshot)."""
         from storyplanner.voice.commit_router import VoiceCommitContext
         from storyplanner.writing_modes import get_project_writing_mode_by_id
-        gn_ref = None
+        gn_ref = self._gn_panel_ref_at_cursor()
         view = self.content_area
-        from storyplanner.ui.graphic_novel_manuscript_view import (
-            GraphicNovelManuscriptView,
-        )
-        if isinstance(view, GraphicNovelManuscriptView):
-            gn_ref = view.current_panel_ref()
         return VoiceCommitContext(
             db=self._db,
             project_id=self._project_id,
