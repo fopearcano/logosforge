@@ -948,3 +948,61 @@ def test_recert_voice_commit_routes_unicode_into_panel_field():
     panel = gnb.load_scene_script(db, sid).pages[0].panels[0]
     assert spoken in panel.dialogue
     assert _GATE_STRINGS["ja"] in panel.dialogue       # appended, not replaced
+
+
+# ==========================================================================
+# Block-UX post-fix gate pins (2026-06-11): old UI gone, shared paradigm in.
+# ==========================================================================
+
+
+def test_gate_old_gn_ui_markers_are_gone():
+    """The old 'Comics Script' single-scene renderer and the tree-only
+    Outline are unreachable: their markers no longer exist in the GN view
+    sources (no user-facing 'Comics Script', no scene dropdown, no tree)."""
+    for path in ("storyplanner/ui/graphic_novel_manuscript_view.py",
+                 "storyplanner/ui/graphic_novel_outline_view.py"):
+        src = open(path).read()
+        assert "Comics Script" not in src, path
+        assert "QTreeWidget" not in src, path
+    ms = open("storyplanner/ui/graphic_novel_manuscript_view.py").read()
+    assert "QComboBox" not in ms                   # no scene dropdown
+    db = Database()
+    pid, _a, _b = _shared_page_project(db)
+    m = _manuscript(db, pid)
+    assert not any("Comics Script" in w.text()
+                   for w in m.findChildren(QLabel))
+    assert m.findChild(QLabel, "gnModeLabel").text() == "Graphic Novel"
+    assert "words" in m._word_count_label.text()   # shared toolbar vocabulary
+
+
+def test_gate_unicode_entered_in_block_reaches_outline_snippet():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid, "一")
+    _pages(db, sid, 1)
+    m = _manuscript(db, pid)
+    text = "Visual:\nこれはテストシーンです。🐕 Zampanò, città"
+    ed = m._field_editors[("panel", sid, 0, 0)]
+    ed.setPlainText(text)
+    m._commit_panel_script(sid, 0, 0, text)
+    assert "これはテストシーンです。🐕" in db.get_scene_by_id(sid).content
+    v = _outline(db, pid)
+    snippets = [w.text() for w in v.findChildren(QLabel)
+                if w.objectName() == "gnOutlinePanelSnippet"]
+    assert any("これはテストシーン" in t for t in snippets)
+
+
+def test_gate_screenplay_outline_and_manuscript_untouched():
+    from storyplanner.ui.main_window import MainWindow
+    from storyplanner.ui.plan_view import PlanView
+    from storyplanner.ui.writing_core_view import WritingCoreView
+    db = Database()
+    pid = db.create_project("sp", narrative_engine="screenplay",
+                            default_writing_format="screenplay").id
+    win = MainWindow(db, pid)
+    win._show_plan()
+    assert isinstance(win.content_area, PlanView)
+    assert win.content_area.objectName() == \
+        "outline_target_block_card_planner_view"
+    win._show_manuscript()
+    assert isinstance(win.content_area, WritingCoreView)

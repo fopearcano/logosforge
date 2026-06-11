@@ -5,6 +5,14 @@ dates are release-readiness milestones, not packaged builds.
 
 ## [0.9.0-alpha] — pre-finalization refactor — 2026-06-11
 
+### GN block-UX post-fix gate — PASSED (2026-06-11)
+
+Audit-only: old-UI leak scan clean (no "Comics Script"/tree/dropdown in
+sources or rendered widgets), shared-paradigm rendering pinned, Screenplay
+views pinned untouched, CJK block-entry → Outline snippet pinned. Three
+pins (suite → 84); no production changes. Gate matrix 537 green; fix-tree
+broad sweep 1527. **Classification: A.**
+
 ### Graphic Novel UI bugfix — shared block-based UX for Manuscript + Outline (2026-06-11)
 
 Release-blocking UI mismatch fixed: Graphic Novel now uses the same UX

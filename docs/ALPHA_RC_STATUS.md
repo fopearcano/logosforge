@@ -371,6 +371,22 @@ legacy/Series **205** + broad certification sweep **1527** — all green.
 The Final Alpha RC re-certification result stands; manual smoke items
 (GN real-UI pass) remain.
 
+## GN block-UX post-fix gate (2026-06-11): PASSED
+
+Certified the UI bugfix: zero old-UI leaks (no "Comics Script" marker, no
+tree, no scene dropdown anywhere in the GN view sources or rendered UI —
+source+widget pinned); the Manuscript renders the shared full-editor
+paradigm (mode label + live count, ACT/SCENE/PAGE/PANEL blocks) and the
+Outline the shared block/card paradigm; Screenplay's PlanView/
+WritingCoreView pinned untouched; CJK entered through a new Manuscript
+block reaches the Outline snippet; routing, data model, mirroring,
+Pages inertness, exports, language/Dexter scope all re-verified. Three
+pins added (GN act-page suite → 84). Evidence: gate matrix **537** green
++ the fix commit's full runs at this tree (GN 228, voice 139, legacy/
+Series 205, broad sweep **1527**). **No production code changed.
+Classification: A — Final Alpha RC re-certification can resume** (manual
+GN real-UI smoke pass remains).
+
 ## Last audit summary
 
 The final global multi-mode integrity audit (the **Alpha Release Gate**, see
