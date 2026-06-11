@@ -27,14 +27,19 @@ Labels (Visual / Caption / Dialogue / SFX / Notes) are optional — unlabeled
 leading text is the panel's Visual; speaker lines like ``NAME: …`` stay plain
 content. Each block parses back into the canonical five-field Panel on
 commit (focus-out) via :func:`graphic_novel_blocks.parse_panel_text`, so the
-structured model (Chapter owns Pages, Scene owns Panels, Panel assigned to a
-Page, a Scene can span Pages) remains intact underneath, page/panel numbers
-stay auto-numbered, and the **Outline** — the structure manager/navigator —
-mirrors every edit over the same shared ``Scene.content`` body. Line breaks
-inside a field are preserved end-to-end.
+canonical model (**Act → Page → Scene → Panel**: an Act owns its Pages and
+Scenes, a Panel belongs to one Scene and sits on one Page, a Scene can span
+Pages and a Page can hold Panels from several Scenes) remains intact
+underneath, page/panel numbers stay auto-numbered, and the **Outline** — the
+canonical structure — is what this Manuscript derives from, mirroring every
+edit over the same shared ``Scene.content`` body. PAGE headings show the
+**act-wide** page numbers from :mod:`graphic_novel_structure`; chapters are
+hidden in Graphic Novel mode (storage labels only). Line breaks inside a
+field are preserved end-to-end.
 
-Empty-state ladder: no scene → *Create Scene*; scene without pages → *Add
-Page*; page without panels → *Add Panel*; otherwise the flowing script.
+Empty-state ladder: no Act → *"Create an Act to begin your Graphic Novel."*
+with **+ Act**; Act/scene without pages → *Add Page*; page without panels →
+*Add Panel*; otherwise the flowing script.
 
 The standalone Pages route stays disabled (it was fullscreen-hostile); this
 view is a single embedded child widget — no top-level window, no dock, no
@@ -62,7 +67,10 @@ from PySide6.QtWidgets import (
 )
 
 from storyplanner import graphic_novel_blocks as gnb
+from storyplanner import graphic_novel_structure as gns
 from storyplanner.ui import safe_dialogs
+
+EMPTY_PROJECT_MESSAGE = "Create an Act to begin your Graphic Novel."
 
 _SCRIPT_PLACEHOLDER = (
     "Visual:\n"
@@ -141,6 +149,11 @@ class GraphicNovelManuscriptView(QWidget):
 
         self._scene_id: int | None = None
         self._script = gnb.GraphicNovelScript()
+        # Act-wide placement of the current scene (the Outline is canonical;
+        # PAGE headings show these act-wide numbers, not scene-local ones).
+        self._page_start = 1
+        self._scene_act = ""
+        self._scene_pages_label = ""
         # Last panel whose script block had focus — (page_idx, panel_idx).
         # The Voice Commit Router reads this as "the selected Panel".
         self._last_panel_loc: tuple[int, int] | None = None
@@ -210,21 +223,19 @@ class GraphicNovelManuscriptView(QWidget):
                 return []
 
     def _scene_label(self, scene) -> str:
+        # Chapters are hidden in Graphic Novel mode (storage labels only).
         title = (getattr(scene, "title", "") or "Untitled").strip() or "Untitled"
         act = (getattr(scene, "act", "") or "").strip()
-        chapter = (getattr(scene, "chapter", "") or "").strip()
-        prefix = " · ".join(p for p in (act, chapter) if p)
-        return f"{prefix} · {title}" if prefix else title
+        return f"{act} · {title}" if act else title
 
     def _scene_context_text(self) -> str:
         scene = (self._db.get_scene_by_id(self._scene_id)
                  if self._scene_id is not None else None)
         if scene is None:
             return ""
-        act = (getattr(scene, "act", "") or "").strip()
-        chapter = (getattr(scene, "chapter", "") or "").strip()
         title = (getattr(scene, "title", "") or "Untitled").strip() or "Untitled"
-        path = " · ".join(p for p in (act, chapter) if p)
+        parts = [p for p in (self._scene_act, self._scene_pages_label) if p]
+        path = " · ".join(parts)
         return f"{path}  —  SCENE: {title}" if path else f"SCENE: {title}"
 
     # ---------------------------------------------------------------- refresh
@@ -237,12 +248,26 @@ class GraphicNovelManuscriptView(QWidget):
             self._scene_id = ids[0] if ids else None
         fresh = (gnb.load_scene_script(self._db, self._scene_id)
                  if self._scene_id is not None else gnb.GraphicNovelScript())
-        fp = (scenes_sig, self._scene_id,
+        # Act-wide placement (canonical Act → Page → Scene → Panel): another
+        # scene's pages shift this scene's page numbers, so the start page is
+        # part of the fingerprint.
+        start, act_name, pages_label = 1, "", ""
+        if self._scene_id is not None:
+            act, placement = gns.find_placement(self._db, self._project_id,
+                                                self._scene_id)
+            if placement is not None:
+                start = placement.start_page
+                act_name = act or ""
+                pages_label = gns.scene_page_range_label(placement)
+        fp = (scenes_sig, self._scene_id, start,
               gnb.serialize_graphic_novel_script(fresh))
         if fp == self._rendered_fp:
             return                       # rendered UI already matches the data
         focus_loc = self._focused_location()
         self._script = fresh
+        self._page_start = start
+        self._scene_act = act_name
+        self._scene_pages_label = pages_label
         self._scenes_sig = scenes_sig
         self._rebuild_combo(scenes_sig)
         self._rebuild_script(have_scenes=bool(scenes))
@@ -256,6 +281,7 @@ class GraphicNovelManuscriptView(QWidget):
         follows the save can then skip the rebuild and the user's focus,
         cursor and pending clicks survive."""
         self._rendered_fp = (self._scenes_sig, self._scene_id,
+                             self._page_start,
                              gnb.serialize_graphic_novel_script(self._script))
 
     def _rebuild_combo(self, scenes_sig: tuple) -> None:
@@ -367,13 +393,13 @@ class GraphicNovelManuscriptView(QWidget):
     def _rebuild_script(self, *, have_scenes: bool) -> None:
         self._clear_script()
         if not have_scenes:
-            # Empty state A: no scene in the project yet.
-            msg = QLabel("No Graphic Novel scene yet.")
+            # Empty state A: no Act in the project yet.
+            msg = QLabel(EMPTY_PROJECT_MESSAGE)
             msg.setObjectName("gnScriptEmpty")
             self._script_layout.addWidget(msg)
-            btn = QPushButton("+ Create Scene")
-            btn.setObjectName("gnDetailCreateScene")
-            btn.clicked.connect(self._add_scene)
+            btn = QPushButton("+ Act")
+            btn.setObjectName("gnScriptCreateAct")
+            btn.clicked.connect(self._add_act)
             self._script_layout.addWidget(btn)
             self._script_layout.addStretch()
             return
@@ -414,7 +440,8 @@ class GraphicNovelManuscriptView(QWidget):
 
         head = QHBoxLayout()
         head.setSpacing(8)
-        lbl = QLabel(f"PAGE {page.number}")
+        # Act-wide page number (the Outline's canonical coordinate).
+        lbl = QLabel(f"PAGE {self._page_start + pi}")
         lbl.setObjectName("gnPageHeader")
         lbl.setStyleSheet("font-size: 16px; font-weight: bold;")
         head.addWidget(lbl)
@@ -567,6 +594,16 @@ class GraphicNovelManuscriptView(QWidget):
         setattr(page, field, value)
         self._mark_rendered_current()
         self._save()
+
+    def _add_act(self) -> None:
+        """Empty state A: create the first Act (seeds its first scene)."""
+        from storyplanner import story_structure as ss
+        scene = ss.create_act(self._db, self._project_id)
+        self._scene_id = scene.id
+        self._rendered_fp = None
+        self.refresh()
+        if self._on_data_changed:
+            self._on_data_changed()
 
     def _add_scene(self) -> None:
         from storyplanner import story_structure as ss

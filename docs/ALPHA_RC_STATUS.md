@@ -94,50 +94,64 @@ isolation / Alpha gate: **858 passed, 0 failures** (only the pre-existing
 optional-lib PDF/DOCX cases fail in an environment without `reportlab` /
 `python-docx`). **Classification: A — post-fix gate passed.**
 
-## Graphic Novel — Pages/Panels in the Outline + Manuscript (standalone Pages disabled)
+## Graphic Novel — canonical `Act → Page → Scene → Panel` (standalone Pages disabled)
 
 The standalone left-panel **Pages** route proved fullscreen-hostile (clicking it
 minimized the app in macOS fullscreen, across multiple attempted fixes), so it is
 **disabled for Alpha** — hidden in every mode, inert route that never mounts the old
-standalone Pages widget. Graphic Novel Page/Panel management now lives in **two
-mirrored surfaces** over the shared `Scene.content` body:
+standalone Pages widget. The Graphic Novel structure lives in **two mirrored
+surfaces** over the shared `Scene.content` body:
 
-- the **Outline** (`GraphicNovelOutlineView`) — the GN Page/Panel navigator: a
-  **Scenes** tab (`Act → Chapter → Scene → Page → Panel`, editable) + a **Pages** tab
-  (chapter-level cross-reference grouping panels across the chapter's scenes by page
-  number — a page can show panels from multiple scenes), with a selected-Panel editor
-  (Visual / Caption / Dialogue / SFX / Notes), add/move/delete, assign-panel-to-page,
-  and double-click → Manuscript;
-- the **Manuscript** (`GraphicNovelManuscriptView`) — the **comics script
-  editor** (Superscript-style blocks): PAGE headings + one large free-typing
+- the **Outline** (`GraphicNovelOutlineView`) — the **canonical structure**: one
+  page-first tree `Act → Page → Scene → Panel` (an **Act owns its act-wide Pages
+  and its Scenes**; a **Panel belongs to one Scene** and sits on **one Page**; a
+  **Scene can span several Pages** — `Scene … (continued)` on each following
+  page; **one Page can hold Panels from several Scenes**; empty scenes stay
+  visible under their Act; **chapters hidden** — `Scene.chapter` is a compat
+  storage label only). Selected-item editor: the Panel's five fields (Visual /
+  Caption / Dialogue / SFX / Notes), scene-page title/notes, and the scene's
+  **act-wide start page** (pin / "Auto — after previous scene", which is how
+  two scenes share one physical page); + Act / + Scene / + Page / + Panel,
+  panel move + move-panel-to-page (act-wide labels), confirmed deletes,
+  double-click → Manuscript;
+- the **Manuscript** (`GraphicNovelManuscriptView`) — **derives from the
+  Outline** — the **comics script editor** (Superscript-style blocks): PAGE
+  headings showing the **act-wide page numbers** + one large free-typing
   script block per panel where the writer types labeled sections (Visual /
   Caption / Dialogue / SFX / Notes — labels optional; unlabeled text is the
   Visual; speaker lines stay content). Blocks parse back into the canonical
   five-field model on commit (focus-out) with line breaks preserved
-  end-to-end and auto-numbered pages/panels; per-page **+ Panel** / **Delete
-  Page**, per-panel move/delete (confirmed); flat scene dropdown (no tree, no
-  form — structure stays in the Outline, whose Panel double-click deep-links
-  to the script block here; focus survives the app-wide refresh that follows
-  each save).
+  end-to-end and auto-numbered pages/panels; context header = Act + act-wide
+  page range (no chapter); empty project → *"Create an Act to begin your
+  Graphic Novel."* + **+ Act**; per-page **+ Panel** / **Delete Page**,
+  per-panel move/delete (confirmed); flat scene dropdown (no tree, no form —
+  structure stays in the Outline, whose Panel double-click deep-links to the
+  script block here; focus survives the app-wide refresh that follows each
+  save).
 
-Both read/write the same body (single source of truth), so they mirror. Model:
-Chapter owns Pages (via scenes), Scene owns Panels, Panel assigned to a Page, Scene
-can span Pages. Pages are physically scene-scoped for Alpha (the chapter Page View is
-a cross-reference; merging panels from different scenes onto one shared page record is
-a documented next step). Both surfaces are single embedded child widgets (no separate
-route, no top-level window, no dialog on mount) → cannot trigger the minimize. Non-GN
+Both read/write the same body (single source of truth), so they mirror.
+**Coordinates, not migration:** pages stay physically scene-scoped (`PAGE 1..n`
+per scene body); `graphic_novel_structure` computes the act-wide page numbers
+over the single new nullable `Scene.gn_page_start` offset (idempotent additive
+`ALTER TABLE`; `NULL` = auto-chain = exact legacy layout, so existing projects
+are untouched; other modes ignore the column). Physically merging panels from
+different scenes onto one shared page record remains a documented next step.
+Both surfaces are single embedded child widgets (no separate route, no top-level
+window, no dialog on mount) → cannot trigger the minimize. Non-GN
 Outline/Manuscript unchanged (`PlanView` / `WritingCoreView`).
 
 Single source: `MainWindow._show_plan` (GN → `GraphicNovelOutlineView`) +
 `_show_manuscript` (GN → `GraphicNovelManuscriptView`) + `_apply_pages_availability`
 (hides standalone Pages) + `_show_gn_pages` (inert). Data layer:
-`storyplanner/graphic_novel_outline.py`. Tests: `tests/test_gn_outline.py`
-(**38 passed**), `tests/test_gn_manuscript_script_editor.py` (**66 passed** —
-replaces `test_gn_embedded_navigator.py` after the Manuscript was reshaped from
-a tree+detail navigator into the inline comics script editor), plus
-pages/lifecycle/phase suites. True macOS fullscreen behavior must still be confirmed
-manually (smoke-test F-items). **Classification: A — Graphic Novel Outline manages
-Pages/Panels and mirrors the Manuscript; standalone Pages disabled.**
+`storyplanner/graphic_novel_outline.py` (scene-scoped ops) +
+`storyplanner/graphic_novel_structure.py` (act-wide coordinates + canonical
+export). Tests: `tests/test_gn_act_page_structure.py` (**59 passed**),
+`tests/test_gn_outline.py` (**38 passed**),
+`tests/test_gn_manuscript_script_editor.py` (**56 passed**), plus
+pages/lifecycle/phase suites. True macOS fullscreen behavior must still be
+confirmed manually (smoke-test F-items). **Classification: A — the Outline is
+the canonical Act → Page → Scene → Panel structure and the Manuscript derives
+from it; standalone Pages disabled.**
 
 **Post-fix integrity gate (2026-06-08).** A targeted audit re-verified the model
 (Chapter owns Pages, Scene owns Panels, Panel assigned to Page, Scene spans Pages),
@@ -149,7 +163,22 @@ ComfyUI), and full cross-mode regression — **no regressions** found. New gate:
 `tests/test_gn_outline_integrity_gate.py` (**13 passed**); broad audit sweep
 **813 passed, 0 failures**. Only deferral: **Page reorder** (move Page up/down) in
 the Outline is not implemented for Alpha (panel reorder + move-panel-to-page are).
-**Gate result: A.**
+**Gate result: A.** *(Historical: this gate predates the pre-finalization
+refactor below; its data-integrity invariants were re-verified after it.)*
+
+**Pre-finalization refactor (2026-06-11): canonical Act → Page → Scene → Panel.**
+The Outline became the canonical page-first structure above and the Manuscript
+now derives from it (act-wide page numbers via the additive
+`Scene.gn_page_start` coordinate; chapters hidden in GN UI; legacy `NULL`
+offsets reproduce the old sequential layout exactly — non-destructive).
+Canonical export with explicit Panel → Scene / Panel → Page assignments
+replaces the duplicate Scene-view + Page-view markdown. Verification: new
+`tests/test_gn_act_page_structure.py` **59 passed**; updated GN suites
+(outline 38 + integrity gate 13 + script editor 56) green; regression batches —
+GN core **452**, GN engine/graph/timeline **358**, cross-cutting gates
+(incl. `test_alpha_release_gate.py`, multi-mode, pages safety, lifecycle,
+export stabilization) **155**, voice-over-GN **156**, Series + backup **126**
+— **all passed, 0 failures**. **Gate result: A.**
 
 ## Last audit summary
 

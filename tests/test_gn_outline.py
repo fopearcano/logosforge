@@ -1,11 +1,14 @@
-"""Graphic Novel Outline — Page/Panel management mirrored with the Manuscript.
+"""Graphic Novel Outline — canonical Act → Page → Scene → Panel structure.
 
-The standalone Pages section is disabled for Alpha; the Graphic Novel **Outline**
-is the Page/Panel navigator. It manages Pages/Panels over the shared `Scene.content`
-body (so it mirrors the Manuscript) and presents a Scenes view (Act → Chapter →
-Scene → Page → Panel) and a chapter-level Pages cross-reference view. These tests
-cover the data layer, Outline visibility, editing, mirroring, export, navigation,
-isolation, fullscreen safety, and non-GN regression.
+The standalone Pages section is disabled for Alpha; the Graphic Novel
+**Outline** is the canonical structure navigator: one page-first tree
+(``Act → Page → Scene → Panel``) over the shared `Scene.content` body (so it
+mirrors the Manuscript), with act-wide page coordinates from
+:mod:`graphic_novel_structure`. Chapters are hidden in Graphic Novel mode
+(storage labels only). These tests cover the data layer, Outline visibility,
+editing, mirroring, export, navigation, isolation, fullscreen safety, and
+non-GN regression; the act-wide page coordinate suite lives in
+`test_gn_act_page_structure.py`.
 """
 
 from __future__ import annotations
@@ -156,25 +159,32 @@ def test_outline_unchanged_for_non_gn(engine):
     assert isinstance(win.content_area, PlanView)
 
 
-def test_outline_shows_scene_page_panel_under_chapter():
+def test_outline_shows_act_page_scene_panel_chapter_hidden():
     db = Database()
     pid = _gn(db)
     sid = _scene(db, pid, "Cold Open")
     gno.add_page(db, sid); gno.add_panel(db, sid, 0)
     v = _outline(db, pid)
-    assert _find(v._scene_tree, lambda it: it.text(0) == "Chapter 1")
-    assert _find(v._scene_tree, lambda it: "Cold Open" in it.text(0))
-    assert _find(v._scene_tree, lambda it: it.text(0).startswith("Page 1"))
-    assert _find(v._scene_tree, lambda it: it.text(0).startswith("Panel 1"))
+    # Canonical visible hierarchy: Act → Page → Scene → Panel.
+    act = _find(v._tree, lambda it: it.text(0) == "Act 1")
+    assert act is not None
+    page = _find(v._tree, lambda it: it.text(0) == "Page 1")
+    assert page is not None and page.parent() is act
+    scene = _find(v._tree, lambda it: "Cold Open" in it.text(0))
+    assert scene is not None and scene.parent() is page
+    panel = _find(v._tree, lambda it: it.text(0).startswith("Panel 1"))
+    assert panel is not None and panel.parent() is scene
+    # Chapters are HIDDEN from the Graphic Novel Outline.
+    assert _find(v._tree, lambda it: "Chapter" in it.text(0)) is None
 
 
-def test_outline_page_view_shows_panels_under_chapter_pages():
+def test_outline_page_first_order_shows_scene_under_page():
     db = Database()
     pid = _gn(db)
     a = _scene(db, pid, "Scene A")
     gno.add_page(db, a); gno.add_panel(db, a, 0)
     v = _outline(db, pid)
-    pg = _find(v._page_tree, lambda it: it.text(0) == "Page 1")
+    pg = _find(v._tree, lambda it: it.text(0) == "Page 1")
     assert pg is not None and pg.childCount() >= 1
     assert "Scene A" in pg.child(0).text(0)
 
@@ -189,8 +199,7 @@ def test_add_page_from_outline():
     pid = _gn(db)
     sid = _scene(db, pid)
     v = _outline(db, pid)
-    v._sel = {"kind": "scene", "act": "Act 1", "chapter": "Chapter 1",
-              "scene_id": sid}
+    v._sel = {"kind": "scene", "act": "Act 1", "scene_id": sid}
     v._add_page()
     assert len(_body(db, sid).pages) == 1
 
@@ -200,8 +209,7 @@ def test_add_panel_from_outline():
     pid = _gn(db)
     sid = _scene(db, pid)
     v = _outline(db, pid)
-    v._sel = {"kind": "scene", "act": "Act 1", "chapter": "Chapter 1",
-              "scene_id": sid}
+    v._sel = {"kind": "scene", "act": "Act 1", "scene_id": sid}
     v._add_page(); v._add_panel()
     assert len(_body(db, sid).pages[0].panels) == 1
 
@@ -251,7 +259,7 @@ def test_delete_panel_from_outline_with_confirmation(monkeypatch):
     sid = _scene(db, pid)
     gno.add_page(db, sid); gno.add_panel(db, sid, 0); gno.add_panel(db, sid, 0)
     v = _outline(db, pid)
-    v._sel = {"kind": "panel", "act": "Act 1", "chapter": "Chapter 1",
+    v._sel = {"kind": "panel", "act": "Act 1",
               "scene_id": sid, "page": 0, "panel": 0}
     v._delete_selected()
     assert len(_body(db, sid).pages[0].panels) == 1
@@ -264,21 +272,24 @@ def test_delete_page_cancel_keeps_data(monkeypatch):
     sid = _scene(db, pid)
     gno.add_page(db, sid); gno.add_panel(db, sid, 0)
     v = _outline(db, pid)
-    v._sel = {"kind": "page", "act": "Act 1", "chapter": "Chapter 1",
-              "scene_id": sid, "page": 0}
+    v._sel = {"kind": "scene_page", "act": "Act 1",
+              "scene_id": sid, "page": 0, "page_no": 1, "continued": False}
     v._delete_selected()
     assert len(_body(db, sid).pages) == 1
 
 
-def test_add_scene_to_chapter_from_outline():
+def test_add_scene_to_act_from_outline():
     db = Database()
     pid = _gn(db)
     _scene(db, pid, "First")
     v = _outline(db, pid)
-    v._sel = {"kind": "chapter", "act": "Act 1", "chapter": "Chapter 1"}
+    v._sel = {"kind": "act", "act": "Act 1"}
     v._add_scene()
-    titles = {s.title for s in ss.list_scenes(db, pid)}
+    scenes = ss.list_scenes(db, pid)
+    titles = {s.title for s in scenes}
     assert "Untitled Scene" in titles
+    # The new scene lands under the selected Act (chapter stays hidden).
+    assert all(s.act == "Act 1" for s in scenes)
 
 
 # ==========================================================================
@@ -309,7 +320,7 @@ def test_manuscript_edit_visible_in_outline():
         number=1, panels=[gnb.Panel(number=1, visual_description="FROM_MS")])])
     gnb.save_scene_script(db, sid, script)
     v = _outline(db, pid)
-    panel_item = _find(v._scene_tree, lambda it: "FROM_MS" in it.text(0))
+    panel_item = _find(v._tree, lambda it: "FROM_MS" in it.text(0))
     assert panel_item is not None
 
 
@@ -320,7 +331,7 @@ def test_project_switch_isolation(tmp_path):
     gno.add_page(db, sa); gno.add_panel(db, sa, 0)
     b = _gn(db, "B")
     vb = _outline(db, b)
-    assert vb._scene_tree.topLevelItemCount() == 0       # B has no acts/scenes
+    assert vb._tree.topLevelItemCount() == 0             # B has no acts/scenes
 
 
 # ==========================================================================
@@ -335,7 +346,7 @@ def test_double_click_scene_opens_manuscript():
     opened = []
     from storyplanner.ui.graphic_novel_outline_view import GraphicNovelOutlineView
     v = GraphicNovelOutlineView(db, pid, on_open_manuscript=lambda i: opened.append(i))
-    item = _find(v._scene_tree, lambda it: "Opener" in it.text(0))
+    item = _find(v._tree, lambda it: "Opener" in it.text(0))
     v._activate(item)
     assert opened == [sid]
 
@@ -348,7 +359,7 @@ def test_double_click_panel_opens_manuscript():
     opened = []
     from storyplanner.ui.graphic_novel_outline_view import GraphicNovelOutlineView
     v = GraphicNovelOutlineView(db, pid, on_open_manuscript=lambda i: opened.append(i))
-    item = _find(v._scene_tree, lambda it: it.text(0).startswith("Panel 1"))
+    item = _find(v._tree, lambda it: it.text(0).startswith("Panel 1"))
     v._activate(item)
     assert opened == [sid]
 
@@ -360,8 +371,8 @@ def test_selection_does_not_mutate():
     gno.add_page(db, sid); gno.add_panel(db, sid, 0)
     before = db.get_scene_by_id(sid).content
     v = _outline(db, pid)
-    item = _find(v._scene_tree, lambda it: it.text(0).startswith("Panel 1"))
-    v._scene_tree.setCurrentItem(item)            # selection only
+    item = _find(v._tree, lambda it: it.text(0).startswith("Panel 1"))
+    v._tree.setCurrentItem(item)                  # selection only
     assert db.get_scene_by_id(sid).content == before
 
 
@@ -424,7 +435,8 @@ def test_export_includes_pages_panels_scene_and_page_assignment():
     assert "Cold Open" in md            # scene
     assert "Page 1" in md               # page
     assert "EXPORTABLE" in md           # panel body
-    assert "Page view" in md            # chapter page cross-reference
+    # Explicit Panel → Scene / Panel → Page assignment, page-first order.
+    assert "(Scene: Cold Open → Page 1)" in md
 
 
 def test_export_no_duplicate_panel_text():

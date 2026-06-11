@@ -3,6 +3,51 @@
 All notable changes to Logosforge. This project uses semantic-ish versioning;
 dates are release-readiness milestones, not packaged builds.
 
+## [0.9.0-alpha] — pre-finalization refactor — 2026-06-11
+
+### Graphic Novel — canonical `Act → Page → Scene → Panel` (Manuscript derives)
+
+The Graphic Novel Outline's visible hierarchy is now the canonical
+**Project → Act → Page → Scene → Panel** and the Manuscript derives from it:
+
+- **Structure.** An **Act owns its act-wide Pages and its Scenes**; a **Panel
+  belongs to exactly one Scene** and sits on **exactly one Page**; a **Scene
+  can span several Pages** (its panels distributed across them); **one Page
+  can hold Panels from several Scenes**. **Chapters are hidden** in Graphic
+  Novel mode (`Scene.chapter` remains a hidden storage label so other modes
+  and legacy data are untouched).
+- **Smallest safe adapter, no storage migration.** Scene bodies keep the
+  scene-local `PAGE n` / `PANEL n` script. The act-wide page numbers are a
+  **computed coordinate** from the new module `graphic_novel_structure`
+  over ONE new nullable column, `Scene.gn_page_start` (idempotent additive
+  `ALTER TABLE`): `NULL` auto-chains the scene after the previous one —
+  exactly the legacy layout, so existing projects read identically — and a
+  pinned value places the scene's first page onto an earlier scene's page
+  (page sharing). Other modes ignore the column entirely.
+- **Outline rewritten** (`GraphicNovelOutlineView`): one page-first tree
+  `Act → Page → Scene → Panel` with `Scene … (continued)` labels, empty
+  scenes kept visible under their Act, toolbar **+ Act / + Scene / + Page /
+  + Panel**, panel move/delete, move-panel-to-page with act-wide labels, a
+  **"Scene starts on act page"** pin/Auto control, and the five-field Panel
+  editor; double-click deep-links into the Manuscript (unchanged signature).
+- **Manuscript derives from the Outline**: PAGE headings show **act-wide**
+  numbers (re-rendered when another scene's pages shift them), the context
+  header shows Act + act-wide page range, the scene dropdown drops the
+  chapter, and the empty-state ladder starts with *"Create an Act to begin
+  your Graphic Novel."* + **+ Act**. Script-block editing, mirroring, voice
+  panel targeting and deep-links keep their local-coordinate APIs.
+- **Export** (`export_structure_markdown`; the old
+  `gno.export_outline_markdown` delegates): `Act → Page → Scene → Panel` in
+  physical page order with explicit Panel → Scene / Panel → Page assignments
+  and `continued` markers — each panel's text exactly once, no image data,
+  no settings/keys. Standalone Pages stays disabled; ComfyUI stays deferred;
+  Panels remain the future anchor for visual production integrations.
+- **Tests:** new `tests/test_gn_act_page_structure.py` (59) covering
+  coordinates, UI shape, editing, derivation, mirroring, export, migration
+  and cross-mode safety; `test_gn_outline.py` / `test_gn_outline_integrity_
+  gate.py` / `test_gn_manuscript_script_editor.py` updated to the canonical
+  shape. GN + cross-mode + voice regression batches all green.
+
 ## [0.9.0-alpha] — post-RC corrections & additions — 2026-06-10
 
 Blocker fixes and structural corrections found by manual Alpha testing, plus a

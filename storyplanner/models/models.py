@@ -149,6 +149,11 @@ class Scene(SQLModel, table=True):
     # projects that pre-date the hierarchy (back-compatible default). See
     # storyplanner/series_structure.py.
     episode_id: Optional[int] = Field(default=None, foreign_key="episode.id")
+    # Graphic Novel act-wide page coordinate (pre-finalization refactor):
+    # the ACT-wide page number this scene's local PAGE 1 maps to.
+    # NULL = auto-chain after the previous scene (back-compatible;
+    # other modes ignore it entirely).
+    gn_page_start: Optional[int] = None
     created_at: datetime = Field(default_factory=_now)
 
 

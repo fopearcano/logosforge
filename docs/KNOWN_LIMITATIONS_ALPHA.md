@@ -227,48 +227,55 @@ limitations for this RC:
   global Outline stays flat — see the Series hierarchy note). The full Season →
   Episode → Act → Chapter → Scene **path is available** (`series_structure.
   scene_series_path`); wiring it into the Manuscript title bar is deferred.
-- **Graphic Novel — Pages/Panels managed in the Outline + Manuscript (standalone
+- **Graphic Novel — canonical `Act → Page → Scene → Panel` structure (standalone
   Pages section disabled).** The separate left-panel **Pages** route was fullscreen-
   hostile (clicking it minimized the app in macOS fullscreen, across multiple
   attempted fixes), so it is **disabled for Alpha**: hidden in every mode, route
-  inert (never mounts the old standalone Pages widget). Graphic Novel Page/Panel
-  navigation now lives in **two mirrored surfaces** over the shared `Scene.content`
+  inert (never mounts the old standalone Pages widget). The Graphic Novel
+  structure lives in **two mirrored surfaces** over the shared `Scene.content`
   body:
-  - the **Outline** (`GraphicNovelOutlineView`) is the GN Page/Panel navigator —
-    a **Scenes** tab (`Act → Chapter → Scene → Page → Panel`, editable) and a
-    **Pages** tab (a chapter-level cross-reference grouping panels across the
-    chapter's scenes by page number, so a page can show panels from more than one
-    scene), with a selected-Panel editor (**Visual / Caption / Dialogue / SFX /
-    Notes**), add / move / delete, assign-panel-to-page, and double-click → Manuscript;
-    Pages are renamed via the page detail (title field). **Panel** reorder (within a
-    scene) and **move-panel-to-page** are supported; **Page reorder** (move Page
-    up/down) is deferred for Alpha (pages are scene-scoped and authored in order).
-  - the **Manuscript** (`GraphicNovelManuscriptView`) is the **comics script
-    editor** (Superscript-style): the scene flows as a script document — PAGE
-    headings, then **one large free-typing script block per panel** where the
+  - the **Outline** (`GraphicNovelOutlineView`) is the **canonical structure**:
+    one page-first tree — `Act → Page → Scene → Panel` (an **Act owns its
+    act-wide Pages and its Scenes**; a **Panel belongs to one Scene** and sits
+    on **one Page**; a **Scene can span several Pages**, shown as
+    `Scene … (continued)` on each following page; **one Page can hold Panels
+    from several Scenes**). **Chapters are hidden** in Graphic Novel mode
+    (`Scene.chapter` remains a storage label for cross-mode compatibility
+    only). The selected-item editor edits a Panel's five fields (**Visual /
+    Caption / Dialogue / SFX / Notes**), a scene-page's title/notes, and the
+    scene's **act-wide start page** ("Auto — after previous scene" or a pinned
+    page number, which is how two scenes share one physical page); add Act /
+    Scene / Page / Panel, panel reorder + move-panel-to-page (act-wide page
+    labels), confirmed deletes, and double-click → Manuscript deep-link.
+  - the **Manuscript** (`GraphicNovelManuscriptView`) **derives from the
+    Outline** — the **comics script editor** (Superscript-style): the scene
+    flows as a script document — PAGE headings showing the **act-wide** page
+    numbers, then **one large free-typing script block per panel** where the
     writer types labeled sections (**Visual / Caption / Dialogue / SFX /
     Notes** — labels optional, unlabeled text is the Visual, speaker lines
     like `NAME: …` stay content). Blocks parse back into the canonical
     five-field model on commit (focus-out); line breaks inside a field are
-    preserved end-to-end; page/panel numbers stay auto-numbered. Per-page
-    **+ Panel** / **Delete Page**, per-panel move / delete (confirmed). It is
-    **not** a tree/outliner and **not** a form: scene selection is a flat
-    dropdown, structure stays in the Outline (double-clicking a Panel there
-    focuses its script block here).
+    preserved end-to-end; page/panel numbers stay auto-numbered. Empty-state
+    ladder: no Act → *"Create an Act to begin your Graphic Novel."* (+ Act);
+    no pages → + Page; page without panels → + Panel. It is **not** a
+    tree/outliner and **not** a form: scene selection is a flat dropdown
+    (Act · Title — no chapter), structure stays in the Outline
+    (double-clicking a Panel there focuses its script block here).
   Both read/write the **same** `Scene.content` (single source of truth — no separate
-  Pages storage), so edits mirror. Relationships: **Chapter owns Pages** (via its
-  scenes), **Scene owns Panels**, **Panel is assigned to a Page** (its containing
-  page), and a **Scene can span multiple Pages**. **Storage note (Alpha):** pages are
-  physically **scene-scoped** (each scene owns its Pages/Panels in its body); the
-  chapter Page View surfaces panels from multiple scenes by page number, but
-  physically merging panels from different scenes onto one shared page record is a
-  documented future step. Both surfaces are single embedded **child widgets** (no
-  separate route, no top-level window, no dialog on mount), so they cannot trigger
-  the fullscreen minimize. This structure is the intended **future anchor point for
-  visual-production integrations** (panel visual brief / render status / generated
-  assets); **no image generation / prompt / ComfyUI** fields exist today. (Confirm in
-  macOS fullscreen — smoke-test F-items — that opening the GN Outline/Manuscript does
-  not minimize the app.)
+  Pages storage), so edits mirror. **Storage note (Alpha):** pages are physically
+  **scene-scoped** (each scene owns its Pages/Panels in its body, numbered `PAGE
+  1..n` per scene); the act-wide page numbers are a **computed coordinate** — the
+  single nullable `Scene.gn_page_start` offset (`NULL` = auto-chain after the
+  previous scene, exactly the legacy layout, so the migration is purely additive
+  and non-destructive; a pinned value places the scene's first page onto an
+  earlier scene's page). Physically merging panels from different scenes onto one
+  shared page record is a documented future step. Both surfaces are single
+  embedded **child widgets** (no separate route, no top-level window, no dialog on
+  mount), so they cannot trigger the fullscreen minimize. **Panels are the future
+  anchor for visual production integrations** (panel visual brief / render status /
+  generated assets); **no image generation / prompt / ComfyUI** fields exist today
+  (ComfyUI stays deferred). (Confirm in macOS fullscreen — smoke-test F-items —
+  that opening the GN Outline/Manuscript does not minimize the app.)
 - **Graphic Novel — one shared body.** The Manuscript edits the GN scene body
   (`Scene.content`, structured by `graphic_novel_blocks` into Pages → Panels:
   visual / caption / dialogue / SFX / notes). Pages/Panels are **writing/script

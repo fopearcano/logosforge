@@ -207,7 +207,9 @@ def test_scene_context_header_visible():
     ctx = [w for w in v._host.findChildren(QLabel)
            if w.objectName() == "gnScriptContext"]
     assert len(ctx) == 1
-    assert "Act 1" in ctx[0].text() and "Chapter 1" in ctx[0].text()
+    # Act + act-wide page range; chapters are HIDDEN in Graphic Novel mode.
+    assert "Act 1" in ctx[0].text() and "Page" in ctx[0].text()
+    assert "Chapter" not in ctx[0].text()
     assert "SCENE:" in ctx[0].text()
 
 
@@ -228,21 +230,22 @@ def test_scene_selector_is_flat_combo_and_script_scrolls():
 # ==========================================================================
 
 
-def test_state_a_no_scene_offers_create_scene():
+def test_state_a_no_act_offers_create_act():
     db = Database()
-    v = _view(db, _gn(db))                       # project without scenes
+    v = _view(db, _gn(db))                       # project without an Act
     msgs = [w.text() for w in v._host.findChildren(QLabel)
             if w.objectName() == "gnScriptEmpty"]
-    assert msgs == ["No Graphic Novel scene yet."]
-    btn = v._host.findChild(QPushButton, "gnDetailCreateScene")
-    assert btn is not None and btn.text() == "+ Create Scene"
+    assert msgs == ["Create an Act to begin your Graphic Novel."]
+    btn = v._host.findChild(QPushButton, "gnScriptCreateAct")
+    assert btn is not None and btn.text() == "+ Act"
 
 
-def test_state_a_create_scene_advances_to_add_page():
+def test_state_a_create_act_advances_to_add_page():
     db = Database()
     pid = _gn(db)
     v = _view(db, pid)
-    v._add_scene()
+    v._host.findChild(QPushButton, "gnScriptCreateAct").click()
+    assert ss.list_acts(db, pid) == ["Act 1"]    # Act 1 + its first scene
     assert len(ss.list_scenes(db, pid)) == 1
     assert v._host.findChild(QPushButton, "gnDetailAddPage") is not None
 
@@ -500,7 +503,7 @@ def test_outline_panel_double_click_deep_links_to_block():
             stack.extend(it.child(i) for i in range(it.childCount()))
         return None
 
-    item = find_panel_item(o._scene_tree)
+    item = find_panel_item(o._tree)
     assert item is not None
     o._activate(item)
     assert hits == [("panel", sid, 0, 1)]         # deep-link, not scene-only
@@ -614,7 +617,7 @@ def test_project_switch_isolation(tmp_path):
     b = _gn(db, "B")                              # empty project
     vb = _view(db, b)
     assert vb._scene_combo.count() == 0
-    assert vb._host.findChild(QPushButton, "gnDetailCreateScene") is not None
+    assert vb._host.findChild(QPushButton, "gnScriptCreateAct") is not None
 
 
 def test_save_reload_round_trip():

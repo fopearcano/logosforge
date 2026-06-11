@@ -92,26 +92,36 @@ stays Project → Act → Chapter → Scene):
 - **Export dependencies:** `requirements.txt` now lists `reportlab` (PDF) and
   `python-docx` (DOCX); a normal install supports every export format, with the
   same graceful fallback if a library is missing.
-- **Graphic Novel — Pages/Panels in the Outline + Manuscript (standalone Pages
-  disabled):** the separate left-panel **Pages** route was fullscreen-hostile, so it
-  is **disabled for Alpha** (hidden; inert route). Graphic Novel Page/Panel management
-  now lives in **two mirrored surfaces** over the shared scene body (`Scene.content`):
-  the **Outline** becomes the GN Page/Panel navigator — a **Scenes** view
-  (`Act → Chapter → Scene → Page → Panel`) and a chapter-level **Pages** cross-reference
-  view (panels grouped across a chapter's scenes by page number) with a selected-Panel
-  editor (**Visual / Caption / Dialogue / SFX / Notes**), add/move/delete, and
-  assign-panel-to-page — and the **Manuscript** is the **comics script editor**
-  (Superscript-style): the scene flows as a script document — PAGE headings,
-  then one large free-typing script block per panel with labeled sections
-  (**Visual / Caption / Dialogue / SFX / Notes**; labels optional, unlabeled
-  text is the Visual). Blocks parse back into the structured model on commit;
-  line breaks are preserved; numbers stay auto-numbered; Outline Panel
-  double-click deep-links to the script block. Not a tree, not a form.
-  Model: Chapter owns Pages, Scene owns Panels, Panel assigned to a Page, Scene can
-  span Pages. Pages/Panels are script structure, not image generation; this is the
-  future anchor point for visual-production integrations. Both surfaces are embedded
-  child widgets (no separate route, no top-level window), addressing the earlier macOS
-  fullscreen minimize. See `docs/KNOWN_LIMITATIONS_ALPHA.md`.
+- **Graphic Novel — canonical `Act → Page → Scene → Panel` structure in the
+  Outline + Manuscript (standalone Pages disabled):** the separate left-panel
+  **Pages** route was fullscreen-hostile, so it is **disabled for Alpha** (hidden;
+  inert route). The **Outline is the canonical structure** — one page-first tree,
+  `Act → Page → Scene → Panel`: an **Act owns its act-wide Pages and its Scenes**;
+  a **Panel belongs to one Scene** and sits on **one Page**; a **Scene can span
+  several Pages** (shown as `Scene … (continued)`); **one Page can hold Panels
+  from several Scenes** (pin the scene's *start page* in the selected-item
+  editor; *Auto* chains it after the previous scene). **Chapters are hidden** in
+  Graphic Novel mode (kept as storage labels for other modes). The selected-item
+  editor edits the Panel's five fields (**Visual / Caption / Dialogue / SFX /
+  Notes**), page title/notes and the scene start page, with add Act/Scene/Page/
+  Panel, move and confirmed delete. The **Manuscript derives from the Outline**
+  — the **comics script editor** (Superscript-style): the scene flows as a
+  script document — PAGE headings showing the **act-wide** page numbers, then
+  one large free-typing script block per panel with labeled sections (labels
+  optional, unlabeled text is the Visual). Blocks parse back into the
+  structured model on commit; line breaks are preserved; numbers stay
+  auto-numbered; Outline Panel double-click deep-links to the script block;
+  empty project → *"Create an Act to begin your Graphic Novel."* + **+ Act**.
+  Not a tree, not a form. Storage is unchanged and the migration is purely
+  additive (one nullable `Scene.gn_page_start` offset; `NULL` keeps the exact
+  legacy sequential layout — non-destructive for existing projects). Export
+  follows the same `Act → Page → Scene → Panel` order with explicit
+  Panel → Scene / Panel → Page assignments (each panel's text exactly once; no
+  image data, no settings/keys). Pages/Panels are script structure, not image
+  generation; **Panels are the future anchor for visual production
+  integrations**. Both surfaces are embedded child widgets (no separate route,
+  no top-level window), addressing the earlier macOS fullscreen minimize. See
+  `docs/KNOWN_LIMITATIONS_ALPHA.md`.
 - **Local voice-to-script (MVP, off by default):** an opt-in, **local-first**
   dictation foundation (`enable_voice_mode`; backend mode defaults to Disabled) —
   buffered microphone capture, simple pause detection, transcript preview, and

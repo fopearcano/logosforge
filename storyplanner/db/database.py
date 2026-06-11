@@ -290,6 +290,15 @@ class Database:
                 ))
                 conn.commit()
 
+            # Scene.gn_page_start — Graphic Novel act-wide page coordinate
+            # (Act -> Page -> Scene -> Panel outline). Nullable; NULL keeps
+            # the legacy auto-chained layout, so this is purely additive.
+            if scene_rows and "gn_page_start" not in scene_columns:
+                conn.execute(text(
+                    "ALTER TABLE scene ADD COLUMN gn_page_start INTEGER"
+                ))
+                conn.commit()
+
     # -- Projects ------------------------------------------------------------
 
     def get_project_by_id(self, project_id: int) -> Project | None:
@@ -2176,6 +2185,19 @@ class Database:
             if scene is None:
                 return
             scene.episode_id = episode_id
+            session.commit()
+
+    def set_scene_gn_page_start(self, scene_id: int,
+                                start: int | None) -> None:
+        """Pin (or clear, with ``None``) a Graphic Novel scene's act-wide
+        start page (``gn_page_start``). Touches only that offset — never the
+        body, labels, links or sort order. ``None`` returns the scene to the
+        auto-chained page layout."""
+        with Session(self._engine) as session:
+            scene = session.get(Scene, scene_id)
+            if scene is None:
+                return
+            scene.gn_page_start = start
             session.commit()
 
     def get_scenes_for_episode(self, episode_id: int) -> list[Scene]:

@@ -110,12 +110,16 @@ per-mode export tests.)
 - [ ] **Canvas Plot** hidden from navigation.
 - [ ] **Standalone Pages section disabled (fullscreen-hostile):** the left-panel
       **Pages** item is hidden in every mode and its route is inert (never mounts
-      the old standalone Pages widget). Graphic Novel Page/Panel management lives in
-      the **Outline** (Scenes tab `Act → Chapter → Scene → Page → Panel` + a
-      chapter-level Pages cross-reference tab) **and** the **Manuscript** (a
-      **comics script editor**: PAGE headings + one free-typing script block
-      per panel with labeled Visual/Caption/Dialogue/SFX/Notes sections — not
-      a tree, not a form), both over the shared `Scene.content` body
+      the old standalone Pages widget). The Graphic Novel structure lives in the
+      **Outline** — the canonical page-first `Act → Page → Scene → Panel` tree
+      (an Act owns its act-wide Pages and Scenes; a Scene can span Pages with
+      `(continued)` labels; one Page can hold Panels from several Scenes via the
+      scene's pinned start page; **chapters hidden** in GN mode) — **and** the
+      **Manuscript**, which **derives from it** (a **comics script editor**:
+      PAGE headings with act-wide numbers + one free-typing script block per
+      panel with labeled Visual/Caption/Dialogue/SFX/Notes sections — not a
+      tree, not a form; empty project → *"Create an Act to begin your Graphic
+      Novel."* + **+ Act**), both over the shared `Scene.content` body
       (mirrored; Outline Panel double-click deep-links to the script block).
       **Verify in macOS fullscreen** (smoke-test F-items) that opening the GN
       Outline/Manuscript shows the script editor and does **not** minimize.

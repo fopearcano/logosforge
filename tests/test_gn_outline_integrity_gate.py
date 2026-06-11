@@ -1,11 +1,14 @@
 """Graphic Novel Outline/Page/Panel — post-fix integrity gate.
 
-A focused gate that re-verifies the corrected Graphic Novel architecture
-(Chapter owns Pages, Scene owns Panels, Panel assigned to Page, Scene spans Pages,
-Outline ⇄ Manuscript mirror the same shared body, standalone Pages disabled). It
-complements the detailed suites (`test_gn_outline.py`, `test_gn_manuscript_script_editor.py`,
-`test_gn_pages_manuscript_sync.py`) with the audit's specific data-integrity,
-standalone-Pages-safety, export, and no-image-generation invariants.
+A focused gate that re-verifies the Graphic Novel architecture (canonical
+**Act → Page → Scene → Panel**: an Act owns its Pages and Scenes, a Panel
+belongs to one Scene and sits on one Page, a Scene spans Pages, a Page can
+hold Panels from several Scenes, Outline ⇄ Manuscript mirror the same shared
+body, chapters hidden, standalone Pages disabled). It complements the
+detailed suites (`test_gn_outline.py`, `test_gn_act_page_structure.py`,
+`test_gn_manuscript_script_editor.py`, `test_gn_pages_manuscript_sync.py`)
+with the audit's specific data-integrity, standalone-Pages-safety, export,
+and no-image-generation invariants.
 """
 
 from __future__ import annotations
@@ -150,8 +153,8 @@ def test_outline_and_manuscript_share_one_body():
     assert "MIRROR" in (db.get_scene_by_id(sid).content or "")
     # Outline tree shows the panel snippet.
     found = None
-    stack = [o._scene_tree.topLevelItem(i)
-             for i in range(o._scene_tree.topLevelItemCount())]
+    stack = [o._tree.topLevelItem(i)
+             for i in range(o._tree.topLevelItemCount())]
     while stack:
         it = stack.pop()
         if "MIRROR" in it.text(0):
@@ -209,7 +212,8 @@ def test_export_has_page_and_scene_assignment_no_secrets():
     db.save_project_settings(pid, settings)
     md = gno.export_outline_markdown(db, pid)
     assert "Cold Open" in md and "Page 1" in md and "PANELBODY" in md
-    assert "Page view" in md                       # page-order cross-reference
+    # Explicit Panel → Scene and Panel → Page assignment, page-first order.
+    assert "(Scene: Cold Open → Page 1)" in md
     assert "SECRET" not in md and "sk-" not in md
     low = md.lower()
     for banned in ("comfyui", "image prompt", "lora", "img2img", "txt2img"):

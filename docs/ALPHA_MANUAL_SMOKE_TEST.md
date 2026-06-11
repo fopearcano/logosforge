@@ -134,8 +134,10 @@ this behavior as supporting evidence (the manual UI check is still required).
 
 | # | Item | Result | Auto |
 |---|------|--------|------|
-| 22 | Manuscript opens the **comics script editor** — PAGE headings + one free-typing script block per panel (labeled Visual/Caption/Dialogue/SFX/Notes sections; no tree, no form fields) | PENDING MANUAL RETEST | ✓ |
-| 23 | Outline shows the same Pages/Panels as the Manuscript | PENDING MANUAL RETEST | ✓ |
+| 22 | Manuscript opens the **comics script editor** — PAGE headings (act-wide numbers) + one free-typing script block per panel (labeled Visual/Caption/Dialogue/SFX/Notes sections; no tree, no form fields) | PENDING MANUAL RETEST | ✓ |
+| 23 | Outline shows the canonical `Act → Page → Scene → Panel` tree (page-first; chapters hidden); same Pages/Panels as the Manuscript | PENDING MANUAL RETEST | ✓ |
+| 23b | Empty GN project: Manuscript + Outline show *"Create an Act to begin your Graphic Novel."* with **+ Act**; clicking it creates Act 1 and offers **+ Page** | PENDING MANUAL RETEST | ✓ |
+| 23c | A scene spanning several pages shows `Scene … (continued)` on each following Outline page; pinning a scene's **start page** ("Scene starts on act page") makes one Page hold panels from two scenes; Auto returns it after the previous scene | PENDING MANUAL RETEST | ✓ |
 | 24 | Editing in the Manuscript updates the Outline (shared body) | PENDING MANUAL RETEST | ✓ |
 | 25 | Editing in the Outline updates the Manuscript (shared body) | PENDING MANUAL RETEST | ✓ |
 | 26 | Add Page updates both surfaces | PENDING MANUAL RETEST | ✓ |
@@ -149,13 +151,16 @@ this behavior as supporting evidence (the manual UI check is still required).
 ### Fullscreen window-management — Graphic Novel Outline + Manuscript Page/Panel editor
 
 > The standalone **Pages** sidebar section is **disabled for Alpha** (it was
-> fullscreen-hostile). Graphic Novel Page/Panel management lives in the **Outline**
-> (Scenes tab `Act → Chapter → Scene → Page → Panel` + a chapter-level Pages
-> cross-reference tab) **and** the **Manuscript** (a **comics script editor**:
-> inline PAGE blocks → Panel cards, all fields editable in place — not a tree),
-> both over the shared `Scene.content` body (child-widget-only; no separate
-> route, no top-level window). Headless tests cover both surfaces + route safety
-> (`tests/test_gn_outline.py`, `tests/test_gn_manuscript_script_editor.py`,
+> fullscreen-hostile). The Graphic Novel structure lives in the **Outline** —
+> the canonical page-first `Act → Page → Scene → Panel` tree (chapters hidden;
+> scenes can span pages with `(continued)` labels; a pinned scene start page
+> lets one Page hold panels from several scenes) — **and** the **Manuscript**,
+> which derives from it (a **comics script editor**: inline PAGE blocks with
+> act-wide numbers → panel script blocks — not a tree), both over the shared
+> `Scene.content` body (child-widget-only; no separate route, no top-level
+> window). Headless tests cover both surfaces + route safety
+> (`tests/test_gn_outline.py`, `tests/test_gn_act_page_structure.py`,
+> `tests/test_gn_manuscript_script_editor.py`,
 > `tests/test_pages_alpha_fallback.py`, `tests/test_pages_fullscreen_safe.py`).
 > **Confirm the fullscreen behavior manually** — especially that opening the GN
 > Outline/Manuscript does not minimize the app:
@@ -165,10 +170,10 @@ this behavior as supporting evidence (the manual UI check is still required).
 | F1 | Enter macOS **fullscreen**, open a Graphic Novel project | PENDING MANUAL RETEST | |
 | F2 | The standalone **Pages** sidebar item is **not shown** (disabled) | PENDING MANUAL RETEST | ✓ |
 | F3 | Click **Outline** — the GN Page/Panel Outline appears; app does **not** minimize/flicker | PENDING MANUAL RETEST | partial |
-| F4 | Outline **Scenes** tab shows `Act → Chapter → Scene → Page → Panel`; **Pages** tab groups panels by chapter page | PENDING MANUAL RETEST | ✓ |
-| F5 | Add Scene / Page / Panel in the Outline; edit Visual / Caption / Dialogue / SFX / Notes | PENDING MANUAL RETEST | ✓ |
-| F6 | Open the **Manuscript** — the comics script editor shows the same Pages/Panels inline (mirrored); app stays fullscreen | PENDING MANUAL RETEST | ✓ |
-| F7 | Export Graphic Novel text / Markdown (shared body; shows Panel → Page and Panel → Scene) | PENDING MANUAL RETEST | ✓ |
+| F4 | Outline shows the canonical page-first `Act → Page → Scene → Panel` tree (chapters hidden; `(continued)` labels for spanning scenes) | PENDING MANUAL RETEST | ✓ |
+| F5 | Add Act / Scene / Page / Panel in the Outline; edit Visual / Caption / Dialogue / SFX / Notes; pin a scene's start page to share a Page between two scenes | PENDING MANUAL RETEST | ✓ |
+| F6 | Open the **Manuscript** — the comics script editor shows the same structure with act-wide PAGE numbers (mirrored); app stays fullscreen | PENDING MANUAL RETEST | ✓ |
+| F7 | Export Graphic Novel text / Markdown (`Act → Page → Scene → Panel`, explicit Panel → Scene / Panel → Page assignments, each panel once) | PENDING MANUAL RETEST | ✓ |
 
 ### Local voice-to-script (MVP) — OFF by default
 

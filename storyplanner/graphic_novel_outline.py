@@ -1,25 +1,24 @@
-"""Graphic Novel Outline — chapter-aware Page/Panel aggregation over the shared body.
+"""Graphic Novel Outline data layer — scene-scoped Page/Panel editing helpers.
 
-The Graphic Novel Outline is the Alpha Page/Panel navigator (the standalone Pages
-section is disabled for fullscreen safety). It reads the **shared** per-scene GN
-body (`Scene.content` via :mod:`graphic_novel_blocks`) and presents it two ways:
+The editing primitives behind the Graphic Novel Outline (the standalone Pages
+section stays disabled for fullscreen safety). Everything reads/writes the
+**shared** per-scene GN body (`Scene.content` via :mod:`graphic_novel_blocks`):
+helpers here load the scene script, mutate it, and save it back (single source
+of truth) — no separate Pages storage, no body-format change, no migration.
+Pure data logic: no Qt. No image / prompt / ComfyUI fields.
 
-* **Scene View** — ``Act -> Chapter -> Scene -> Page -> Panel`` (editable). A scene
-  owns its panels; panels are grouped on pages; a scene can span multiple pages.
-* **Page View** — ``Act -> Chapter -> [chapter Page N] -> Panel (from Scene X)``: a
-  cross-reference that groups panels across a chapter's scenes by page number, so a
-  chapter page can show panels from more than one scene.
+The canonical **visible** hierarchy — ``Act → Page → Scene → Panel``, where an
+Act owns act-wide Pages, a Scene can span several Pages and one Page can hold
+Panels from several Scenes — is computed by :mod:`graphic_novel_structure`
+(act-wide page coordinates over these same scene-local bodies). Chapters
+remain hidden storage labels for cross-mode compatibility; the legacy
+chapter-grouped read views below (:func:`scene_view`, :func:`chapter_page_view`)
+are retained as data-layer compatibility helpers.
 
-Both views operate on the **same** body — there is no separate Pages storage, no
-body-format change, and no migration. Editing helpers here load the scene script,
-mutate it, and save it back to ``Scene.content`` (single source of truth). Pure
-data logic: no Qt. No image / prompt / ComfyUI fields.
-
-Storage note (Alpha): pages are physically **scene-scoped** (each scene owns its
-Pages/Panels in its own body). The chapter-level Page View groups by page *number*
-across the chapter's scenes; physically merging panels from different scenes onto
-one shared page record is a documented future step (the model is the anchor point
-for later visual-production integrations).
+Storage note (Alpha): pages are physically **scene-scoped** (each scene owns
+its Pages/Panels in its own body); the act-wide page numbers are a computed
+coordinate (`Scene.gn_page_start` + canonical order), which is the anchor
+point for later visual-production integrations.
 """
 
 from __future__ import annotations
@@ -210,48 +209,15 @@ def delete_page(db, scene_id: int, page_idx: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Export (chapter-aware: shows Panel -> Page and Panel -> Scene)
+# Export (canonical Act → Page → Scene → Panel)
 # ---------------------------------------------------------------------------
 
 
 def export_outline_markdown(db, project_id: int) -> str:
-    """Markdown of the GN structure showing, per chapter, both the Scene View and
-    the chapter Page View (each panel's Page and Scene). Reads only the shared
-    body — never settings / API keys / image data."""
-    project = db.get_project_by_id(project_id)
-    title = (getattr(project, "title", "") or "Graphic Novel").strip() or "Graphic Novel"
-    lines: list[str] = [f"# {title}", ""]
-    view = scene_view(db, project_id)
-    if not view:
-        lines.append("_No structure yet._")
-        return "\n".join(lines) + "\n"
-    for act, chapters in view:
-        lines.append(f"## {act}")
-        lines.append("")
-        for chapter, sc_out in chapters:
-            lines.append(f"### {chapter}")
-            lines.append("")
-            scenes = [s for s, _ in sc_out]
-            # Scene View
-            for s, script in sc_out:
-                s_title = (getattr(s, "title", "") or "Untitled").strip()
-                lines.append(f"- **Scene: {s_title or 'Untitled'}**")
-                for pi, page in enumerate(script.pages):
-                    for panel in page.panels:
-                        lines.append(
-                            f"  - Panel {panel.number} → Page {page.number}: "
-                            f"{panel_snippet(panel)}")
-            lines.append("")
-            # Page View (cross-reference: which scene each panel comes from)
-            pv = chapter_page_view(db, scenes)
-            if pv:
-                lines.append(f"_Page view — {chapter}_")
-                for page_num, entries in pv:
-                    lines.append(f"  - Page {page_num}:")
-                    for s, _pi, _ci, panel in entries:
-                        s_title = (getattr(s, "title", "") or "Untitled").strip()
-                        lines.append(
-                            f"    - Panel {panel.number} (Scene {s_title}): "
-                            f"{panel_snippet(panel)}")
-                lines.append("")
-    return "\n".join(lines).rstrip() + "\n"
+    """Canonical **Act → Page → Scene → Panel** structural export (delegates
+    to :func:`graphic_novel_structure.export_structure_markdown`): physical
+    page order, explicit Panel → Scene and Panel → Page assignments,
+    ``continued`` markers, each panel's text exactly once. Reads only the
+    shared body — never settings / API keys / image data."""
+    from storyplanner import graphic_novel_structure as gns
+    return gns.export_structure_markdown(db, project_id)
