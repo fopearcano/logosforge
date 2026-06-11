@@ -1,31 +1,36 @@
-"""Graphic Novel Outline — canonical **Act → Page → Scene → Panel** navigator.
+"""Graphic Novel Outline — block/card planner (Act → Page → Scene → Panel).
 
-Mounted as the **Outline** for Graphic Novel projects (the standalone Pages
-section stays disabled). One tree in physical, page-first order over the
-act-wide page coordinates from :mod:`graphic_novel_structure`:
+Mounted as the **Outline** for Graphic Novel projects. Uses the same
+block-card UX paradigm as the shared Outline planner (full-width dark
+card canvas + header action bar — not the old thin tree with an empty
+detail pane), with the Graphic Novel hierarchy substituted:
 
-    Act 1
-      Page 1
-        Scene — A                ← the scene's first page on this act page
-          Panel 1 — snippet
-      Page 2
-        Scene — A (continued)    ← the same scene spanning onto Page 2
-        Scene — B                ← a second scene sharing Page 2
-      Scene — D (no pages yet)   ← empty scenes stay visible under their Act
+    Outline                      [+ Act] [+ Page] [+ Scene] [+ Panel] …
+    ┌─ ACT 1 ────────────────────────────────────────────────────────┐
+    │  ┌─ PAGE 1 · <title> ─────────────────────────────────────────┐│
+    │  │  SCENE — A                       (rename · starts-on-page) ││
+    │  │    [ PANEL 1 — snippet ]  [ PANEL 2 — snippet ]            ││
+    │  └────────────────────────────────────────────────────────────┘│
+    │  ┌─ PAGE 2 ───────────────────────────────────────────────────┐│
+    │  │  SCENE — A (continued)                                     ││
+    │  │  SCENE — B                                                 ││
+    │  └────────────────────────────────────────────────────────────┘│
+    │  SCENE — D (no pages yet)                                      │
+    └─────────────────────────────────────────────────────────────────┘
 
-An Act owns its Pages and Scenes; a Panel belongs to one Scene and sits on one
-act Page; a Scene can span several Pages; one Page can hold Panels from
-several Scenes. **Chapters are hidden** in Graphic Novel mode (they remain
-storage labels for cross-mode compatibility only).
+An Act owns its act-wide Pages and its Scenes; a Panel belongs to one Scene
+and sits on one Page; a Scene can span Pages (``(continued)`` groups) and
+one Page can hold Panels from several Scenes. **Chapters are hidden**
+(compat storage labels only). Coordinates come from
+:mod:`graphic_novel_structure`; all edits go through the shared body
+(:mod:`graphic_novel_outline`), so the Manuscript mirrors immediately.
 
-The selected-item editor on the right edits a Panel's five fields (Visual /
-Caption / Dialogue / SFX / Notes), a scene-page's title/notes, the Scene's
-title (rename — PlanView is not mounted in GN mode), and a scene's act-wide
-start page (pin / auto-chain). Selection never mutates; add/move/
-delete go through the shared body (:mod:`graphic_novel_outline`) so the
-Manuscript mirrors every edit. Double-click deep-links into the Manuscript.
-Child-widget-only: no separate route, no top-level window, no dialog on
-mount — fullscreen-safe. No image / prompt / ComfyUI fields.
+Click selects (highlighted card); double-click opens the block in the
+Manuscript (Panels deep-link to their script block). Panel text is written
+in the Manuscript — cards show snippets, page title/notes and scene
+rename/start-page stay inline here. Selection never mutates; deletes
+confirm; child-widget-only (no separate route, no top-level window).
+No image / prompt / ComfyUI fields.
 """
 
 from __future__ import annotations
@@ -35,15 +40,16 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSpinBox,
-    QTreeWidget,
-    QTreeWidgetItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -51,18 +57,25 @@ from PySide6.QtWidgets import (
 from storyplanner import graphic_novel_outline as gno
 from storyplanner import graphic_novel_structure as gns
 from storyplanner import story_structure as ss
-from storyplanner.ui import safe_dialogs
-
-_ROLE = Qt.ItemDataRole.UserRole
-_PANEL_FIELDS = (
-    ("visual_description", "Visual", True),
-    ("caption", "Caption", False),
-    ("dialogue", "Dialogue", True),
-    ("sfx", "SFX", False),
-    ("notes", "Notes", True),
-)
+from storyplanner.ui import safe_dialogs, theme
 
 EMPTY_PROJECT_MESSAGE = "Create an Act to begin your Graphic Novel."
+
+_CARD_BASE = (
+    "QFrame#gnPanelCard {{ background: {bg}; border: 1px solid {border};"
+    " border-radius: 6px; }}"
+    "QFrame#gnPanelCard[selected=\"true\"] {{ border: 1px solid {accent}; }}"
+    "QFrame#gnSceneGroup {{ border: none; border-left: 2px solid {border};"
+    " border-radius: 0px; }}"
+    "QFrame#gnSceneGroup[selected=\"true\"] {{ border-left: 2px solid"
+    " {accent}; }}"
+    "QFrame#gnPageCard {{ background: {bg}; border: 1px solid {border};"
+    " border-radius: 8px; }}"
+    "QFrame#gnPageCard[selected=\"true\"] {{ border: 1px solid {accent}; }}"
+    "QFrame#gnActCard {{ background: {panel}; border: 1px solid {border};"
+    " border-radius: 10px; }}"
+    "QFrame#gnActCard[selected=\"true\"] {{ border: 1px solid {accent}; }}"
+)
 
 
 class _FocusPlainText(QPlainTextEdit):
@@ -73,8 +86,30 @@ class _FocusPlainText(QPlainTextEdit):
         self.committed.emit()
 
 
+class _Card(QFrame):
+    """A selectable block card: click selects, double-click opens it in the
+    Manuscript. Carries its structural descriptor in ``gn_data``."""
+
+    def __init__(self, view: "GraphicNovelOutlineView", data: dict,
+                 object_name: str) -> None:
+        super().__init__()
+        self._view = view
+        self.gn_data = data
+        self.setObjectName(object_name)
+        self.setProperty("selected", "false")
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 (Qt signature)
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._view._select(self.gn_data)
+        super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
+        self._view._activate(self.gn_data)
+        super().mouseDoubleClickEvent(event)
+
+
 class GraphicNovelOutlineView(QWidget):
-    """Act → Page → Scene → Panel navigator + editor over the shared body."""
+    """Block/card Outline over the canonical Act → Page → Scene → Panel."""
 
     def __init__(
         self, db, project_id: int, *,
@@ -89,24 +124,34 @@ class GraphicNovelOutlineView(QWidget):
         self._project_id = project_id
         self._on_data_changed = on_data_changed
         self._on_open_manuscript = on_open_manuscript
-        # Optional deep-link: double-clicking a Panel focuses its script
-        # block in the Manuscript (scene_id, local_page_idx, panel_idx).
+        # Deep-link: opening a Panel focuses its script block in the
+        # Manuscript (scene_id, local_page_idx, panel_idx).
         self._on_open_panel = on_open_panel
         self._sel: dict = {}
+        self._cards: list[_Card] = []
 
-        root = QHBoxLayout(self)
-        root.setContentsMargins(10, 8, 10, 8)
-        root.setSpacing(10)
+        self.setStyleSheet(_CARD_BASE.format(
+            bg="rgba(255,255,255,0.03)", border=theme.BORDER,
+            accent=theme.ACCENT, panel=theme.BG_PANEL))
 
-        # -- Left: toolbar + the canonical tree --
-        left = QVBoxLayout()
-        left.setSpacing(4)
-        head = QLabel("Graphic Novel Outline")
-        head.setObjectName("gnOutlineHeading")
-        head.setStyleSheet("font-size: 14px; font-weight: bold;")
-        left.addWidget(head)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(16, 12, 16, 12)
+        root.setSpacing(8)
 
-        bar = QHBoxLayout()
+        # -- Header: title + mode chip + action bar (shared Outline style) --
+        head = QHBoxLayout()
+        head.setSpacing(6)
+        title = QLabel("Outline")
+        title.setObjectName("gnOutlineHeading")
+        title.setStyleSheet(
+            f"font-size: 18px; font-weight: bold;"
+            f" color: {theme.TEXT_PRIMARY};")
+        head.addWidget(title)
+        chip = QLabel("Graphic Novel · Act → Page → Scene → Panel")
+        chip.setObjectName("gnOutlineModeChip")
+        chip.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 11px;")
+        head.addWidget(chip)
+        head.addStretch()
         for label, slot, name in (
             ("+ Act", self._add_act, "gnOutlineAddAct"),
             ("+ Scene", self._add_scene, "gnOutlineAddScene"),
@@ -119,262 +164,234 @@ class GraphicNovelOutlineView(QWidget):
             b = QPushButton(label)
             b.setObjectName(name)
             b.clicked.connect(slot)
-            bar.addWidget(b)
-        left.addLayout(bar)
+            head.addWidget(b)
+        root.addLayout(head)
 
-        self._tree = QTreeWidget()
-        self._tree.setObjectName("gnOutlineTree")
-        self._tree.setHeaderHidden(True)
-        self._tree.setMaximumWidth(380)
-        self._tree.currentItemChanged.connect(
-            lambda cur, _p: self._on_select(cur))
-        self._tree.itemDoubleClicked.connect(
-            lambda it, _c: self._activate(it))
-        left.addWidget(self._tree, stretch=1)
-        root.addLayout(left)
-
-        # -- Right: selected-item editor --
+        # -- Full-width card canvas --
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
-        self._detail_host = QWidget()
-        self._detail_layout = QVBoxLayout(self._detail_host)
-        self._detail_layout.setContentsMargins(4, 4, 4, 4)
-        self._detail_layout.setSpacing(6)
-        self._scroll.setWidget(self._detail_host)
+        self._scroll.setStyleSheet("QScrollArea { border: none; }")
+        self._host = QWidget()
+        self._host.setObjectName("gnOutlineCanvas")
+        self._canvas = QVBoxLayout(self._host)
+        self._canvas.setContentsMargins(4, 4, 4, 4)
+        self._canvas.setSpacing(10)
+        self._scroll.setWidget(self._host)
         root.addWidget(self._scroll, stretch=1)
 
         self.refresh()
 
-    # -------------------------------------------------------------- tree build
+    # -------------------------------------------------------------- rebuild
     def refresh(self) -> None:
-        keep = dict(self._sel)
-        self._tree.blockSignals(True)
-        self._tree.clear()
-        self._build_tree(gns.act_view(self._db, self._project_id))
-        self._tree.blockSignals(False)
-        target = self._find_item(keep)
-        if target is not None:
-            self._tree.setCurrentItem(target)
-        else:
-            self._render_detail()
+        self._cards = []
+        while self._canvas.count():
+            it = self._canvas.takeAt(0)
+            w = it.widget()
+            if w is not None:
+                w.setParent(None)
+                w.deleteLater()
+        view = gns.act_view(self._db, self._project_id)
+        if not view:
+            # Empty state A: no Act yet.
+            msg = QLabel(EMPTY_PROJECT_MESSAGE)
+            msg.setObjectName("gnOutlineEmpty")
+            self._canvas.addWidget(msg)
+            btn = QPushButton("+ Act")
+            btn.setObjectName("gnOutlineDetailAddAct")
+            btn.clicked.connect(self._add_act)
+            self._canvas.addWidget(btn)
+            self._canvas.addStretch()
+            self._sel = {}
+            return
+        for act, pages, placements in view:
+            self._canvas.addWidget(self._build_act_card(act, pages,
+                                                        placements))
+        self._canvas.addStretch()
+        self._apply_selection_styles()
 
     @staticmethod
     def _scene_title(scene) -> str:
         return (getattr(scene, "title", "") or "Untitled").strip() or "Untitled"
 
-    def _build_tree(self, view) -> None:
-        for act, pages, placements in view:
-            a_item = QTreeWidgetItem([act])
-            a_item.setData(0, _ROLE, {"kind": "act", "act": act})
-            self._tree.addTopLevelItem(a_item)
-            for page_no, slices in pages:
-                pg_item = QTreeWidgetItem([f"Page {page_no}"])
-                pg_item.setData(0, _ROLE, {"kind": "act_page", "act": act,
-                                           "page_no": page_no})
-                a_item.addChild(pg_item)
-                for sl in slices:
-                    scene = sl.placement.scene
-                    label = f"Scene — {self._scene_title(scene)}"
-                    if sl.continued:
-                        label += " (continued)"
-                    if (sl.page.title or "").strip():
-                        label += f" · {sl.page.title.strip()}"
-                    s_item = QTreeWidgetItem([label])
-                    s_item.setData(0, _ROLE, {
-                        "kind": "scene_page", "act": act,
-                        "scene_id": scene.id, "page": sl.local_idx,
-                        "page_no": page_no, "continued": sl.continued})
-                    pg_item.addChild(s_item)
-                    for ci, panel in enumerate(sl.page.panels):
-                        pn = QTreeWidgetItem([
-                            f"Panel {panel.number} — {gno.panel_snippet(panel)}"])
-                        pn.setData(0, _ROLE, {
-                            "kind": "panel", "act": act, "scene_id": scene.id,
-                            "page": sl.local_idx, "panel": ci,
-                            "page_no": page_no})
-                        s_item.addChild(pn)
-                    s_item.setExpanded(True)
-                pg_item.setExpanded(True)
-            # Scenes without pages stay visible directly under their Act.
-            for placement in placements:
-                if placement.page_count:
-                    continue
-                s_item = QTreeWidgetItem([
-                    f"Scene — {self._scene_title(placement.scene)} "
-                    f"(no pages yet)"])
-                s_item.setData(0, _ROLE, {"kind": "scene", "act": act,
-                                          "scene_id": placement.scene.id})
-                a_item.addChild(s_item)
-            a_item.setExpanded(True)
+    def _register(self, card: _Card) -> _Card:
+        self._cards.append(card)
+        return card
 
-    def _find_item(self, sel: dict):
-        if not sel:
-            return None
+    def _build_act_card(self, act, pages, placements) -> QFrame:
+        card = self._register(_Card(self, {"kind": "act", "act": act},
+                                    "gnActCard"))
+        v = QVBoxLayout(card)
+        v.setContentsMargins(12, 10, 12, 10)
+        v.setSpacing(8)
+        head = QLabel((act or "Act").upper())
+        head.setObjectName("gnActCardTitle")
+        head.setStyleSheet(
+            f"font-size: 15px; font-weight: bold; letter-spacing: 1px;"
+            f" color: {theme.TEXT_PRIMARY};")
+        v.addWidget(head)
+        for page_no, slices in pages:
+            v.addWidget(self._build_page_card(act, page_no, slices))
+        # Scenes without pages stay visible inside their Act.
+        for placement in placements:
+            if placement.page_count == 0:
+                v.addWidget(self._build_scene_group(
+                    act, placement, local_idx=None, page_no=None,
+                    continued=False))
+        return card
 
-        def walk(item):
-            if item.data(0, _ROLE) == sel:
-                return item
-            for i in range(item.childCount()):
-                f = walk(item.child(i))
-                if f is not None:
-                    return f
-            return None
-        for i in range(self._tree.topLevelItemCount()):
-            f = walk(self._tree.topLevelItem(i))
-            if f is not None:
-                return f
-        return None
+    def _build_page_card(self, act, page_no, slices) -> QFrame:
+        card = self._register(_Card(
+            self, {"kind": "act_page", "act": act, "page_no": page_no},
+            "gnPageCard"))
+        v = QVBoxLayout(card)
+        v.setContentsMargins(10, 8, 10, 8)
+        v.setSpacing(6)
 
-    # -------------------------------------------------------------- selection
-    def _on_select(self, item) -> None:
-        data = item.data(0, _ROLE) if item is not None else None
-        self._sel = dict(data) if isinstance(data, dict) else {}
-        self._render_detail()
-
-    def _activate(self, item) -> None:
-        data = item.data(0, _ROLE) if item is not None else None
-        if not isinstance(data, dict):
-            return
-        if data.get("kind") == "panel" and self._on_open_panel is not None:
-            # Deep-link: focus the panel's script block in the Manuscript.
-            self._on_open_panel(int(data["scene_id"]),
-                                int(data["page"]), int(data["panel"]))
-            return
-        if data.get("kind") in ("scene", "scene_page", "panel") \
-                and self._on_open_manuscript:
-            self._on_open_manuscript(int(data["scene_id"]))
-
-    def select_scene(self, scene_id: int) -> None:
-        # Select a scene's first node (its first page slice, or the
-        # no-pages entry) in the tree.
-        def walk(it):
-            d = it.data(0, _ROLE)
-            if isinstance(d, dict) and d.get("kind") in ("scene_page", "scene") \
-                    and d.get("scene_id") == scene_id:
-                return it
-            for i in range(it.childCount()):
-                f = walk(it.child(i))
-                if f is not None:
-                    return f
-            return None
-        for i in range(self._tree.topLevelItemCount()):
-            found = walk(self._tree.topLevelItem(i))
-            if found is not None:
-                self._tree.setCurrentItem(found)
-                return
-
-    def _select_scene_node(self, scene_id: int) -> None:
-        """Point _sel at a scene's first node after a structural change."""
-        act, placement = gns.find_placement(self._db, self._project_id,
-                                            scene_id)
-        if placement is None:
-            self._sel = {}
-        elif placement.page_count:
-            self._sel = {"kind": "scene_page", "act": act,
-                         "scene_id": scene_id, "page": 0,
-                         "page_no": placement.start_page, "continued": False}
-        else:
-            self._sel = {"kind": "scene", "act": act, "scene_id": scene_id}
-
-    # -------------------------------------------------------------- detail
-    def _clear_detail(self) -> None:
-        while self._detail_layout.count():
-            it = self._detail_layout.takeAt(0)
-            w = it.widget()
-            if w is not None:
-                w.deleteLater()
-
-    def _render_detail(self) -> None:
-        self._clear_detail()
-        kind = self._sel.get("kind")
-        if kind == "panel":
-            self._render_panel_detail()
-        elif kind == "scene_page":
-            self._render_scene_page_detail()
-        elif kind == "scene":
-            self._render_scene_detail()
-        elif kind == "act_page":
-            self._render_act_page_detail()
-        elif kind == "act":
-            self._render_act_detail()
-        elif self._tree.topLevelItemCount() == 0:
-            # Empty state A: no Act yet.
-            msg = QLabel(EMPTY_PROJECT_MESSAGE)
-            msg.setObjectName("gnOutlineEmpty")
-            self._detail_layout.addWidget(msg)
-            btn = QPushButton("+ Act")
-            btn.setObjectName("gnOutlineDetailAddAct")
-            btn.clicked.connect(self._add_act)
-            self._detail_layout.addWidget(btn)
-        else:
-            self._detail_layout.addWidget(QLabel(
-                "Select an Act, Page, Scene or Panel on the left. The "
-                "Outline is the canonical Act → Page → Scene → Panel "
-                "structure; the Manuscript mirrors it."))
-        self._detail_layout.addStretch()
-
-    def _title_label(self, text: str) -> QLabel:
-        lbl = QLabel(text)
+        head = QHBoxLayout()
+        head.setSpacing(8)
+        lbl = QLabel(f"PAGE {page_no}")
+        lbl.setObjectName("gnOutlinePageHeader")
         lbl.setStyleSheet("font-size: 13px; font-weight: bold;")
-        return lbl
+        head.addWidget(lbl)
+        # Page title/notes live on the scene-local page object: editable on
+        # the page's FIRST slice (one page object per scene slice).
+        first = slices[0]
+        title = QLineEdit(first.page.title or "")
+        title.setObjectName("gnOutlinePageTitle")
+        title.setPlaceholderText("Page title (optional)")
+        title.editingFinished.connect(
+            lambda e=title, s=first: self._commit_page(
+                s.placement.scene.id, s.local_idx, "title", e.text()))
+        head.addWidget(title, stretch=1)
+        v.addLayout(head)
 
-    def _render_act_detail(self) -> None:
-        act = self._sel.get("act", "")
-        self._detail_layout.addWidget(self._title_label(act))
-        self._detail_layout.addWidget(QLabel(
-            "An Act owns its Pages and Scenes. Add a Scene, then Pages "
-            "and Panels."))
-        btn = QPushButton("+ Add Scene")
-        btn.setObjectName("gnOutlineDetailAddScene")
-        btn.clicked.connect(self._add_scene)
-        self._detail_layout.addWidget(btn)
-        btn = QPushButton("+ Add Page")
-        btn.setObjectName("gnOutlineDetailAddPage")
-        btn.clicked.connect(self._add_page)
-        self._detail_layout.addWidget(btn)
+        notes = _FocusPlainText()
+        notes.setObjectName("gnOutlinePageSummary")
+        notes.setPlaceholderText("Page notes (optional)")
+        notes.setPlainText(first.page.summary or "")
+        notes.setFixedHeight(40)
+        notes.committed.connect(
+            lambda e=notes, s=first: self._commit_page(
+                s.placement.scene.id, s.local_idx, "summary",
+                e.toPlainText()))
+        v.addWidget(notes)
 
-    def _render_act_page_detail(self) -> None:
-        act = self._sel.get("act")
-        page_no = self._sel.get("page_no")
-        self._detail_layout.addWidget(self._title_label(
-            f"{act} · Page {page_no}"))
-        slices = self._act_page_slices(act, page_no)
-        if len(slices) > 1:
-            self._detail_layout.addWidget(QLabel(
-                "This page holds panels from more than one scene:"))
         for sl in slices:
-            marker = " — continued" if sl.continued else ""
-            self._detail_layout.addWidget(QLabel(
-                f"• Scene {self._scene_title(sl.placement.scene)}{marker} "
-                f"({len(sl.page.panels)} panel(s))"))
-        self._detail_layout.addWidget(QLabel(
-            "Select a Scene entry under this page to edit its page title, "
-            "notes and panels."))
+            v.addWidget(self._build_scene_group(
+                act, sl.placement, local_idx=sl.local_idx, page_no=page_no,
+                continued=sl.continued, page=sl.page))
+        return card
 
-    def _act_page_slices(self, act, page_no):
-        for a, pages, _placements in gns.act_view(self._db, self._project_id):
-            if a != act:
+    def _build_scene_group(self, act, placement, *, local_idx, page_no,
+                           continued, page=None) -> QFrame:
+        sid = placement.scene.id
+        if local_idx is None:
+            data = {"kind": "scene", "act": act, "scene_id": sid}
+        else:
+            data = {"kind": "scene_page", "act": act, "scene_id": sid,
+                    "page": local_idx, "page_no": page_no,
+                    "continued": continued}
+        group = self._register(_Card(self, data, "gnSceneGroup"))
+        v = QVBoxLayout(group)
+        v.setContentsMargins(10, 4, 4, 4)
+        v.setSpacing(4)
+
+        head = QHBoxLayout()
+        head.setSpacing(8)
+        marker = " (continued)" if continued else ""
+        suffix = " (no pages yet)" if local_idx is None else ""
+        lbl = QLabel(f"SCENE — {self._scene_title(placement.scene)}"
+                     f"{marker}{suffix}")
+        lbl.setObjectName("gnOutlineSceneLabel")
+        lbl.setStyleSheet("font-weight: bold; font-size: 12px;")
+        head.addWidget(lbl)
+        head.addStretch()
+        if not continued:
+            rename = QLineEdit(placement.scene.title or "")
+            rename.setObjectName("gnOutlineSceneTitle")
+            rename.setPlaceholderText("Scene title")
+            rename.setMaximumWidth(180)
+            rename.editingFinished.connect(
+                lambda e=rename, s=sid: self._commit_scene_title(s, e.text()))
+            head.addWidget(rename)
+            head.addWidget(self._start_page_controls(sid, placement))
+        v.addLayout(head)
+
+        if local_idx is None:
+            btn = QPushButton("+ Add Page")
+            btn.setObjectName("gnOutlineDetailAddPage")
+            btn.setFlat(True)
+            btn.clicked.connect(
+                lambda _=False, s=sid: self._add_page_for(s))
+            v.addWidget(btn)
+            return group
+
+        for ci, panel in enumerate(page.panels):
+            v.addWidget(self._build_panel_card(act, sid, local_idx, ci,
+                                               page_no, panel))
+        return group
+
+    def _build_panel_card(self, act, sid, local_idx, ci, page_no,
+                          panel) -> QFrame:
+        card = self._register(_Card(
+            self, {"kind": "panel", "act": act, "scene_id": sid,
+                   "page": local_idx, "panel": ci, "page_no": page_no},
+            "gnPanelCard"))
+        row = QHBoxLayout(card)
+        row.setContentsMargins(8, 4, 8, 4)
+        row.setSpacing(8)
+        lbl = QLabel(f"PANEL {panel.number}")
+        lbl.setObjectName("gnOutlinePanelHeader")
+        lbl.setStyleSheet("font-weight: bold; color: palette(mid);"
+                          " font-size: 11px;")
+        row.addWidget(lbl)
+        snippet = QLabel(gno.panel_snippet(panel))
+        snippet.setObjectName("gnOutlinePanelSnippet")
+        snippet.setStyleSheet("font-size: 11px;")
+        row.addWidget(snippet, stretch=1)
+        move = QToolButton()
+        move.setObjectName("gnOutlinePanelMove")
+        move.setText("⇢")
+        move.setToolTip("Move panel to another page of this scene")
+        move.clicked.connect(
+            lambda _=False, s=sid, p=local_idx, c=ci:
+            self._show_move_menu(move, s, p, c))
+        row.addWidget(move)
+        return card
+
+    def _show_move_menu(self, button, sid, from_idx, ci) -> None:
+        script = gno.gnb.load_scene_script(self._db, sid)
+        if len(script.pages) < 2:
+            return
+        _act, placement = gns.find_placement(self._db, self._project_id, sid)
+        menu = QMenu(button)
+        for to_idx in range(len(script.pages)):
+            if to_idx == from_idx:
                 continue
-            for no, slices in pages:
-                if no == page_no:
-                    return slices
-        return []
+            no = placement.global_page(to_idx) if placement else to_idx + 1
+            menu.addAction(
+                f"Move to Page {no}",
+                lambda s=sid, f=from_idx, c=ci, t=to_idx:
+                self._assign_panel_to_page(s, f, c, t))
+        menu.exec(button.mapToGlobal(button.rect().bottomLeft()))
 
-    def _start_page_controls(self, scene_id: int) -> QWidget:
+    def _start_page_controls(self, scene_id: int, placement) -> QWidget:
         """Pin / auto-chain a scene's act-wide start page (how a scene is
         placed onto a shared page)."""
-        _act, placement = gns.find_placement(self._db, self._project_id,
-                                             scene_id)
         holder = QWidget()
         row = QHBoxLayout(holder)
         row.setContentsMargins(0, 0, 0, 0)
-        row.addWidget(QLabel("Scene starts on act page:"))
+        row.setSpacing(4)
+        lbl = QLabel("starts on page")
+        lbl.setStyleSheet("color: palette(mid); font-size: 10px;")
+        row.addWidget(lbl)
         spin = QSpinBox()
         spin.setObjectName("gnOutlineStartPage")
         spin.setRange(1, 9999)
         spin.setValue(placement.start_page if placement else 1)
-        auto = QCheckBox("Auto (after previous scene)")
+        auto = QCheckBox("Auto")
         auto.setObjectName("gnOutlineStartAuto")
+        auto.setToolTip("Auto (after previous scene)")
         auto.setChecked(not (placement and placement.explicit))
         spin.setEnabled(not auto.isChecked())
 
@@ -396,134 +413,63 @@ class GraphicNovelOutlineView(QWidget):
         auto.toggled.connect(toggled)
         row.addWidget(spin)
         row.addWidget(auto)
-        row.addStretch()
         return holder
 
-    def _scene_title_editor(self, scene_id: int) -> QLineEdit:
-        """Rename the Scene from the Outline (the canonical GN structure
-        surface — PlanView's rename is not mounted in Graphic Novel mode)."""
-        scene = self._db.get_scene_by_id(scene_id)
-        edit = QLineEdit((getattr(scene, "title", "") or "") if scene else "")
-        edit.setObjectName("gnOutlineSceneTitle")
-        edit.setPlaceholderText("Scene title")
-        edit.editingFinished.connect(
-            lambda e=edit, sid=scene_id: self._commit_scene_title(sid,
-                                                                  e.text()))
-        return edit
+    # -------------------------------------------------------------- selection
+    def _apply_selection_styles(self) -> None:
+        for card in self._cards:
+            selected = "true" if card.gn_data == self._sel else "false"
+            if card.property("selected") != selected:
+                card.setProperty("selected", selected)
+                card.style().unpolish(card)
+                card.style().polish(card)
 
-    def _commit_scene_title(self, sid: int, title: str) -> None:
-        title = (title or "").strip()
-        scene = self._db.get_scene_by_id(sid)
-        # Empty titles are refused (never blank a scene by accident).
-        if scene is None or not title or (scene.title or "") == title:
+    def _select(self, data: dict) -> None:
+        self._sel = dict(data)
+        self._apply_selection_styles()
+
+    def _activate(self, data: dict) -> None:
+        if not isinstance(data, dict):
             return
-        self._db.update_scene_title(sid, title)
-        self._notify()
-
-    def _render_scene_detail(self) -> None:
-        sid = self._sel.get("scene_id")
-        scene = self._db.get_scene_by_id(sid) if sid is not None else None
-        title = self._scene_title(scene) if scene else "Scene"
-        self._detail_layout.addWidget(self._title_label(f"Scene — {title}"))
-        if sid is not None:
-            self._detail_layout.addWidget(QLabel("Scene title"))
-            self._detail_layout.addWidget(self._scene_title_editor(sid))
-        self._detail_layout.addWidget(QLabel(
-            "No pages yet — add a Page to place this scene's panels."))
-        btn = QPushButton("+ Add Page")
-        btn.setObjectName("gnOutlineDetailAddPage")
-        btn.clicked.connect(self._add_page)
-        self._detail_layout.addWidget(btn)
-        if sid is not None:
-            self._detail_layout.addWidget(self._start_page_controls(sid))
-
-    def _render_scene_page_detail(self) -> None:
-        sid, pi = self._sel.get("scene_id"), self._sel.get("page")
-        page_no = self._sel.get("page_no")
-        script = gno.gnb.load_scene_script(self._db, sid)
-        try:
-            page = script.pages[pi]
-        except (IndexError, TypeError):
+        if data.get("kind") == "panel" and self._on_open_panel is not None:
+            self._on_open_panel(int(data["scene_id"]),
+                                int(data["page"]), int(data["panel"]))
             return
-        scene = self._db.get_scene_by_id(sid)
-        title = self._scene_title(scene) if scene else "Scene"
-        marker = " — continued" if self._sel.get("continued") else ""
-        self._detail_layout.addWidget(self._title_label(
-            f"Scene {title}{marker} · Act page {page_no} "
-            f"(scene page {page.number} of {len(script.pages)})"))
-        self._detail_layout.addWidget(QLabel("Scene title"))
-        self._detail_layout.addWidget(self._scene_title_editor(sid))
-        self._detail_layout.addWidget(QLabel("Page title"))
-        title_edit = QLineEdit(page.title or "")
-        title_edit.setObjectName("gnOutlinePageTitle")
-        title_edit.editingFinished.connect(
-            lambda e=title_edit: self._commit_page(sid, pi, "title", e.text()))
-        self._detail_layout.addWidget(title_edit)
-        self._detail_layout.addWidget(QLabel("Page notes"))
-        notes = _FocusPlainText()
-        notes.setObjectName("gnOutlinePageSummary")
-        notes.setPlainText(page.summary or "")
-        notes.setFixedHeight(60)
-        notes.committed.connect(
-            lambda e=notes: self._commit_page(sid, pi, "summary",
-                                              e.toPlainText()))
-        self._detail_layout.addWidget(notes)
-        btn = QPushButton("+ Add Panel")
-        btn.setObjectName("gnOutlineDetailAddPanel")
-        btn.clicked.connect(self._add_panel)
-        self._detail_layout.addWidget(btn)
-        self._detail_layout.addWidget(self._start_page_controls(sid))
+        if data.get("kind") in ("scene", "scene_page", "panel") \
+                and self._on_open_manuscript:
+            self._on_open_manuscript(int(data["scene_id"]))
+        elif data.get("kind") == "act_page" and self._on_open_manuscript:
+            # Open the page's first scene in the Manuscript.
+            slices = self._act_page_slices(data.get("act"),
+                                           data.get("page_no"))
+            if slices:
+                self._on_open_manuscript(slices[0].placement.scene.id)
 
-    def _render_panel_detail(self) -> None:
-        sid, pi, ci = (self._sel.get("scene_id"), self._sel.get("page"),
-                       self._sel.get("panel"))
-        script = gno.gnb.load_scene_script(self._db, sid)
-        try:
-            page = script.pages[pi]
-            panel = page.panels[ci]
-        except (IndexError, TypeError):
-            return
-        scene = self._db.get_scene_by_id(sid)
-        s_title = self._scene_title(scene) if scene else "Scene"
-        page_no = self._sel.get("page_no")
-        where = f"Act page {page_no}" if page_no else f"Page {page.number}"
-        self._detail_layout.addWidget(self._title_label(
-            f"Panel {panel.number}  ·  {where}  ·  Scene {s_title}"))
-        for key, label, multiline in _PANEL_FIELDS:
-            self._detail_layout.addWidget(QLabel(label))
-            if multiline:
-                ed = _FocusPlainText()
-                ed.setPlainText(getattr(panel, key, "") or "")
-                ed.setFixedHeight(56)
-                ed.committed.connect(
-                    lambda e=ed, k=key: self._commit_panel(sid, pi, ci, k,
-                                                           e.toPlainText()))
-            else:
-                ed = QLineEdit(getattr(panel, key, "") or "")
-                ed.editingFinished.connect(
-                    lambda e=ed, k=key: self._commit_panel(sid, pi, ci, k,
-                                                           e.text()))
-            ed.setObjectName(f"gnOutlinePanelField_{key}")
-            self._detail_layout.addWidget(ed)
-        # Move-to-page control (labels show ACT-wide page numbers).
-        if len(script.pages) > 1:
-            _act, placement = gns.find_placement(self._db, self._project_id,
-                                                 sid)
-            row = QHBoxLayout()
-            row.addWidget(QLabel("Move panel to page:"))
-            for to_idx in range(len(script.pages)):
-                if to_idx == pi:
-                    continue
-                no = placement.global_page(to_idx) if placement else to_idx + 1
-                b = QPushButton(f"Page {no}")
-                b.clicked.connect(
-                    lambda _=False, t=to_idx:
-                    self._assign_panel_to_page(sid, pi, ci, t))
-                row.addWidget(b)
-            row.addStretch()
-            holder = QWidget()
-            holder.setLayout(row)
-            self._detail_layout.addWidget(holder)
+    def select_scene(self, scene_id: int) -> None:
+        self._select_scene_node(scene_id)
+        self._apply_selection_styles()
+
+    def _select_scene_node(self, scene_id: int) -> None:
+        """Point _sel at a scene's first card after a structural change."""
+        act, placement = gns.find_placement(self._db, self._project_id,
+                                            scene_id)
+        if placement is None:
+            self._sel = {}
+        elif placement.page_count:
+            self._sel = {"kind": "scene_page", "act": act,
+                         "scene_id": scene_id, "page": 0,
+                         "page_no": placement.start_page, "continued": False}
+        else:
+            self._sel = {"kind": "scene", "act": act, "scene_id": scene_id}
+
+    def _act_page_slices(self, act, page_no):
+        for a, pages, _placements in gns.act_view(self._db, self._project_id):
+            if a != act:
+                continue
+            for no, slices in pages:
+                if no == page_no:
+                    return slices
+        return []
 
     # -------------------------------------------------------------- mutations
     def _notify(self) -> None:
@@ -538,6 +484,15 @@ class GraphicNovelOutlineView(QWidget):
     def _commit_page(self, sid, pi, field, value) -> None:
         if gno.set_page_field(self._db, sid, pi, field, value):
             self._notify()
+
+    def _commit_scene_title(self, sid: int, title: str) -> None:
+        title = (title or "").strip()
+        scene = self._db.get_scene_by_id(sid)
+        # Empty titles are refused (never blank a scene by accident).
+        if scene is None or not title or (scene.title or "") == title:
+            return
+        self._db.update_scene_title(sid, title)
+        self._notify()
 
     def _selected_act(self) -> str | None:
         act = self._sel.get("act")
@@ -567,7 +522,10 @@ class GraphicNovelOutlineView(QWidget):
             return sid
         act = self._sel.get("act")
         if not act:
-            return None
+            acts = gns.acts_with_scenes(self._db, self._project_id)
+            if not acts:
+                return None
+            act = acts[-1][0]
         for a, scenes in gns.acts_with_scenes(self._db, self._project_id):
             if a == act:
                 if scenes:
@@ -580,6 +538,9 @@ class GraphicNovelOutlineView(QWidget):
         sid = self._scene_for_structure_ops()
         if sid is None:
             return
+        self._add_page_for(sid)
+
+    def _add_page_for(self, sid: int) -> None:
         idx = gno.add_page(self._db, sid)
         act, placement = gns.find_placement(self._db, self._project_id, sid)
         if placement is not None:

@@ -151,17 +151,11 @@ def test_outline_and_manuscript_share_one_body():
     m = GraphicNovelManuscriptView(db, pid, on_data_changed=lambda: None)
     m.select_scene(sid)
     assert "MIRROR" in (db.get_scene_by_id(sid).content or "")
-    # Outline tree shows the panel snippet.
-    found = None
-    stack = [o._tree.topLevelItem(i)
-             for i in range(o._tree.topLevelItemCount())]
-    while stack:
-        it = stack.pop()
-        if "MIRROR" in it.text(0):
-            found = it
-            break
-        stack.extend(it.child(i) for i in range(it.childCount()))
-    assert found is not None
+    # Outline cards show the panel snippet.
+    from PySide6.QtWidgets import QLabel
+    snippets = [w.text() for w in o.findChildren(QLabel)
+                if w.objectName() == "gnOutlinePanelSnippet"]
+    assert any("MIRROR" in t for t in snippets)
 
 
 # ==========================================================================
@@ -263,8 +257,9 @@ def test_selection_and_cancelled_actions_never_mark_dirty(monkeypatch):
     gno.add_page(db, sid); gno.add_panel(db, sid, 0)
     dirty = []
     v = _gate_outline(db, pid, dirty)
-    # Selection alone never mutates / never marks dirty.
-    v._tree.setCurrentItem(v._tree.topLevelItem(0).child(0).child(0))
+    # Selecting cards never mutates / never marks dirty.
+    for card in v._cards:
+        v._select(card.gn_data)
     assert dirty == []
     # A cancelled delete neither mutates nor marks dirty …
     v._sel = {"kind": "panel", "act": "Act 1", "scene_id": sid,
@@ -278,7 +273,8 @@ def test_selection_and_cancelled_actions_never_mark_dirty(monkeypatch):
     assert dirty == [1] and _body(db, sid).panel_count() == 0
 
 
-def test_tree_collapse_expand_and_highlight_are_safe():
+
+def test_card_selection_highlight_is_safe():
     db = Database()
     pid = _gn(db)
     sid = _scene(db, pid)
@@ -286,21 +282,17 @@ def test_tree_collapse_expand_and_highlight_are_safe():
     before = db.get_scene_by_id(sid).content
     dirty = []
     v = _gate_outline(db, pid, dirty)
-    act = v._tree.topLevelItem(0)
-    page = act.child(0)
-    group = page.child(0)
-    for item in (act, page, group):
-        assert item.isExpanded() is True          # readable by default
-        item.setExpanded(False)                   # collapse …
-        assert item.isExpanded() is False
-        item.setExpanded(True)                    # … and expand again
-    v._tree.setCurrentItem(group)
-    assert v._tree.currentItem() is group         # selected item highlighted
+    panel = next(c for c in v._cards if c.gn_data["kind"] == "panel")
+    v._select(panel.gn_data)
+    assert panel.property("selected") == "true"      # highlighted
+    others = [c for c in v._cards if c is not panel]
+    assert all(c.property("selected") == "false" for c in others)
     assert db.get_scene_by_id(sid).content == before
     assert dirty == []
 
 
-def test_scene_rename_from_outline_detail():
+
+def test_scene_rename_from_outline_card():
     from PySide6.QtWidgets import QLineEdit
     db = Database()
     pid = _gn(db)
@@ -308,10 +300,9 @@ def test_scene_rename_from_outline_detail():
     gno.add_page(db, sid)
     dirty = []
     v = _gate_outline(db, pid, dirty)
-    v._sel = {"kind": "scene_page", "act": "Act 1", "scene_id": sid,
-              "page": 0, "page_no": 1, "continued": False}
-    v._render_detail()
-    edit = v._detail_host.findChild(QLineEdit, "gnOutlineSceneTitle")
+    group = next(c for c in v._cards
+                 if c.gn_data.get("kind") == "scene_page")
+    edit = group.findChild(QLineEdit, "gnOutlineSceneTitle")
     assert edit is not None and edit.text() == "Untitled Scene"
     v._commit_scene_title(sid, "  Cold Open  ")
     assert db.get_scene_by_id(sid).title == "Cold Open"   # trimmed + saved
@@ -322,19 +313,20 @@ def test_scene_rename_from_outline_detail():
     assert dirty == [1]                                   # still exactly one
 
 
-def test_manuscript_clears_stale_panel_ref_on_scene_switch():
+
+def test_manuscript_panel_ref_validated_against_live_script(monkeypatch):
+    from storyplanner.ui import safe_dialogs
     from storyplanner.ui.graphic_novel_manuscript_view import (
         GraphicNovelManuscriptView)
     db = Database()
     pid = _gn(db)
-    a = _scene(db, pid, "A")
     b = _scene(db, pid, "B")
     gno.add_page(db, b); gno.add_panel(db, b, 0)
     m = GraphicNovelManuscriptView(db, pid, on_data_changed=lambda: None)
+    assert m.current_panel_ref() is None             # nothing focused yet
     m.select_scene(b)
     m.select_panel(0, 0)
     assert m.current_panel_ref() == (b, 0, 0)
-    idx = next(i for i in range(m._scene_combo.count())
-               if m._scene_combo.itemData(i) == a)
-    m._scene_combo.setCurrentIndex(idx)           # switch scene
-    assert m.current_panel_ref() is None          # no stale Panel target
+    monkeypatch.setattr(safe_dialogs, "question", lambda *a, **k: True)
+    m._delete_page(b, 0)                             # target disappears
+    assert m.current_panel_ref() is None             # no stale Panel target

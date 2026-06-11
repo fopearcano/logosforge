@@ -284,36 +284,35 @@ limitations for this RC:
   inert (never mounts the old standalone Pages widget). The Graphic Novel
   structure lives in **two mirrored surfaces** over the shared `Scene.content`
   body:
-  - the **Outline** (`GraphicNovelOutlineView`) is the **canonical structure**:
-    one page-first tree — `Act → Page → Scene → Panel` (an **Act owns its
-    act-wide Pages and its Scenes**; a **Panel belongs to one Scene** and sits
-    on **one Page**; a **Scene can span several Pages**, shown as
-    `Scene … (continued)` on each following page; **one Page can hold Panels
-    from several Scenes**). **Chapters are hidden** in Graphic Novel mode
-    (`Scene.chapter` remains a storage label for cross-mode compatibility
-    only). The selected-item editor edits a Panel's five fields (**Visual /
-    Caption / Dialogue / SFX / Notes**), a scene-page's title/notes, the
-    **Scene's title** (rename — PlanView is not mounted in GN mode), and the
-    scene's **act-wide start page** ("Auto — after previous scene" or a pinned
-    page number, which is how two scenes share one physical page); add Act /
-    Scene / Page / Panel, panel reorder + move-panel-to-page (act-wide page
-    labels), confirmed deletes, and double-click → Manuscript deep-link.
-    Deferred: physical Page reorder within a scene (placement is controlled
-    via the start-page pin) and Act rename/move from the GN Outline.
+  - the **Outline** (`GraphicNovelOutlineView`) is the **canonical
+    structure** rendered in the same block/card planner UX as the other
+    modes' Outline (full-width dark card canvas + header action bar — not a
+    tree): Act cards contain act-wide Page cards, Page cards contain Scene
+    groups (`SCENE — X (continued)` when a scene spans pages; one Page can
+    hold groups from several Scenes via the scene's pinned start page) and
+    Panel snippet cards. **Chapters are hidden** (`Scene.chapter` is a
+    compat storage label only). Click selects (highlighted card);
+    double-click opens the block in the Manuscript (Panels deep-link to
+    their script block). Inline on the cards: page title/notes, scene
+    rename, and the scene's act-wide start page (pin / "Auto — after
+    previous scene"); + Act / + Scene / + Page / + Panel, panel reorder and
+    move-panel-to-page (act-wide labels), confirmed deletes. Panel text is
+    written in the Manuscript.
   - the **Manuscript** (`GraphicNovelManuscriptView`) **derives from the
-    Outline** — the **comics script editor** (Superscript-style): the scene
-    flows as a script document — PAGE headings showing the **act-wide** page
-    numbers, then **one large free-typing script block per panel** where the
-    writer types labeled sections (**Visual / Caption / Dialogue / SFX /
-    Notes** — labels optional, unlabeled text is the Visual, speaker lines
-    like `NAME: …` stay content). Blocks parse back into the canonical
-    five-field model on commit (focus-out); line breaks inside a field are
-    preserved end-to-end; page/panel numbers stay auto-numbered. Empty-state
-    ladder: no Act → *"Create an Act to begin your Graphic Novel."* (+ Act);
-    no pages → + Page; page without panels → + Panel. It is **not** a
-    tree/outliner and **not** a form: scene selection is a flat dropdown
-    (Act · Title — no chapter), structure stays in the Outline
-    (double-clicking a Panel there focuses its script block here).
+    Outline** and uses the same full-editor UX paradigm as the other modes'
+    Manuscript: ONE full-width document over the whole project (no per-scene
+    dropdown, no standalone "Comics Script" screen) — ACT section headers,
+    SCENE headers with inline rename + act-wide page-range chip, PAGE blocks
+    showing the **act-wide** page numbers, then **one large free-typing
+    script block per panel** with labeled sections (**Visual / Caption /
+    Dialogue / SFX / Notes** — labels optional, unlabeled text is the
+    Visual, speaker lines like `NAME: …` stay content). The toolbar shows a
+    "Graphic Novel" mode label and a live word/character count (≈ characters
+    for no-word-space scripts). Blocks parse back into the canonical
+    five-field model on commit (focus-out); line breaks preserved;
+    page/panel numbers stay auto-numbered. Empty-state ladder: no Act →
+    *"Create an Act to begin your Graphic Novel."* (+ Act); scene without
+    pages → + Add Page; page without panels → + Panel.
   Both read/write the **same** `Scene.content` (single source of truth — no separate
   Pages storage), so edits mirror. **Storage note (Alpha):** pages are physically
   **scene-scoped** (each scene owns its Pages/Panels in its body, numbered `PAGE

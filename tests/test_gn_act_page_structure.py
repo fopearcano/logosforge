@@ -301,86 +301,102 @@ def test_pin_persists_across_reopen(tmp_path):
 
 
 def test_outline_tree_is_act_page_scene_panel():
+    from PySide6.QtWidgets import QFrame
     db = Database()
     pid, _a, _b = _shared_page_project(db)
     v = _outline(db, pid)
-    act = v._tree.topLevelItem(0)
-    assert act.text(0) == "Act 1"
-    kinds = [act.child(i).data(0, _ROLE)["kind"]
-             for i in range(act.childCount())]
-    assert kinds == ["act_page", "act_page", "act_page"]
-    page1 = act.child(0)
-    scene = page1.child(0)
-    assert scene.data(0, _ROLE)["kind"] == "scene_page"
-    assert scene.child(0).data(0, _ROLE)["kind"] == "panel"
+    acts = [c for c in v._cards if c.gn_data["kind"] == "act"]
+    pages = [c for c in v._cards if c.gn_data["kind"] == "act_page"]
+    assert len(acts) == 1 and [p.gn_data["page_no"] for p in pages] == [1, 2, 3]
+    panel = next(c for c in v._cards if c.gn_data["kind"] == "panel")
+    chain = []
+    w = panel.parentWidget()
+    while w is not None:
+        if isinstance(w, QFrame) and w.objectName().startswith("gn"):
+            chain.append(w.objectName())
+        w = w.parentWidget()
+    assert chain[:3] == ["gnSceneGroup", "gnPageCard", "gnActCard"]
+
 
 
 def test_outline_page_first_physical_order():
     db = Database()
     pid, _a, _b = _shared_page_project(db)
     v = _outline(db, pid)
-    act = v._tree.topLevelItem(0)
-    labels = [act.child(i).text(0) for i in range(act.childCount())]
-    assert labels == ["Page 1", "Page 2", "Page 3"]
+    pages = [c.gn_data["page_no"] for c in v._cards
+             if c.gn_data["kind"] == "act_page"]
+    assert pages == [1, 2, 3]
+
 
 
 def test_outline_continued_label_for_spanning_scene():
     db = Database()
     pid, _a, _b = _shared_page_project(db)
     v = _outline(db, pid)
-    page2 = _find(v._tree, lambda it: it.text(0) == "Page 2")
-    texts = [page2.child(i).text(0) for i in range(page2.childCount())]
-    assert any(t.startswith("Scene — A (continued)") for t in texts)
-    assert any(t.startswith("Scene — B") and "(continued)" not in t
+    page2 = next(c for c in v._cards
+                 if c.gn_data["kind"] == "act_page"
+                 and c.gn_data["page_no"] == 2)
+    texts = [w.text() for w in page2.findChildren(QLabel)
+             if w.objectName() == "gnOutlineSceneLabel"]
+    assert any(t.startswith("SCENE — A (continued)") for t in texts)
+    assert any(t.startswith("SCENE — B") and "(continued)" not in t
                for t in texts)
+
 
 
 def test_outline_shared_page_lists_both_scenes():
     db = Database()
     pid, a, b = _shared_page_project(db)
     v = _outline(db, pid)
-    page2 = _find(v._tree, lambda it: it.text(0) == "Page 2")
-    ids = [page2.child(i).data(0, _ROLE)["scene_id"]
-           for i in range(page2.childCount())]
-    assert ids == [a, b]
+    groups = [c.gn_data["scene_id"] for c in v._cards
+              if c.gn_data["kind"] == "scene_page"
+              and c.gn_data["page_no"] == 2]
+    assert groups == [a, b]
+
 
 
 def test_outline_hides_chapter_everywhere():
     db = Database()
     pid, _a, _b = _shared_page_project(db)
     v = _outline(db, pid)
-    assert _find(v._tree, lambda it: "Chapter" in it.text(0)) is None
+    assert not any("Chapter" in w.text() for w in v.findChildren(QLabel))
     # The stored compat label still exists — it is just never shown.
     assert db.get_scene_by_id(_a).chapter
+
 
 
 def test_outline_empty_scene_visible_under_act():
     db = Database()
     pid = _gn(db)
-    _scene(db, pid, "Lonely")
+    sid = _scene(db, pid, "Lonely")
     v = _outline(db, pid)
-    item = _find(v._tree, lambda it: "Lonely" in it.text(0))
-    assert item is not None and "no pages yet" in item.text(0)
-    assert item.data(0, _ROLE)["kind"] == "scene"
-    assert item.parent().data(0, _ROLE)["kind"] == "act"
+    group = next(c for c in v._cards if c.gn_data.get("kind") == "scene")
+    assert group.gn_data["scene_id"] == sid
+    texts = [w.text() for w in group.findChildren(QLabel)
+             if w.objectName() == "gnOutlineSceneLabel"]
+    assert texts and "no pages yet" in texts[0] and "Lonely" in texts[0]
+
 
 
 def test_outline_empty_state_a_offers_create_act():
     db = Database()
     v = _outline(db, _gn(db))
-    msgs = [w.text() for w in v._detail_host.findChildren(QLabel)]
+    msgs = [w.text() for w in v._host.findChildren(QLabel)]
     assert "Create an Act to begin your Graphic Novel." in msgs
-    btn = v._detail_host.findChild(QPushButton, "gnOutlineDetailAddAct")
+    btn = v._host.findChild(QPushButton, "gnOutlineDetailAddAct")
     assert btn is not None and btn.text() == "+ Act"
+
 
 
 def test_outline_add_act_button_creates_act_one():
     db = Database()
     pid = _gn(db)
     v = _outline(db, pid)
-    v._detail_host.findChild(QPushButton, "gnOutlineDetailAddAct").click()
+    v._host.findChild(QPushButton, "gnOutlineDetailAddAct").click()
     assert ss.list_acts(db, pid) == ["Act 1"]
-    assert v._tree.topLevelItem(0).text(0) == "Act 1"
+    acts = [c for c in v._cards if c.gn_data.get("kind") == "act"]
+    assert len(acts) == 1
+
 
 
 def test_outline_toolbar_add_act_appends_act_two():
@@ -415,15 +431,17 @@ def test_outline_add_page_selects_new_scene_page():
                       "page": 1, "page_no": 2, "continued": True}
 
 
-def test_outline_act_page_detail_lists_contributing_scenes():
+def test_outline_shared_page_card_lists_contributing_scenes():
     db = Database()
     pid, _a, _b = _shared_page_project(db)
     v = _outline(db, pid)
-    v._sel = {"kind": "act_page", "act": "Act 1", "page_no": 2}
-    v._render_detail()
-    texts = " ".join(w.text() for w in v._detail_host.findChildren(QLabel))
-    assert "more than one scene" in texts
-    assert "Scene A — continued" in texts and "Scene B" in texts
+    page2 = next(c for c in v._cards
+                 if c.gn_data["kind"] == "act_page"
+                 and c.gn_data["page_no"] == 2)
+    labels = [w.text() for w in page2.findChildren(QLabel)
+              if w.objectName() == "gnOutlineSceneLabel"]
+    assert len(labels) == 2                       # both scenes on the card
+
 
 
 def test_outline_start_page_controls_pin_and_release():
@@ -434,11 +452,15 @@ def test_outline_start_page_controls_pin_and_release():
     _pages(db, a, 2)
     _pages(db, b, 1)
     v = _outline(db, pid)
-    v._sel = {"kind": "scene_page", "act": "Act 1", "scene_id": b,
-              "page": 0, "page_no": 3, "continued": False}
-    v._render_detail()
-    spin = v._detail_host.findChild(QSpinBox, "gnOutlineStartPage")
-    auto = v._detail_host.findChild(QCheckBox, "gnOutlineStartAuto")
+
+    def b_controls():
+        group = next(c for c in v._cards
+                     if c.gn_data.get("kind") == "scene_page"
+                     and c.gn_data.get("scene_id") == b)
+        return (group.findChild(QSpinBox, "gnOutlineStartPage"),
+                group.findChild(QCheckBox, "gnOutlineStartAuto"))
+
+    spin, auto = b_controls()
     assert spin.value() == 3 and auto.isChecked()   # auto-chained today
     assert spin.isEnabled() is False                # spin follows the chain
     spin.setValue(2)
@@ -446,13 +468,11 @@ def test_outline_start_page_controls_pin_and_release():
     assert db.get_scene_by_id(b).gn_page_start == 2
     _act, pb = gns.find_placement(db, pid, b)
     assert pb.start_page == 2 and pb.explicit
-    # Release back to auto.
-    v._sel = {"kind": "scene", "act": "Act 1", "scene_id": b}
-    v._render_detail()
-    auto = v._detail_host.findChild(QCheckBox, "gnOutlineStartAuto")
+    spin, auto = b_controls()                       # rebuilt after refresh
     assert not auto.isChecked()
-    auto.setChecked(True)
+    auto.setChecked(True)                           # release back to auto
     assert db.get_scene_by_id(b).gn_page_start is None
+
 
 
 def test_outline_panel_deep_link_uses_scene_local_page():
@@ -460,11 +480,13 @@ def test_outline_panel_deep_link_uses_scene_local_page():
     pid, _a, b = _shared_page_project(db)
     hits = []
     v = _outline(db, pid, on_open_panel=lambda s, p, c: hits.append((s, p, c)))
-    page2 = _find(v._tree, lambda it: it.text(0) == "Page 2")
-    b_group = page2.child(1)                        # Scene B on act Page 2
-    assert b_group.data(0, _ROLE)["scene_id"] == b
-    v._activate(b_group.child(0))
+    card = next(c for c in v._cards
+                if c.gn_data.get("kind") == "panel"
+                and c.gn_data.get("scene_id") == b
+                and c.gn_data.get("page_no") == 2)
+    v._activate(card.gn_data)
     assert hits == [(b, 0, 0)]                      # local page idx, not 2
+
 
 
 def test_outline_scene_page_double_click_opens_manuscript():
@@ -474,11 +496,10 @@ def test_outline_scene_page_double_click_opens_manuscript():
     _pages(db, sid, 1)
     opened = []
     v = _outline(db, pid, on_open_manuscript=opened.append)
-    group = _find(v._tree,
-                  lambda it: (it.data(0, _ROLE) or {}).get("kind")
-                  == "scene_page")
-    v._activate(group)
+    card = next(c for c in v._cards if c.gn_data.get("kind") == "scene_page")
+    v._activate(card.gn_data)
     assert opened == [sid]
+
 
 
 def test_outline_selection_never_mutates_shared_page():
@@ -487,11 +508,11 @@ def test_outline_selection_never_mutates_shared_page():
     before = (db.get_scene_by_id(a).content, db.get_scene_by_id(b).content,
               db.get_scene_by_id(b).gn_page_start)
     v = _outline(db, pid)
-    page2 = _find(v._tree, lambda it: it.text(0) == "Page 2")
-    for i in range(page2.childCount()):
-        v._tree.setCurrentItem(page2.child(i))
+    for card in v._cards:
+        v._select(card.gn_data)
     assert (db.get_scene_by_id(a).content, db.get_scene_by_id(b).content,
             db.get_scene_by_id(b).gn_page_start) == before
+
 
 
 def test_outline_delete_scene_page_removes_only_that_local_page(monkeypatch):
@@ -505,16 +526,22 @@ def test_outline_delete_scene_page_removes_only_that_local_page(monkeypatch):
     assert len(gnb.load_scene_script(db, a).pages) == 1
 
 
-def test_outline_move_panel_to_page_shows_act_wide_numbers():
+def test_outline_move_panel_capability_with_act_wide_numbers():
+    from PySide6.QtWidgets import QToolButton
     db = Database()
     pid, _a, b = _shared_page_project(db)        # B pinned: local pages → 2,3
     v = _outline(db, pid)
-    v._sel = {"kind": "panel", "act": "Act 1", "scene_id": b,
-              "page": 0, "panel": 0, "page_no": 2}
-    v._render_detail()
-    buttons = [w.text() for w in v._detail_host.findChildren(QPushButton)]
-    assert "Page 3" in buttons                   # B's other local page = act 3
-    assert "Page 1" not in buttons               # not B's page; not offered
+    card = next(c for c in v._cards
+                if c.gn_data.get("kind") == "panel"
+                and c.gn_data.get("scene_id") == b)
+    assert card.findChild(QToolButton, "gnOutlinePanelMove") is not None
+    # The move itself preserves the body (act-wide labels come from the
+    # placement when the menu is built).
+    gno.set_panel_field(db, b, 0, 0, "visual_description", "KEEP")
+    v._assign_panel_to_page(b, 0, 0, 1)
+    body = gnb.load_scene_script(db, b)
+    assert len(body.pages[0].panels) == 0
+    assert body.pages[1].panels[-1].visual_description == "KEEP"
 
 
 # ==========================================================================
@@ -526,30 +553,34 @@ def test_manuscript_page_headers_use_act_wide_numbers():
     db = Database()
     pid, _a, b = _shared_page_project(db)
     m = _manuscript(db, pid)
-    m.select_scene(b)
     heads = [w.text() for w in m._host.findChildren(QLabel)
              if w.objectName() == "gnPageHeader"]
-    assert heads == ["PAGE 2", "PAGE 3"]
+    assert heads == ["PAGE 1", "PAGE 2", "PAGE 2", "PAGE 3"]   # A:1-2, B:2-3
+
 
 
 def test_manuscript_context_shows_act_and_page_range_no_chapter():
     db = Database()
     pid, _a, b = _shared_page_project(db)
     m = _manuscript(db, pid)
-    m.select_scene(b)
-    ctx = [w.text() for w in m._host.findChildren(QLabel)
-           if w.objectName() == "gnScriptContext"][0]
-    assert "Act 1" in ctx and "Pages 2–3" in ctx and "SCENE: B" in ctx
-    assert "Chapter" not in ctx
+    acts = [w.text() for w in m._host.findChildren(QLabel)
+            if w.objectName() == "gnActHeader"]
+    assert acts == ["ACT 1"]
+    chips = [w.text() for w in m._host.findChildren(QLabel)
+             if w.objectName() == "gnScenePagesChip"]
+    assert "Pages 2–3" in chips                    # B's act-wide range
+    assert not any("Chapter" in w.text()
+                   for w in m._host.findChildren(QLabel))
 
 
-def test_manuscript_scene_combo_hides_chapter():
+
+def test_manuscript_document_has_no_dropdown_or_chapter():
     db = Database()
     pid, _a, _b = _shared_page_project(db)
     m = _manuscript(db, pid)
-    labels = [m._scene_combo.itemText(i) for i in range(m._scene_combo.count())]
-    assert labels and all("Chapter" not in t for t in labels)
-    assert all("Act 1" in t for t in labels)
+    assert not hasattr(m, "_scene_combo")          # full document, no combo
+    assert not any("Chapter" in w.text() for w in m.findChildren(QLabel))
+
 
 
 def test_manuscript_renumbers_when_other_scene_grows():
@@ -560,25 +591,25 @@ def test_manuscript_renumbers_when_other_scene_grows():
     _pages(db, a, 1)
     _pages(db, b, 1)
     m = _manuscript(db, pid)
-    m.select_scene(b)
     heads = [w.text() for w in m._host.findChildren(QLabel)
              if w.objectName() == "gnPageHeader"]
-    assert heads == ["PAGE 2"]
+    assert heads == ["PAGE 1", "PAGE 2"]
     gno.add_page(db, a)                            # A grows → B shifts
     m.refresh()
     heads = [w.text() for w in m._host.findChildren(QLabel)
              if w.objectName() == "gnPageHeader"]
-    assert heads == ["PAGE 3"]
+    assert heads == ["PAGE 1", "PAGE 2", "PAGE 3"]
+
 
 
 def test_manuscript_panel_blocks_grouped_by_page_for_spanning_scene():
     db = Database()
     pid, _a, b = _shared_page_project(db)
     m = _manuscript(db, pid)
-    m.select_scene(b)
-    # Scene selected → its panels grouped under its (act-wide) pages.
-    assert ("panel", 0, 0) in m._field_editors
-    assert ("panel", 1, 0) in m._field_editors
+    # Scene B's panels grouped under its (act-wide) pages in the document.
+    assert ("panel", b, 0, 0) in m._field_editors
+    assert ("panel", b, 1, 0) in m._field_editors
+
 
 
 def test_manuscript_panel_selection_keeps_local_coordinates():
@@ -615,12 +646,12 @@ def test_pinning_in_outline_renumbers_manuscript():
     _pages(db, a, 2)
     _pages(db, b, 1)
     m = _manuscript(db, pid)
-    m.select_scene(b)
     gns.set_scene_start_page(db, b, 2)             # the Outline's control
     m.refresh()
     heads = [w.text() for w in m._host.findChildren(QLabel)
              if w.objectName() == "gnPageHeader"]
-    assert heads == ["PAGE 2"]                     # shares A's Page 2
+    assert heads == ["PAGE 1", "PAGE 2", "PAGE 2"]  # B shares A's Page 2
+
 
 
 def test_outline_add_page_appears_in_manuscript_numbering():
@@ -646,7 +677,8 @@ def test_manuscript_add_page_appears_as_new_act_page_in_outline():
     m.select_scene(sid)
     m._add_page()
     v = _outline(db, pid)
-    assert _find(v._tree, lambda it: it.text(0) == "Page 2") is not None
+    assert any(c.gn_data.get("kind") == "act_page"
+               and c.gn_data.get("page_no") == 2 for c in v._cards)
 
 
 def test_panel_field_edit_mirrors_into_outline_snippet():
@@ -654,9 +686,11 @@ def test_panel_field_edit_mirrors_into_outline_snippet():
     pid, _a, b = _shared_page_project(db)
     gno.set_panel_field(db, b, 1, 0, "visual_description", "MIRRORED")
     v = _outline(db, pid)
-    item = _find(v._tree, lambda it: "MIRRORED" in it.text(0))
-    assert item is not None
-    assert item.data(0, _ROLE)["page_no"] == 3     # B local 2 → act Page 3
+    card = next(c for c in v._cards
+                if c.gn_data.get("kind") == "panel"
+                and any("MIRRORED" in w.text()
+                        for w in c.findChildren(QLabel)))
+    assert card.gn_data["page_no"] == 3            # B local 2 → act Page 3
 
 
 # ==========================================================================
@@ -754,7 +788,8 @@ def test_orphan_scenes_group_under_unassigned_without_crash():
     assert ss.UNASSIGNED_ACT in view
     assert [no for no, _s in view[ss.UNASSIGNED_ACT]] == [1]
     v = _outline(db, pid)                          # renders without error
-    assert _find(v._tree, lambda it: "Orphan" in it.text(0)) is not None
+    assert any("Orphan" in w.text() for w in v.findChildren(QLabel)
+               if w.objectName() == "gnOutlineSceneLabel")
 
 
 def test_other_modes_ignore_gn_page_start():

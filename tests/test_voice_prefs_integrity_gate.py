@@ -186,8 +186,8 @@ def test_commit_into_graphic_novel_field_keeps_field_working():
     win._show_manuscript()
     view = win.content_area
     view.select_scene(sid)
-    view._add_page(); view._add_panel()
-    field = view._field_editors[("panel", 0, 0)]         # panel script block
+    view._add_page(sid); view._add_panel(sid)
+    field = view._field_editors[("panel", sid, 0, 0)]    # panel script block
     win._voice_commit.note_focus(field)
     panel = win._voice_panel
     panel._preview.setPlainText("a windswept rooftop")

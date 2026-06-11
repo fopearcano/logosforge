@@ -356,6 +356,21 @@ PDF/DOCX export visual checks, Dexter and Graphic Novel real-UI passes.
 **Classification: A — Final Alpha RC re-certification passed; ready for
 manual release confirmation.**
 
+## Graphic Novel UI bugfix (2026-06-11): shared block-based UX
+
+Post-re-certification screenshots showed the GN screens still used bespoke
+chrome. Fixed before release: the **Manuscript** is now one full-document
+block editor (ACT/SCENE headers, act-wide PAGE blocks, panel script
+blocks, mode label + live word count — no "Comics Script" title, no scene
+dropdown) and the **Outline** is the shared block/card planner (Act → Page
+→ Scene → Panel cards, selection highlight, inline page/scene/start-page
+editing — no tree, no empty detail pane). Data model, mirroring, voice
+panel targeting, deep-links, Pages inertness and exports unchanged.
+Verification: GN suites **228** + voice/cross-cutting **555** + GN
+legacy/Series **205** + broad certification sweep **1527** — all green.
+The Final Alpha RC re-certification result stands; manual smoke items
+(GN real-UI pass) remain.
+
 ## Last audit summary
 
 The final global multi-mode integrity audit (the **Alpha Release Gate**, see

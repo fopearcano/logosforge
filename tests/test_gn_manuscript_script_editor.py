@@ -92,8 +92,13 @@ def _scripted_view(db, *, pages=1, panels=1):
     return pid, sid, v
 
 
-def _block(view, pi=0, ci=0):
-    return view._field_editors[("panel", pi, ci)]
+def _sid(view):
+    return next(iter(view._scripts), None)
+
+
+def _block(view, pi=0, ci=0, sid=None):
+    sid = sid if sid is not None else _sid(view)
+    return view._field_editors[("panel", sid, pi, ci)]
 
 
 def _commit_block(view, pi, ci, text):
@@ -151,15 +156,11 @@ def test_manuscript_contains_no_tree_widget():
 
 def test_one_script_block_per_panel_not_five_form_fields():
     db = Database()
-    _pid, _sid, v = _scripted_view(db, pages=2, panels=2)
+    _pid, _sid_, v = _scripted_view(db, pages=2, panels=2)
     blocks = [w for w in v._host.findChildren(QPlainTextEdit)
               if w.objectName() == "gnPanelScript"]
-    assert len(blocks) == 4                      # ONE writing block per panel
-    # No per-field form inputs for panel content (page titles are the only
-    # line edits, one per page header).
-    line_edits = v._host.findChildren(QLineEdit)
-    assert all(e.objectName() == "gnPageTitle" for e in line_edits)
-    assert len(line_edits) == 2
+    assert len(blocks) == 4                      # ONE block per panel
+
 
 
 def test_labeled_sections_render_inside_block_text():
@@ -203,31 +204,34 @@ def test_panel_headers_rendered_in_order():
 
 def test_scene_context_header_visible():
     db = Database()
-    _pid, _sid, v = _scripted_view(db)
-    ctx = [w for w in v._host.findChildren(QLabel)
-           if w.objectName() == "gnScriptContext"]
-    assert len(ctx) == 1
-    # Act + act-wide page range; chapters are HIDDEN in Graphic Novel mode.
-    assert "Act 1" in ctx[0].text() and "Page" in ctx[0].text()
-    assert "Chapter" not in ctx[0].text()
-    assert "SCENE:" in ctx[0].text()
+    _pid, _sid_, v = _scripted_view(db)
+    # Full-document editor: ACT header + SCENE header + act-wide pages chip;
+    # chapters are HIDDEN in Graphic Novel mode.
+    acts = [w.text() for w in v._host.findChildren(QLabel)
+            if w.objectName() == "gnActHeader"]
+    assert acts == ["ACT 1"]
+    assert [w.text() for w in v._host.findChildren(QLabel)
+            if w.objectName() == "gnSceneHeader"] == ["SCENE 1"]
+    chips = [w.text() for w in v._host.findChildren(QLabel)
+             if w.objectName() == "gnScenePagesChip"]
+    assert chips and "Page" in chips[0]
+    assert not any("Chapter" in w.text() for w in v._host.findChildren(QLabel))
 
 
-def test_scene_selector_is_flat_combo_and_script_scrolls():
+
+def test_full_document_editor_no_scene_dropdown():
     db = Database()
-    _pid, _sid, v = _scripted_view(db)
-    combo = v.findChild(QComboBox, "gnScriptSceneSelect")
-    assert combo is not None and combo.count() == 1
+    _pid, _sid_, v = _scripted_view(db)
+    # The old single-scene "Comics Script" renderer is gone: no scene
+    # dropdown, no Comics Script title — one full document that scrolls.
+    assert not hasattr(v, "_scene_combo")
+    assert not any("Comics Script" in w.text()
+                   for w in v.findChildren(QLabel))
     assert v._scroll.widget() is v._host
-    # Panel blocks never grow inner scrollbars — the document scrolls as one.
     from PySide6.QtCore import Qt
     assert (_block(v).verticalScrollBarPolicy()
             == Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-
-# ==========================================================================
-# Empty-state ladder A → B → C → D
-# ==========================================================================
 
 
 def test_state_a_no_act_offers_create_act():
@@ -255,14 +259,14 @@ def test_state_b_shows_scene_path_and_start_message():
     pid = _gn(db)
     sid = _scene(db, pid, "Cold Open")
     v = _view(db, pid)
-    v.select_scene(sid)
-    ctx = [w for w in v._host.findChildren(QLabel)
-           if w.objectName() == "gnScriptContext"]
-    assert ctx and "Cold Open" in ctx[0].text()      # scene path shown
+    titles = [w.text() for w in v._host.findChildren(QLineEdit)
+              if w.objectName() == "gnSceneTitle"]
+    assert titles == ["Cold Open"]                   # scene shown in document
     msgs = [w.text() for w in v._host.findChildren(QLabel)
             if w.objectName() == "gnScriptEmpty"]
     assert msgs == ["Start the comics script for this scene."]
     assert v._host.findChild(QPushButton, "gnDetailAddPage") is not None
+
 
 
 def test_state_c_page_without_panels_offers_add_panel():
@@ -286,15 +290,12 @@ def test_state_d_panels_render_script_blocks():
     sid = _scene(db, pid)
     v = _view(db, pid)
     v.select_scene(sid)
-    v._add_page(); v._add_panel()
+    v._add_page(sid)
+    v._add_panel(sid)
     assert not any(w.objectName() == "gnPageNoPanels"
                    for w in v._host.findChildren(QLabel))
-    assert ("panel", 0, 0) in v._field_editors
+    assert ("panel", sid, 0, 0) in v._field_editors
 
-
-# ==========================================================================
-# Block editing → canonical model (parse safety, line breaks)
-# ==========================================================================
 
 
 def test_full_block_commit_fills_all_five_fields():
@@ -366,7 +367,10 @@ def test_numbers_stay_canonical_across_edits():
 def test_programmatic_field_commit_updates_block_text():
     db = Database()
     _pid, sid, v = _scripted_view(db)
-    v._commit_panel_field(0, 0, "sfx", "KRAKOOM")
+    # Programmatic path: write the field through the shared body and let
+    # refresh re-render the block (the Outline/voice routes work this way).
+    gno.set_panel_field(db, sid, 0, 0, "sfx", "KRAKOOM")
+    v.refresh()
     assert "SFX:\nKRAKOOM" in _block(v).toPlainText()
     assert _body(db, sid).pages[0].panels[0].sfx == "KRAKOOM"
 
@@ -374,10 +378,10 @@ def test_programmatic_field_commit_updates_block_text():
 def test_page_title_and_notes_edit_persist():
     db = Database()
     _pid, sid, v = _scripted_view(db)
-    title = v._field_editors[("page", 0, "title")]
+    title = v._field_editors[("page", sid, 0, "title")]
     title.setText("Rooftops")
     title.editingFinished.emit()
-    notes = v._field_editors[("page", 0, "summary")]
+    notes = v._field_editors[("page", sid, 0, "summary")]
     notes.setPlainText("Splash page")
     notes.committed.emit()
     body = _body(db, sid)
@@ -402,10 +406,10 @@ def test_delete_panel_confirm_and_cancel(monkeypatch):
     db = Database()
     _pid, sid, v = _scripted_view(db, pages=1, panels=3)
     monkeypatch.setattr(safe_dialogs, "question", lambda *a, **k: False)
-    v._delete_panel(0, 0)
+    v._delete_panel(sid, 0, 0)
     assert len(_body(db, sid).pages[0].panels) == 3      # cancel keeps
     monkeypatch.setattr(safe_dialogs, "question", lambda *a, **k: True)
-    v._delete_panel(0, 0)
+    v._delete_panel(sid, 0, 0)
     assert [p.number for p in _body(db, sid).pages[0].panels] == [1, 2]
 
 
@@ -413,10 +417,10 @@ def test_delete_page_confirm_and_cancel(monkeypatch):
     db = Database()
     _pid, sid, v = _scripted_view(db, pages=2, panels=1)
     monkeypatch.setattr(safe_dialogs, "question", lambda *a, **k: False)
-    v._delete_page(0)
+    v._delete_page(sid, 0)
     assert len(_body(db, sid).pages) == 2
     monkeypatch.setattr(safe_dialogs, "question", lambda *a, **k: True)
-    v._delete_page(0)
+    v._delete_page(sid, 0)
     body = _body(db, sid)
     assert len(body.pages) == 1 and body.pages[0].number == 1
 
@@ -426,7 +430,7 @@ def test_move_panel_reorders_within_page():
     _pid, sid, v = _scripted_view(db, pages=1, panels=2)
     _commit_block(v, 0, 0, "Visual: first")
     _commit_block(v, 0, 1, "Visual: second")
-    v._move_panel(0, 1, -1)
+    v._move_panel(sid, 0, 1, -1)
     panels = _body(db, sid).pages[0].panels
     assert panels[0].visual_description == "second"
     assert [p.number for p in panels] == [1, 2]
@@ -437,7 +441,7 @@ def test_move_panel_reorders_within_page():
 # ==========================================================================
 
 
-def test_select_scene_loads_that_scenes_script():
+def test_select_scene_targets_that_scenes_script():
     db = Database()
     pid = _gn(db)
     s1 = _scene(db, pid, "One")
@@ -446,23 +450,26 @@ def test_select_scene_loads_that_scenes_script():
     gno.set_panel_field(db, s2, 0, 0, "visual_description", "SECOND-SCENE")
     v = _view(db, pid)
     v.select_scene(s2)
-    assert "SECOND-SCENE" in _block(v).toPlainText()
+    assert "SECOND-SCENE" in _block(v, sid=s2).toPlainText()
     v.select_scene(s1)
     assert v._host.findChild(QPushButton, "gnDetailAddPage") is not None
 
 
-def test_scene_combo_switch_changes_script():
+
+def test_document_shows_all_scenes_without_switching():
     db = Database()
     pid = _gn(db)
     _s1 = _scene(db, pid, "One")
     s2 = _scene(db, pid, "Two")
     gno.add_page(db, s2)
-    v = _view(db, pid)                            # lands on scene One
-    v._scene_combo.setCurrentIndex(1)             # user picks scene Two
-    assert v._scene_id == s2
+    v = _view(db, pid)                            # whole project, one document
+    titles = [w.text() for w in v._host.findChildren(QLineEdit)
+              if w.objectName() == "gnSceneTitle"]
+    assert titles == ["One", "Two"]
     heads = [w.text() for w in v._host.findChildren(QLabel)
              if w.objectName() == "gnPageHeader"]
-    assert heads == ["PAGE 1"]
+    assert heads == ["PAGE 1"]                    # Two's page, no switching
+
 
 
 def test_select_panel_focuses_script_block(monkeypatch):
@@ -489,24 +496,12 @@ def test_outline_panel_double_click_deep_links_to_block():
         db, pid, on_data_changed=lambda: None,
         on_open_manuscript=lambda s: hits.append(("scene", s)),
         on_open_panel=lambda s, p, c: hits.append(("panel", s, p, c)))
-
-    def find_panel_item(tree):
-        from PySide6.QtCore import Qt
-        role = Qt.ItemDataRole.UserRole
-        stack = [tree.topLevelItem(i) for i in range(tree.topLevelItemCount())]
-        while stack:
-            it = stack.pop()
-            d = it.data(0, role)
-            if isinstance(d, dict) and d.get("kind") == "panel" \
-                    and d.get("panel") == 1:
-                return it
-            stack.extend(it.child(i) for i in range(it.childCount()))
-        return None
-
-    item = find_panel_item(o._tree)
-    assert item is not None
-    o._activate(item)
+    card = next(c for c in o._cards
+                if c.gn_data.get("kind") == "panel"
+                and c.gn_data.get("panel") == 1)
+    o._activate(card.gn_data)
     assert hits == [("panel", sid, 0, 1)]         # deep-link, not scene-only
+
 
 
 def test_main_window_panel_deep_link_focuses_block(monkeypatch):
@@ -523,7 +518,7 @@ def test_main_window_panel_deep_link_focuses_block(monkeypatch):
                         lambda self, p, c: calls.append((p, c)))
     win._open_gn_panel_in_manuscript(sid, 0, 1)
     assert isinstance(win.content_area, GraphicNovelManuscriptView)
-    assert win.content_area._scene_id == sid
+    assert win.content_area._active_scene_id == sid
     assert calls == [(0, 1)]
 
 
@@ -568,15 +563,15 @@ def test_outline_panel_page_assignment_appears_in_manuscript():
     assert gno.move_panel_to_page(db, sid, 0, 0, 1) is True
     v = _view(db, pid)
     v.select_scene(sid)
-    assert ("panel", 0, 0) not in v._field_editors     # left page 1
+    assert ("panel", sid, 0, 0) not in v._field_editors  # left page 1
     assert "MOVER" in _block(v, 1, 0).toPlainText()    # shown under PAGE 2
 
 
 def test_manuscript_edits_appear_in_outline_data():
     db = Database()
     _pid, sid, v = _scripted_view(db)
-    v._add_page()                                      # Manuscript adds page 2
-    v._add_panel(1)                                    # … and a panel on it
+    v._add_page(sid)                                   # Manuscript adds page 2
+    v._add_panel(sid, 1)                               # … and a panel on it
     _commit_block(v, 1, 0, "Visual:\nFROM_MANUSCRIPT")
     script = gnb.load_scene_script(db, sid)            # what the Outline reads
     assert len(script.pages) == 2
@@ -604,7 +599,8 @@ def test_focus_location_captured_and_restored(monkeypatch):
                         lambda loc: restored.setdefault("loc", loc))
     gno.set_panel_field(db, sid, 0, 0, "caption", "X")   # external change
     v.refresh()
-    assert restored["loc"][0] == ("panel", 0, 0)
+    assert restored["loc"][0] == ("panel", sid, 0, 0)
+
 
 
 def test_project_switch_isolation(tmp_path):
@@ -613,11 +609,12 @@ def test_project_switch_isolation(tmp_path):
     sa = _scene(db, a, "A-scene")
     va = _view(db, a)
     va.select_scene(sa)
-    va._add_page()
+    va._add_page(sa)
     b = _gn(db, "B")                              # empty project
     vb = _view(db, b)
-    assert vb._scene_combo.count() == 0
+    assert vb._scripts == {}
     assert vb._host.findChild(QPushButton, "gnScriptCreateAct") is not None
+
 
 
 def test_save_reload_round_trip():

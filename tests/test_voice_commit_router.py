@@ -378,7 +378,7 @@ def test_gn_commit_mirrors_in_manuscript_and_outline():
         GraphicNovelManuscriptView)
     view = GraphicNovelManuscriptView(db, pid, on_data_changed=lambda: None)
     view.select_scene(sid)
-    block = view._field_editors[("panel", 0, 0)]
+    block = view._field_editors[("panel", sid, 0, 0)]
     assert "MIRRORED-BY-VOICE" in block.toPlainText()
     # …and the Outline snippet reads the same shared body.
     script = gnb.load_scene_script(db, sid)

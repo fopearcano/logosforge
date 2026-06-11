@@ -414,7 +414,7 @@ def test_gn_panel_proposal_through_queue_mirrors_and_undoes():
     view = GraphicNovelManuscriptView(db, pid, on_data_changed=lambda: None)
     view.select_scene(sid)
     assert "cinematic visual" in \
-        view._field_editors[("panel", 0, 0)].toPlainText()
+        view._field_editors[("panel", sid, 0, 0)].toPlainText()
     assert undo_commit(op, ctx)[0] is True
     assert gnb.load_scene_script(db, sid).pages[0].panels[0] \
         .visual_description == "old visual"

@@ -160,38 +160,47 @@ def test_outline_unchanged_for_non_gn(engine):
 
 
 def test_outline_shows_act_page_scene_panel_chapter_hidden():
+    from PySide6.QtWidgets import QFrame, QLabel
     db = Database()
     pid = _gn(db)
     sid = _scene(db, pid, "Cold Open")
     gno.add_page(db, sid); gno.add_panel(db, sid, 0)
     v = _outline(db, pid)
-    # Canonical visible hierarchy: Act → Page → Scene → Panel.
-    act = _find(v._tree, lambda it: it.text(0) == "Act 1")
-    assert act is not None
-    page = _find(v._tree, lambda it: it.text(0) == "Page 1")
-    assert page is not None and page.parent() is act
-    scene = _find(v._tree, lambda it: "Cold Open" in it.text(0))
-    assert scene is not None and scene.parent() is page
-    panel = _find(v._tree, lambda it: it.text(0).startswith("Panel 1"))
-    assert panel is not None and panel.parent() is scene
+    # Canonical block/card hierarchy: Act card > Page card > Scene group >
+    # Panel card (the shared Outline UX, not a tree).
+    kinds = [c.gn_data.get("kind") for c in v._cards]
+    assert kinds.count("act") == 1
+    assert kinds.count("act_page") == 1
+    assert kinds.count("scene_page") == 1
+    assert kinds.count("panel") == 1
+    panel = next(c for c in v._cards if c.gn_data["kind"] == "panel")
+    # Nesting: the panel card lives inside scene group inside page inside act.
+    names = []
+    w = panel.parentWidget()
+    while w is not None:
+        if isinstance(w, QFrame) and w.objectName().startswith("gn"):
+            names.append(w.objectName())
+        w = w.parentWidget()
+    assert names[:3] == ["gnSceneGroup", "gnPageCard", "gnActCard"]
     # Chapters are HIDDEN from the Graphic Novel Outline.
-    assert _find(v._tree, lambda it: "Chapter" in it.text(0)) is None
+    assert not any("Chapter" in lbl.text()
+                   for lbl in v.findChildren(QLabel))
+
 
 
 def test_outline_page_first_order_shows_scene_under_page():
+    from PySide6.QtWidgets import QLabel
     db = Database()
     pid = _gn(db)
     a = _scene(db, pid, "Scene A")
     gno.add_page(db, a); gno.add_panel(db, a, 0)
     v = _outline(db, pid)
-    pg = _find(v._tree, lambda it: it.text(0) == "Page 1")
-    assert pg is not None and pg.childCount() >= 1
-    assert "Scene A" in pg.child(0).text(0)
+    page = next(c for c in v._cards if c.gn_data.get("kind") == "act_page")
+    assert page.gn_data["page_no"] == 1
+    labels = [w.text() for w in page.findChildren(QLabel)
+              if w.objectName() == "gnOutlineSceneLabel"]
+    assert labels and "Scene A" in labels[0]
 
-
-# ==========================================================================
-# 14-27  Editing in Outline
-# ==========================================================================
 
 
 def test_add_page_from_outline():
@@ -312,6 +321,7 @@ def test_outline_edit_visible_in_manuscript():
 
 
 def test_manuscript_edit_visible_in_outline():
+    from PySide6.QtWidgets import QLabel
     db = Database()
     pid = _gn(db)
     sid = _scene(db, pid)
@@ -320,8 +330,10 @@ def test_manuscript_edit_visible_in_outline():
         number=1, panels=[gnb.Panel(number=1, visual_description="FROM_MS")])])
     gnb.save_scene_script(db, sid, script)
     v = _outline(db, pid)
-    panel_item = _find(v._tree, lambda it: "FROM_MS" in it.text(0))
-    assert panel_item is not None
+    snippets = [w.text() for w in v.findChildren(QLabel)
+                if w.objectName() == "gnOutlinePanelSnippet"]
+    assert any("FROM_MS" in t for t in snippets)
+
 
 
 def test_project_switch_isolation(tmp_path):
@@ -331,12 +343,11 @@ def test_project_switch_isolation(tmp_path):
     gno.add_page(db, sa); gno.add_panel(db, sa, 0)
     b = _gn(db, "B")
     vb = _outline(db, b)
-    assert vb._tree.topLevelItemCount() == 0             # B has no acts/scenes
+    assert vb._cards == []                        # B has no acts/scenes
+    from PySide6.QtWidgets import QLabel
+    assert any(w.objectName() == "gnOutlineEmpty"
+               for w in vb.findChildren(QLabel))
 
-
-# ==========================================================================
-# 35-37  Navigation
-# ==========================================================================
 
 
 def test_double_click_scene_opens_manuscript():
@@ -346,9 +357,12 @@ def test_double_click_scene_opens_manuscript():
     opened = []
     from storyplanner.ui.graphic_novel_outline_view import GraphicNovelOutlineView
     v = GraphicNovelOutlineView(db, pid, on_open_manuscript=lambda i: opened.append(i))
-    item = _find(v._tree, lambda it: "Opener" in it.text(0))
-    v._activate(item)
+    card = next(c for c in v._cards
+                if c.gn_data.get("kind") in ("scene", "scene_page")
+                and c.gn_data.get("scene_id") == sid)
+    v._activate(card.gn_data)
     assert opened == [sid]
+
 
 
 def test_double_click_panel_opens_manuscript():
@@ -359,9 +373,10 @@ def test_double_click_panel_opens_manuscript():
     opened = []
     from storyplanner.ui.graphic_novel_outline_view import GraphicNovelOutlineView
     v = GraphicNovelOutlineView(db, pid, on_open_manuscript=lambda i: opened.append(i))
-    item = _find(v._tree, lambda it: it.text(0).startswith("Panel 1"))
-    v._activate(item)
-    assert opened == [sid]
+    card = next(c for c in v._cards if c.gn_data.get("kind") == "panel")
+    v._activate(card.gn_data)                     # no on_open_panel wired →
+    assert opened == [sid]                        # falls back to the scene
+
 
 
 def test_selection_does_not_mutate():
@@ -371,14 +386,10 @@ def test_selection_does_not_mutate():
     gno.add_page(db, sid); gno.add_panel(db, sid, 0)
     before = db.get_scene_by_id(sid).content
     v = _outline(db, pid)
-    item = _find(v._tree, lambda it: it.text(0).startswith("Panel 1"))
-    v._tree.setCurrentItem(item)                  # selection only
+    for card in v._cards:
+        v._select(card.gn_data)                   # selection only
     assert db.get_scene_by_id(sid).content == before
 
-
-# ==========================================================================
-# 38-41  Standalone Pages disabled
-# ==========================================================================
 
 
 def test_standalone_pages_hidden():

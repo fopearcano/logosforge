@@ -122,6 +122,15 @@ stays Project → Act → Chapter → Scene):
   integrations**. Both surfaces are embedded child widgets (no separate route,
   no top-level window), addressing the earlier macOS fullscreen minimize. See
   `docs/KNOWN_LIMITATIONS_ALPHA.md`.
+- **Graphic Novel UI alignment (pre-release fix):** both GN screens now use
+  the SAME UX paradigm as the other modes — the **Manuscript** is one
+  full-document block editor (ACT/SCENE headers, act-wide PAGE blocks,
+  free-typing panel script blocks, mode label + live word count; the old
+  single-scene "Comics Script" renderer and its scene dropdown are gone)
+  and the **Outline** is the block/card planner (Act → Page → Scene → Panel
+  cards with selection highlight, inline page/scene editing and start-page
+  pinning; the old thin tree + empty detail pane is gone). Same canonical
+  data, same mirroring, same deep-links.
 - **Local voice-to-script (MVP, off by default):** an opt-in, **local-first**
   dictation foundation (`enable_voice_mode`; backend mode defaults to Disabled) —
   buffered microphone capture, simple pause detection, transcript preview, and

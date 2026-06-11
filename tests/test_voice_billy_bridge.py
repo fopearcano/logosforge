@@ -362,7 +362,7 @@ def test_gn_panel_field_proposal_apply_and_mirror(field):
         GraphicNovelManuscriptView)
     view = GraphicNovelManuscriptView(db, pid, on_data_changed=lambda: None)
     view.select_scene(sid)
-    assert "billy value" in view._field_editors[("panel", 0, 0)].toPlainText()
+    assert "billy value" in view._field_editors[("panel", sid, 0, 0)].toPlainText()
     # Undo restores the previous value.
     assert undo_commit(op, ctx)[0] is True
     panel = gnb.load_scene_script(db, sid).pages[0].panels[0]

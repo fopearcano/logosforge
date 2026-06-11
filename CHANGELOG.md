@@ -5,6 +5,26 @@ dates are release-readiness milestones, not packaged builds.
 
 ## [0.9.0-alpha] — pre-finalization refactor — 2026-06-11
 
+### Graphic Novel UI bugfix — shared block-based UX for Manuscript + Outline (2026-06-11)
+
+Release-blocking UI mismatch fixed: Graphic Novel now uses the same UX
+paradigm as Screenplay/other modes. **Manuscript** = one full-document
+block editor over the whole project (ACT section headers, SCENE headers
+with inline rename + act-wide page-range chips, act-wide PAGE blocks,
+free-typing panel script blocks, "Graphic Novel" mode label + live
+word/character count) — the old standalone "Comics Script" single-scene
+renderer and its scene dropdown are removed. **Outline** = the block/card
+planner (full-width card canvas: Act cards → act-wide Page cards → Scene
+groups with `(continued)` → Panel snippet cards; header action bar; click
+selects/highlights, double-click deep-links to the Manuscript; inline page
+title/notes, scene rename and start-page pin/Auto on the cards) — the old
+thin tree + empty detail pane is removed. Canonical Act → Page → Scene →
+Panel data, mirroring, voice panel targeting (`current_panel_ref`),
+deep-link signatures, standalone-Pages inertness and exports are
+unchanged; chapters stay hidden. Tests migrated to the new shape (GN
+suites 228 green; voice GN routing keys updated); broad certification
+sweep 1527 at baseline.
+
 ### FINAL ALPHA RC RE-CERTIFICATION — PASSED (2026-06-11)
 
 The complete Desktop Alpha re-certified end-to-end after the GN refactor,
