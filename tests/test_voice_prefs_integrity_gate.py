@@ -70,7 +70,7 @@ def test_single_shared_entry_point_with_unique_shortcut():
     from PySide6.QtGui import QAction
     _db, _pid, win = _main_window()
     voice_actions = [a for a in win.findChildren(QAction)
-                     if "Voice" in a.text()]
+                     if "Dexter" in a.text()]
     assert len(voice_actions) == 1                      # one menu action
     assert voice_actions[0].shortcut().toString() == "Ctrl+Shift+V"
     _enable_voice()

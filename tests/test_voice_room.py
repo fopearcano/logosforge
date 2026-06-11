@@ -373,7 +373,7 @@ def test_room_state_flows_through_billy_generate_and_apply():
 def test_room_label_and_queue_visible_in_shell():
     _db, _pid, win = _ui_window()
     panel = win._voice_panel
-    assert "Voice Room (Alpha)" in panel._room_label.text()
+    assert "Dexter's Room" in panel._room_label.text()
     assert panel._queue_list.isVisibleTo(panel) is True
     assert panel._pause_btn.isVisibleTo(panel) is True
 

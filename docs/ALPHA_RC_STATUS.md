@@ -236,7 +236,7 @@ conflated** with final Electron/Web commercial packaging.
 
 The complete local voice stack — flag/capture/buffering (1), mode-aware
 Commit Router (2), transcript history with edit/undo/retry (3), preview-first
-Intent Router (4), Billy Voice Bridge (5), Voice Room shell with state
+Intent Router (4), Billy Voice Bridge (5), Dexter's Room shell with state
 machine + proposal queue (6), project Voice Glossary corrections (7), Voice
 Setup/diagnostics/backend profiles incl. whisper.cpp (8) — passed the Phase 9
 end-to-end hardening gate. Privacy audit: `voice/lan_server.py` is the only

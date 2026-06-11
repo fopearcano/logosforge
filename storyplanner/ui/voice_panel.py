@@ -107,8 +107,9 @@ class VoicePanel(QWidget):
         layout.setContentsMargins(10, 6, 10, 6)
         layout.setSpacing(4)
 
-        # Voice Room (Alpha) shell header: session state + context summary.
-        self._room_label = QLabel("Voice Room (Alpha) · idle")
+        # Dexter's Room shell header (internal VoiceRoom* modules power
+        # the Dexter's Room UI): session state + context summary.
+        self._room_label = QLabel("Dexter's Room (Alpha) · idle")
         self._room_label.setObjectName("voiceRoomStatus")
         self._room_label.setStyleSheet("color: #94a3b8; font-size: 11px;")
         layout.addWidget(self._room_label)
@@ -960,7 +961,7 @@ class VoicePanel(QWidget):
         from storyplanner.voice.room import (build_voice_room_context,
                                              context_summary_line)
         ctx = self._build_context()
-        line = f"Voice Room (Alpha) · {self._room.state}"
+        line = f"Dexter's Room (Alpha) · {self._room.state}"
         if ctx is not None:
             room = build_voice_room_context(ctx, self._history, self._queue)
             line += f" · {context_summary_line(room)}"
@@ -1573,7 +1574,7 @@ class VoiceDictationWindow(QDialog):
                  ) -> None:
         super().__init__(parent)
         self.setObjectName("voiceDictationWindow")
-        self.setWindowTitle("Voice Dictation (local)")
+        self.setWindowTitle("Dexter's Room — local voice (Alpha)")
         self.setModal(False)
         self.setSizeGripEnabled(True)        # resizable, with a visible grip
         self.setMinimumSize(460, 280)

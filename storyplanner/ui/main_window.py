@@ -2683,7 +2683,10 @@ class MainWindow(QMainWindow):
         focus_action.triggered.connect(self._menu_toggle_focus)
         view_menu.addAction(focus_action)
 
-        voice_action = QAction("Voice Dictation (local)", self)
+        voice_action = QAction("Dexter's Room", self)
+        voice_action.setToolTip("Enter Dexter's Room — local voice "
+                                "dictation (Alpha)")
+        voice_action.setStatusTip("Enter Dexter's Room")
         voice_action.setShortcut(QKeySequence("Ctrl+Shift+V"))
         voice_action.triggered.connect(self._toggle_voice_panel)
         view_menu.addAction(voice_action)

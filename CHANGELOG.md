@@ -99,6 +99,30 @@ P/F items) and maintainer sign-off remain before tagging.
 
 ### Added (feature-flagged, off by default)
 
+- **Voice dependency / language / naming update (post-gate).** (1)
+  `requirements.txt` now installs the voice modules the implementation
+  actually uses — `faster-whisper` + `sounddevice` (loose-minimum style,
+  matching the reportlab/python-docx precedent; PortAudio note for Linux;
+  whisper.cpp documented as a local executable, never a pip package; the
+  app still starts and degrades gracefully without models). (2) The
+  user-facing voice workspace is renamed **Dexter's Room** (menu action
+  "Dexter's Room" with "Enter Dexter's Room" tooltip, window title, shell
+  header, privacy note "Dexter's Room uses local transcription. Audio is
+  processed on this device. …"); **Billy stays Billy, Logos stays Logos**;
+  internal `VoiceRoom*` module/class names are deliberately retained
+  (low-risk policy) and documented as powering the Dexter's Room UI; no
+  "Dester" typo exists. (3) The language selector now offers the **full
+  OpenAI Whisper list** (Auto detect + 100 languages, alphabetical, shown
+  as "English (en)", stored by code) with internal aliases
+  (Mandarin→zh, Cantonese→yue, Castilian→es, Valencian→ca, Flemish→nl,
+  Haitian→ht, Burmese→my, Moldovan→ro, Panjabi→pa, Pushto→ps,
+  Sinhalese→si, …); invalid saved values fall back to Auto detect with a
+  visible message; auto omits the language for faster-whisper (None) and
+  whisper.cpp (no `-l`), chosen codes (incl. yue/haw/jw) pass through; and
+  transcript segments now record `selected_language_code` /
+  `detected_language_code` / `language_source`
+  (auto | user_selected | backend_detected).
+  `tests/test_voice_language_dexter.py` (15 passed).
 - **Voice Phase 9 — end-to-end Alpha hardening gate (audit + certification;
   no production code changed).** The complete voice stack (Phases 1–8)
   passed the cross-cutting gate `tests/test_voice_alpha_gate.py` (9): a

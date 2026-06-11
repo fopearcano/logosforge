@@ -66,7 +66,7 @@ manual UI check). Command form:
 | `tests/test_voice_history.py` (Phase 3 history/edit/undo/retry/segments) | **37 passed** |
 | `tests/test_voice_intents.py` (Phase 4 intent router, preview-first ops) | **37 passed** |
 | `tests/test_voice_billy_bridge.py` (Phase 5 Billy Voice Bridge) | **35 passed** |
-| `tests/test_voice_room.py` (Phase 6 Voice Room shell: state/queue/modes) | **26 passed** |
+| `tests/test_voice_room.py` (Phase 6 Dexter's Room shell: state/queue/modes) | **26 passed** |
 | `tests/test_voice_glossary.py` (Phase 7 project glossary + corrections) | **28 passed** |
 | `tests/test_voice_setup.py` (Phase 8 setup/diagnostics/backend profiles) | **28 passed** |
 | `tests/test_voice_alpha_gate.py` (Phase 9 end-to-end hardening gate) | **9 passed** |
@@ -216,7 +216,7 @@ this behavior as supporting evidence (the manual UI check is still required).
 | V33 | Speak an instruction → select the segment → Generate Proposal → before/after preview appears; Apply mutates once; Cancel mutates nothing | PENDING MANUAL RETEST | ✓ |
 | V34 | GN: with a Panel selected, Billy's Panel-field proposal applies to the chosen field and Outline/Manuscript mirror; Undo restores | PENDING MANUAL RETEST | ✓ |
 | V35 | Dangerous spoken "commands" ("delete the project", "run this command", …) get the chat-only refusal — nothing executes | PENDING MANUAL RETEST | ✓ |
-| V36 | **Voice Room header** shows the session state + context summary (project · mode · section · panel · selection) and updates as you work | PENDING MANUAL RETEST | ✓ |
+| V36 | **Dexter's Room header** shows the session state + context summary (project · mode · section · panel · selection) and updates as you work | PENDING MANUAL RETEST | ✓ |
 | V37 | Four workflow modes (Dictation default / Intent / Ask Billy / Edit with Billy); Billy modes preset the operation; mode is never auto-detected | PENDING MANUAL RETEST | ✓ |
 | V38 | Proposal queue lists every proposal with status; stale items refuse Apply; double-click re-activates a ready one; Pause keeps session/history/queue | PENDING MANUAL RETEST | ✓ |
 | V39 | Glossary: add a term with a misrecognition → dictate it → segment shows "N suggestion(s)"; Apply fixes the transcript only; Reject leaves it | PENDING MANUAL RETEST | ✓ |
@@ -226,7 +226,7 @@ this behavior as supporting evidence (the manual UI check is still required).
 | V43 | **Voice Setup…** opens (parented); pick a backend → status chip shows ready/missing-dependency/missing-model; invalid paths never crash | PENDING MANUAL RETEST | ✓ |
 | V44 | Configure faster-whisper (model dir) or whisper.cpp (executable + model) → Test backend reports ready; Test transcription on a short WAV shows text in the panel (not committed) | PENDING MANUAL RETEST | |
 | V45 | Performance profile (Fast draft / Balanced / Accurate) updates silence/segment/beam; Custom exposes the fields; no GPU required | PENDING MANUAL RETEST | ✓ |
-| V46 | With no valid backend, Voice Room Start is disabled with "Local Whisper is not configured. Open Voice Setup…"; Copy diagnostics has no secrets | PENDING MANUAL RETEST | ✓ |
+| V46 | With no valid backend, Dexter's Room Start is disabled with "Local Whisper is not configured. Open Voice Setup…"; Copy diagnostics has no secrets | PENDING MANUAL RETEST | ✓ |
 | V47 | Full pipeline: speak → transcript → glossary correction → commit as dictation → Undo; then Send to Billy → Apply one proposal, Cancel another | PENDING MANUAL RETEST | ✓ |
 | V48 | Close the app while recording — the session stops safely (reopen: app normal) | PENDING MANUAL RETEST | ✓ |
 | V49 | Export the project — no transcript history, glossary internals, audio or voice temp data in the export | PENDING MANUAL RETEST | ✓ |

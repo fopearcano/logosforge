@@ -70,7 +70,16 @@ PERFORMANCE_PROFILES = {
     },
 }
 
-LANGUAGES = (("auto", "Auto-detect"), ("en", "English"), ("it", "Italiano"))
+def _language_choices() -> tuple:
+    """("auto", "Auto detect") first, then every Whisper language sorted by
+    display name. Stored by CODE; shown as "Name (code)"."""
+    from storyplanner.voice.types import WHISPER_LANGUAGES
+    rest = sorted(((code, name) for code, name in WHISPER_LANGUAGES.items()
+                   if code != "auto"), key=lambda cn: cn[1])
+    return (("auto", WHISPER_LANGUAGES["auto"]),) + tuple(rest)
+
+
+LANGUAGES = _language_choices()
 
 
 @dataclass

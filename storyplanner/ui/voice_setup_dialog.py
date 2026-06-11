@@ -117,8 +117,9 @@ class VoiceSetupDialog(QDialog):
         lang_row.addWidget(QLabel("Language:"))
         self._language = QComboBox()
         self._language.setObjectName("setupLanguage")
-        for value, label in vs.LANGUAGES:
-            self._language.addItem(label, value)
+        for value, label in vs.LANGUAGES:           # full Whisper list
+            self._language.addItem(
+                label if value == "auto" else f"{label} ({value})", value)
         self._language.currentIndexChanged.connect(
             lambda _i: self._store("voice_language",
                                    self._language.currentData()))
@@ -231,8 +232,20 @@ class VoiceSetupDialog(QDialog):
         self._model_path.setText(str(get("voice_whisper_model_path") or ""))
         self._exe_path.setText(
             str(get("voice_whisper_executable_path") or ""))
-        lang_idx = self._language.findData(str(get("voice_language")
-                                               or "auto"))
+        raw_lang = str(get("voice_language") or "auto")
+        lang_idx = self._language.findData(raw_lang)
+        if lang_idx < 0:
+            from storyplanner.voice.types import normalize_language
+            normalized = normalize_language(raw_lang)
+            lang_idx = self._language.findData(normalized)
+            if normalized == "auto" and raw_lang not in ("", "auto"):
+                self._show_result("Saved language is no longer supported; "
+                                  "using Auto detect.")
+            setter = self._set
+            if setter is None:
+                from storyplanner.settings import get_manager
+                setter = get_manager().set
+            setter("voice_language", normalized)
         self._language.blockSignals(True)
         self._language.setCurrentIndex(lang_idx if lang_idx >= 0 else 0)
         self._language.blockSignals(False)

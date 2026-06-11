@@ -84,7 +84,7 @@ panel** yet:
   Panel-field update with mirror) are preview-first with explicit
   Apply/Cancel, stale-proposal blocking and the shared Undo; dangerous
   spoken "commands" are refused chat-only without reaching the provider.
-  **Phase 6 Voice Room (Alpha shell):** one local review-first session
+  **Phase 6 Dexter's Room (Alpha shell; internally VoiceRoom):** one local review-first session
   workflow — explicit crash-proof state machine, a context summary line, a
   session-scoped proposal queue (draft/ready/applied/cancelled/stale/failed;
   stale can never apply; double-click re-activates a ready item) and four
@@ -102,7 +102,7 @@ panel** yet:
   / LAN / mock-test — with a status chip; model & executable paths with
   Browse; language; Fast draft / Balanced / Accurate / Custom performance
   profiles; microphone test, backend test, file-based local test
-  transcription, copyable secrets-free diagnostics). The Voice Room gates
+  transcription, copyable secrets-free diagnostics). Dexter's Room gates
   Start on a ready backend; nothing is installed or downloaded, no GPU is
   required, invalid paths show clear messages instead of crashing.
   **Model setup is manual** — no automatic backend installation, no model

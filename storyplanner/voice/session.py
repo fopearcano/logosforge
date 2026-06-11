@@ -131,6 +131,17 @@ class VoiceSessionController:
         # touch disk and are dropped on discard/clear.
         seg.audio_bytes = pcm
         seg.sample_rate = self._settings.sample_rate
+        # Language metadata: what was asked for vs. what the backend found.
+        selected = (self._settings.language or "auto").lower()
+        seg.selected_language_code = selected
+        detected = (seg.language or "").lower()
+        if detected and detected != "auto":
+            seg.detected_language_code = detected
+        if selected in ("", "auto"):
+            seg.language_source = ("backend_detected"
+                                   if seg.detected_language_code else "auto")
+        else:
+            seg.language_source = "user_selected"
         if seg.error:
             self._set_status(VoiceStatus.ERROR)
         elif not seg.is_empty():

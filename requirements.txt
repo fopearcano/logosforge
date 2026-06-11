@@ -13,3 +13,14 @@ uvicorn>=0.27
 # these are absent, but a normal install should support every export format.
 reportlab>=4.0
 python-docx>=1.1
+
+# -- Local voice (Dexter's Room).  The app starts and runs fine without these
+# (voice is OFF by default and degrades to clear setup messages), but a normal
+# install should support the supported Alpha voice workflows out of the box:
+# faster-whisper powers the Local-PC backend (a LOCAL model path must still be
+# configured manually — models are never downloaded automatically) and
+# sounddevice provides microphone capture (it may need the system PortAudio
+# library on Linux: e.g. `apt install libportaudio2`).  whisper.cpp is a local
+# EXECUTABLE configured in Voice Setup, not a pip package.
+faster-whisper>=1.0
+sounddevice>=0.4

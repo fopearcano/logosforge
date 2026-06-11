@@ -421,7 +421,7 @@ def test_voice_shortcut_has_no_conflicts():
             key = ks.toString()
             if key:
                 shortcuts.setdefault(key, []).append(action.text())
-    assert any("Voice" in t for t in shortcuts.get("Ctrl+Shift+V", []))
+    assert any("Dexter" in t for t in shortcuts.get("Ctrl+Shift+V", []))
     assert len(shortcuts.get("Ctrl+Shift+V", [])) == 1      # unique
 
 

@@ -261,9 +261,16 @@ never executed and never even reach the provider — Billy answers chat-only:
 tracks `sent_to_billy` / proposal id / applied-or-cancelled per segment (no
 secrets, no audio).
 
-## Voice Room — Live Writer Room Alpha shell (Phase 6)
+## Dexter's Room — the voice workspace (Phase 6 Alpha shell)
 
-The panel is organized as a **Voice Room (Alpha)** shell — one local,
+> **Naming:** the user-facing voice workspace is **Dexter's Room** (the
+> writer "enters Dexter's Room" to dictate). **Billy** remains the AI
+> chat/assistant agent reachable FROM Dexter's Room; **Logos** remains the
+> inline/context AI layer. Internal module/class names (`voice/room.py`,
+> `VoiceRoomStateMachine`, …) are retained on purpose — they power the
+> Dexter's Room UI.
+
+The panel is organized as **Dexter's Room (Alpha)** — the writer's local voice workspace (internally the `VoiceRoom*` modules; the internal names are kept deliberately) — one local,
 buffered, **review-first** session workflow over the whole stack. It is not
 full Live Writer Room, not cloud realtime, not voice-to-voice, and not an
 autonomous agent.
@@ -348,7 +355,7 @@ show clear messages instead of crashing.
   point the executable at its binary (e.g. `./main`) and the model at a
   `ggml-*.bin`; the app shells out per segment to a temp WAV that is
   always deleted.
-- **Language** (auto / English / Italiano) and a **performance profile**:
+- **Language**: the FULL OpenAI Whisper list (Auto detect first, then all 100 languages alphabetically, shown as “English (en)” and stored by code; common aliases like Mandarin→zh, Cantonese→yue, Castilian→es resolve internally; an invalid saved value falls back to Auto detect with “Saved language is no longer supported; using Auto detect.”). Auto passes no language to the backends (faster-whisper gets None; whisper.cpp omits -l); a chosen code is passed through, and segments record selected/detected language + source. And a **performance profile**:
   *Fast draft* (short segments, beam 1), *Balanced* (the default),
   *Accurate* (longer segments, beam 5 — latency may rise), *Custom* (edit
   silence/segment/beam directly). Profiles only set CPU-safe segmentation +
@@ -361,7 +368,7 @@ show clear messages instead of crashing.
   model/executable *present yes/no*, microphone, language, profile, last
   error, and the local-only statement).
 
-Voice Room gating: **Start is enabled only when the selected backend is
+Dexter's Room gating: **Start is enabled only when the selected backend is
 ready**; otherwise it is disabled with *"Local Whisper is not configured.
 Open Voice Setup to enable Voice Mode."* Dictation still works with Whisper
 alone — Billy actions disable without an AI provider, and glossary
