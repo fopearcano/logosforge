@@ -171,7 +171,7 @@ this behavior as supporting evidence (the manual UI check is still required).
 | F2 | The standalone **Pages** sidebar item is **not shown** (disabled) | PENDING MANUAL RETEST | ✓ |
 | F3 | Click **Outline** — the GN Page/Panel Outline appears; app does **not** minimize/flicker | PENDING MANUAL RETEST | partial |
 | F4 | Outline shows the canonical page-first `Act → Page → Scene → Panel` tree (chapters hidden; `(continued)` labels for spanning scenes) | PENDING MANUAL RETEST | ✓ |
-| F5 | Add Act / Scene / Page / Panel in the Outline; edit Visual / Caption / Dialogue / SFX / Notes; pin a scene's start page to share a Page between two scenes | PENDING MANUAL RETEST | ✓ |
+| F5 | Add Act / Scene / Page / Panel in the Outline; rename a Scene and a Page; edit Visual / Caption / Dialogue / SFX / Notes; pin a scene's start page to share a Page between two scenes | PENDING MANUAL RETEST | ✓ |
 | F6 | Open the **Manuscript** — the comics script editor shows the same structure with act-wide PAGE numbers (mirrored); app stays fullscreen | PENDING MANUAL RETEST | ✓ |
 | F7 | Export Graphic Novel text / Markdown (`Act → Page → Scene → Panel`, explicit Panel → Scene / Panel → Page assignments, each panel once) | PENDING MANUAL RETEST | ✓ |
 

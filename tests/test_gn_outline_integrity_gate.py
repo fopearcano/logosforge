@@ -241,3 +241,100 @@ def test_panel_model_has_no_image_generation_fields():
     fields = set(vars(gnb.Panel()).keys())
     assert fields == {"number", "visual_description", "caption", "dialogue",
                       "sfx", "notes"}
+
+
+# ==========================================================================
+# Post-refactor gate pins (Act → Page → Scene → Panel audit, 2026-06-11)
+# ==========================================================================
+
+
+def _gate_outline(db, pid, counter):
+    from storyplanner.ui.graphic_novel_outline_view import GraphicNovelOutlineView
+    return GraphicNovelOutlineView(
+        db, pid, on_data_changed=lambda: counter.append(1),
+        on_open_manuscript=lambda i: None)
+
+
+def test_selection_and_cancelled_actions_never_mark_dirty(monkeypatch):
+    from storyplanner.ui import safe_dialogs
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    gno.add_page(db, sid); gno.add_panel(db, sid, 0)
+    dirty = []
+    v = _gate_outline(db, pid, dirty)
+    # Selection alone never mutates / never marks dirty.
+    v._tree.setCurrentItem(v._tree.topLevelItem(0).child(0).child(0))
+    assert dirty == []
+    # A cancelled delete neither mutates nor marks dirty …
+    v._sel = {"kind": "panel", "act": "Act 1", "scene_id": sid,
+              "page": 0, "panel": 0}
+    monkeypatch.setattr(safe_dialogs, "question", lambda *a, **k: False)
+    v._delete_selected()
+    assert dirty == [] and _body(db, sid).panel_count() == 1
+    # … while the confirmed one does exactly once.
+    monkeypatch.setattr(safe_dialogs, "question", lambda *a, **k: True)
+    v._delete_selected()
+    assert dirty == [1] and _body(db, sid).panel_count() == 0
+
+
+def test_tree_collapse_expand_and_highlight_are_safe():
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid)
+    gno.add_page(db, sid); gno.add_panel(db, sid, 0)
+    before = db.get_scene_by_id(sid).content
+    dirty = []
+    v = _gate_outline(db, pid, dirty)
+    act = v._tree.topLevelItem(0)
+    page = act.child(0)
+    group = page.child(0)
+    for item in (act, page, group):
+        assert item.isExpanded() is True          # readable by default
+        item.setExpanded(False)                   # collapse …
+        assert item.isExpanded() is False
+        item.setExpanded(True)                    # … and expand again
+    v._tree.setCurrentItem(group)
+    assert v._tree.currentItem() is group         # selected item highlighted
+    assert db.get_scene_by_id(sid).content == before
+    assert dirty == []
+
+
+def test_scene_rename_from_outline_detail():
+    from PySide6.QtWidgets import QLineEdit
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid, "Untitled Scene")
+    gno.add_page(db, sid)
+    dirty = []
+    v = _gate_outline(db, pid, dirty)
+    v._sel = {"kind": "scene_page", "act": "Act 1", "scene_id": sid,
+              "page": 0, "page_no": 1, "continued": False}
+    v._render_detail()
+    edit = v._detail_host.findChild(QLineEdit, "gnOutlineSceneTitle")
+    assert edit is not None and edit.text() == "Untitled Scene"
+    v._commit_scene_title(sid, "  Cold Open  ")
+    assert db.get_scene_by_id(sid).title == "Cold Open"   # trimmed + saved
+    assert dirty == [1]
+    v._commit_scene_title(sid, "   ")                     # empty refused
+    v._commit_scene_title(sid, "Cold Open")               # no-op rename
+    assert db.get_scene_by_id(sid).title == "Cold Open"
+    assert dirty == [1]                                   # still exactly one
+
+
+def test_manuscript_clears_stale_panel_ref_on_scene_switch():
+    from storyplanner.ui.graphic_novel_manuscript_view import (
+        GraphicNovelManuscriptView)
+    db = Database()
+    pid = _gn(db)
+    a = _scene(db, pid, "A")
+    b = _scene(db, pid, "B")
+    gno.add_page(db, b); gno.add_panel(db, b, 0)
+    m = GraphicNovelManuscriptView(db, pid, on_data_changed=lambda: None)
+    m.select_scene(b)
+    m.select_panel(0, 0)
+    assert m.current_panel_ref() == (b, 0, 0)
+    idx = next(i for i in range(m._scene_combo.count())
+               if m._scene_combo.itemData(i) == a)
+    m._scene_combo.setCurrentIndex(idx)           # switch scene
+    assert m.current_panel_ref() is None          # no stale Panel target

@@ -19,8 +19,9 @@ several Scenes. **Chapters are hidden** in Graphic Novel mode (they remain
 storage labels for cross-mode compatibility only).
 
 The selected-item editor on the right edits a Panel's five fields (Visual /
-Caption / Dialogue / SFX / Notes), a scene-page's title/notes, and a scene's
-act-wide start page (pin / auto-chain). Selection never mutates; add/move/
+Caption / Dialogue / SFX / Notes), a scene-page's title/notes, the Scene's
+title (rename — PlanView is not mounted in GN mode), and a scene's act-wide
+start page (pin / auto-chain). Selection never mutates; add/move/
 delete go through the shared body (:mod:`graphic_novel_outline`) so the
 Manuscript mirrors every edit. Double-click deep-links into the Manuscript.
 Child-widget-only: no separate route, no top-level window, no dialog on
@@ -398,11 +399,35 @@ class GraphicNovelOutlineView(QWidget):
         row.addStretch()
         return holder
 
+    def _scene_title_editor(self, scene_id: int) -> QLineEdit:
+        """Rename the Scene from the Outline (the canonical GN structure
+        surface — PlanView's rename is not mounted in Graphic Novel mode)."""
+        scene = self._db.get_scene_by_id(scene_id)
+        edit = QLineEdit((getattr(scene, "title", "") or "") if scene else "")
+        edit.setObjectName("gnOutlineSceneTitle")
+        edit.setPlaceholderText("Scene title")
+        edit.editingFinished.connect(
+            lambda e=edit, sid=scene_id: self._commit_scene_title(sid,
+                                                                  e.text()))
+        return edit
+
+    def _commit_scene_title(self, sid: int, title: str) -> None:
+        title = (title or "").strip()
+        scene = self._db.get_scene_by_id(sid)
+        # Empty titles are refused (never blank a scene by accident).
+        if scene is None or not title or (scene.title or "") == title:
+            return
+        self._db.update_scene_title(sid, title)
+        self._notify()
+
     def _render_scene_detail(self) -> None:
         sid = self._sel.get("scene_id")
         scene = self._db.get_scene_by_id(sid) if sid is not None else None
         title = self._scene_title(scene) if scene else "Scene"
         self._detail_layout.addWidget(self._title_label(f"Scene — {title}"))
+        if sid is not None:
+            self._detail_layout.addWidget(QLabel("Scene title"))
+            self._detail_layout.addWidget(self._scene_title_editor(sid))
         self._detail_layout.addWidget(QLabel(
             "No pages yet — add a Page to place this scene's panels."))
         btn = QPushButton("+ Add Page")
@@ -426,6 +451,8 @@ class GraphicNovelOutlineView(QWidget):
         self._detail_layout.addWidget(self._title_label(
             f"Scene {title}{marker} · Act page {page_no} "
             f"(scene page {page.number} of {len(script.pages)})"))
+        self._detail_layout.addWidget(QLabel("Scene title"))
+        self._detail_layout.addWidget(self._scene_title_editor(sid))
         self._detail_layout.addWidget(QLabel("Page title"))
         title_edit = QLineEdit(page.title or "")
         title_edit.setObjectName("gnOutlinePageTitle")

@@ -5,6 +5,22 @@ dates are release-readiness milestones, not packaged builds.
 
 ## [0.9.0-alpha] — pre-finalization refactor — 2026-06-11
 
+### Post-refactor integrity gate — PASSED (2026-06-11)
+
+A dedicated audit re-certified the canonical Graphic Novel refactor: data
+model, Outline shape + full editing matrix (selection/cancelled actions never
+mark dirty; confirmed edits do exactly once), Manuscript derivation,
+Outline ⇄ Manuscript mirroring (incl. stale Panel-target clearing on scene
+switch), standalone-Pages/fullscreen safety, canonical export, compatibility
+(legacy `NULL` offsets byte-identical; simulated pre-refactor DB migrates
+idempotently) and cross-mode/voice regression. One gap fixed: the GN Outline
+now offers **Scene rename** ("Scene title" in the scene/scene-page detail —
+PlanView is not mounted in GN mode; empty titles refused). Four gate pins
+added (`tests/test_gn_outline_integrity_gate.py` → 17). Evidence: **2511
+passed, 0 failures** (GN core 170, GN surfaces/export 272, gates/lock/
+autosave/isolation 186, Dexter/voice 230, Series/backup 126, broad sweep
+1527). **Classification: A.**
+
 ### Graphic Novel — canonical `Act → Page → Scene → Panel` (Manuscript derives)
 
 The Graphic Novel Outline's visible hierarchy is now the canonical

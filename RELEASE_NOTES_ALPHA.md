@@ -103,8 +103,8 @@ stays Project → Act → Chapter → Scene):
   editor; *Auto* chains it after the previous scene). **Chapters are hidden** in
   Graphic Novel mode (kept as storage labels for other modes). The selected-item
   editor edits the Panel's five fields (**Visual / Caption / Dialogue / SFX /
-  Notes**), page title/notes and the scene start page, with add Act/Scene/Page/
-  Panel, move and confirmed delete. The **Manuscript derives from the Outline**
+  Notes**), the scene title (rename), page title/notes and the scene start
+  page, with add Act/Scene/Page/Panel, move and confirmed delete. The **Manuscript derives from the Outline**
   — the **comics script editor** (Superscript-style): the scene flows as a
   script document — PAGE headings showing the **act-wide** page numbers, then
   one large free-typing script block per panel with labeled sections (labels

@@ -242,11 +242,14 @@ limitations for this RC:
     from several Scenes**). **Chapters are hidden** in Graphic Novel mode
     (`Scene.chapter` remains a storage label for cross-mode compatibility
     only). The selected-item editor edits a Panel's five fields (**Visual /
-    Caption / Dialogue / SFX / Notes**), a scene-page's title/notes, and the
+    Caption / Dialogue / SFX / Notes**), a scene-page's title/notes, the
+    **Scene's title** (rename — PlanView is not mounted in GN mode), and the
     scene's **act-wide start page** ("Auto — after previous scene" or a pinned
     page number, which is how two scenes share one physical page); add Act /
     Scene / Page / Panel, panel reorder + move-panel-to-page (act-wide page
     labels), confirmed deletes, and double-click → Manuscript deep-link.
+    Deferred: physical Page reorder within a scene (placement is controlled
+    via the start-page pin) and Act rename/move from the GN Outline.
   - the **Manuscript** (`GraphicNovelManuscriptView`) **derives from the
     Outline** — the **comics script editor** (Superscript-style): the scene
     flows as a script document — PAGE headings showing the **act-wide** page

@@ -180,6 +180,27 @@ GN core **452**, GN engine/graph/timeline **358**, cross-cutting gates
 export stabilization) **155**, voice-over-GN **156**, Series + backup **126**
 — **all passed, 0 failures**. **Gate result: A.**
 
+**Post-refactor integrity gate (2026-06-11): PASSED.** A dedicated audit
+re-certified the refactor end-to-end: data model (ownership/assignment/order
+stability, spans, shared pages, no duplicates, no orphans, isolation), Outline
+shape + editing matrix (selection/cancel never dirty, confirmed edits dirty
+exactly once; collapse/expand + highlight safe), Manuscript derivation +
+empty-state ladder, Outline ⇄ Manuscript mirroring incl. stale-Panel-target
+clearing on scene switch, standalone-Pages/fullscreen safety, canonical
+export, compatibility (legacy `NULL` offsets byte-identical; simulated
+pre-refactor DB migrates idempotently; pre-Alpha `GraphicNovelPage/Panel`
+tables untouched and unmounted), and cross-mode + voice regression. One gap
+was found and fixed: the GN Outline (which replaces PlanView in GN mode) had
+no **Scene rename** — the scene/scene-page detail panes now carry a "Scene
+title" editor (`update_scene_title`; empty titles refused). Four gate pins
+added to `tests/test_gn_outline_integrity_gate.py` (**17 passed**). Evidence:
+GN core **170** + GN surfaces/pages/export **272** + gates/lock/autosave/
+isolation **186** + Dexter/voice **230** + Series/backup **126** + broad
+certification sweep **1527** = **2511 passed, 0 failures**. Deferred (still
+documented, unchanged): physical Page reorder within a scene (placement is
+controlled via the start-page pin); Act rename/move from the GN Outline.
+**Gate result: A.**
+
 ## Last audit summary
 
 The final global multi-mode integrity audit (the **Alpha Release Gate**, see
