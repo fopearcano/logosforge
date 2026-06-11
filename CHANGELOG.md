@@ -5,6 +5,15 @@ dates are release-readiness milestones, not packaged builds.
 
 ## [0.9.0-alpha] — pre-finalization refactor — 2026-06-11
 
+### Phase 2 verification gate — PASSED (2026-06-11)
+
+Audit-only: routing proof (shared mounts, legacy `not isinstance` pins),
+old-UI absence (no Comics Script/page-manager chrome anywhere in code or
+rendered UI), schema/mirroring/regression re-verified; new pin proves no
+production module constructs the LEGACY renderers. **740** verification
+matrix green + Phase-2 tree runs (incl. broad sweep 1527). No production
+changes. **Classification: A.**
+
 ### Phase 2 — GN routes through SHARED editors (legacy renderers bypassed) (2026-06-11)
 
 Graphic Novel Manuscript now mounts the **shared `WritingCoreView`** (same

@@ -403,6 +403,20 @@ certification sweep re-run green after flipping two stale mount pins.
 18-file batch — the documented Qt teardown flake; both halves pass alone.)
 **Classification: A.**
 
+## Phase 2 verification gate (2026-06-11): PASSED
+
+Routing proven with mount pins and a new production-source pin: GN
+Manuscript mounts the SHARED `WritingCoreView` (GN grammar, chapters
+hidden), GN Outline mounts the SHARED `PlanView` GN schema; no production
+module instantiates the LEGACY `GraphicNovel*View` renderers (their
+modules carry the LEGACY — NOT ROUTED label) and "Comics Script" exists
+nowhere in code; Pages stays inert; Screenplay/Novel/Stage/Series/Dexter
+paths byte-identical; mirroring, isolation, dirty-save, exports, mode
+lock and the alpha gate green. Evidence: verification matrix **740
+passed, 0 failures** + the Phase-2 commit's runs at this tree (501 + 270
++ 183 + 319 + broad sweep **1527**). **No production code changed.
+Classification: A — Final Alpha RC re-certification can resume.**
+
 ## Last audit summary
 
 The final global multi-mode integrity audit (the **Alpha Release Gate**, see

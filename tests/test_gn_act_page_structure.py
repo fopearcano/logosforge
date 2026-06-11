@@ -1160,3 +1160,20 @@ def test_p2_cursor_panel_mapping_round_trips():
         assert gnb.panel_at_offset(text, off) == (pi, ci)
     assert gnb.panel_at_offset(text, 0) is None          # before first panel
     assert gnb.panel_offset(text, 5, 0) is None          # missing → None
+
+
+def test_p2gate_legacy_renderers_not_constructed_in_production():
+    """Verification-gate pin: no production module instantiates the LEGACY
+    GraphicNovel*View renderers (their modules carry the LEGACY — NOT
+    ROUTED label); 'Comics Script' exists nowhere in production code."""
+    import pathlib
+    legacy_defs = {"storyplanner/ui/graphic_novel_manuscript_view.py",
+                   "storyplanner/ui/graphic_novel_outline_view.py"}
+    for path in pathlib.Path("storyplanner").rglob("*.py"):
+        src = path.read_text()
+        assert "Comics Script" not in src, path
+        if str(path) in legacy_defs:
+            assert src.startswith('"""LEGACY — NOT ROUTED')
+            continue
+        assert "GraphicNovelManuscriptView(" not in src, path
+        assert "GraphicNovelOutlineView(" not in src, path
