@@ -5,6 +5,22 @@ dates are release-readiness milestones, not packaged builds.
 
 ## [0.9.0-alpha] — pre-finalization refactor — 2026-06-11
 
+### Graphic Novel post-refactor RE-certification — PASSED (2026-06-11)
+
+Combined gate after the scope cleanup: canonical Act → Page → Scene → Panel
+data model, Outline shape/editing, Manuscript derivation, mirroring,
+standalone-Pages safety, export hygiene and compatibility re-verified —
+now together with the language/Dexter dimensions. Eleven permanent pins
+added (`tests/test_gn_act_page_structure.py` → 70): the full
+CJK/RTL/Indic/Thai/mixed string set through every Panel field (reload +
+canonical export), GN project-language coordination (AI context with
+CJK/RTL notes, Dexter "Use project language", no Panel mutation,
+English-only UI), and Dexter routing a CJK transcript into a Panel
+Dialogue field (explicit, append-preserving). **No production code
+changed.** Evidence: 376 + 355 + 298 + 1527 = **2556 passed, 0
+failures**. **Classification: A** — Final Alpha RC re-certification can
+resume.
+
 ### Dexter scope-cleanup certification gate — PASSED (2026-06-11)
 
 Audit-only certification of the scope cleanup: Dexter capabilities and

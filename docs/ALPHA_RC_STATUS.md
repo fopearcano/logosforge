@@ -293,6 +293,28 @@ sweep **1527** = **2589 passed, 0 failures**. **Gate result: A.**
 Graphic Novel post-refactor re-certification can resume, followed by
 Final Alpha RC re-certification.
 
+**Graphic Novel post-refactor RE-certification (2026-06-11): PASSED.**
+After the scope cleanup, a combined gate re-certified the canonical
+Act → Page → Scene → Panel architecture together with the language and
+Dexter-scope dimensions. Eleven new permanent pins
+(`tests/test_gn_act_page_structure.py` → **70**): the full gate string set
+(zh/ja/ko/ar/he/hi/bn/th/mixed) through **every** Panel field with reload +
+canonical export + snippet safety; GN project language coordinates AI
+context (Japanese no-word-spacing note, Arabic RTL note), resolves
+Dexter's "Use project language", and never mutates Panel text while the UI
+stays English; and Dexter's writing-room routing commits a CJK transcript
+into the selected Panel's Dialogue field (explicit target,
+append-preserving). Everything else re-verified green: data model,
+Outline shape/editing, Manuscript derivation + empty states, mirroring,
+standalone-Pages/fullscreen safety, export (assignments, no
+dupes/secrets/image data, no grammar/translation metadata),
+compatibility (NULL offsets, idempotent migration, legacy tables
+untouched), other modes, Dexter scope, blockers. **No production code
+changed.** Evidence: GN core/surfaces/export **376** + language &
+voice/Dexter **355** + GN engine/Series/lock/isolation/backup **298** +
+broad certification sweep **1527** = **2556 passed, 0 failures**.
+**Gate result: A — Final Alpha RC re-certification can resume.**
+
 ## Last audit summary
 
 The final global multi-mode integrity audit (the **Alpha Release Gate**, see

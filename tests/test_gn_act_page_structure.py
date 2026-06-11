@@ -823,3 +823,93 @@ def test_body_grammar_and_renumber_untouched():
     gnb._renumber(script)
     assert [p.number for p in script.pages] == [1, 2]
     _ = pid
+
+
+# ==========================================================================
+# Post-refactor RE-certification pins (2026-06-11): Unicode matrix,
+# project-language coordination, Dexter routing — after the scope cleanup.
+# ==========================================================================
+
+_GATE_STRINGS = {
+    "zh": "这是一个测试场景。角色走进房间。",
+    "ja": "これはテストシーンです。登場人物が部屋に入る。",
+    "ko": "이것은 테스트 장면입니다. 인물이 방에 들어간다.",
+    "ar": "هذا مشهد اختبار. تدخل الشخصية إلى الغرفة.",
+    "he": "זו סצנת בדיקה. הדמות נכנסת לחדר.",
+    "hi": "यह एक परीक्षण दृश्य है। पात्र कमरे में प्रवेश करता है।",
+    "bn": "এটি একটি পরীক্ষামূলক দৃশ্য। চরিত্রটি ঘরে প্রবেশ করে।",
+    "th": "นี่คือฉากทดสอบ ตัวละครเดินเข้าไปในห้อง",
+    "mixed": "“Curly quotes”, em dash — ellipsis … emoji 🐕, accented: "
+             "Zampanò, città, perché.",
+}
+_PANEL_FIELDS = ("visual_description", "caption", "dialogue", "sfx", "notes")
+
+
+@pytest.mark.parametrize("key", sorted(_GATE_STRINGS))
+def test_recert_unicode_in_every_panel_field(key, tmp_path):
+    """Every gate script (CJK/RTL/Indic/Thai/mixed) survives every Panel
+    field through save, full reload and the canonical Act → Page → Scene →
+    Panel export."""
+    text = _GATE_STRINGS[key]
+    path = str(tmp_path / f"gn-{key}.db")
+    db = Database(path)
+    pid = _gn(db)
+    sid = _scene(db, pid, f"Scene {key}")
+    _pages(db, sid, 1, panels_per_page=0)
+    gno.add_panel(db, sid, 0)
+    for field in _PANEL_FIELDS:
+        gno.set_panel_field(db, sid, 0, 0, field, text)
+    db2 = Database(path)                               # reload from disk
+    panel = gnb.load_scene_script(db2, sid).pages[0].panels[0]
+    for field in _PANEL_FIELDS:
+        assert getattr(panel, field) == text, field
+    md = gns.export_structure_markdown(db2, pid)
+    assert text in md                                  # UTF-8 export intact
+    # Outline snippets never crash on the script (labels only truncate).
+    assert gno.panel_snippet(panel)
+
+
+def test_recert_project_language_coordinates_gn_without_mutation():
+    from storyplanner import languages as L
+    from storyplanner import i18n
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid, "一")
+    _pages(db, sid, 1)
+    gno.set_panel_field(db, sid, 0, 0, "dialogue", _GATE_STRINGS["ja"])
+    before = db.get_scene_by_id(sid).content
+    L.set_project_writing_language(db, pid, "ja")
+    # AI context: project language + no Latin-word-spacing assumption.
+    assert L.language_context_line(db, pid).startswith(
+        "[Writing Language] Japanese (ja)")
+    assert "does not separate words" in L.ai_language_instruction("ja")
+    assert "right-to-left" in L.ai_language_instruction("ar")
+    # Dexter "Use project language" resolves to the GN project's language.
+    assert L.dexter_language_for_project(db, pid) == "ja"
+    # Language changes never rewrite Panel text; the UI stays English.
+    L.set_project_writing_language(db, pid, "ar")
+    L.set_project_writing_language(db, pid, "ja")
+    assert db.get_scene_by_id(sid).content == before
+    assert i18n.ui_language() == "en"
+
+
+def test_recert_voice_commit_routes_unicode_into_panel_field():
+    """Dexter's writing-room routing: a CJK transcript commits into the
+    selected Panel's Dialogue field (explicit target, append-preserving,
+    undoable) — no grammar pass anywhere in the path."""
+    from storyplanner.voice.commit_router import (
+        T_GN_DIALOGUE, VoiceCommitContext, commit_transcript)
+    db = Database()
+    pid = _gn(db)
+    sid = _scene(db, pid, "ja")
+    _pages(db, sid, 1)
+    gno.set_panel_field(db, sid, 0, 0, "dialogue", _GATE_STRINGS["ja"])
+    ctx = VoiceCommitContext(db=db, project_id=pid,
+                             writing_mode="graphic_novel",
+                             gn_panel_ref=(sid, 0, 0))
+    spoken = "「ザンパノ」と彼は言った。🐕"
+    ok, msg = commit_transcript(spoken, T_GN_DIALOGUE, ctx)
+    assert ok, msg
+    panel = gnb.load_scene_script(db, sid).pages[0].panels[0]
+    assert spoken in panel.dialogue
+    assert _GATE_STRINGS["ja"] in panel.dialogue       # appended, not replaced
