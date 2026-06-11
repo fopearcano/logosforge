@@ -109,6 +109,41 @@ class ProjectSettingsDialog(QDialog):
         format_row.addWidget(self._format_combo, stretch=1)
         layout.addLayout(format_row)
 
+        # -- Writing Language --------------------------------------------------
+        from storyplanner import languages as L
+        from storyplanner.i18n import tr
+        lang_row = QHBoxLayout()
+        lang_row.addWidget(QLabel(tr("Writing Language:")))
+        self._language_combo = QComboBox()
+        self._language_combo.setObjectName("projectWritingLanguage")
+        for code, label in L.selector_choices():
+            self._language_combo.addItem(label, code)
+        self._initial_language = L.get_project_writing_language(
+            self._db, self._project_id)
+        idx = self._language_combo.findData(self._initial_language)
+        if idx >= 0:
+            self._language_combo.setCurrentIndex(idx)
+        self._language_combo.currentIndexChanged.connect(
+            self._on_language_changed)
+        lang_row.addWidget(self._language_combo, stretch=1)
+        layout.addLayout(lang_row)
+
+        lang_hint = QLabel(tr(
+            "The writing language guides AI, grammar checking and Dexter's "
+            "Room. Changing it never rewrites or translates your text."))
+        lang_hint.setWordWrap(True)
+        lang_hint.setStyleSheet("color: #94a3b8; font-size: 11px;")
+        layout.addWidget(lang_hint)
+
+        # Honest grammar coverage for the selected language (graceful
+        # degradation message for unsupported scripts).
+        self._grammar_note = QLabel("")
+        self._grammar_note.setObjectName("projectGrammarNote")
+        self._grammar_note.setWordWrap(True)
+        self._grammar_note.setStyleSheet("color: #94a3b8; font-size: 11px;")
+        layout.addWidget(self._grammar_note)
+        self._refresh_grammar_note()
+
         # -- Buttons ---------------------------------------------------------
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok
@@ -117,6 +152,15 @@ class ProjectSettingsDialog(QDialog):
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _on_language_changed(self, _index: int) -> None:
+        self._refresh_grammar_note()
+
+    def _refresh_grammar_note(self) -> None:
+        from storyplanner.grammar_checker import grammar_status
+        code = self._language_combo.currentData() or "auto"
+        _level, message = grammar_status(code)
+        self._grammar_note.setText(message if code != "auto" else "")
 
     def _on_engine_changed(self, _index: int) -> None:
         """When the engine changes, auto-sync the default format unless the
@@ -161,6 +205,14 @@ class ProjectSettingsDialog(QDialog):
             self._db.update_project_narrative_engine(self._project_id, new_engine)
         if new_format != self._initial_format:
             self._db.update_project_writing_format(self._project_id, new_format)
+        # Writing language: settings-only write — never reinterprets, rewrites
+        # or translates any scene body (AI/grammar/Dexter context only).
+        new_language = self._language_combo.currentData()
+        if new_language and new_language != self._initial_language:
+            from storyplanner import languages as L
+            L.set_project_writing_language(self._db, self._project_id,
+                                           new_language,
+                                           source="user_selected")
         self.accept()
 
     def get_selected_engine(self) -> str:

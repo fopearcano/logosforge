@@ -105,6 +105,29 @@ per-mode export tests.)
       A/B/C buckets reflect the Episode Beat Plan (or show an empty-state message).
       Navigation does not modify or dirty the project.
 
+## Languages (multi-language infrastructure)
+
+- [ ] New Project + Project Settings show **Writing Language** (full Whisper
+      list, friendly "Italian (it)" names); changing it never mutates scene
+      text and never unlocks/changes the writing mode.
+- [ ] Project language **does not leak** across projects (switch A→B→A keeps
+      each project's language and AI context).
+- [ ] AI replies **preserve the project language** by default (no automatic
+      translation; explicit ask required to translate).
+- [ ] **Dexter's Room** transcription language: *Use project language*
+      (default) / *Auto detect* / explicit code; invalid saved values repair
+      to Auto with the message; segments carry project/mode metadata.
+- [ ] **Grammar**: project language by default; unsupported scripts (CJK/RTL)
+      show *"Grammar checking is not available for <language>…"* instead of
+      English-only checks; English keeps full rules.
+- [ ] **Unicode**: Chinese/Japanese/Arabic/Hebrew/emoji text saves, reloads,
+      searches (titles/summaries) and exports (Markdown/TXT/JSON/Fountain
+      UTF-8); CJK word count shows **≈ characters**; PDF glyph limits
+      documented.
+- [ ] **Software UI Language** (Preferences → Language) is global and
+      separate; English default; Italian partial; only translated locales
+      selectable; the partial-coverage note is visible.
+
 ## Deferred features (must remain off/hidden)
 
 - [ ] **Canvas Plot** hidden from navigation.

@@ -86,6 +86,20 @@ class NewProjectDialog(QDialog):
         format_row.addWidget(self._format_combo, stretch=1)
         layout.addLayout(format_row)
 
+        # -- Writing Language --------------------------------------------------
+        from storyplanner import languages as L
+        from storyplanner.i18n import tr
+        lang_row = QHBoxLayout()
+        lang_row.addWidget(QLabel(tr("Writing Language:")))
+        self._language_combo = QComboBox()
+        self._language_combo.setObjectName("newProjectWritingLanguage")
+        for code, label in L.selector_choices():
+            self._language_combo.addItem(label, code)
+        idx = self._language_combo.findData(L.default_writing_language())
+        self._language_combo.setCurrentIndex(max(idx, 0))
+        lang_row.addWidget(self._language_combo, stretch=1)
+        layout.addLayout(lang_row)
+
         # -- Buttons ---------------------------------------------------------
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok
@@ -117,3 +131,6 @@ class NewProjectDialog(QDialog):
 
     def get_format(self) -> str:
         return self._format_combo.currentData()
+
+    def get_writing_language(self) -> str:
+        return self._language_combo.currentData() or "en"

@@ -88,6 +88,17 @@ DEFAULTS: dict[str, object] = {
     "open_anyway_on_lock": False,
     "graph_state": {},
     "graph_presets": {},
+    # -- Language system (multi-language infrastructure) ----------------------
+    # Software UI Language — GLOBAL, separate from any project's writing
+    # language ("en" default; only translated locales are selectable).
+    "ui_language_code": "en",
+    # Default Writing Language for NEW projects (per-project value lives in
+    # the project's settings_json: writing_language_code).
+    "default_writing_language": "en",
+    # Dexter transcription mode: "project" (follow the project's writing
+    # language) | "auto" | "explicit" (use voice_language). "" = infer from
+    # voice_language for pre-existing installs (concrete code → explicit).
+    "voice_language_mode": "",
     # -- Local voice-to-script (MVP) — OFF by default; local/LAN-first; no cloud --
     # When enabled but the selected backend is not configured, the voice UI shows
     # a non-blocking setup message (the app stays usable).

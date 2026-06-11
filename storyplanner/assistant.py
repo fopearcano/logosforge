@@ -106,6 +106,8 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 
 
+# Names of the languages the trigram detector can report (back-compat
+# export; the full registry lives in storyplanner.languages).
 _LANGUAGE_NAMES: dict[str, str] = {
     "en": "English",
     "es": "Spanish",
@@ -114,6 +116,26 @@ _LANGUAGE_NAMES: dict[str, str] = {
     "it": "Italian",
     "pt": "Portuguese",
 }
+
+# The active project's USER-SELECTED writing language ("" = none chosen —
+# keep the legacy detect-from-text behavior). The app shell sets this on
+# project open/switch, so every AI surface (assistant, Logos, inline edits,
+# rewrite tools, Billy voice proposals) preserves the project language by
+# default without per-call wiring. Explicit response_language always wins.
+_ACTIVE_PROJECT_LANGUAGE: dict[str, str] = {"code": ""}
+
+
+def set_active_project_language(code) -> None:
+    if not code:
+        _ACTIVE_PROJECT_LANGUAGE["code"] = ""
+        return
+    from storyplanner.languages import normalize_language
+    normalized = normalize_language(code)
+    _ACTIVE_PROJECT_LANGUAGE["code"] = "" if normalized == "auto" else normalized
+
+
+def get_active_project_language() -> str:
+    return _ACTIVE_PROJECT_LANGUAGE["code"]
 
 
 def _detect_response_language(messages: list[dict]) -> str:
@@ -131,15 +153,16 @@ def _detect_response_language(messages: list[dict]) -> str:
 def _inject_language_instruction(
     messages: list[dict], language: str,
 ) -> list[dict]:
+    """Append the preserve-the-writing-language instruction to the system
+    message. English returns the messages unchanged (the prompts' base
+    assumption); the wording never asks for translation and adds RTL / CJK
+    notes where relevant (see languages.ai_language_instruction)."""
     if language == "en":
         return messages
-    lang_name = _LANGUAGE_NAMES.get(language, language)
-    instruction = (
-        f"\n\nIMPORTANT: Respond in {lang_name}. The user is writing in "
-        f"{lang_name} — all your prose, feedback, suggestions, and "
-        f"explanations must be in {lang_name}. Never translate code, "
-        f"JSON keys, or structured output formats."
-    )
+    from storyplanner.languages import ai_language_instruction
+    instruction = ai_language_instruction(language)
+    if not instruction:
+        return messages
     result = []
     for msg in messages:
         if msg["role"] == "system":
@@ -342,7 +365,10 @@ def chat_completion(
     if timeout <= 0:
         timeout = get_configured_timeout(provider.name)
 
-    lang = response_language or _detect_response_language(messages)
+    # Response-language priority: explicit caller choice → the project's
+    # user-selected writing language → legacy detect-from-text.
+    lang = (response_language or get_active_project_language()
+            or _detect_response_language(messages))
     messages = _inject_language_instruction(messages, lang)
 
     key: str | None = None

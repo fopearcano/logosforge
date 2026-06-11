@@ -414,14 +414,38 @@ class RuleBasedChecker:
 _default_backend: CheckerBackend = RuleBasedChecker()
 
 
-def check_text(text: str, backend: CheckerBackend | None = None) -> list[Issue]:
+def check_text(text: str, backend: CheckerBackend | None = None,
+               language: str | None = None) -> list[Issue]:
     """Check *text* for spelling, grammar, and style issues.
 
-    Detects the language automatically.  Uses the built-in rule-based
-    backend unless an alternative *backend* is provided.
+    With *language* (a project Writing Language code) the checker runs as
+    that language: English gets the full rule set, other word-spaced
+    languages the generic rules only, and languages the rule set cannot
+    honestly check (no word spaces / RTL — see
+    :func:`storyplanner.languages.grammar_support`) return no issues at all
+    instead of being silently checked as English. Without *language* the
+    legacy per-call detection is used. Uses the built-in rule-based backend
+    unless an alternative *backend* is provided.
     """
     if not text or not text.strip():
         return []
-    language = detect_language(text)
+    if language:
+        from storyplanner import languages as L
+        code = L.normalize_language(language)
+        if code == "auto":
+            code = detect_language(text)
+        elif L.grammar_support(code) == L.GRAMMAR_NONE:
+            return []
+    else:
+        code = detect_language(text)
     checker = backend or _default_backend
-    return checker.check(text, language)
+    return checker.check(text, code)
+
+
+def grammar_status(language: str) -> tuple[str, str]:
+    """(support_level, user-facing message) for a Writing Language code —
+    the graceful-degradation surface ("Grammar checking is not available
+    for <language>. You can still write and use AI review.")."""
+    from storyplanner import languages as L
+    code = L.normalize_language(language)
+    return L.grammar_support(code), L.grammar_status_message(code)

@@ -355,6 +355,19 @@ this behavior as supporting evidence (the manual UI check is still required).
 | 89 | No ComfyUI / image-generation actions appear | PENDING MANUAL RETEST | ✓ |
 | 90 | No production scheduling / writers-room automation appears | PENDING MANUAL RETEST | ✓ |
 
+### Languages (multi-language infrastructure)
+
+| # | Item | Result | Auto |
+|---|------|--------|------|
+| L1 | New Project dialog shows **Writing Language** (defaults to the global default); Project Settings shows and saves it with friendly names ("Italian (it)") | PENDING MANUAL RETEST | ✓ |
+| L2 | Write Chinese / Japanese / Arabic / Hebrew / emoji text; save, close, reopen — text intact (editor + DB) | PENDING MANUAL RETEST | ✓ |
+| L3 | Export Markdown/TXT/JSON/Fountain of that project — UTF-8 intact; PDF either renders or its glyph limitation matches the docs | PENDING MANUAL RETEST | partial |
+| L4 | With a non-English project language, an AI reply stays in that language and does NOT translate user text unasked | PENDING MANUAL RETEST | partial |
+| L5 | Dexter's Room Setup: language shows **Use project language** by default; explicit pick and Auto both work; invalid saved value repairs to Auto with the message | PENDING MANUAL RETEST | ✓ |
+| L6 | Grammar: set project to Chinese/Arabic → Project Settings shows "Grammar checking is not available…"; English project keeps spell/grammar underlines | PENDING MANUAL RETEST | ✓ |
+| L7 | Preferences → Language: switch Software UI Language to Italiano — translated labels appear on reopened dialogs, project language untouched; switch back to English | PENDING MANUAL RETEST | ✓ |
+| L8 | CJK project shows **≈ N characters** word count; switch project A (it) → B (none) → A — no language leak anywhere | PENDING MANUAL RETEST | ✓ |
+
 ## Release blocker criteria
 
 A **release blocker** if any of these FAIL: app cannot launch · project creation

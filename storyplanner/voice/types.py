@@ -59,7 +59,11 @@ class TranscriptSegment:
     # -- language metadata (Dexter's Room language update) --
     selected_language_code: str = ""     # what the user/setting asked for
     detected_language_code: str = ""     # what the backend reported, if any
-    language_source: str = ""            # auto | user_selected | backend_detected
+    language_source: str = ""    # auto | user_selected | project_language
+    #                            # | backend_detected
+    # -- project coordination (multi-language infrastructure) --
+    project_language_code: str = ""      # the project's writing language
+    dexter_language_mode: str = ""       # auto | project | explicit
 
     def is_empty(self) -> bool:
         return not (self.text or "").strip()
@@ -81,7 +85,15 @@ class VoiceSettings:
     performance_profile: str = "balanced"
     local_device: str = "auto"
     local_compute_type: str = "int8"
-    language: str = "auto"
+    language: str = "auto"            # the EXPLICIT language selection
+    # Transcription language mode: "project" (follow the project's writing
+    # language — the default), "auto", or "explicit" (use ``language``).
+    # "" infers for pre-existing installs: a concrete saved ``language``
+    # means the user chose it (explicit); auto/empty follows the project.
+    language_mode: str = ""
+    # The active project's writing language, filled by the caller that
+    # knows the project (the voice panel). "auto" when unknown.
+    project_language_code: str = "auto"
     auto_commit: bool = False
     silence_ms: int = 900
     max_segment_seconds: int = 25
@@ -107,6 +119,25 @@ class VoiceSettings:
             return mode
         return "mock" if (self.backend or "").lower() == "mock" else "local_process"
 
+    def resolved_language_mode(self) -> str:
+        """auto | project | explicit — with back-compat inference: installs
+        that saved a concrete language before the mode existed keep it."""
+        mode = (self.language_mode or "").strip().lower()
+        if mode in ("auto", "project", "explicit"):
+            return mode
+        return "explicit" if self.language not in ("", "auto") else "project"
+
+    def effective_language(self) -> str:
+        """The transcription language code the backend should receive.
+        Invalid values fall back to auto (never crash, never leave the
+        Whisper code domain)."""
+        mode = self.resolved_language_mode()
+        if mode == "auto":
+            return "auto"
+        if mode == "project":
+            return normalize_language(self.project_language_code)
+        return normalize_language(self.language)
+
     @classmethod
     def from_store(cls, get) -> "VoiceSettings":
         """Build from a ``get(key)`` accessor (e.g. ``settings.get_manager().get``)."""
@@ -127,6 +158,7 @@ class VoiceSettings:
             local_device=str(get("voice_local_device") or "auto"),
             local_compute_type=str(get("voice_local_compute_type") or "int8"),
             language=normalize_language(get("voice_language")),
+            language_mode=str(get("voice_language_mode") or ""),
             auto_commit=bool(get("voice_auto_commit")),
             silence_ms=_int("voice_silence_ms", 900),
             max_segment_seconds=_int("voice_max_segment_seconds", 25),
@@ -149,62 +181,15 @@ class VoiceSettings:
 
 
 # Full OpenAI Whisper language list (code -> display name). "auto" first;
-# stored BY CODE; display names are user-friendly. Source of truth for the
-# Voice Setup / Dexter's Room selector and the backend pass-through.
-WHISPER_LANGUAGES: dict[str, str] = {
-    "auto": "Auto detect",
-    "af": "Afrikaans", "am": "Amharic", "ar": "Arabic", "as": "Assamese",
-    "az": "Azerbaijani", "ba": "Bashkir", "be": "Belarusian",
-    "bg": "Bulgarian", "bn": "Bengali", "bo": "Tibetan", "br": "Breton",
-    "bs": "Bosnian", "ca": "Catalan", "cs": "Czech", "cy": "Welsh",
-    "da": "Danish", "de": "German", "el": "Greek", "en": "English",
-    "es": "Spanish", "et": "Estonian", "eu": "Basque", "fa": "Persian",
-    "fi": "Finnish", "fo": "Faroese", "fr": "French", "gl": "Galician",
-    "gu": "Gujarati", "ha": "Hausa", "haw": "Hawaiian", "he": "Hebrew",
-    "hi": "Hindi", "hr": "Croatian", "ht": "Haitian Creole",
-    "hu": "Hungarian", "hy": "Armenian", "id": "Indonesian",
-    "is": "Icelandic", "it": "Italian", "ja": "Japanese", "jw": "Javanese",
-    "ka": "Georgian", "kk": "Kazakh", "km": "Khmer", "kn": "Kannada",
-    "ko": "Korean", "la": "Latin", "lb": "Luxembourgish", "ln": "Lingala",
-    "lo": "Lao", "lt": "Lithuanian", "lv": "Latvian", "mg": "Malagasy",
-    "mi": "Maori", "mk": "Macedonian", "ml": "Malayalam",
-    "mn": "Mongolian", "mr": "Marathi", "ms": "Malay", "mt": "Maltese",
-    "my": "Myanmar", "ne": "Nepali", "nl": "Dutch", "nn": "Nynorsk",
-    "no": "Norwegian", "oc": "Occitan", "pa": "Punjabi", "pl": "Polish",
-    "ps": "Pashto", "pt": "Portuguese", "ro": "Romanian", "ru": "Russian",
-    "sa": "Sanskrit", "sd": "Sindhi", "si": "Sinhala", "sk": "Slovak",
-    "sl": "Slovenian", "sn": "Shona", "so": "Somali", "sq": "Albanian",
-    "sr": "Serbian", "su": "Sundanese", "sv": "Swedish", "sw": "Swahili",
-    "ta": "Tamil", "te": "Telugu", "tg": "Tajik", "th": "Thai",
-    "tk": "Turkmen", "tl": "Tagalog", "tr": "Turkish", "tt": "Tatar",
-    "uk": "Ukrainian", "ur": "Urdu", "uz": "Uzbek", "vi": "Vietnamese",
-    "yi": "Yiddish", "yo": "Yoruba", "yue": "Cantonese", "zh": "Chinese",
-}
-
-# Internal-only aliases (never shown in the UI): common alternate names map
-# to their canonical Whisper code.
-LANGUAGE_ALIASES: dict[str, str] = {
-    "mandarin": "zh", "chinese mandarin": "zh", "cantonese": "yue",
-    "castilian": "es", "valencian": "ca", "flemish": "nl",
-    "haitian": "ht", "burmese": "my", "moldovan": "ro",
-    "moldavian": "ro", "panjabi": "pa", "pushto": "ps",
-    "sinhalese": "si", "letzeburgesch": "lb",
-}
-
-
-def normalize_language(value) -> str:
-    """A valid Whisper language CODE for any stored value: codes pass
-    through, known aliases resolve, anything else falls back to auto."""
-    raw = str(value or "").strip().lower()
-    if not raw:
-        return "auto"
-    if raw in WHISPER_LANGUAGES:
-        return raw
-    if raw in LANGUAGE_ALIASES:
-        return LANGUAGE_ALIASES[raw]
-    by_name = {name.lower(): code
-               for code, name in WHISPER_LANGUAGES.items()}
-    return by_name.get(raw, "auto")
+# stored BY CODE; display names are user-friendly. The single source of
+# truth now lives in the central registry (storyplanner.languages) shared
+# with the Project Writing Language and grammar systems; these re-exports
+# keep every existing voice import working unchanged.
+from storyplanner.languages import (  # noqa: E402  (re-export)
+    LANGUAGE_ALIASES,
+    WHISPER_LANGUAGES,
+    normalize_language,
+)
 
 
 # Non-blocking setup messages (shown in the panel; the app stays usable).

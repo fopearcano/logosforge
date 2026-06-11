@@ -117,12 +117,14 @@ class VoiceSetupDialog(QDialog):
         lang_row.addWidget(QLabel("Language:"))
         self._language = QComboBox()
         self._language.setObjectName("setupLanguage")
+        # Transcription language: follow the project's writing language
+        # (default), Auto detect, or an explicit code (full Whisper list).
+        from storyplanner.i18n import tr
+        self._language.addItem(tr("Use project language"), "project")
         for value, label in vs.LANGUAGES:           # full Whisper list
             self._language.addItem(
                 label if value == "auto" else f"{label} ({value})", value)
-        self._language.currentIndexChanged.connect(
-            lambda _i: self._store("voice_language",
-                                   self._language.currentData()))
+        self._language.currentIndexChanged.connect(self._on_language_changed)
         lang_row.addWidget(self._language)
         lang_row.addSpacing(12)
         lang_row.addWidget(QLabel("Performance:"))
@@ -215,6 +217,17 @@ class VoiceSetupDialog(QDialog):
         except (TypeError, ValueError):
             pass                          # invalid input: keep previous value
 
+    def _on_language_changed(self, _index: int) -> None:
+        """Persist the transcription language MODE (+ explicit code)."""
+        data = self._language.currentData()
+        if data == "project":
+            self._store("voice_language_mode", "project")
+        elif data == "auto":
+            self._store("voice_language_mode", "auto")
+        else:
+            self._store("voice_language", data)
+            self._store("voice_language_mode", "explicit")
+
     def _settings(self) -> VoiceSettings:
         return VoiceSettings.from_store(self._getter())
 
@@ -232,20 +245,30 @@ class VoiceSetupDialog(QDialog):
         self._model_path.setText(str(get("voice_whisper_model_path") or ""))
         self._exe_path.setText(
             str(get("voice_whisper_executable_path") or ""))
+        # Transcription language selection = mode + explicit code. "Use
+        # project language" (default) follows the project; an invalid saved
+        # explicit value repairs to Auto detect exactly as before.
+        from storyplanner.voice.types import normalize_language
         raw_lang = str(get("voice_language") or "auto")
-        lang_idx = self._language.findData(raw_lang)
-        if lang_idx < 0:
-            from storyplanner.voice.types import normalize_language
-            normalized = normalize_language(raw_lang)
-            lang_idx = self._language.findData(normalized)
-            if normalized == "auto" and raw_lang not in ("", "auto"):
-                self._show_result("Saved language is no longer supported; "
-                                  "using Auto detect.")
+        normalized = normalize_language(raw_lang)
+        if normalized == "auto" and raw_lang not in ("", "auto"):
+            self._show_result("Saved language is no longer supported; "
+                              "using Auto detect.")
             setter = self._set
             if setter is None:
                 from storyplanner.settings import get_manager
                 setter = get_manager().set
-            setter("voice_language", normalized)
+            setter("voice_language", "auto")
+            setter("voice_language_mode", "auto")
+            lang_idx = self._language.findData("auto")
+        else:
+            mode = self._settings().resolved_language_mode()
+            if mode == "project":
+                lang_idx = self._language.findData("project")
+            elif mode == "auto":
+                lang_idx = self._language.findData("auto")
+            else:
+                lang_idx = self._language.findData(normalized)
         self._language.blockSignals(True)
         self._language.setCurrentIndex(lang_idx if lang_idx >= 0 else 0)
         self._language.blockSignals(False)

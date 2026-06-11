@@ -123,23 +123,33 @@ class VoiceSessionController:
         if not pcm:
             return TranscriptSegment(text="", is_final=True)
         self._set_status(VoiceStatus.PROCESSING)
+        # Resolve the transcription language from the Dexter mode (project /
+        # auto / explicit) — the backend only ever sees a valid Whisper code.
+        mode = self._settings.resolved_language_mode()
+        effective = self._settings.effective_language()
         seg = self._transcriber.transcribe(
             pcm, sample_rate=self._settings.sample_rate,
-            language=self._settings.language)
+            language=effective)
         # Keep the segment's local PCM in memory (session-only) so the history
         # panel can offer "Retry transcription". Local-first: the bytes never
         # touch disk and are dropped on discard/clear.
         seg.audio_bytes = pcm
         seg.sample_rate = self._settings.sample_rate
-        # Language metadata: what was asked for vs. what the backend found.
-        selected = (self._settings.language or "auto").lower()
+        # Language metadata: what was asked for vs. what the backend found,
+        # plus the project coordination fields (Dexter language update).
+        selected = (effective or "auto").lower()
         seg.selected_language_code = selected
+        seg.project_language_code = (
+            self._settings.project_language_code or "").lower()
+        seg.dexter_language_mode = mode
         detected = (seg.language or "").lower()
         if detected and detected != "auto":
             seg.detected_language_code = detected
         if selected in ("", "auto"):
             seg.language_source = ("backend_detected"
                                    if seg.detected_language_code else "auto")
+        elif mode == "project":
+            seg.language_source = "project_language"
         else:
             seg.language_source = "user_selected"
         if seg.error:

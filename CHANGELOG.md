@@ -5,6 +5,44 @@ dates are release-readiness milestones, not packaged builds.
 
 ## [0.9.0-alpha] — pre-finalization refactor — 2026-06-11
 
+### Multi-language infrastructure (writing / Dexter / grammar / UI)
+
+Four separated language concepts, all stored by stable Whisper codes over a
+new central registry (`storyplanner/languages.py`: scripts, RTL,
+no-word-space metadata, grammar support levels, aliases — single source of
+truth re-exported by the voice stack):
+
+- **Project Writing Language** (per project; New Project + Project Settings;
+  full 100-language list + Auto; settings-only — never rewrites text; no
+  cross-project leaks; global default in Preferences).
+- **AI coordination**: `chat_completion` now resolves explicit
+  `response_language` → active project language → legacy text detection,
+  so every AI surface (assistant, Logos, inline edits, rewrite tools,
+  Billy voice bridge) preserves the project language by default with
+  RTL/CJK-aware, never-auto-translate instructions.
+- **Dexter's Room**: transcription language modes *Use project language*
+  (default; follows project switches), *Auto detect*, *explicit code*
+  (pre-existing explicit choices inferred and kept); segments record
+  `project_language_code` + `dexter_language_mode` (+ existing
+  selected/detected/source); invalid values always degrade to Auto;
+  codes-only injection-proof pass-through.
+- **Grammar**: `check_text(..., language=)` with honest levels — full
+  English; basic generic rules for word-spaced scripts; **none** (graceful
+  message, zero bogus issues) for CJK/RTL; project language by default,
+  per-project override field, editor session override respected; Project
+  Settings shows the support note. No external/cloud grammar engine.
+- **Unicode/script safety** certified: CJK/RTL/emoji storage + reload,
+  UTF-8 Markdown/TXT/JSON/Fountain exports (no needless escaping), search,
+  GN structure export; CJK word count shown as ≈ characters; PDF glyph
+  limits documented (no bundled fonts).
+- **Software UI Language** (global, separate): lightweight catalog
+  (`storyplanner/i18n.py`), English default + partial Italian; only
+  translated locales selectable; Preferences → Language section
+  (UI language + default writing language).
+- Tests: new `tests/test_language_system.py` (54) + updated Dexter
+  language pins; voice matrix 569, modes/gates/grammar 415, broad
+  certification sweep **1527** — all green. No new dependencies.
+
 ### Post-refactor integrity gate — PASSED (2026-06-11)
 
 A dedicated audit re-certified the canonical Graphic Novel refactor: data

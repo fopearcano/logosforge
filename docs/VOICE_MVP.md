@@ -355,7 +355,25 @@ show clear messages instead of crashing.
   point the executable at its binary (e.g. `./main`) and the model at a
   `ggml-*.bin`; the app shells out per segment to a temp WAV that is
   always deleted.
-- **Language**: the FULL OpenAI Whisper list (Auto detect first, then all 100 languages alphabetically, shown as “English (en)” and stored by code; common aliases like Mandarin→zh, Cantonese→yue, Castilian→es resolve internally; an invalid saved value falls back to Auto detect with “Saved language is no longer supported; using Auto detect.”). Auto passes no language to the backends (faster-whisper gets None; whisper.cpp omits -l); a chosen code is passed through, and segments record selected/detected language + source. And a **performance profile**:
+- **Language** — three transcription modes over the FULL OpenAI Whisper
+  list: **Use project language** (the default — Dexter follows the active
+  project's Writing Language, so an Italian project dictates in Italian
+  with zero setup; a project set to Auto, or no choice at all, falls
+  through to Auto detect), **Auto detect**, or an **explicit language**
+  (all 100 languages alphabetically, shown as “English (en)” and stored by
+  code; common aliases like Mandarin→zh, Cantonese→yue, Castilian→es
+  resolve internally; an invalid saved value falls back to Auto detect with
+  “Saved language is no longer supported; using Auto detect.”; pre-existing
+  installs that had picked a concrete language stay on it — inferred
+  *explicit* mode). Auto passes no language to the backends (faster-whisper
+  gets None; whisper.cpp omits -l); the resolved code is passed through,
+  and segments record selected/detected language + source **plus**
+  `project_language_code` and `dexter_language_mode`
+  (auto / project / explicit; project-resolved segments report
+  `language_source = "project_language"`). Switching projects re-resolves
+  the project mode immediately — Project A's language never leaks into
+  Project B. CJK/RTL codes are passed through safely (codes only, argv
+  lists, injection-proof normalization). And a **performance profile**:
   *Fast draft* (short segments, beam 1), *Balanced* (the default),
   *Accurate* (longer segments, beam 5 — latency may rise), *Custom* (edit
   silence/segment/beam directly). Profiles only set CPU-safe segmentation +

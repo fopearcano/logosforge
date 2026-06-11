@@ -143,6 +143,27 @@ stays Project → Act → Chapter → Scene):
   scrolls its content vertically (sticky Close row outside the scroll area, so
   the bottom controls are always reachable) and clamps its height to ~85% of
   the available screen.
+- **Multi-language writing (pre-finalization infrastructure):** every project
+  has a **Writing Language** (full OpenAI Whisper list — 100 languages +
+  Auto, friendly "Italian (it)" names, set in New Project / Project
+  Settings; changing it never rewrites or translates your text). It
+  coordinates: **AI** (assistant, Logos, rewrite tools and Billy voice
+  proposals preserve the project language by default — never auto-translate,
+  with RTL and CJK-aware instructions), **Dexter's Room** (transcription
+  language defaults to *Use project language*, with Auto detect and explicit
+  overrides; per-segment language metadata), and **grammar checking**
+  (project language by default; honest support levels — full English, basic
+  for word-spaced scripts, and a graceful *"Grammar checking is not
+  available for <language>"* for CJK/RTL instead of silent English-only
+  checks). **Unicode-safe end-to-end**: Chinese/Japanese/Korean/Arabic/
+  Hebrew/Hindi/… text saves, reloads, searches and exports (UTF-8
+  Markdown/TXT/JSON/Fountain; DOCX preserves Unicode; PDF glyph coverage
+  depends on system/ReportLab fonts — documented); CJK word counts show
+  **≈ characters**. Separately, a global **Software UI Language**
+  (Preferences → Language) ships with English default and a **partial
+  Italian** translation (only translated locales are selectable; coverage
+  is documented as partial for Alpha). Local-only: no cloud grammar or
+  speech services anywhere.
 
 **Final Alpha RC integration gate (2026-06-10): PASSED** — authoritative
 sweep 1527 + voice stack 392 + GN/Series/export 392 = **2311 passed, 0

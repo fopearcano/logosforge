@@ -699,7 +699,10 @@ class MainWindow(QMainWindow):
             commit_target=self._voice_commit,
             context_provider=self._voice_commit_context,
             on_data_changed=self._on_data_changed,
+            project_language_getter=self._project_dexter_language,
         )
+        # AI surfaces preserve the project's writing language by default.
+        self._sync_project_language_context()
         self._voice_window = VoiceDictationWindow(self._voice_panel,
                                                   parent=self)
 
@@ -2815,6 +2818,16 @@ class MainWindow(QMainWindow):
             narrative_engine=dlg.get_engine(),
             default_writing_format=dlg.get_format(),
         )
+        # Persist the chosen Writing Language with the project (settings-only;
+        # coordinates AI, grammar and Dexter — never touches text). Only when
+        # the dialog offered the choice — otherwise the project simply reads
+        # the global default.
+        lang_getter = getattr(dlg, "get_writing_language", None)
+        if lang_getter is not None:
+            from storyplanner import languages as L
+            L.set_project_writing_language(self._db, project.id,
+                                           lang_getter(),
+                                           source="user_selected")
         # ONE clean transition: set the target section, then run the canonical
         # switch pipeline exactly once — but suppress its project_loaded so the
         # only lifecycle signal is the project_created emitted below. Without
@@ -2966,6 +2979,27 @@ class MainWindow(QMainWindow):
                 "active_section": getattr(self, "_current_section", ""),
             },
         )
+
+    def _project_dexter_language(self) -> str:
+        """Dexter's "Use project language" target for the ACTIVE project."""
+        from storyplanner import languages as L
+        try:
+            return L.dexter_language_for_project(self._db, self._project_id)
+        except Exception:
+            return "auto"
+
+    def _sync_project_language_context(self) -> None:
+        """Point the AI layer at the active project's writing language (only
+        when the user chose one; "" keeps legacy detect-from-text). Called on
+        load and on every project switch so languages never leak across
+        projects."""
+        from storyplanner import languages as L
+        from storyplanner.assistant import set_active_project_language
+        try:
+            set_active_project_language(
+                L.project_language_for_ai(self._db, self._project_id))
+        except Exception:
+            set_active_project_language("")
 
     def _voice_ai_complete_callable(self):
         """Text-only completion via the EXISTING provider settings — None
@@ -3367,6 +3401,10 @@ class MainWindow(QMainWindow):
         # 2. Swap the active project id and hand it to long-lived
         # sub-systems.
         self._project_id = new_id
+        # Language context follows the project (A's language never leaks
+        # into B): AI preserve-language default + Dexter "project" mode
+        # both re-resolve from the new project.
+        self._sync_project_language_context()
         # Repair any legacy orphan structure for the project we're entering so
         # no section ever shows scenes outside the Act → Chapter → Scene chain.
         self._repair_structure(new_id)

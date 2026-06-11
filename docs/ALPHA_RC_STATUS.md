@@ -201,6 +201,38 @@ documented, unchanged): physical Page reorder within a scene (placement is
 controlled via the start-page pin); Act rename/move from the GN Outline.
 **Gate result: A.**
 
+## Multi-language infrastructure (2026-06-11)
+
+Pre-finalization language system, four separated concepts over the new
+central registry (`storyplanner/languages.py`: full Whisper list + script /
+RTL / no-word-space metadata, honest grammar levels, internal aliases —
+single source of truth, re-exported by the voice stack):
+**Project Writing Language** (per project; New Project + Project Settings;
+settings-only writes — never rewrites text; no cross-project leaks; global
+default in Preferences), **AI coordination** (`chat_completion` resolves
+explicit `response_language` → active project language → legacy detection,
+so assistant/Logos/inline edits/rewrite tools/Billy proposals preserve the
+project language by default, never auto-translate, RTL/CJK-aware),
+**Dexter language modes** (*Use project language* default / *Auto detect* /
+explicit; follows project switches; per-segment `project_language_code` +
+`dexter_language_mode`; invalid values → Auto; injection-proof codes-only
+pass-through), **grammar** (project language by default with per-project
+override + editor session override; full English / basic word-spaced /
+**none** for CJK-RTL with the graceful "not available … AI review" message
+— never silent English-only checks), **Unicode certification**
+(CJK/RTL/emoji storage + reload, search, UTF-8 Markdown/TXT/JSON/Fountain
+exports without needless escaping; CJK word counts as ≈ characters; PDF
+glyph limits documented; no bundled fonts), and a separate global
+**Software UI Language** (English default + partial Italian via
+`storyplanner/i18n.py`; only translated locales selectable; coverage
+labeled partial). Local-only — no cloud grammar/speech; no new
+dependencies. Verification: `tests/test_language_system.py` **54 passed** +
+Dexter/assistant language pins **35**; full voice matrix **569**;
+modes/gates/grammar **415** + isolation **82**; broad certification sweep
+**1527** — all green. **Classification: B — complete with documented
+partial grammar coverage and partial UI translation (by design for
+Alpha).**
+
 ## Last audit summary
 
 The final global multi-mode integrity audit (the **Alpha Release Gate**, see

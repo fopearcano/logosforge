@@ -173,13 +173,19 @@ def test_language_selector_displays_names_and_stores_codes():
     _db, _pid, win = _ui_window()
     dlg = VoiceSetupDialog(parent=win)
     combo = dlg._language
-    assert combo.count() == 101
-    assert combo.itemText(0) == "Auto detect"
+    # "Use project language" (the default mode) + Auto detect + 100 codes.
+    assert combo.count() == 102
+    assert combo.itemData(0) == "project"
+    assert combo.itemText(1) == "Auto detect"
+    assert combo.currentData() == "project"                      # default
     idx_en = combo.findData("en")
     assert combo.itemText(idx_en) == "English (en)"              # friendly
     combo.setCurrentIndex(combo.findData("yue"))
     from storyplanner.settings import get_manager
     assert get_manager().get("voice_language") == "yue"          # by code
+    assert get_manager().get("voice_language_mode") == "explicit"
+    combo.setCurrentIndex(combo.findData("project"))             # and back
+    assert get_manager().get("voice_language_mode") == "project"
 
 
 def test_invalid_saved_language_falls_back_to_auto_with_message():

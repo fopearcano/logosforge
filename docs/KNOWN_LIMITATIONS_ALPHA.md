@@ -129,6 +129,45 @@ panel** yet:
 - **Fountain** block classification is heuristic; dual-dialogue and title-page
   metadata are minimal (no text is lost — unknown lines become action).
 
+## Languages (multi-language infrastructure)
+
+- **Project Writing Language** is per project (full OpenAI Whisper list +
+  Auto; stored by code in the project settings; default English). It guides
+  **AI context** (the assistant/Logos/Billy preserve the project language by
+  default and never translate unless asked — RTL/CJK notes included),
+  **grammar checking**, **Dexter's Room** ("Use project language" is the
+  default transcription mode) and future glossary behavior. Changing it
+  **never rewrites, reinterprets or translates text**, and Project A's
+  language never leaks into Project B.
+- **Software UI Language** is a separate GLOBAL setting (Preferences →
+  Language). English is the default; **Italian is a partial first
+  translation** (language/settings surfaces; untranslated strings stay in
+  English). Only locales with real catalogs are selectable — translations
+  are **partial in Alpha** by design; further locales are deferred
+  (infrastructure ready: `storyplanner/i18n.py`).
+- **Grammar support is honest and partial**: full rules for English; generic
+  rules (repeated word, capitalization, long sentence) for other word-spaced
+  scripts; **no checking** for no-word-space (Chinese, Japanese, Thai, …)
+  and RTL (Arabic, Hebrew, …) scripts — those show *"Grammar checking is not
+  available for <language>. You can still write and use AI review."* instead
+  of being silently checked as English. No cloud grammar service; no
+  LanguageTool dependency.
+- **Unicode/CJK/RTL writing is supported at storage / editor / export
+  level** (SQLite + Qt are Unicode-native; TXT/Markdown/JSON/Fountain
+  exports are UTF-8 with no needless escaping; DOCX preserves Unicode).
+  **Full RTL *layout* (right-aligned editing UI) is deferred** — RTL text is
+  stored and exported intact. **PDF export glyph coverage depends on the
+  ReportLab built-in fonts**: CJK/RTL glyphs may render as fallback boxes
+  without appropriate system fonts (no font files are bundled or shared) —
+  use Markdown/DOCX for those scripts in Alpha. Word counts for
+  no-word-space scripts are shown as **≈ character counts** (approximate by
+  design).
+- **Dexter language modes**: Use project language (default) / Auto detect /
+  explicit code; invalid values always fall back to Auto; segments record
+  `project_language_code`, `dexter_language_mode`, selected/detected
+  language and source. **No cloud speech and no audio leaves the device**,
+  unchanged.
+
 ## Platform / scope
 
 - **Single-user, local-only.** No cloud sync, no collaboration (cloud folders are

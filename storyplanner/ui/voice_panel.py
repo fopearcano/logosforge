@@ -79,11 +79,15 @@ class VoicePanel(QWidget):
                  commit_target: EditorCommitTarget | None = None,
                  context_provider: Callable[[], object] | None = None,
                  on_data_changed: Callable[[], None] | None = None,
+                 project_language_getter: Callable[[], str] | None = None,
                  parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("voicePanel")
         self._settings_get = settings_get
         self._settings_set = settings_set
+        # Multi-language coordination: the active project's writing language
+        # ("Use project language" mode resolves through this; None → auto).
+        self._project_language_getter = project_language_getter
         self._commit = commit_target or EditorCommitTarget()
         # Phase 2: mode-aware commit routing (optional — without a context
         # provider the panel behaves exactly as the cursor-only MVP).
@@ -411,7 +415,16 @@ class VoicePanel(QWidget):
         if get is None:
             from storyplanner.settings import get_manager
             get = get_manager().get
-        return VoiceSettings.from_store(get)
+        settings = VoiceSettings.from_store(get)
+        # Fill the project's writing language so "Use project language"
+        # resolves; any failure degrades to Auto detect (never crashes).
+        if self._project_language_getter is not None:
+            try:
+                settings.project_language_code = str(
+                    self._project_language_getter() or "auto")
+            except Exception:
+                settings.project_language_code = "auto"
+        return settings
 
     def is_enabled(self) -> bool:
         return bool(self._load_settings().enabled)

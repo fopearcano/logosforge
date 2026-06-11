@@ -186,7 +186,9 @@ def build_backend_profile(settings) -> VoiceBackendProfile:
         enabled=bool(settings.enabled),
         model_path=settings.model_path or "",
         executable_path=settings.executable_path or "",
-        language=settings.language or "auto",
+        language=(settings.effective_language()
+                  if hasattr(settings, "effective_language")
+                  else settings.language) or "auto",
         device=getattr(settings, "local_device", "auto") or "auto",
         compute_type=getattr(settings, "local_compute_type", "") or "",
         sample_rate=int(settings.sample_rate or 16000),
@@ -277,7 +279,9 @@ def run_test_transcription(settings, *, wav_path: str = "",
     from storyplanner.voice.transcriber import build_transcriber
     transcriber = build_transcriber(settings)
     seg = transcriber.transcribe(pcm, sample_rate=sample_rate,
-                                 language=settings.language or None)
+                                 language=(settings.effective_language()
+                                           if hasattr(settings, "effective_language")
+                                           else settings.language) or None)
     if seg.error:
         return False, seg.error
     if seg.is_empty():
@@ -309,7 +313,9 @@ def diagnostics_summary(settings, *, last_error: str = "") -> str:
         f"{'yes' if (settings.executable_path or '').strip() else 'no'}",
         f"microphone: {'available' if mic_ok else 'unavailable'} "
         f"— {mic_msg}",
-        f"language: {settings.language or 'auto'}",
+        f"language: "
+        f"{(settings.effective_language() if hasattr(settings, 'effective_language') else settings.language) or 'auto'}"
+        f" (mode: {settings.resolved_language_mode() if hasattr(settings, 'resolved_language_mode') else 'explicit'})",
         f"performance profile: {profile.performance_profile}",
         f"segmentation: silence {settings.silence_ms} ms / max "
         f"{settings.max_segment_seconds} s / beam "

@@ -259,10 +259,13 @@ class _GrammarWorker(QThread):
 
     finished = Signal(int, object)
 
-    def __init__(self, generation: int, scenes: dict[int, str]) -> None:
+    def __init__(self, generation: int, scenes: dict[int, str],
+                 language: str = "") -> None:
         super().__init__()
         self._generation = generation
         self._scenes = scenes
+        # Project Writing Language ("" = legacy per-paragraph detection).
+        self._language = language
         self._cancelled = False
 
     def cancel(self) -> None:
@@ -282,7 +285,7 @@ class _GrammarWorker(QThread):
             for para in paragraphs:
                 if self._cancelled:
                     return
-                para_hash = hash(para)
+                para_hash = hash((self._language, para))
                 cached = _GRAMMAR_CACHE.get(para_hash)
                 if cached is not None:
                     for issue in cached:
@@ -295,7 +298,8 @@ class _GrammarWorker(QThread):
                         ))
                 else:
                     if para.strip():
-                        para_issues = check_text(para)
+                        para_issues = check_text(
+                            para, language=self._language or None)
                         if len(_GRAMMAR_CACHE) >= _GRAMMAR_CACHE_MAX:
                             _GRAMMAR_CACHE.clear()
                         _GRAMMAR_CACHE[para_hash] = para_issues
@@ -3496,12 +3500,47 @@ class WritingCoreView(QWidget):
 
     # -- Word count -----------------------------------------------------------
 
+    def _writing_language(self) -> str:
+        """The project's Writing Language code (cached per project)."""
+        cache = getattr(self, "_writing_lang_cache", None)
+        if cache is None or cache[0] != self._project_id:
+            from storyplanner import languages as L
+            try:
+                code = L.get_project_writing_language(
+                    self._db, self._project_id)
+            except Exception:
+                code = "en"
+            self._writing_lang_cache = (self._project_id, code)
+        return self._writing_lang_cache[1]
+
+    def _project_grammar_language(self) -> str:
+        """Grammar language: the editor's session override when set, else
+        the project Writing Language ("" keeps legacy auto-detection)."""
+        if self._language_override not in ("", "auto"):
+            return self._language_override
+        from storyplanner import languages as L
+        try:
+            return L.grammar_language_for_project(self._db, self._project_id)
+        except Exception:
+            return ""
+
     def _update_word_count(self) -> None:
+        from storyplanner import languages as L
+        spaced = L.uses_word_spaces(self._writing_language())
         total = 0
         for editor in self._editors.values():
             text = editor.toPlainText()
-            total += len(text.split()) if text.strip() else 0
-        label = f"{total:,} words"
+            if not text.strip():
+                continue
+            if spaced:
+                total += len(text.split())
+            else:
+                # No-word-space script (CJK/Thai/...): count characters and
+                # label the figure as approximate instead of pretending an
+                # English-style word count.
+                total += len("".join(text.split()))
+        label = (f"{total:,} words" if spaced
+                 else f"≈ {total:,} characters")
         self._word_count_label.setText(label)
         self._focus_word_label.setText(label)
 
@@ -3528,6 +3567,19 @@ class WritingCoreView(QWidget):
 
     def _run_language_detection(self) -> None:
         if self._language_override != "auto":
+            return
+        # A user-selected project Writing Language is authoritative — no
+        # trigram guessing against the writer's own setting.
+        from storyplanner import languages as L
+        try:
+            project_lang = L.grammar_language_for_project(
+                self._db, self._project_id)
+        except Exception:
+            project_lang = ""
+        if project_lang:
+            if project_lang != self._current_language:
+                self._current_language = project_lang
+                self._session_save_timer.start()
             return
         sample = self._collect_text_sample()
         if len(sample.strip()) < 50:
@@ -3617,7 +3669,8 @@ class WritingCoreView(QWidget):
         scenes: dict[int, str] = {}
         for sid, editor in self._editors.items():
             scenes[sid] = editor.toPlainText()
-        worker = _GrammarWorker(self._grammar_generation, scenes)
+        worker = _GrammarWorker(self._grammar_generation, scenes,
+                                language=self._project_grammar_language())
         worker.finished.connect(self._on_grammar_results)
         self._grammar_worker = worker
         worker.start()
