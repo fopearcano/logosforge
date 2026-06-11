@@ -95,29 +95,16 @@ class SettingsDialog(QDialog):
         layout.addWidget(self._separator())
 
         # -- Language -----------------------------------------------------------
-        # Software UI Language is GLOBAL and separate from any project's
-        # Writing Language: changing one never changes the other.
-        from storyplanner import i18n
+        # Alpha scope: the UI is ENGLISH-ONLY (no UI-language selector;
+        # localization is deferred — storyplanner.i18n stays dormant). The
+        # default WRITING language for new projects is a separate,
+        # fully-multilingual concept and remains configurable.
         from storyplanner import languages as L
-        layout.addWidget(self._section_label(i18n.tr("Language")))
-
-        ui_lang_row = QHBoxLayout()
-        ui_lang_row.addWidget(QLabel(i18n.tr("Software UI Language:")))
-        self._ui_language_combo = QComboBox()
-        self._ui_language_combo.setObjectName("prefsUiLanguage")
-        for code, label in i18n.UI_LANGUAGES:
-            self._ui_language_combo.addItem(label, code)
-        idx = self._ui_language_combo.findData(i18n.ui_language())
-        self._ui_language_combo.setCurrentIndex(max(idx, 0))
-        self._ui_language_combo.currentIndexChanged.connect(
-            lambda _i: get_settings().set(
-                "ui_language_code", self._ui_language_combo.currentData()))
-        ui_lang_row.addWidget(self._ui_language_combo, stretch=1)
-        layout.addLayout(ui_lang_row)
+        layout.addWidget(self._section_label("Language"))
 
         wl_row = QHBoxLayout()
         wl_row.addWidget(QLabel(
-            i18n.tr("Default writing language (new projects):")))
+            "Default writing language (new projects):"))
         self._default_writing_combo = QComboBox()
         self._default_writing_combo.setObjectName("prefsDefaultWritingLanguage")
         for code, label in L.selector_choices():
@@ -131,9 +118,10 @@ class SettingsDialog(QDialog):
         wl_row.addWidget(self._default_writing_combo, stretch=1)
         layout.addLayout(wl_row)
 
-        ui_lang_note = QLabel(i18n.tr(
-            "UI translations are partial in Alpha; untranslated text stays "
-            "in English. Applies to newly opened windows and dialogs."))
+        ui_lang_note = QLabel(
+            "The app interface is English-only in Alpha (interface "
+            "localization is deferred). Writing language and Dexter "
+            "transcription language are separate and fully multilingual.")
         ui_lang_note.setObjectName("prefsUiLanguageNote")
         ui_lang_note.setWordWrap(True)
         ui_lang_note.setStyleSheet("color: #94a3b8; font-size: 11px;")

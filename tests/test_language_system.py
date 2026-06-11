@@ -428,16 +428,17 @@ def test_legacy_paths_unchanged_without_project_language():
 
 
 def test_grammar_note_shown_in_project_settings():
+    # Alpha scope: the note is the static DEFERRAL statement — no
+    # per-language grammar-support claims anywhere in the UI.
     db = Database()
     pid = _project(db)
     from storyplanner.ui.project_settings_dialog import ProjectSettingsDialog
     dlg = ProjectSettingsDialog(db, pid)
-    dlg._language_combo.setCurrentIndex(dlg._language_combo.findData("ja"))
-    assert "not available for Japanese" in dlg._grammar_note.text()
-    assert "AI review" in dlg._grammar_note.text()
-    dlg._language_combo.setCurrentIndex(dlg._language_combo.findData("en"))
-    assert "Grammar and spelling checks run in English" \
-        in dlg._grammar_note.text()
+    note = dlg._grammar_note.text()
+    assert "deferred" in note and "Review/Correction" in note
+    for code in ("ja", "en", "zh"):
+        dlg._language_combo.setCurrentIndex(dlg._language_combo.findData(code))
+        assert dlg._grammar_note.text() == note        # static, no claims
 
 
 # ==========================================================================
@@ -556,14 +557,18 @@ def test_editor_detection_prefers_selected_project_language():
 # ==========================================================================
 
 
-def test_ui_language_setting_saves_and_defaults_english():
+def test_ui_language_english_only_while_localization_deferred():
+    # Alpha scope: localization is deferred — the UI resolves to English
+    # no matter what the (kept, dormant) setting says.
     from storyplanner.settings import get_manager
+    assert i18n.UI_LOCALIZATION_ENABLED is False
     assert i18n.ui_language() == "en"                  # default
     get_manager().set("ui_language_code", "it")
-    assert i18n.ui_language() == "it"
+    assert i18n.ui_language() == "en"                  # forced English
     import storyplanner.settings as settings
     settings._instance = None                          # reload from disk
-    assert i18n.ui_language() == "it"                  # persisted globally
+    assert get_manager().get("ui_language_code") == "it"   # setting persists
+    assert i18n.ui_language() == "en"                  # …but stays dormant
 
 
 def test_ui_language_independent_of_project_language():
@@ -582,34 +587,36 @@ def test_english_default_means_untranslated_passthrough():
     assert i18n.tr("Anything at all") == "Anything at all"
 
 
-def test_italian_labels_appear_where_implemented():
+def test_no_partial_translation_ships_in_alpha_ui():
+    # The Italian catalog remains DORMANT scaffolding: even with the setting
+    # forced to "it", every label renders English — no mixed-language UI.
     from storyplanner.settings import get_manager
     get_manager().set("ui_language_code", "it")
-    assert i18n.tr("Writing Language:") == "Lingua di scrittura:"
-    assert i18n.tr("Use project language") == "Usa la lingua del progetto"
+    assert i18n.tr("Writing Language:") == "Writing Language:"
+    assert i18n.tr("Use project language") == "Use project language"
+    assert i18n.coverage("it") > 0                     # scaffolding kept…
     db = Database()
     pid = _project(db)
     from storyplanner.ui.project_settings_dialog import ProjectSettingsDialog
     dlg = ProjectSettingsDialog(db, pid)
     from PySide6.QtWidgets import QLabel
     texts = [w.text() for w in dlg.findChildren(QLabel)]
-    assert "Lingua di scrittura:" in texts
-    # Untranslated strings fall back to English (partial coverage).
-    assert i18n.tr("Narrative Engine:") == "Narrative Engine:"
+    assert "Writing Language:" in texts                # …but not user-facing
+    assert not any("Lingua" in t for t in texts)
 
 
-def test_only_translated_ui_languages_offered():
+def test_no_ui_language_selector_in_alpha_preferences():
+    # No UI-language selector ships in Alpha; the Language section keeps the
+    # (multilingual) default WRITING language and states English-only UI.
     from storyplanner.ui.settings_dialog import SettingsDialog
     dlg = SettingsDialog(on_theme_changed=lambda n: None)
-    combo = dlg.findChild(QComboBox, "prefsUiLanguage")
-    codes = [combo.itemData(i) for i in range(combo.count())]
-    assert codes == ["en", "it"]                       # only real catalogs
-    for code in codes:
-        assert code == "en" or i18n.coverage(code) > 0
-    # The partial-coverage note is shown, never claiming completeness.
+    assert dlg.findChild(QComboBox, "prefsUiLanguage") is None
+    assert dlg.findChild(QComboBox, "prefsDefaultWritingLanguage") is not None
     from PySide6.QtWidgets import QLabel
     note = dlg.findChild(QLabel, "prefsUiLanguageNote")
-    assert note is not None and "partial" in note.text()
+    assert note is not None
+    assert "English-only" in note.text()
+    assert "deferred" in note.text()
 
 
 def test_unsupported_ui_language_falls_back_to_english():
@@ -802,14 +809,14 @@ def test_gate_scripts_across_all_surfaces(tmp_path):
     assert _GATE_STRINGS["ko"] in gn_md and _GATE_STRINGS["zh"] in gn_md
 
 
-def test_gate_dexter_setup_label_translates_in_italian():
+def test_gate_dexter_setup_label_stays_english_in_alpha():
     from storyplanner.settings import get_manager
-    get_manager().set("ui_language_code", "it")
+    get_manager().set("ui_language_code", "it")        # dormant setting
     get_manager().set("enable_voice_mode", True)
     get_manager().set("voice_backend_mode", "mock")
     from storyplanner.ui.voice_setup_dialog import VoiceSetupDialog
     dlg = VoiceSetupDialog()
-    assert dlg._language.itemText(0) == "Usa la lingua del progetto"
+    assert dlg._language.itemText(0) == "Use project language"
     assert dlg._language.itemData(0) == "project"      # data stays stable
     get_manager().set("ui_language_code", "en")
 
@@ -828,3 +835,110 @@ def test_gate_exports_carry_no_language_settings_metadata():
     for blob in (js, md):
         assert "writing_language_code" not in blob
         assert "dexter_language_override" not in blob
+
+
+# ==========================================================================
+# Final pre-Alpha scope cleanup pins (2026-06-11): Dexter = writing room;
+# grammar/text correction deferred; UI English-only.
+# ==========================================================================
+
+
+def _setup_scene(db, pid):
+    s = ss.create_scene(db, pid, act="Act 1", chapter="Chapter 1", title="S")
+    db.update_scene_content(s.id, "Hello world.")
+    return s
+
+
+def test_grammar_checking_deferred_in_editor():
+    # Even a previously stored opt-in is ignored: no grammar pass on load.
+    db = Database()
+    pid = _project(db)
+    _setup_scene(db, pid)
+    settings = db.get_project_settings(pid) or {}
+    settings["grammar_checking"] = True                # legacy opt-in
+    db.save_project_settings(pid, settings)
+    from storyplanner.ui.writing_core_view import WritingCoreView
+    view = WritingCoreView(db, pid, on_data_changed=lambda: None)
+    assert view._grammar_checking is False             # forced off (deferred)
+    assert view._grammar_worker is None
+    assert view._grammar_timer.isActive() is False
+    for editor in view._editors.values():
+        assert editor._grammar_enabled is False
+
+
+def test_review_menu_grammar_entry_is_disabled_deferred_placeholder():
+    db = Database()
+    pid = _project(db)
+    _setup_scene(db, pid)
+    from storyplanner.ui.writing_core_view import WritingCoreView
+    view = WritingCoreView(db, pid, on_data_changed=lambda: None)
+    view.on_open_review = lambda: None
+    actions = view._build_review_menu().actions()
+    grammar = next(a for a in actions if "Grammar" in a.text())
+    assert "deferred" in grammar.text()                # clearly deferred
+    assert grammar.isEnabled() is False                # no active route
+    assert "Review/Correction" in grammar.toolTip()
+
+
+def test_dexter_room_has_no_grammar_coupling():
+    # Dexter's Room is the dynamic voice WRITING room: capture, transcript
+    # review/format, routing and Billy proposals — never a grammar checker.
+    import inspect
+    import importlib
+    voice_modules = (
+        "storyplanner.ui.voice_panel",
+        "storyplanner.ui.voice_setup_dialog",
+        "storyplanner.ui.voice_glossary_dialog",
+        "storyplanner.voice.room",
+        "storyplanner.voice.session",
+        "storyplanner.voice.commit_router",
+        "storyplanner.voice.intent_router",
+        "storyplanner.voice.billy_bridge",
+        "storyplanner.voice.setup",
+    )
+    for name in voice_modules:
+        src = inspect.getsource(importlib.import_module(name))
+        assert "grammar_checker" not in src, name      # no dependency
+        low = src.lower()
+        for banned in ("grammar check", "proofread", "correct grammar",
+                       "automatic correction", "final correction",
+                       "multilingual correction"):
+            assert banned not in low, (name, banned)
+
+
+def test_dexter_room_opens_without_grammar_and_stays_preview_first():
+    from storyplanner.settings import get_manager
+    get_manager().set("enable_voice_mode", True)
+    get_manager().set("voice_backend_mode", "mock")
+    from storyplanner.ui.main_window import MainWindow
+    db = Database()
+    pid = _project(db)
+    win = MainWindow(db, pid)
+    win._toggle_voice_panel()
+    assert win._voice_window.isVisible()               # the room opens
+    panel = win._voice_panel
+    assert "Dexter's Room" in panel._room_label.text() # naming unchanged
+    # Review-first invariants survive the re-scope.
+    assert get_manager().get("voice_auto_commit") is False
+    assert get_manager().get("voice_auto_apply_exact") is False
+
+
+def test_grammar_module_needs_no_third_party_dependency():
+    # Startup (and the future Review phase) require no grammar-only package.
+    import ast
+    tree = ast.parse(open("storyplanner/grammar_checker.py").read())
+    ext = {n.names[0].name.split(".")[0] for n in ast.walk(tree)
+           if isinstance(n, ast.Import)}
+    ext |= {n.module.split(".")[0] for n in ast.walk(tree)
+            if isinstance(n, ast.ImportFrom) and n.module}
+    assert ext <= {"__future__", "math", "re", "collections", "dataclasses",
+                   "typing", "storyplanner"}
+
+
+def test_docs_state_dexter_scope_and_deferrals():
+    # Whitespace-normalized so doc line wrapping never breaks the pin.
+    voice_doc = " ".join(open("docs/VOICE_MVP.md").read().split())
+    assert "not a grammar checker" in voice_doc
+    limits = " ".join(open("docs/KNOWN_LIMITATIONS_ALPHA.md").read().split())
+    assert "deferred to a later Review/Correction phase" in limits
+    assert "English-only" in limits

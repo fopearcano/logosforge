@@ -125,7 +125,10 @@ panel** yet:
   (voice drift, knowledge leak, object reuse, lore-rule violation) are not done.
 - **Knowledge Graph** centrality is plain degree; undefined-term detection is
   heuristic.
-- **Grammar / spelling** is a basic rule-based checker (no external engine).
+- **Grammar / spelling checking is DEFERRED for Alpha** (see the Languages
+  section): the local rule-based checker remains in the codebase but has no
+  active UI route — the Review-menu entry is a disabled "deferred after
+  Alpha" placeholder.
 - **Fountain** block classification is heuristic; dual-dialogue and title-page
   metadata are minimal (no text is lost — unknown lines become action).
 
@@ -135,24 +138,30 @@ panel** yet:
   Auto; stored by code in the project settings; default English). It guides
   **AI context** (the assistant/Logos/Billy preserve the project language by
   default and never translate unless asked — RTL/CJK notes included),
-  **grammar checking**, **Dexter's Room** ("Use project language" is the
-  default transcription mode) and future glossary behavior. Changing it
+  **Dexter's Room** ("Use project language" is the default transcription
+  mode), and **future** grammar/text-correction and glossary behavior
+  (both deferred). Changing it
   **never rewrites, reinterprets or translates text**, and Project A's
   language never leaks into Project B. Like every project setting, the
   language is **not included in content exports** (Markdown/JSON/etc. carry
   story content only); it travels with the project database/backup.
-- **Software UI Language** is a separate GLOBAL setting (Preferences →
-  Language). English is the default; **Italian is a partial first
-  translation** (language/settings surfaces; untranslated strings stay in
-  English). Only locales with real catalogs are selectable — translations
-  are **partial in Alpha** by design; further locales are deferred
-  (infrastructure ready: `storyplanner/i18n.py`).
-- **Grammar support is honest and partial**: full rules for English; generic
-  rules (repeated word, capitalization, long sentence) for other word-spaced
-  scripts; **no checking** for no-word-space (Chinese, Japanese, Thai, …)
-  and RTL (Arabic, Hebrew, …) scripts — those show *"Grammar checking is not
-  available for <language>. You can still write and use AI review."* instead
-  of being silently checked as English. No cloud grammar service; no
+- **Alpha UI is English-only. Multilingual interface localization is
+  deferred.** Project writing language and Dexter transcription language are
+  already separate from UI language (and stay fully multilingual). There is
+  **no UI-language selector** in Alpha; the translation infrastructure
+  (`storyplanner/i18n.py`, with a dormant partial Italian catalog) remains
+  as non-user-facing scaffolding for a future localization pass — no
+  partial/mixed-language UI ships.
+- **Grammar checking and deep text correction are deferred to a later
+  Review/Correction phase. Dexter's Room focuses on dynamic voice writing,
+  formatting, and AI-assisted drafting.** The local rule-based checker stays
+  in the codebase (stdlib-only, no startup dependency) but is inactive: the
+  Manuscript Review menu shows a disabled *"Grammar Check — deferred after
+  Alpha"* placeholder, Project Settings states the deferral instead of
+  per-language support claims, and **grammar is not an Alpha release
+  blocker**. The project Writing Language does **not** imply grammar
+  support. A later phase may add a Review Room / Correction Room / Text
+  Review. No cloud grammar service; no automatic correction; no
   LanguageTool dependency.
 - **Unicode/CJK/RTL writing is supported at storage / editor / export
   level** (SQLite + Qt are Unicode-native; TXT/Markdown/JSON/Fountain

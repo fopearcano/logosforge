@@ -364,8 +364,8 @@ this behavior as supporting evidence (the manual UI check is still required).
 | L3 | Export Markdown/TXT/JSON/Fountain of that project — UTF-8 intact; PDF either renders or its glyph limitation matches the docs | PENDING MANUAL RETEST | partial |
 | L4 | With a non-English project language, an AI reply stays in that language and does NOT translate user text unasked | PENDING MANUAL RETEST | partial |
 | L5 | Dexter's Room Setup: language shows **Use project language** by default; explicit pick and Auto both work; invalid saved value repairs to Auto with the message | PENDING MANUAL RETEST | ✓ |
-| L6 | Grammar: set project to Chinese/Arabic → Project Settings shows "Grammar checking is not available…"; English project keeps spell/grammar underlines | PENDING MANUAL RETEST | ✓ |
-| L7 | Preferences → Language: switch Software UI Language to Italiano — translated labels appear on reopened dialogs, project language untouched; switch back to English | PENDING MANUAL RETEST | ✓ |
+| L6 | Grammar is deferred: no underlines/popup appear while typing; Manuscript Review menu shows a **disabled** "Grammar Check — deferred after Alpha"; Project Settings shows the deferral note | PENDING MANUAL RETEST | ✓ |
+| L7 | UI is English-only: Preferences → Language has **no UI-language selector** (only the default writing language + English-only note); all labels stay English regardless of project language | PENDING MANUAL RETEST | ✓ |
 | L8 | CJK project shows **≈ N characters** word count; switch project A (it) → B (none) → A — no language leak anywhere | PENDING MANUAL RETEST | ✓ |
 
 ## Release blocker criteria
@@ -373,15 +373,24 @@ this behavior as supporting evidence (the manual UI check is still required).
 A **release blocker** if any of these FAIL: app cannot launch · project creation
 broken · save/open broken · project isolation broken · Manuscript unusable ·
 writing-mode lock broken after meaningful content · mode switching corrupts body ·
-Graphic Novel Manuscript/Pages mismatch remains · Series cannot create/navigate
+Graphic Novel Outline/Manuscript loses Panel data · Series cannot create/navigate
 Season → Episode → Act → Chapter → Scene · dirty close-save prompt broken · data
-loss · export leaks API/provider secrets.
+loss · export leaks API/provider secrets · Unicode text corrupts on save/reload ·
+project language leaks between projects · Dexter sends raw audio to cloud/AI ·
+Dexter auto-applies changes without confirmation · Dexter cannot gracefully
+handle a missing backend/microphone · the standalone-Pages fullscreen minimize
+bug returns · export crashes instead of showing the graceful PDF/font
+limitation.
 
 **Non-blocking** (acceptable for Alpha): optional PDF/DOCX dependency absent but
 graceful message works · minor UI spacing · dashboard refresh requires manual
 refresh · A/B/C explicit assignment deferred if empty state is clear · Series
 legacy migration not automatic but old data remains safe · panel undocking
-deferred if collapsible layout works.
+deferred if collapsible layout works · **grammar checking deferred** (no active
+checker; placeholder disabled) · **UI localization deferred** (English-only UI) ·
+imperfect Whisper transcription quality (review-first by design) · incomplete
+PDF glyph coverage when graceful/documented · RTL layout polish (storage/editing
+safe; limitation documented).
 
 ## Blocker list
 

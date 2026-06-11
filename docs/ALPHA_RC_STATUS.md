@@ -251,6 +251,30 @@ broad certification sweep **1527** = **2432 passed, 0 failures**.
 **Gate result: B** (the implementation's documented grammar/UI/PDF/RTL
 limitations stand; everything else certified A-clean).
 
+**Final pre-Alpha scope cleanup (2026-06-11): PASSED.** Scope decision
+applied: **Dexter's Room is the dynamic voice writing room** (capture →
+transcript review/manual edit → formatting → routing → preview-first,
+project-language-aware Billy proposals → explicit Apply → undo); it has no
+grammar coupling (pinned, incl. wording scan of all voice modules).
+**Grammar checking and deep text correction are deferred to a later
+Review/Correction phase**: the editor's grammar pass is forced off on load
+(stored opt-ins ignored), the Review-menu entry is a disabled "Grammar
+Check — deferred after Alpha" placeholder, Project Settings shows the
+deferral statement, grammar removed from the blocker list (backend kept
+dormant; stdlib-only; no startup dependency). **Alpha UI is English-only**:
+the Preferences UI-language selector was removed; `storyplanner/i18n.py`
+is dormant (`UI_LOCALIZATION_ENABLED = False`, `tr()` pass-through — no
+partial Italian ships); localization documented as future work. **Kept in
+full:** project Writing Language (with the required help text), full
+Whisper list, Dexter language modes + metadata, AI preserve-language
+context, Unicode/CJK/RTL writing + exports. Blocker criteria updated per
+the scope decision. Verification: language + editor + grammar-adjacent
+**392** (suite → 66), voice/Dexter + assistant language **314**,
+GN/Series/lock/isolation/export **390**, broad certification sweep
+**1527** = **2623 passed, 0 failures**. **Classification: A — Dexter is
+writing/interaction only; grammar and UI translation are cleanly deferred;
+Alpha scope is clean** (dormant deferred code documented).
+
 ## Last audit summary
 
 The final global multi-mode integrity audit (the **Alpha Release Gate**, see

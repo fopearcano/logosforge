@@ -1,23 +1,29 @@
-"""Software UI language — lightweight translation registry (Alpha).
+"""Software UI language — DORMANT translation scaffolding (deferred).
 
-The **Software UI Language** is global and entirely separate from any
-project's Writing Language: changing one never changes the other. English is
-the default and the complete reference; **Italian** ships as the first
-(partial) translation. Coverage is incremental by design — strings are
-translated where :func:`tr` is applied (language/settings surfaces first),
-everything else stays English. No machine translation of the whole UI, no
-Qt ``.qm`` toolchain (a plain in-code catalog keeps Alpha risk low; the
-``tr()`` call sites are the extraction points for a future full pass).
+**Alpha UI is English-only. Multilingual interface localization is
+deferred.** Project writing language and Dexter transcription language are
+already separate from UI language and stay fully multilingual.
 
-Only languages with an actual catalog are selectable, and the Preferences UI
-labels the coverage as partial — an unsupported UI language is never shown
-as complete.
+This module is the future localization infrastructure, kept intentionally
+dormant for Alpha: ``UI_LOCALIZATION_ENABLED`` is ``False``, so
+:func:`ui_language` always resolves to English and :func:`tr` is a
+pass-through — no partial/mixed-language UI ever ships, and no UI-language
+selector is exposed. The Italian catalog below remains as non-user-facing
+scaffolding (the ``tr()`` call sites are the extraction points for the
+future localization pass); the stored ``ui_language_code`` setting is kept
+but ignored while localization is deferred. No machine translation, no Qt
+``.qm`` toolchain.
 """
 
 from __future__ import annotations
 
-# Selectable UI languages: code -> native display label. Only list languages
-# that really have a catalog below (English is the built-in reference).
+# Alpha scope decision: UI localization is DEFERRED. Flipping this on is the
+# entry point for the future localization phase — nothing else exposes a
+# non-English UI while it is False.
+UI_LOCALIZATION_ENABLED = False
+
+# Future selectable UI languages: code -> native display label. Only list
+# languages that really have a catalog below (English is the reference).
 UI_LANGUAGES: tuple[tuple[str, str], ...] = (
     ("en", "English"),
     ("it", "Italiano"),
@@ -52,7 +58,11 @@ _CATALOG: dict[str, dict[str, str]] = {
 
 
 def ui_language() -> str:
-    """The current UI language code (global setting; invalid → English)."""
+    """The current UI language code. While localization is deferred this is
+    always English — the stored setting is kept but ignored (invalid values
+    fall back to English either way)."""
+    if not UI_LOCALIZATION_ENABLED:
+        return DEFAULT_UI_LANGUAGE
     try:
         from storyplanner.settings import get_manager
         code = str(get_manager().get("ui_language_code") or "").strip().lower()

@@ -1447,7 +1447,12 @@ class WritingCoreView(QWidget):
             self._language_override = "auto"
         if self._language_override != "auto":
             self._current_language = self._language_override
-        self._grammar_checking: bool = bool(_settings.get("grammar_checking", False))
+        # Grammar checking is DEFERRED for Alpha (a later Review/Correction
+        # phase re-enables it): always start off — any previously stored
+        # opt-in is ignored, so no grammar pass ever runs on load. The
+        # mechanism (_toggle_grammar/worker/popup) stays intact but has no
+        # active UI route.
+        self._grammar_checking: bool = False
         self._style_hints_checking: bool = bool(_settings.get("style_hints", False))
         self._style_sensitivity: str = str(_settings.get("style_sensitivity", "medium"))
         if self._style_sensitivity not in STYLE_SENSITIVITY_LEVELS:
@@ -3175,10 +3180,14 @@ class WritingCoreView(QWidget):
         review_act.triggered.connect(self.toggle_review_mode)
         menu.addAction(review_act)
 
-        grammar_act = QAction("Grammar Check", menu)
-        grammar_act.setCheckable(True)
-        grammar_act.setChecked(self._grammar_checking)
-        grammar_act.triggered.connect(lambda checked: self._toggle_grammar())
+        # Alpha scope: grammar checking is a disabled, clearly-deferred
+        # placeholder (no active backend call; no support claims). The
+        # future Review/Correction phase reactivates it.
+        grammar_act = QAction("Grammar Check — deferred after Alpha", menu)
+        grammar_act.setEnabled(False)
+        grammar_act.setToolTip(
+            "Grammar checking and deep text correction are deferred to a "
+            "later Review/Correction phase.")
         menu.addAction(grammar_act)
 
         style_act = QAction("Style Feedback", menu)

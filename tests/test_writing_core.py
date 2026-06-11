@@ -1033,16 +1033,19 @@ def test_grammar_persists_setting():
     assert settings["grammar_checking"] is True
 
 
-def test_grammar_restores_from_settings():
+def test_grammar_stored_optin_ignored_while_deferred():
+    """Grammar checking is DEFERRED for Alpha: a previously stored opt-in is
+    ignored on load — the view always starts with grammar off (the
+    programmatic toggle mechanism stays for the future Review phase)."""
     db = Database()
     proj, *_ = _setup_project(db)
     settings = db.get_project_settings(proj.id)
     settings["grammar_checking"] = True
     db.save_project_settings(proj.id, settings)
     view = WritingCoreView(db, proj.id)
-    assert view._grammar_checking is True
+    assert view._grammar_checking is False
     for editor in view._editors.values():
-        assert editor._grammar_enabled is True
+        assert editor._grammar_enabled is False
 
 
 def test_grammar_issues_property():

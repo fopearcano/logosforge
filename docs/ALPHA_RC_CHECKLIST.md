@@ -117,16 +117,20 @@ per-mode export tests.)
 - [ ] **Dexter's Room** transcription language: *Use project language*
       (default) / *Auto detect* / explicit code; invalid saved values repair
       to Auto with the message; segments carry project/mode metadata.
-- [ ] **Grammar**: project language by default; unsupported scripts (CJK/RTL)
-      show *"Grammar checking is not available for <language>…"* instead of
-      English-only checks; English keeps full rules.
+- [ ] **Grammar checking is DEFERRED (not a blocker):** no active grammar
+      pass anywhere; the Manuscript Review menu shows a disabled
+      *"Grammar Check — deferred after Alpha"* placeholder; Project Settings
+      states the deferral (no per-language support claims); Dexter's Room
+      has no grammar coupling; no startup/grammar dependency.
 - [ ] **Unicode**: Chinese/Japanese/Arabic/Hebrew/emoji text saves, reloads,
       searches (titles/summaries) and exports (Markdown/TXT/JSON/Fountain
       UTF-8); CJK word count shows **≈ characters**; PDF glyph limits
       documented.
-- [ ] **Software UI Language** (Preferences → Language) is global and
-      separate; English default; Italian partial; only translated locales
-      selectable; the partial-coverage note is visible.
+- [ ] **Alpha UI is English-only (localization deferred):** no UI-language
+      selector anywhere; the Preferences Language section keeps only the
+      default WRITING language and states the deferral; no partial/mixed
+      translations visible; writing/Dexter languages stay fully
+      multilingual and independent of the UI language.
 
 ## Deferred features (must remain off/hidden)
 

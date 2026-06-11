@@ -149,21 +149,23 @@ stays Project → Act → Chapter → Scene):
   Settings; changing it never rewrites or translates your text). It
   coordinates: **AI** (assistant, Logos, rewrite tools and Billy voice
   proposals preserve the project language by default — never auto-translate,
-  with RTL and CJK-aware instructions), **Dexter's Room** (transcription
+  with RTL and CJK-aware instructions) and **Dexter's Room** (transcription
   language defaults to *Use project language*, with Auto detect and explicit
-  overrides; per-segment language metadata), and **grammar checking**
-  (project language by default; honest support levels — full English, basic
-  for word-spaced scripts, and a graceful *"Grammar checking is not
-  available for <language>"* for CJK/RTL instead of silent English-only
-  checks). **Unicode-safe end-to-end**: Chinese/Japanese/Korean/Arabic/
-  Hebrew/Hindi/… text saves, reloads, searches and exports (UTF-8
-  Markdown/TXT/JSON/Fountain; DOCX preserves Unicode; PDF glyph coverage
-  depends on system/ReportLab fonts — documented); CJK word counts show
-  **≈ characters**. Separately, a global **Software UI Language**
-  (Preferences → Language) ships with English default and a **partial
-  Italian** translation (only translated locales are selectable; coverage
-  is documented as partial for Alpha). Local-only: no cloud grammar or
-  speech services anywhere.
+  overrides; per-segment language metadata). **Unicode-safe end-to-end**:
+  Chinese/Japanese/Korean/Arabic/Hebrew/Hindi/… text saves, reloads,
+  searches and exports (UTF-8 Markdown/TXT/JSON/Fountain; DOCX preserves
+  Unicode; PDF glyph coverage depends on system/ReportLab fonts —
+  documented); CJK word counts show **≈ characters**. **Dexter's Room is
+  the dynamic voice writing room** — capture, transcript review/editing,
+  formatting and preview-first AI drafting with explicit Apply; it is **not
+  a grammar checker** and performs no automatic correction. **Grammar
+  checking and deep text correction are deferred** to a later
+  Review/Correction phase (the Review-menu entry is a disabled "deferred"
+  placeholder; not an Alpha blocker). **The Alpha UI is English-only** —
+  interface localization is deferred (the translation scaffolding stays
+  dormant and non-user-facing); project writing language and Dexter
+  language are separate from UI language and fully multilingual.
+  Local-only: no cloud grammar or speech services anywhere.
 
 **Final Alpha RC integration gate (2026-06-10): PASSED** — authoritative
 sweep 1527 + voice stack 392 + GN/Series/export 392 = **2311 passed, 0

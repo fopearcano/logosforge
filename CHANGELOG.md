@@ -5,6 +5,31 @@ dates are release-readiness milestones, not packaged builds.
 
 ## [0.9.0-alpha] — pre-finalization refactor — 2026-06-11
 
+### Final pre-Alpha scope cleanup — Dexter = voice writing room; grammar & UI localization deferred (2026-06-11)
+
+Scope decision before Alpha RC re-certification: **Dexter's Room is the
+dynamic voice writing room** (capture, buffered transcription, transcript
+review/manual editing, formatting, routing into Manuscript/Outline/Notes/
+PSYKE/GN Panels, preview-first project-language-aware Billy proposals,
+explicit Apply, undo) — **not a grammar-correction room**; it has and had
+no grammar coupling (now test-pinned, incl. a wording scan). **Grammar
+checking and deep text correction are deferred to a later Review/Correction
+phase**: the editor's opt-in grammar pass is forced off on load (stored
+opt-ins ignored), the Review-menu entry became a disabled *"Grammar Check —
+deferred after Alpha"* placeholder, Project Settings shows the deferral
+instead of per-language support claims, and grammar was removed from the
+Alpha blocker list (backend kept dormant, stdlib-only). **The Alpha UI is
+English-only**: the Preferences UI-language selector was removed, the
+i18n scaffolding is dormant (`UI_LOCALIZATION_ENABLED = False`; `tr()`
+pass-through; no partial Italian ships), and localization is documented as
+future work. **Kept in full:** project Writing Language (label + new
+required help text), full Whisper list, Dexter language modes, AI
+preserve-language context, Unicode/CJK/RTL writing and exports. Blocker
+list updated per the scope decision (grammar/UI-translation/transcription-
+quality/PDF-glyph/RTL-polish are non-blocking when graceful+documented).
+Tests: deferral/scope pins added; UI-language tests rewritten to pin
+English-only (suite → 66).
+
 ### Multi-language regression gate — PASSED (2026-06-11)
 
 Audit-only certification of the multi-language system: registry fields,

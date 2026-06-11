@@ -275,6 +275,17 @@ buffered, **review-first** session workflow over the whole stack. It is not
 full Live Writer Room, not cloud realtime, not voice-to-voice, and not an
 autonomous agent.
 
+**Scope (final Alpha):** Dexter's Room is the **dynamic voice writing
+room** — voice capture, buffered transcription, transcript review and
+manual editing, formatting/structuring, routing into Manuscript / Outline
+drafts / Notes / PSYKE drafts / Graphic Novel Panel fields, and
+project-language-aware, preview-first Billy proposals with explicit
+Apply/Cancel and undo. Dexter captures and formats your spoken draft; you
+can correct the text before applying it. It is **not a grammar checker**,
+does not promise perfect transcription, and performs **no automatic
+correction** of any kind — grammar checking and deep text correction are
+deferred to a later Review/Correction phase outside Dexter's Room.
+
 - **Session header**: a status line showing the room state (idle → checking
   backend → ready → listening → transcribing → transcript ready → choosing
   target / sending to Billy → proposal ready → applying → applied; error /

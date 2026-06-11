@@ -129,20 +129,22 @@ class ProjectSettingsDialog(QDialog):
         layout.addLayout(lang_row)
 
         lang_hint = QLabel(tr(
-            "The writing language guides AI, grammar checking and Dexter's "
-            "Room. Changing it never rewrites or translates your text."))
+            "Used for AI writing context and Dexter transcription defaults. "
+            "It does not change the app interface language, and changing it "
+            "never rewrites or translates your text."))
         lang_hint.setWordWrap(True)
         lang_hint.setStyleSheet("color: #94a3b8; font-size: 11px;")
         layout.addWidget(lang_hint)
 
-        # Honest grammar coverage for the selected language (graceful
-        # degradation message for unsupported scripts).
-        self._grammar_note = QLabel("")
+        # Alpha scope: no per-language grammar-support claims — grammar
+        # checking is deferred to a later Review/Correction phase.
+        self._grammar_note = QLabel(
+            "Grammar checking and deep text correction are deferred to a "
+            "later Review/Correction phase.")
         self._grammar_note.setObjectName("projectGrammarNote")
         self._grammar_note.setWordWrap(True)
         self._grammar_note.setStyleSheet("color: #94a3b8; font-size: 11px;")
         layout.addWidget(self._grammar_note)
-        self._refresh_grammar_note()
 
         # -- Buttons ---------------------------------------------------------
         buttons = QDialogButtonBox(
@@ -154,13 +156,8 @@ class ProjectSettingsDialog(QDialog):
         layout.addWidget(buttons)
 
     def _on_language_changed(self, _index: int) -> None:
-        self._refresh_grammar_note()
-
-    def _refresh_grammar_note(self) -> None:
-        from storyplanner.grammar_checker import grammar_status
-        code = self._language_combo.currentData() or "auto"
-        _level, message = grammar_status(code)
-        self._grammar_note.setText(message if code != "auto" else "")
+        # The deferral note is static; nothing language-specific to claim.
+        pass
 
     def _on_engine_changed(self, _index: int) -> None:
         """When the engine changes, auto-sync the default format unless the
