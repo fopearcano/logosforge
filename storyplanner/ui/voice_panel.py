@@ -95,7 +95,8 @@ class VoicePanel(QWidget):
         # Phase 3: local, session-only transcript history (review layer).
         self._history = VoiceTranscriptHistory()
         self._editing_entry_id: str | None = None
-        # Phase 6: Live Writer Room shell — session state + proposal queue.
+        # Phase 6: Dexter's Room shell (internal VoiceRoom* modules) —
+        # session state + proposal queue.
         from storyplanner.voice.room import (ProposalQueue,
                                              VoiceRoomStateMachine)
         self._room = VoiceRoomStateMachine()
@@ -945,7 +946,7 @@ class VoicePanel(QWidget):
         self._intent_preview_area.setVisible(False)
         self._status_label.setText("Voice: intent preview cancelled")
 
-    # -- Phase 6: Voice Room shell (state + queue + summary) ------------------
+    # -- Phase 6: Dexter's Room shell (state + queue + summary) ---------------
     def _room_to(self, state: str) -> None:
         self._room.to(state)              # invalid transitions are no-ops
         self._update_room_label()
@@ -1501,7 +1502,7 @@ class VoicePanel(QWidget):
     def _apply_status(self, status: VoiceStatus) -> None:
         self._status = status
         self._status_label.setText(_STATUS_TEXT.get(status, "Voice"))
-        # Mirror the controller status into the Voice Room state machine.
+        # Mirror the controller status into the room state machine.
         room_state = {
             VoiceStatus.LISTENING: "listening",
             VoiceStatus.PROCESSING: "transcribing",

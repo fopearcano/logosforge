@@ -1,6 +1,11 @@
-"""Live Writer Room — Alpha shell core (Phase 6): state, context, queue.
+"""Dexter's Room shell core (Phase 6): state, context, queue.
 
-The Voice Room is the unifying layer over the local voice stack: one
+Internal note: these ``VoiceRoom*`` names power the user-facing
+**Dexter's Room** workspace (the names are deliberately retained — renaming
+internals would be churn without benefit). "Live Writer Room" remains the
+name of the DEFERRED future autonomy concept only.
+
+The room is the unifying layer over the local voice stack: one
 session workflow connecting listening → buffered transcription → transcript
 history → (Dictation | Intent | Ask Billy | Edit with Billy) → preview →
 explicit apply/cancel/undo. It is **local and review-first**: not cloud
@@ -99,7 +104,7 @@ class VoiceRoomStateMachine:
 
 
 # --------------------------------------------------------------------------
-# Voice Room context (§4) — safe, refreshed, validated
+# Dexter's Room context (§4) — safe, refreshed, validated
 # --------------------------------------------------------------------------
 
 

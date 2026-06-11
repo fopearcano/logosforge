@@ -291,6 +291,16 @@ def test_mock_backend_and_segment_language_metadata():
     assert seg.language_source == "backend_detected"
 
 
+def test_language_domain_is_injection_proof_and_no_shell():
+    # Whatever is stored, normalize_language yields a member of the fixed
+    # list — the whisper.cpp argv can only ever receive a known code.
+    for hostile in ("; rm -rf /", "$(reboot)", "en; ls", "yue\nx", "''"):
+        assert normalize_language(hostile) in WHISPER_LANGUAGES
+    import inspect
+    from storyplanner.voice import transcriber as t
+    assert "shell=True" not in inspect.getsource(t)      # argv lists only
+
+
 def test_segment_metadata_defaults_do_not_break_history():
     seg = TranscriptSegment(text="plain")
     assert seg.selected_language_code == ""
