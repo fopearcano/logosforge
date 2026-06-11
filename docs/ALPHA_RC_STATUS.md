@@ -233,6 +233,24 @@ modes/gates/grammar **415** + isolation **82**; broad certification sweep
 partial grammar coverage and partial UI translation (by design for
 Alpha).**
 
+**Post-implementation regression gate (2026-06-11): PASSED.** A dedicated
+audit re-certified every area with targeted probes and six new permanent
+pins (`tests/test_language_system.py` → **60**): registry fields for the
+full required code list (incl. ta/te/ml/kn/gu/pa), corrupt stored project
+language degrades to auto everywhere (AI receives nothing hostile),
+per-project Dexter override wins and clears, the gate's exact
+zh/ja/ko/ar/he/hi/bn/th/mixed-punctuation strings round-trip through every
+writing surface (scene bodies, Notes, PSYKE, GN panel fields, Series
+bodies, search, Markdown/JSON/GN exports), the Dexter setup label
+translates under the Italian UI, and exports are confirmed to carry **no**
+language/settings metadata (the project language travels in the
+database/backup only — same property that keeps API keys out of exports).
+No blockers found; **no production code changed**. Evidence: language +
+voice/Dexter batch **482**, GN/Series/lock/isolation/export batch **423**,
+broad certification sweep **1527** = **2432 passed, 0 failures**.
+**Gate result: B** (the implementation's documented grammar/UI/PDF/RTL
+limitations stand; everything else certified A-clean).
+
 ## Last audit summary
 
 The final global multi-mode integrity audit (the **Alpha Release Gate**, see

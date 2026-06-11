@@ -685,3 +685,146 @@ def test_series_hierarchy_unaffected():
     db.set_scene_episode(s.id, episode.id)
     L.set_project_writing_language(db, pid, "ja")
     assert db.get_scenes_for_episode(episode.id)[0].id == s.id
+
+
+# ==========================================================================
+# Post-implementation regression gate pins (2026-06-11)
+# ==========================================================================
+
+_GATE_STRINGS = {
+    "zh": "这是一个测试场景。角色走进房间。",
+    "ja": "これはテストシーンです。登場人物が部屋に入る。",
+    "ko": "이것은 테스트 장면입니다. 인물이 방에 들어간다.",
+    "ar": "هذا مشهد اختبار. تدخل الشخصية إلى الغرفة.",
+    "he": "זו סצנת בדיקה. הדמות נכנסת לחדר.",
+    "hi": "यह एक परीक्षण दृश्य है। पात्र कमरे में प्रवेश करता है।",
+    "bn": "এটি একটি পরীক্ষামূলক দৃশ্য। চরিত্রটি ঘরে প্রবেশ করে।",
+    "th": "นี่คือฉากทดสอบ ตัวละครเดินเข้าไปในห้อง",
+    "mixed": "“Curly quotes”, em dash — ellipsis … emoji 🐕, accented "
+             "text: Zampanò, città, perché.",
+}
+
+
+def test_gate_registry_full_code_list_fields():
+    for code in ("zh", "yue", "ja", "ko", "ar", "he", "hi", "bn", "bo",
+                 "th", "ru", "uk", "el", "ta", "te", "ml", "kn", "gu",
+                 "pa"):
+        d = L.get_language(code)
+        assert d.whisper_code == code and d.name_en
+        assert d.script and d.direction in ("ltr", "rtl")
+        assert d.supports_whisper
+    assert L.get_language("it").ui_locale == "it"
+    assert L.get_language("fr").ui_locale == ""        # no UI translation
+    assert L.get_language("en").grammar_code == "en"
+    assert L.get_language("th").grammar_code == ""     # unsupported → empty
+
+
+def test_gate_invalid_stored_project_language_is_safe():
+    # Corrupt / hand-edited stored value: everything degrades to auto/none,
+    # nothing crashes and the AI never receives a hostile string.
+    db = Database()
+    pid = _project(db)
+    s = db.get_project_settings(pid) or {}
+    s[L.KEY_WRITING_LANGUAGE] = "klingon; rm -rf /"
+    s[L.KEY_WRITING_SOURCE] = "user_selected"
+    db.save_project_settings(pid, s)
+    assert L.get_project_writing_language(db, pid) == "auto"
+    assert L.project_language_for_ai(db, pid) == ""
+    assert L.grammar_language_for_project(db, pid) == ""
+    assert L.dexter_language_for_project(db, pid) == "auto"
+
+
+def test_gate_dexter_project_override_wins_and_clears():
+    db = Database()
+    pid = _project(db)
+    L.set_project_writing_language(db, pid, "it")
+    L.set_project_override(db, pid, L.KEY_DEXTER_OVERRIDE, "yue")
+    assert L.dexter_language_for_project(db, pid) == "yue"   # override wins
+    L.set_project_override(db, pid, L.KEY_DEXTER_OVERRIDE, "")
+    assert L.dexter_language_for_project(db, pid) == "it"    # back to project
+
+
+def test_gate_scripts_across_all_surfaces(tmp_path):
+    """The gate's exact CJK/RTL/Indic/Thai/mixed strings survive every
+    writing surface: scene bodies, Notes, PSYKE, Graphic Novel panel
+    fields, Series scene bodies — through save, reload, search and
+    Markdown/JSON exports."""
+    from storyplanner import graphic_novel_blocks as gnb
+    from storyplanner import graphic_novel_outline as gno
+    from storyplanner import graphic_novel_structure as gns
+    path = str(tmp_path / "gate.db")
+    db = Database(path)
+    pid = _project(db, "Novel")
+    scene_ids = {}
+    for key, text in _GATE_STRINGS.items():
+        s = ss.create_scene(db, pid, act="Act 1", chapter="Chapter 1",
+                            title=text[:24])
+        db.update_scene_content(s.id, text)
+        scene_ids[key] = s.id
+    db.create_note(pid, title=_GATE_STRINGS["ko"][:20],
+                   content=_GATE_STRINGS["ar"])
+    db.create_psyke_entry(pid, name="Zampanò 🐕", entry_type="character",
+                          notes=_GATE_STRINGS["he"])
+    gpid = _project(db, "GN", engine="graphic_novel")
+    gs = ss.create_scene(db, gpid, act="Act 1",
+                         title=_GATE_STRINGS["ja"][:12])
+    gno.add_page(db, gs.id)
+    gno.add_panel(db, gs.id, 0)
+    for field, key in (("visual_description", "zh"), ("caption", "th"),
+                       ("dialogue", "ko"), ("sfx", "mixed"),
+                       ("notes", "hi")):
+        gno.set_panel_field(db, gs.id, 0, 0, field, _GATE_STRINGS[key])
+    spid = _project(db, "Series", engine="series")
+    season = db.create_season(spid, title="시즌 1")
+    episode = db.create_episode(season.id, title="エピソード1")
+    ssc = ss.create_scene(db, spid, act="Act 1", chapter="Chapter 1",
+                          title=_GATE_STRINGS["bn"][:16])
+    db.set_scene_episode(ssc.id, episode.id)
+    db.update_scene_content(ssc.id, _GATE_STRINGS["bn"])
+
+    db2 = Database(path)                               # full reload
+    for key, text in _GATE_STRINGS.items():
+        assert db2.get_scene_by_id(scene_ids[key]).content == text, key
+        assert db2.search_project(pid, text[:6]), key  # search, no crash
+    panel = gnb.load_scene_script(db2, gs.id).pages[0].panels[0]
+    assert panel.visual_description == _GATE_STRINGS["zh"]
+    assert panel.caption == _GATE_STRINGS["th"]
+    assert panel.dialogue == _GATE_STRINGS["ko"]
+    assert panel.sfx == _GATE_STRINGS["mixed"]
+    assert panel.notes == _GATE_STRINGS["hi"]
+    assert db2.get_scene_by_id(ssc.id).content == _GATE_STRINGS["bn"]
+    assert db2.get_scenes_for_episode(episode.id)[0].id == ssc.id
+    md = X.export_markdown(db2, pid)
+    js = X.export_json(db2, pid)
+    for text in _GATE_STRINGS.values():
+        assert text in md and text in js
+    gn_md = gns.export_structure_markdown(db2, gpid)
+    assert _GATE_STRINGS["ko"] in gn_md and _GATE_STRINGS["zh"] in gn_md
+
+
+def test_gate_dexter_setup_label_translates_in_italian():
+    from storyplanner.settings import get_manager
+    get_manager().set("ui_language_code", "it")
+    get_manager().set("enable_voice_mode", True)
+    get_manager().set("voice_backend_mode", "mock")
+    from storyplanner.ui.voice_setup_dialog import VoiceSetupDialog
+    dlg = VoiceSetupDialog()
+    assert dlg._language.itemText(0) == "Usa la lingua del progetto"
+    assert dlg._language.itemData(0) == "project"      # data stays stable
+    get_manager().set("ui_language_code", "en")
+
+
+def test_gate_exports_carry_no_language_settings_metadata():
+    # Exports never include project settings (the same property that keeps
+    # API keys out) — so language metadata is NOT in exports; the project
+    # language travels only inside the database/backup, as documented.
+    db = Database()
+    pid = _project(db)
+    L.set_project_writing_language(db, pid, "it")
+    s = ss.create_scene(db, pid, act="Act 1", chapter="Chapter 1", title="S")
+    db.update_scene_content(s.id, "Body.")
+    js = X.export_json(db, pid)
+    md = X.export_markdown(db, pid)
+    for blob in (js, md):
+        assert "writing_language_code" not in blob
+        assert "dexter_language_override" not in blob

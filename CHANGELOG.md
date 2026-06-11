@@ -5,6 +5,20 @@ dates are release-readiness milestones, not packaged builds.
 
 ## [0.9.0-alpha] — pre-finalization refactor — 2026-06-11
 
+### Multi-language regression gate — PASSED (2026-06-11)
+
+Audit-only certification of the multi-language system: registry fields,
+project-language safety (corrupt stored values degrade to auto), Dexter
+override precedence, the gate's full CJK/RTL/Indic/Thai string matrix
+across scene bodies / Notes / PSYKE / GN panels / Series / search /
+exports, Italian Dexter setup labels, and the exports-carry-no-settings
+property. Six permanent pins added (`tests/test_language_system.py` → 60);
+**no production code changed**. Evidence: 482 language/voice + 423
+GN/Series/isolation/export + 1527 broad sweep = **2432 passed, 0
+failures**. **Classification: B** (documented grammar/UI/PDF/RTL
+limitations stand). Graphic Novel post-refactor re-certification can
+resume.
+
 ### Multi-language infrastructure (writing / Dexter / grammar / UI)
 
 Four separated language concepts, all stored by stable Whisper codes over a

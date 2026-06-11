@@ -138,7 +138,9 @@ panel** yet:
   **grammar checking**, **Dexter's Room** ("Use project language" is the
   default transcription mode) and future glossary behavior. Changing it
   **never rewrites, reinterprets or translates text**, and Project A's
-  language never leaks into Project B.
+  language never leaks into Project B. Like every project setting, the
+  language is **not included in content exports** (Markdown/JSON/etc. carry
+  story content only); it travels with the project database/backup.
 - **Software UI Language** is a separate GLOBAL setting (Preferences →
   Language). English is the default; **Italian is a partial first
   translation** (language/settings surfaces; untranslated strings stay in
