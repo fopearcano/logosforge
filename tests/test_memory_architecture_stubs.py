@@ -193,12 +193,13 @@ def test_capabilities_local_vs_cloud():
 # 16. AssistantContextBuilder returns a ContextBundle without mutation.
 def test_context_builder_no_mutation():
     store = InMemoryMemoryStore()
-    store.write_candidate(MemoryObject(
+    mem = store.write_candidate(MemoryObject(
         scope=MemoryScope.PROJECT, type=MemoryType.CONTINUITY_FACT,
         content="door is unlocked", project_id="p1"))
+    store.approve_candidate(mem.id)     # Phase 5 retrieves active memory by default
     before = len(store.search(""))
     cb = AssistantContextBuilder(store)
-    # Retrieval is naive substring in Phase 2 (per spec) — query a term.
+    # Deterministic substring ranking (Phase 5) — query a term.
     bundle = cb.build_context("door", project_id="p1")
     assert isinstance(bundle, ContextBundle)
     assert any("door" in m.content for m in bundle.project_memory)

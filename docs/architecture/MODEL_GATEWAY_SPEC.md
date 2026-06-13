@@ -82,3 +82,16 @@ Interfaces/stubs only (no DB, no cloud sync, no GitHub commits, no vector runtim
 Tests: `tests/test_memory_architecture_stubs.py` (21). The Alpha assistant (`assistant.py`, Billy/Logos/Dexter) and `providers.py` are unchanged.
 
 **Note:** the Phase-2 `ProviderCapability` in `assistant_arch/model_gateway.py` is the forward-looking abstraction; the live Alpha still uses `storyplanner/providers.py`. vLLM remains documented but not yet added to the live `PROVIDER_CAPABILITIES`.
+
+
+## Phase 5 — Context Builder Retrieval MVP
+
+**Capabilities are consumed, never stored.** `AssistantContextBuilder.build_context(..., provider_id=...)` (`storyplanner/assistant_arch/context_builder.py`) reads the selected provider's `ProviderCapability` from the `ModelGateway` and includes a capability snapshot in the `ContextBundle` to inform context-size and tool strategy:
+
+- exposed to the assistant: `provider_id`, `provider_type`, `context_window`, `supports_tools`, `supports_json_schema`, `supports_streaming`, `supports_embeddings`, `supports_vision`, `supports_audio`, `privacy_mode`, `offline_capable`.
+- **not** placed in any prompt section: `base_url`, `auth_mode`, or any key/secret.
+- if no provider is selected (or it is not registered): an **empty** capability snapshot + a warning, never a crash.
+
+This is the boundary in action: the gateway **reports capabilities**; the context builder **uses them to size/structure context**; neither reads, writes, retrieves, nor persists memory. **No provider is called during context build.** Model backends (LM Studio / Ollama / vLLM / OpenAI / Anthropic / OpenRouter) generate only — they are not LogosForge memory.
+
+Tests: `tests/test_assistant_context_builder.py` (26) — provider inclusion, missing-provider warning, and "no `generate()` call during build" are covered.

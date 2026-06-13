@@ -139,3 +139,20 @@ Tests: `tests/test_memory_candidate_workflow.py` (31). Dev demo: `scripts/memory
 **Still NOT implemented:** model-driven extraction/classification; semantic contradiction/retrieval; auto-approval; cloud sync; GitHub auto-export; memory-approval UI; any wiring into the running Alpha assistant/providers.
 
 **Reaffirmed (Phase 4):** the model generates, LogosForge remembers, retrieves, structures, updates, and syncs; nothing becomes durable/active without explicit approval; GitHub is optional only; Project Memory and Assistant Meta-Memory stay separate; Jordan has an externalized self-model, not consciousness.
+
+
+## Phase 5 — Context Builder Retrieval MVP
+
+**Retrieval tools refined** (`storyplanner/assistant_arch/tools.py`) and consumed by `AssistantContextBuilder` (`context_builder.py`) — local-only, **no provider call / no memory write**:
+
+- `search_memory(query, scope, project_id, filters)` — local store; supports `type`/`status` filters.
+- `retrieve_project_state(project_id)` — returns **active** project memory + a structure placeholder.
+- `retrieve_user_preferences(task_type)` — **active** user `preference` / `model_preference` / `workflow_rule` / `procedural_rule`.
+- `retrieve_assistant_rules(context)` — **active** assistant `assistant_rule` / `procedural_rule` / `workflow_rule` (the externalized self-model view).
+- `AssistantContextBuilder.build_context(...)` composes the scoped `ContextBundle` (separate Project / User / Workspace / Assistant sections + assistant rules), deterministic ranking, character-budget placeholder, provider-capability inclusion, and `to_prompt_sections` / `to_prompt_text` / `to_dict` serialization (scope-labeled; secrets / raw-audio redacted).
+
+Status policy: **active by default**; `include_proposed` surfaces candidates; every exclusion carries a reason. Tests: `tests/test_assistant_context_builder.py` (26).
+
+**Still NOT implemented:** embeddings/vector retrieval; cloud sync; GitHub export automation; full UI memory review; active assistant-runtime integration; LLM-based extraction; full contradiction reasoning.
+
+**Reaffirmed (Phase 5):** the model generates; LogosForge remembers and retrieves; **providers are not memory** (LM Studio / Ollama / vLLM / OpenAI / Anthropic / OpenRouter are generation backends only); Project Memory and Assistant Meta-Memory stay separate; Jordan is memory-grounded through LogosForge's externalized memory system, not conscious.

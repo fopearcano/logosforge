@@ -65,17 +65,42 @@ class AssistantTools:
         return self.store.search(query, scope=scope, project_id=project_id,
                                  filters=filters)
 
-    def retrieve_project_state(self, project_id: str) -> dict:
-        items = self.store.search("", scope=MemoryScope.PROJECT,
-                                  project_id=project_id)
-        return {"project_id": project_id, "memory": items}
+    def retrieve_project_state(self, project_id: str,
+                               include_proposed: bool = False) -> dict:
+        items = [m for m in self.store.search("", scope=MemoryScope.PROJECT,
+                                              project_id=project_id)
+                 if self._live(m, include_proposed)]
+        return {"project_id": project_id, "memory": items, "structure": []}
 
-    def retrieve_user_preferences(self, task_type: str | None = None
+    def retrieve_user_preferences(self, task_type: str | None = None,
+                                  include_proposed: bool = False
                                   ) -> list[MemoryObject]:
-        return self.store.search("", scope=MemoryScope.USER)
+        return self._active_by_types(
+            MemoryScope.USER,
+            {MemoryType.PREFERENCE, MemoryType.MODEL_PREFERENCE,
+             MemoryType.WORKFLOW_RULE, MemoryType.PROCEDURAL_RULE},
+            include_proposed)
 
-    def retrieve_assistant_rules(self, context=None) -> list[MemoryObject]:
-        return self.store.search("", scope=MemoryScope.ASSISTANT)
+    def retrieve_assistant_rules(self, context=None,
+                                 include_proposed: bool = False
+                                 ) -> list[MemoryObject]:
+        return self._active_by_types(
+            MemoryScope.ASSISTANT,
+            {MemoryType.ASSISTANT_RULE, MemoryType.PROCEDURAL_RULE,
+             MemoryType.WORKFLOW_RULE},
+            include_proposed)
+
+    def _active_by_types(self, scope: MemoryScope, types: set,
+                         include_proposed: bool = False) -> list[MemoryObject]:
+        return [m for m in self.store.search("", scope=scope)
+                if m.type in types and self._live(m, include_proposed)]
+
+    @staticmethod
+    def _live(mem: MemoryObject, include_proposed: bool) -> bool:
+        if mem.status is MemoryStatus.ACTIVE:
+            return True
+        return include_proposed and mem.status in (MemoryStatus.PROPOSED,
+                                                   MemoryStatus.SPECULATIVE)
 
     def list_memory_candidates(self, scope=None, project_id=None, status=None
                                ) -> list[MemoryObject]:

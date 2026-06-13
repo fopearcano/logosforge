@@ -241,12 +241,14 @@ def test_context_builder_local_retrieval_separated(tmp_path):
     from storyplanner.assistant_arch.context_builder import (
         AssistantContextBuilder)
     store = _store(tmp_path)
-    store.write_candidate(MemoryObject(
+    pm = store.write_candidate(MemoryObject(
         scope=MemoryScope.PROJECT, type=MemoryType.CONTINUITY_FACT,
         content="door fact", project_id="p1"))
-    store.write_candidate(MemoryObject(
+    am = store.write_candidate(MemoryObject(
         scope=MemoryScope.ASSISTANT, type=MemoryType.WORKFLOW_RULE,
         content="door rule"))
+    store.approve_candidate(pm.id)      # Phase 5 retrieves active memory by default
+    store.approve_candidate(am.id)
     cb = AssistantContextBuilder(store)
     bundle = cb.build_context("door", project_id="p1", user_id="u1")
     assert any("door fact" in m.content for m in bundle.project_memory)

@@ -162,3 +162,21 @@ Phase 4 builds the curated-memory layer (layer 2) on top of the Phase 3 store: a
 New code: `storyplanner/memory_arch/candidates.py`, `review.py`; upgraded `contradictions.py`; extended `assistant_arch/tools.py`. Tests: `tests/test_memory_candidate_workflow.py` (31). Dev demo: `scripts/memory_candidates_demo.py`. Nothing is wired into the running Alpha; importing creates no DB and touches no provider.
 
 **Reaffirmed (Phase 4):** the model generates, LogosForge remembers, retrieves, structures, updates, and syncs; nothing becomes durable/active without explicit approval; GitHub is optional only; Project Memory and Assistant Meta-Memory stay separate; Jordan has an externalized self-model, not consciousness.
+
+
+## Phase 5 — Context Builder Retrieval MVP
+
+Phase 5 implements the **retrieve / structure** half of the principle: the `AssistantContextBuilder` reads scoped memory from the local store (layer 2) and composes a provider-agnostic `ContextBundle` for the model gateway — **without calling any provider and without writing any memory**.
+
+- **Local scoped retrieval** into **separate** sections (Project / User / Workspace / Assistant + a focused Assistant Rules view) — never one generic memory blob.
+- **Deterministic ranking/selection** (keyword/tag/entity + project/active/confidence/type/mode/entity signals; recency tiebreak) — no embeddings, no vector DB.
+- **Character-budget placeholder** with safe truncation; **prompt-section serialization** that labels every scope and strips secrets / raw-audio paths.
+- **Provider capabilities** (context window, tool/JSON/stream/vision/audio support, privacy/offline) are surfaced as size/strategy hints only — **providers are not memory and store nothing**.
+- Status policy: active by default; proposed/speculative only on request; deprecated/superseded/contradicted/rejected excluded with reasons (diagnostic mode can include them, labeled).
+- A generic, **test-only `DocumentContext` adapter** carries current document/editor state; no UI or active-editor code is touched.
+
+New/updated code: `storyplanner/assistant_arch/context_builder.py`, `tools.py`. Tests: `tests/test_assistant_context_builder.py` (26). Nothing wired into the running Alpha; importing creates no DB and touches no provider.
+
+**Still NOT implemented:** embeddings/vector retrieval; cloud sync; GitHub export automation; full UI memory review; active assistant-runtime integration; LLM-based extraction; full contradiction reasoning.
+
+**Reaffirmed (Phase 5):** the model generates; LogosForge remembers and retrieves; **providers are not memory** (LM Studio / Ollama / vLLM / OpenAI / Anthropic / OpenRouter are generation backends only); Project Memory and Assistant Meta-Memory stay separate; Jordan is memory-grounded through LogosForge's externalized memory system, not conscious.
