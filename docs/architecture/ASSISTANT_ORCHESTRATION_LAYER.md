@@ -154,3 +154,18 @@ Tests: `tests/test_assistant_passive_context_integration.py` (22). No UI / provi
 **Still NOT implemented:** automatic durable memory writing; full memory approval UI; embeddings/vector retrieval; cloud sync; GitHub export automation; provider-specific memory; LLM-based memory extraction; full assistant-runtime replacement.
 
 **Reaffirmed (Phase 6):** the model generates; LogosForge remembers and retrieves; **providers are replaceable backends, not memory**; Jordan is memory-grounded through LogosForge's externalized memory system — **not provider memory or model weights**.
+
+
+## Phase 7 — Memory Review: the human gate (documentation only)
+
+Memory Review is the **explicit human gate** on top of the orchestration's
+"remember" loop: candidates proposed by `process_event_for_memory_candidates`
+are reviewed (approve / reject / edit / supersede / mark) before any become
+`active`. Specified — not implemented — in `MEMORY_REVIEW_UI_SPEC.md`,
+`MEMORY_CANDIDATE_REVIEW_WORKFLOW.md`, `MEMORY_PRIVACY_AND_GOVERNANCE.md`, and
+`MEMORY_UI_ROADMAP.md`.
+
+The orchestrator still performs **no automatic durable writes**; the context
+builder still feeds **approved `active` memory only** by default (proposed/
+speculative only on request; archived only in diagnostic mode, labelled). **No
+code changes in Phase 7.**

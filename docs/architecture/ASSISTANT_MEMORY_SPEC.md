@@ -198,3 +198,15 @@ Tests: `tests/test_assistant_passive_context_integration.py` (22). Billy/Logos/D
 **Still NOT implemented:** automatic durable memory writing; full memory approval UI; embeddings/vector retrieval; cloud sync; GitHub export automation; provider-specific memory; LLM-based memory extraction; full assistant-runtime replacement.
 
 **Reaffirmed (Phase 6):** the model generates; LogosForge remembers and retrieves; **providers are replaceable backends, not memory**; Jordan is memory-grounded through LogosForge's externalized memory system — **not provider memory or model weights**.
+
+
+## Phase 7 — Memory Review (UI/UX spec; documentation only)
+
+The future user-facing review surface is **specified, not implemented**, in:
+
+- `MEMORY_REVIEW_UI_SPEC.md` — the Memory Review UI surface, scopes/tabs, candidate card, actions, states, acceptance criteria, and test plan.
+- `MEMORY_CANDIDATE_REVIEW_WORKFLOW.md` — the review flows (create / approve / reject / supersede / diagnostic) and the status state-machine.
+- `MEMORY_PRIVACY_AND_GOVERNANCE.md` — the 18 governance rules (two-memory-systems boundary, redaction, auditability, local-first).
+- `MEMORY_UI_ROADMAP.md` — MVP → Pro → Team → optional GitHub-export stages.
+
+These reaffirm this spec's **two memory systems**: Project Memory and Assistant Meta-Memory stay separate in storage, retrieval, prompt, UI, and export. Nothing becomes active without explicit approval. **No UI/code is implemented in Phase 7.**

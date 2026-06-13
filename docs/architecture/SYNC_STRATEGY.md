@@ -79,3 +79,17 @@ Tests: `tests/test_memory_architecture_stubs.py` (21). The Alpha assistant (`ass
 **Still NOT implemented:** automatic memory extraction from chats; vector embeddings; cloud sync; GitHub auto-export; memory-approval UI; model-provider memory; provider calls; full contradiction reasoning (`find_contradictions` only surfaces already-flagged `contradicted` rows).
 
 **Reaffirmed:** the model generates, LogosForge remembers; GitHub is optional only; Project Memory and Assistant Meta-Memory stay separate; Jordan has an externalized self-model, not consciousness.
+
+
+## Phase 7 — Sync status in Memory Review (future; still disabled)
+
+The future Memory Review UI (`MEMORY_REVIEW_UI_SPEC.md`, `MEMORY_UI_ROADMAP.md`
+Stage 3) surfaces sync state as **read-only badges only** — `local_only` ·
+`pending_sync` · `synced` · `conflict` (from each object's `sync_state`). A
+`conflict` badge routes the user to **contradiction review** (supersede, never
+blind overwrite).
+
+Cloud sync remains **disabled until accounts exist**, and **opt-in /
+permissioned** thereafter (respecting user/account/workspace permissions). No
+sync is implemented and **no code changes are made in Phase 7** — this is UX
+direction only.

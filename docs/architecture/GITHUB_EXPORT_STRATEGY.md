@@ -74,3 +74,22 @@ Tests: `tests/test_memory_architecture_stubs.py` (21). The Alpha assistant (`ass
 **Still NOT implemented:** automatic memory extraction from chats; vector embeddings; cloud sync; GitHub auto-export; memory-approval UI; model-provider memory; provider calls; full contradiction reasoning (`find_contradictions` only surfaces already-flagged `contradicted` rows).
 
 **Reaffirmed:** the model generates, LogosForge remembers; GitHub is optional only; Project Memory and Assistant Meta-Memory stay separate; Jordan has an externalized self-model, not consciousness.
+
+
+## Phase 7 — GitHub export UI strategy (future; preview-first, optional)
+
+The future GitHub export UI (`MEMORY_REVIEW_UI_SPEC.md`, `MEMORY_UI_ROADMAP.md`
+Stage 5) must be: **optional · advanced/power-user · preview-first · manual ·
+scope-labelled · redaction-aware · never default · never automatic without
+explicit user approval.**
+
+**Exportable (preview-first):** memory snapshot markdown · architecture decision
+log · assistant meta-memory changelog · project memory summary · session
+summary · Claude Code prompt-history archive.
+
+**Not exportable by default:** raw private chat logs · raw audio · API keys ·
+provider secrets · unrelated project data · hidden device-local cache.
+
+This is the UI layer over the disabled `GitHubMemoryExportService` (markdown-only
+stub today). No export automation is implemented and **no code changes are made
+in Phase 7** — this is UX direction only.

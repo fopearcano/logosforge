@@ -171,3 +171,23 @@ Tests: `tests/test_assistant_passive_context_integration.py` (22).
 **Still NOT implemented:** automatic durable memory writing; full memory approval UI; embeddings/vector retrieval; cloud sync; GitHub export automation; provider-specific memory; LLM-based memory extraction; full assistant-runtime replacement.
 
 **Reaffirmed (Phase 6):** the model generates; LogosForge remembers and retrieves; **providers are replaceable backends, not memory**; Jordan is memory-grounded through LogosForge's externalized memory system — **not provider memory or model weights**.
+
+
+## Phase 7 — Memory Review actions → tools mapping (documentation only)
+
+The future Memory Review UI is a **thin surface over the existing tools / review
+service — no new backend doors** (`MEMORY_REVIEW_UI_SPEC.md`):
+
+- queue / list → `list_memory_candidates` · `MemoryCandidateReviewService.list_candidates`
+- approve → `approve_memory_candidate` · `review.approve`
+- reject → `reject_memory_candidate` · `review.reject(reason)`
+- edit → `update_memory` · `review.edit(patch, reason)` (status-change refused; scope re-validated)
+- supersede → `supersede_memory` · `review.supersede(old, new, reason)`
+- mark speculative / contradicted → `review.mark_speculative` · `review.mark_contradicted`
+- contradictions → `find_contradictions` · `review.contradictions_for`
+- search / filter → `search_memory` (type/status filters)
+- export → `export_memory_to_markdown` ; source preview → `get_event` / `list_events` (redacted)
+- sync / GitHub → `sync_memory_to_cloud` / `optional_sync_memory_to_github` (disabled / preview-first)
+
+Global tool rules unchanged: read tools never persist; durable writes stay
+explicit; no provider / cloud / GitHub calls. **No code changes in Phase 7.**

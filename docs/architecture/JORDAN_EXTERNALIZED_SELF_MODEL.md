@@ -83,3 +83,23 @@ Jordan's externalized self-model can now reach the **live** assistant prompt —
 Tests: `tests/test_assistant_passive_context_integration.py` (22).
 
 **Reaffirmed (Phase 6):** the model generates; LogosForge remembers and retrieves; **providers are replaceable backends, not memory**; Jordan is memory-grounded through LogosForge's externalized memory system — **not provider memory or model weights**.
+
+
+## Phase 7 — Memory Review: controlling Jordan's externalized self-model
+
+**Memory Review** (`MEMORY_REVIEW_UI_SPEC.md`) is *how the user controls
+Jordan's externalized self-model.* Jordan's consistency comes from LogosForge
+memory — **not model weights and not provider memory** — and Memory Review lets
+the user inspect and edit that memory safely, at the correct scope, with
+Assistant Meta-Memory kept separate from Project Memory.
+
+Through Memory Review the user can inspect/curate Jordan's: **assistant
+identity · assistant rules · known limitations · remembered collaboration
+history · known mistakes / corrections · project-specific context ·
+user-specific preferences · provider-capability awareness.**
+
+Jordan remains: **not conscious · not self-aware in a human sense · not
+permanently learning inside model weights · not tied to one provider.** Editing
+the self-model is an explicit, auditable human action (approve / reject / edit /
+supersede with reasons); nothing becomes active automatically. **Billy / Logos /
+Dexter are not renamed. No code changes in Phase 7.**
