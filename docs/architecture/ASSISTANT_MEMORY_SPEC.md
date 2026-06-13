@@ -182,3 +182,19 @@ Tests: `tests/test_assistant_context_builder.py` (26).
 **Still NOT implemented:** embeddings/vector retrieval; cloud sync; GitHub export automation; full UI memory review; active assistant-runtime integration; LLM-based extraction; full contradiction reasoning.
 
 **Reaffirmed (Phase 5):** the model generates; LogosForge remembers and retrieves; **providers are not memory** (LM Studio / Ollama / vLLM / OpenAI / Anthropic / OpenRouter are generation backends only); Project Memory and Assistant Meta-Memory stay separate; Jordan is memory-grounded through LogosForge's externalized memory system, not conscious.
+
+
+## Phase 6 — Passive Assistant Context Integration MVP
+
+**Implemented now** (`storyplanner/assistant_arch/passive_context.py`; opt-in seam in `storyplanner/assistant.build_messages`; settings flags `assistant_memory_context_enabled` / `assistant_memory_context_diagnostics_enabled`, both **default-OFF**) — read-only, local-only, **no provider call / no memory write**:
+
+- **Optional context-bundle injection** into the shared prompt builder; gated by an explicit per-call param **and** the settings flag **and** an available memory store. Off → byte-identical prompt; default path imports no memory packages.
+- **Separate, labelled sections** — Project / User / Workspace / Assistant Meta-Memory + a focused **Assistant Rules** section + a metadata-only **Provider Capabilities** section. Memory is never merged into one blob; this honors the spec's two-memory-systems separation at the prompt layer.
+- **Reads only** — uses `AssistantContextBuilder` retrieval; the memory-writer policy and candidate workflow are untouched. No durable write happens during prompt build.
+- **Safe fallback** — no store / missing project_id / failure → no block; secrets / raw-audio / raw events never appear; archived + proposed/speculative excluded by default; diagnostics add labelled warnings only.
+
+Tests: `tests/test_assistant_passive_context_integration.py` (22). Billy/Logos/Dexter behavior is unchanged when the flag is off.
+
+**Still NOT implemented:** automatic durable memory writing; full memory approval UI; embeddings/vector retrieval; cloud sync; GitHub export automation; provider-specific memory; LLM-based memory extraction; full assistant-runtime replacement.
+
+**Reaffirmed (Phase 6):** the model generates; LogosForge remembers and retrieves; **providers are replaceable backends, not memory**; Jordan is memory-grounded through LogosForge's externalized memory system — **not provider memory or model weights**.

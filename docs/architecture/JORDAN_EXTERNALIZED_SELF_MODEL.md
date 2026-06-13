@@ -69,3 +69,17 @@ It includes:
 
 Because it is externalized, swapping the model backend changes *how text is
 generated* but never *who the assistant is* or *what it remembers*.
+
+
+## Phase 6 — Passive Assistant Context Integration MVP
+
+Jordan's externalized self-model can now reach the **live** assistant prompt — passively and read-only. Behind the **default-OFF** flag `assistant_memory_context_enabled`, `storyplanner/assistant_arch/passive_context.py` injects the assistant-scope memory (operating rules, known mistakes/corrections, workflow norms — the externalized self-model, retrieved via `retrieve_assistant_rules` / the context builder) into `assistant.build_messages` as a clearly-labelled **Assistant Rules** / **Assistant Meta-Memory** section, kept separate from Project Memory.
+
+- This is **grounding, not consciousness**: behavior still comes from retrieved LogosForge memory, not model weights and not provider memory.
+- **No memory is written** during prompt build; the self-model is only *read*. It is updated solely through the explicit candidate workflow.
+- Disabled by default and fully provider-agnostic: enabling it does not change which model generates, and swapping backends never changes who Jordan is or what is remembered.
+- Billy / Logos / Dexter are **not renamed**; Jordan remains the architecture-level concept these surfaces share.
+
+Tests: `tests/test_assistant_passive_context_integration.py` (22).
+
+**Reaffirmed (Phase 6):** the model generates; LogosForge remembers and retrieves; **providers are replaceable backends, not memory**; Jordan is memory-grounded through LogosForge's externalized memory system — **not provider memory or model weights**.

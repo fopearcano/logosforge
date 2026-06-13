@@ -95,3 +95,16 @@ Tests: `tests/test_memory_architecture_stubs.py` (21). The Alpha assistant (`ass
 This is the boundary in action: the gateway **reports capabilities**; the context builder **uses them to size/structure context**; neither reads, writes, retrieves, nor persists memory. **No provider is called during context build.** Model backends (LM Studio / Ollama / vLLM / OpenAI / Anthropic / OpenRouter) generate only — they are not LogosForge memory.
 
 Tests: `tests/test_assistant_context_builder.py` (26) — provider inclusion, missing-provider warning, and "no `generate()` call during build" are covered.
+
+
+## Phase 6 — Passive Assistant Context Integration MVP
+
+When the **default-OFF** flag `assistant_memory_context_enabled` is on, `assistant_arch/passive_context.py` may include a **metadata-only** Provider Capabilities section in the assistant prompt (via the context builder). This changes **nothing** about routing or generation:
+
+- capabilities are read from the `ModelGateway` (or omitted, with a diagnostic warning, if no provider is selected) and serialized as hints (`provider_id`, `provider_type`, `context_window`, `supports_*`, `privacy_mode`, `offline_capable`) — **no `base_url`, no `auth_mode`, no keys**.
+- **no provider is called** during prompt build; provider selection, credentials, and `chat_completion` behavior are untouched.
+- the gateway still never stores or owns memory — it only reports capabilities, which the prompt builder uses to size/structure context.
+
+Tests: `tests/test_assistant_passive_context_integration.py` (22) — provider-capabilities section presence, and "no sync/GitHub/memory-write during build" are covered.
+
+**Reaffirmed (Phase 6):** model backends (LM Studio / Ollama / vLLM / OpenAI / Anthropic / OpenRouter) are **replaceable generation backends, not memory**; swapping them changes how text is generated, never what LogosForge remembers.

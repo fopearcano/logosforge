@@ -156,3 +156,18 @@ Status policy: **active by default**; `include_proposed` surfaces candidates; ev
 **Still NOT implemented:** embeddings/vector retrieval; cloud sync; GitHub export automation; full UI memory review; active assistant-runtime integration; LLM-based extraction; full contradiction reasoning.
 
 **Reaffirmed (Phase 5):** the model generates; LogosForge remembers and retrieves; **providers are not memory** (LM Studio / Ollama / vLLM / OpenAI / Anthropic / OpenRouter are generation backends only); Project Memory and Assistant Meta-Memory stay separate; Jordan is memory-grounded through LogosForge's externalized memory system, not conscious.
+
+
+## Phase 6 — Passive Assistant Context Integration MVP
+
+The **read** tools now have a passive consumer: `storyplanner/assistant_arch/passive_context.py` composes a read-only ContextBundle and injects it into `assistant.build_messages` behind the **default-OFF** flag `assistant_memory_context_enabled`.
+
+- Only **read** tools / retrieval are exercised (`search_memory`, `retrieve_project_state`, `retrieve_user_preferences`, `retrieve_assistant_rules` via the context builder). **No write tool** (`write_memory_candidate`, `approve_memory_candidate`, `update_memory`, `supersede_memory`, `summarize_session`) and **no** `sync_memory_to_cloud` / `optional_sync_memory_to_github` are called during prompt build — verified by test.
+- Injected sections are labelled and separate (Project / User / Workspace / Assistant Meta-Memory + Assistant Rules + Provider Capabilities); archived + proposed/speculative excluded by default; secrets / raw-audio / raw events never appear.
+- Global tool rules still hold: read tools never persist; durable writes stay explicit via the candidate workflow.
+
+Tests: `tests/test_assistant_passive_context_integration.py` (22).
+
+**Still NOT implemented:** automatic durable memory writing; full memory approval UI; embeddings/vector retrieval; cloud sync; GitHub export automation; provider-specific memory; LLM-based memory extraction; full assistant-runtime replacement.
+
+**Reaffirmed (Phase 6):** the model generates; LogosForge remembers and retrieves; **providers are replaceable backends, not memory**; Jordan is memory-grounded through LogosForge's externalized memory system — **not provider memory or model weights**.

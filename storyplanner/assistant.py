@@ -189,10 +189,27 @@ def build_messages(
     irrational_context: str = "",
     controlling_idea_context: str = "",
     system_prompt: str = "",
+    memory_context_params: dict | None = None,
 ) -> list[dict]:
     system = system_prompt or DEFAULT_SYSTEM_PROMPT
 
     user_parts: list[str] = []
+    # Phase 6 — optional, default-OFF passive LogosForge memory context. Only
+    # active when a caller passes ``memory_context_params`` AND the settings
+    # flag is on AND a memory store is available; otherwise this is a no-op and
+    # the prompt is byte-identical to before. Read-only; never writes memory;
+    # never calls a provider; failures degrade to no block.
+    if memory_context_params is not None:
+        logosforge_block = ""
+        try:
+            from storyplanner.assistant_arch import passive_context
+            logosforge_block = passive_context.context_block_for_messages(
+                memory_context_params, default_request=action_prompt)
+        except Exception:
+            logosforge_block = ""
+        if logosforge_block:
+            user_parts.append(logosforge_block)
+            user_parts.append("")
     if mode_context:
         user_parts.append(mode_context)
         user_parts.append("")

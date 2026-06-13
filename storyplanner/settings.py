@@ -79,6 +79,15 @@ DEFAULTS: dict[str, object] = {
     "auto_link_ignored": [],
     "context_assistant_enabled": True,
     "context_assistant_ignored": [],
+    # -- LogosForge passive memory context (Phase 6) -------------------------
+    # Opt-in, default-OFF. When enabled AND a memory store is registered, the
+    # assistant prompt builder may append a read-only LogosForge ContextBundle
+    # (scoped memory + provider capabilities). No memory is ever written by
+    # this; disabled keeps prompt behavior exactly as before.
+    "assistant_memory_context_enabled": False,
+    # Dev/diagnostics: also surface retrieval warnings/exclusions (labelled,
+    # never secrets). Default-OFF.
+    "assistant_memory_context_diagnostics_enabled": False,
     "connector_enabled": False,
     "connector_allow_writes": False,
     "connector_confirm_writes": True,
