@@ -70,3 +70,15 @@ The gateway returns generated text/structured output + capability metadata
 to the Assistant Engine. It must not read, write, retrieve, or persist
 memory objects. All memory operations go through the assistant tools
 (`ASSISTANT_TOOLS_SPEC.md`) against the Memory Store.
+
+
+## Phase 2 — implemented interface locations
+
+Interfaces/stubs only (no DB, no cloud sync, no GitHub commits, no vector runtime, no external provider calls, no UI wiring, no automatic durable writes). New isolated packages:
+
+- `storyplanner/memory_arch/` — `schema.py` (MemoryObject, EventLogEntry, enums), `store.py` (`MemoryStore` ABC + `InMemoryMemoryStore`), `policy.py` (`MemoryWriterPolicy`), `retrieval.py`, `contradictions.py`, `sync.py` (disabled), `github_export.py` (disabled).
+- `storyplanner/assistant_arch/` — `model_gateway.py` (`ProviderCapability`/`ModelRequest`/`ModelResponse`/`ModelProvider`/`ModelGateway` + `DummyModelProvider`), `context_builder.py` (`AssistantContextBuilder`, `ContextBundle`, `MemoryCandidateExtractor`), `orchestration.py` (`AssistantOrchestrator`), `tools.py` (`AssistantTools`).
+
+Tests: `tests/test_memory_architecture_stubs.py` (21). The Alpha assistant (`assistant.py`, Billy/Logos/Dexter) and `providers.py` are unchanged.
+
+**Note:** the Phase-2 `ProviderCapability` in `assistant_arch/model_gateway.py` is the forward-looking abstraction; the live Alpha still uses `storyplanner/providers.py`. vLLM remains documented but not yet added to the live `PROVIDER_CAPABILITIES`.
