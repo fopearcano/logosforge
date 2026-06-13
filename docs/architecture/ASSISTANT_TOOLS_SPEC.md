@@ -191,3 +191,13 @@ service — no new backend doors** (`MEMORY_REVIEW_UI_SPEC.md`):
 
 Global tool rules unchanged: read tools never persist; durable writes stay
 explicit; no provider / cloud / GitHub calls. **No code changes in Phase 7.**
+
+
+## Phase 8 — `MemoryReviewService` wraps these tools (plan only)
+
+`MEMORY_REVIEW_UI_IMPLEMENTATION_PLAN.md` specifies a thin, UI-facing
+`MemoryReviewService` (pure Python) that **composes the existing review service
++ tools** — approve / reject / edit / supersede / mark / list / search / export
+/ source-preview — into serializable view models. It adds **no new backend
+doors** and makes **no provider / cloud / GitHub calls**. **No code changes in
+Phase 8.**

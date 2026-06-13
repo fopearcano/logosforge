@@ -169,3 +169,12 @@ The orchestrator still performs **no automatic durable writes**; the context
 builder still feeds **approved `active` memory only** by default (proposed/
 speculative only on request; archived only in diagnostic mode, labelled). **No
 code changes in Phase 7.**
+
+
+## Phase 8 — Memory Review implementation plan (planning only)
+
+`MEMORY_REVIEW_UI_IMPLEMENTATION_PLAN.md` maps the human-gate review surface
+onto the existing app (content-area route, `ui/safe_dialogs.py`, a default-off
+settings flag, the review service/store) with a staged rollout (headless
+service/view-model layer first). The orchestrator and context builder are
+unchanged; approval stays explicit. **No code implemented in Phase 8.**

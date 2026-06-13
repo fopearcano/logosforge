@@ -216,3 +216,13 @@ providers are replaceable backends, not memory; Project Memory and Assistant
 Meta-Memory stay separate; nothing becomes durable/active without explicit
 approval; Jordan is memory-grounded through LogosForge's externalized memory,
 not conscious. **This document implements no UI.**
+
+
+## Phase 8 — Implementation plan
+
+A concrete, architecture-grounded plan for this spec now exists in
+`MEMORY_REVIEW_UI_IMPLEMENTATION_PLAN.md`: route via the existing `main_window`
+content area (not a new window); a headless `MemoryReviewService` + view models
+over the existing review service/store; `ui/safe_dialogs.py` for fullscreen-safe
+confirms; `memory_review_ui_enabled` (default off); staged rollout starting with
+a pure-Python service/view-model layer. Still **no UI/code implemented**.

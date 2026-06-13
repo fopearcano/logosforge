@@ -81,3 +81,12 @@ remembered; the memory UI never changes provider behavior.
 providers are replaceable backends, not memory; Jordan is memory-grounded
 through LogosForge's externalized memory, not conscious. **No implementation in
 this document.**
+
+
+## Phase 8 — Implementation plan for Stage 1
+
+`MEMORY_REVIEW_UI_IMPLEMENTATION_PLAN.md` turns this roadmap into a concrete
+plan: **Stage 1 = a headless `MemoryReviewService` + view models (no UI, tests
+only)**, then a default-off content-area route (`memory_review_ui_enabled`),
+editing/supersession, export preview, and assistant-panel integration — each
+mapped to existing app patterns. **No code implemented in Phase 8.**
