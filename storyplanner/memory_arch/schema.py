@@ -107,6 +107,7 @@ class MemoryObject:
     policy_decision: str = ""
     risk_level: str = ""
     review_reason: str = ""
+    sensitive_flags: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         # Coerce string values to enums so callers may pass either form.

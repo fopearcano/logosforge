@@ -291,35 +291,35 @@ def process_event_for_memory_candidates(
 
         # Automatic, policy-governed decision: auto-save safe memory as active;
         # flag uncertain/sensitive/conflicting/scope-ambiguous for review.
-        decision = policy.decide(cand, existing=existing, context=context)
-        cand.policy_decision = decision.value
+        result = policy.evaluate(cand, existing=existing, context=context)
+        cand.policy_decision = result.decision.value
+        cand.risk_level = result.risk_level
+        if result.sensitive_flags:
+            cand.sensitive_flags = list(result.sensitive_flags)
 
-        if decision is PolicyDecision.REJECT:
+        if result.decision is PolicyDecision.REJECT:
             out.skipped.append({"content": cand.content,
-                                "reason": "policy: rejected (unsafe content)"})
+                                "reason": f"policy: rejected ({result.reason})"})
             continue
-        if decision is PolicyDecision.IGNORE:
-            out.skipped.append({
-                "content": cand.content,
-                "reason": "policy: ignored (duplicate of active memory)"})
+        if result.decision is PolicyDecision.IGNORE:
+            out.skipped.append({"content": cand.content,
+                                "reason": f"policy: ignored ({result.reason})"})
             continue
 
         try:
-            if decision is PolicyDecision.AUTO_SAVE_ACTIVE:
+            if result.decision is PolicyDecision.AUTO_SAVE_ACTIVE:
                 cand.status = MemoryStatus.ACTIVE
                 cand.auto_saved = True
-                cand.risk_level = "low"
                 out.written.append(store.save_active(cand))
-            elif decision is PolicyDecision.SAVE_SPECULATIVE:
+            elif result.decision is PolicyDecision.SAVE_SPECULATIVE:
                 cand.status = MemoryStatus.SPECULATIVE
                 out.written.append(store.write_candidate(cand))
-            elif decision in _REVIEW_DECISIONS:
+            elif result.requires_review:
                 cand.status = MemoryStatus.REVIEW_REQUIRED
                 cand.requires_review = True
-                cand.review_reason = _REVIEW_REASONS[decision]
-                cand.risk_level = ("high"
-                                   if decision is PolicyDecision.FLAG_SENSITIVE
-                                   else "medium")
+                cand.review_reason = result.reason
+                if result.contradiction_ids:
+                    cand.contradicted_by = list(result.contradiction_ids)
                 out.written.append(store.write_candidate(cand))
             else:                                     # SAVE_PROPOSED
                 cand.status = MemoryStatus.PROPOSED
@@ -328,18 +328,6 @@ def process_event_for_memory_candidates(
             out.skipped.append({"content": cand.content, "reason": str(exc)})
 
     return out
-
-
-_REVIEW_DECISIONS = (
-    PolicyDecision.REQUIRE_REVIEW, PolicyDecision.FLAG_SENSITIVE,
-    PolicyDecision.FLAG_CONTRADICTION, PolicyDecision.NEEDS_SCOPE_CONFIRMATION,
-)
-_REVIEW_REASONS = {
-    PolicyDecision.REQUIRE_REVIEW: "low confidence / needs review",
-    PolicyDecision.FLAG_SENSITIVE: "sensitive-looking content",
-    PolicyDecision.FLAG_CONTRADICTION: "possible contradiction with active memory",
-    PolicyDecision.NEEDS_SCOPE_CONFIRMATION: "scope/ownership needs confirmation",
-}
 
 
 def _redact(text: str, policy: MemoryWriterPolicy) -> str:

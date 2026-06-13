@@ -343,6 +343,7 @@ class LocalSQLiteMemoryStore(MemoryStore):
             "policy_decision": getattr(mem, "policy_decision", ""),
             "risk_level": getattr(mem, "risk_level", ""),
             "review_reason": getattr(mem, "review_reason", ""),
+            "sensitive_flags": getattr(mem, "sensitive_flags", []),
         })
 
     @staticmethod
@@ -384,7 +385,8 @@ class LocalSQLiteMemoryStore(MemoryStore):
             requires_review=bool(extra.get("requires_review", False)),
             policy_decision=extra.get("policy_decision", "") or "",
             risk_level=extra.get("risk_level", "") or "",
-            review_reason=extra.get("review_reason", "") or "")
+            review_reason=extra.get("review_reason", "") or "",
+            sensitive_flags=list(extra.get("sensitive_flags", []) or []))
 
     def _require(self, memory_id: str) -> MemoryObject:
         mem = self.get(memory_id)

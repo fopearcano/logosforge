@@ -257,9 +257,13 @@ local-first is default; raw chat spam is not durable memory; Jordan is
 memory-grounded through LogosForge, **not conscious and not provider-bound**.
 
 **Implemented now (still isolated; no provider/cloud/GitHub/UI):** `PolicyDecision`
-+ `MemoryWriterPolicy.decide`; `MemoryStatus.REVIEW_REQUIRED`; `MemoryObject`
-policy metadata; `MemoryStore.save_active`; policy-routed
-`process_event_for_memory_candidates`. The pipeline is not yet wired to live app
-events — so the running Alpha still auto-saves nothing until a store + event
-source are explicitly wired (a later step). Tests:
-`tests/test_memory_policy_direction.py`.
++ `PolicyResult` + `MemoryWriterPolicy.evaluate`/`decide`;
+`MemoryStatus.REVIEW_REQUIRED`; `MemoryObject` policy metadata (incl.
+`sensitive_flags`); `MemoryStore.save_active`. **`write_memory_candidate` now
+routes through the policy** — it may auto-save active, save proposed/
+review_required/speculative, or reject — and `find_contradictions` includes
+review-required memory. `process_event_for_memory_candidates` is likewise
+policy-routed. The pipeline is not yet wired to live app events — the running
+Alpha still auto-saves nothing until a store + event source are explicitly
+wired. Tests: `tests/test_memory_policy_direction.py`,
+`tests/test_automatic_memory_policy.py`.

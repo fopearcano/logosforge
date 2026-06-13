@@ -9,6 +9,7 @@ only — this never writes memory itself.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from enum import Enum
 
 from storyplanner.memory_arch.contradictions import contradicts
@@ -36,6 +37,22 @@ class PolicyDecision(str, Enum):
     FLAG_CONTRADICTION = "flag_contradiction"     # conflicts with ACTIVE memory
     FLAG_SENSITIVE = "flag_sensitive"            # sensitive-looking (not a hard secret)
     NEEDS_SCOPE_CONFIRMATION = "needs_scope_confirmation"  # scope/ownership unclear
+
+
+@dataclass
+class PolicyResult:
+    """Rich, auditable outcome of a policy evaluation (see `evaluate`)."""
+    decision: PolicyDecision
+    reason: str = ""
+    confidence: float = 0.0
+    risk_level: str = "low"                 # low | medium | high
+    requires_review: bool = False
+    auto_saved: bool = False
+    suggested_status: "MemoryStatus" = MemoryStatus.PROPOSED
+    warnings: list[str] = field(default_factory=list)
+    sensitive_flags: list[str] = field(default_factory=list)
+    contradiction_ids: list[str] = field(default_factory=list)
+
 
 # Types that are reusable workflow/assistant knowledge → assistant scope.
 _ASSISTANT_TYPES = {
@@ -135,60 +152,104 @@ class MemoryWriterPolicy:
         if memory.scope is MemoryScope.PROJECT and not memory.project_id:
             raise ValueError("project scope requires project_id.")
 
+    def sensitive_flags(self, text: str) -> list[str]:
+        """The sensitive-looking keywords found (empty if none)."""
+        out: list[str] = []
+        for p in _SENSITIVE_PATTERNS:
+            out.extend(m for m in p.findall(text or "") if isinstance(m, str))
+        return sorted({m.lower() for m in out if m})
+
     def is_sensitive(self, text: str) -> bool:
         """Sensitive-looking (but not a hard secret) → route to review, never
         auto-save. Hard secrets/raw-audio are caught by check_forbidden_content."""
-        return any(p.search(text or "") for p in _SENSITIVE_PATTERNS)
+        return bool(self.sensitive_flags(text))
 
-    def decide(self, candidate: MemoryObject,
-               existing: list[MemoryObject] | None = None,
-               context=None) -> PolicyDecision:
-        """The automatic, policy-governed decision for a classified candidate.
-
-        Auto-saves safe, high-confidence, durable memory as **active**; asks the
-        user only when memory is uncertain, sensitive, contradictory, or
-        scope-ambiguous. Pure decision — performs no write, no model call.
+    def evaluate(self, candidate: MemoryObject,
+                 existing: list[MemoryObject] | None = None,
+                 context=None) -> PolicyResult:
+        """The automatic, policy-governed evaluation for a classified candidate —
+        a rich, auditable `PolicyResult`. Auto-saves safe, high-confidence,
+        durable memory as **active**; asks the user only when memory is
+        uncertain, sensitive, contradictory, or scope-ambiguous. Pure decision —
+        performs no write and no model call.
         """
         existing = existing or []
         text = candidate.content or ""
+        conf = candidate.confidence or 0.0
+
+        def out(decision, reason, *, risk="low", review=False, auto=False,
+                status=MemoryStatus.PROPOSED, sflags=None, cids=None):
+            return PolicyResult(
+                decision=decision, reason=reason, confidence=conf,
+                risk_level=risk, requires_review=review, auto_saved=auto,
+                suggested_status=status, sensitive_flags=sflags or [],
+                contradiction_ids=cids or [])
 
         # 1. Hard-unsafe content → never store.
-        if self.check_forbidden_content_text(text):
-            return PolicyDecision.REJECT
+        forbidden = self.check_forbidden_content_text(text)
+        if forbidden:
+            return out(PolicyDecision.REJECT, f"forbidden content: {forbidden}",
+                       risk="high", status=MemoryStatus.REJECTED, sflags=forbidden)
         # 2. Sensitive-looking → human review.
-        if self.is_sensitive(text):
-            return PolicyDecision.FLAG_SENSITIVE
+        sflags = self.sensitive_flags(text)
+        if sflags:
+            return out(PolicyDecision.FLAG_SENSITIVE,
+                       "sensitive-looking content", risk="high", review=True,
+                       status=MemoryStatus.REVIEW_REQUIRED, sflags=sflags)
         # 3. Collaborative/ambiguous scope → review.
         if candidate.scope is MemoryScope.WORKSPACE:
             if not candidate.workspace_id:
-                return PolicyDecision.NEEDS_SCOPE_CONFIRMATION
-            return PolicyDecision.REQUIRE_REVIEW          # affects collaborators
+                return out(PolicyDecision.NEEDS_SCOPE_CONFIRMATION,
+                           "workspace scope without workspace_id", risk="medium",
+                           review=True, status=MemoryStatus.REVIEW_REQUIRED)
+            return out(PolicyDecision.REQUIRE_REVIEW,
+                       "workspace/collaborative memory affects collaborators",
+                       risk="medium", review=True,
+                       status=MemoryStatus.REVIEW_REQUIRED)
         if candidate.scope is MemoryScope.PROJECT and not candidate.project_id:
-            return PolicyDecision.NEEDS_SCOPE_CONFIRMATION
+            return out(PolicyDecision.NEEDS_SCOPE_CONFIRMATION,
+                       "project scope without project_id", risk="medium",
+                       review=True, status=MemoryStatus.REVIEW_REQUIRED)
         if candidate.scope is MemoryScope.USER and not candidate.user_id:
-            return PolicyDecision.NEEDS_SCOPE_CONFIRMATION
+            return out(PolicyDecision.NEEDS_SCOPE_CONFIRMATION,
+                       "user scope without user_id", risk="medium",
+                       review=True, status=MemoryStatus.REVIEW_REQUIRED)
 
         actives = [m for m in existing if m.status is MemoryStatus.ACTIVE]
         # 4. Exact duplicate of an active memory → ignore (don't re-store).
         norm = text.strip().lower()
         if any(m.scope is candidate.scope and (m.content or "").strip().lower()
                == norm for m in actives):
-            return PolicyDecision.IGNORE
+            return out(PolicyDecision.IGNORE, "duplicate of active memory")
         # 5. Conflicts with an ACTIVE memory → human review.
-        if any(contradicts(candidate, m) for m in actives):
-            return PolicyDecision.FLAG_CONTRADICTION
+        cids = [m.id for m in actives if contradicts(candidate, m)]
+        if cids:
+            return out(PolicyDecision.FLAG_CONTRADICTION,
+                       "possible contradiction with active memory",
+                       risk="medium", review=True,
+                       status=MemoryStatus.REVIEW_REQUIRED, cids=cids)
         # 6. Clearly a maybe/idea → speculative.
         if (candidate.status is MemoryStatus.SPECULATIVE
                 or candidate.type is MemoryType.SPECULATIVE_IDEA):
-            return PolicyDecision.SAVE_SPECULATIVE
+            return out(PolicyDecision.SAVE_SPECULATIVE, "speculative idea",
+                       status=MemoryStatus.SPECULATIVE)
 
         # 7. Confidence/type gating.
-        conf = candidate.confidence or 0.0
         if conf >= _AUTO_SAVE_THRESHOLD and candidate.type in _AUTO_SAVABLE_TYPES:
-            return PolicyDecision.AUTO_SAVE_ACTIVE       # safe + high-confidence
+            return out(PolicyDecision.AUTO_SAVE_ACTIVE,
+                       "high-confidence, durable, safe memory", auto=True,
+                       status=MemoryStatus.ACTIVE)
         if conf >= _MEDIUM_CONFIDENCE:
-            return PolicyDecision.SAVE_PROPOSED
-        return PolicyDecision.REQUIRE_REVIEW              # low confidence
+            return out(PolicyDecision.SAVE_PROPOSED, "medium confidence",
+                       status=MemoryStatus.PROPOSED)
+        return out(PolicyDecision.REQUIRE_REVIEW, "low confidence", risk="medium",
+                   review=True, status=MemoryStatus.REVIEW_REQUIRED)
+
+    def decide(self, candidate: MemoryObject,
+               existing: list[MemoryObject] | None = None,
+               context=None) -> PolicyDecision:
+        """Back-compat thin wrapper: the bare decision from `evaluate`."""
+        return self.evaluate(candidate, existing, context).decision
 
     def check_forbidden_content(self, memory: MemoryObject) -> list[str]:
         return self.check_forbidden_content_text(memory.content)

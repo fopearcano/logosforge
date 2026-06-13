@@ -18,7 +18,7 @@ from __future__ import annotations
 from storyplanner.memory_arch import candidates as _candidates
 from storyplanner.memory_arch.contradictions import pairwise_contradictions
 from storyplanner.memory_arch.github_export import GitHubMemoryExportService
-from storyplanner.memory_arch.policy import MemoryWriterPolicy
+from storyplanner.memory_arch.policy import MemoryWriterPolicy, PolicyDecision
 from storyplanner.memory_arch.review import MemoryCandidateReviewService
 from storyplanner.memory_arch.schema import (
     EventLogEntry,
@@ -31,7 +31,7 @@ from storyplanner.memory_arch.store import InMemoryMemoryStore, MemoryStore
 from storyplanner.memory_arch.sync import MemorySyncService
 
 _LIVE_STATUSES = (MemoryStatus.ACTIVE, MemoryStatus.PROPOSED,
-                  MemoryStatus.SPECULATIVE)
+                  MemoryStatus.REVIEW_REQUIRED, MemoryStatus.SPECULATIVE)
 
 
 class AssistantTools:
@@ -114,14 +114,41 @@ class AssistantTools:
                                source: str | None = None,
                                project_id: str | None = None,
                                user_id: str | None = None) -> MemoryObject:
+        """Propose a memory, routed through the writer policy. Safe,
+        high-confidence, durable memory may **auto-save as active**; uncertain/
+        sensitive/conflicting memory becomes proposed/review_required/speculative;
+        secrets/raw-audio are rejected. Never stores secrets or raw audio."""
         forbidden = self.policy.check_forbidden_content_text(content)
         if forbidden:
             raise ValueError(f"refused forbidden content: {forbidden}")
         mem = MemoryObject(
             scope=scope, type=type, content=content, confidence=confidence,
             source_event=source, project_id=project_id, user_id=user_id,
-            status=MemoryStatus.PROPOSED)        # candidate only, never active
+            status=MemoryStatus.PROPOSED)
         self.policy.validate_scope(mem)
+        existing = self.store.search("", scope=scope, project_id=project_id)
+        result = self.policy.evaluate(mem, existing=existing)
+        mem.policy_decision = result.decision.value
+        mem.risk_level = result.risk_level
+        if result.sensitive_flags:
+            mem.sensitive_flags = list(result.sensitive_flags)
+        if result.decision is PolicyDecision.REJECT:
+            raise ValueError(f"refused forbidden content: {result.reason}")
+        if result.decision is PolicyDecision.AUTO_SAVE_ACTIVE:
+            mem.status = MemoryStatus.ACTIVE
+            mem.auto_saved = True
+            return self.store.save_active(mem)
+        if result.decision is PolicyDecision.SAVE_SPECULATIVE:
+            mem.status = MemoryStatus.SPECULATIVE
+            return self.store.write_candidate(mem)
+        if result.requires_review:
+            mem.status = MemoryStatus.REVIEW_REQUIRED
+            mem.requires_review = True
+            mem.review_reason = result.reason
+            if result.contradiction_ids:
+                mem.contradicted_by = list(result.contradiction_ids)
+            return self.store.write_candidate(mem)
+        mem.status = MemoryStatus.PROPOSED          # save_proposed / explicit ignore
         return self.store.write_candidate(mem)
 
     def process_event_for_memory_candidates(self, event: EventLogEntry,
