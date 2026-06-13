@@ -40,7 +40,10 @@ from storyplanner.memory_arch.schema import (
 from storyplanner.memory_arch.store import MemoryStore
 
 # ---- status groupings -------------------------------------------------------
-_CANDIDATE_STATUSES = (MemoryStatus.PROPOSED, MemoryStatus.SPECULATIVE)
+# Non-active "needs a human / not yet trusted" statuses — excluded from normal
+# context; surfaced only in review/diagnostic mode.
+_CANDIDATE_STATUSES = (MemoryStatus.PROPOSED, MemoryStatus.SPECULATIVE,
+                       MemoryStatus.REVIEW_REQUIRED)
 _ARCHIVED_STATUSES = (MemoryStatus.DEPRECATED, MemoryStatus.SUPERSEDED,
                       MemoryStatus.CONTRADICTED, MemoryStatus.REJECTED)
 

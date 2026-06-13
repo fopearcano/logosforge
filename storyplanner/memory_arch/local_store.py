@@ -73,7 +73,8 @@ CREATE TABLE IF NOT EXISTS memory_objects (
     entities_json TEXT,
     visibility TEXT,
     sync_state TEXT,
-    version INTEGER
+    version INTEGER,
+    extra_json TEXT
 );
 CREATE TABLE IF NOT EXISTS memory_relations (
     id TEXT PRIMARY KEY,
@@ -99,7 +100,18 @@ class LocalSQLiteMemoryStore(MemoryStore):
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
+        self._ensure_columns()
         self._conn.commit()
+
+    def _ensure_columns(self) -> None:
+        """Additive migration for older DBs: add the policy-metadata column if a
+        pre-existing database lacks it. New DBs already have it via _SCHEMA."""
+        cols = {r["name"] for r in self._conn.execute(
+            "PRAGMA table_info(memory_objects)")}
+        if "extra_json" not in cols:
+            self._conn.execute(
+                "ALTER TABLE memory_objects ADD COLUMN extra_json TEXT")
+            self._conn.commit()
 
     # ------------------------------------------------------------- events
     def add_event(self, event: EventLogEntry) -> EventLogEntry:
@@ -145,17 +157,32 @@ class LocalSQLiteMemoryStore(MemoryStore):
 
     # ------------------------------------------------------------- memory
     def write_candidate(self, memory: MemoryObject) -> MemoryObject:
-        # Same invariant as the in-memory store: candidates only — never
-        # silently active. Policy guards secrets/raw-audio + scope mixing.
+        # Candidates only — never silently active. proposed / speculative /
+        # review_required are accepted. Policy guards secrets/raw-audio + scope.
         if memory.status not in (MemoryStatus.PROPOSED,
-                                 MemoryStatus.SPECULATIVE):
+                                 MemoryStatus.SPECULATIVE,
+                                 MemoryStatus.REVIEW_REQUIRED):
             raise ValueError(
-                "write_candidate accepts proposed/speculative status only; "
-                "use approve_candidate to activate.")
+                "write_candidate accepts proposed/speculative/review_required "
+                "status only; use approve_candidate or save_active to activate.")
         forbidden = self._policy.check_forbidden_content(memory)
         if forbidden:
             raise ValueError(f"refused forbidden content: {forbidden}")
         self._policy.validate_scope(memory)
+        self._insert(memory)
+        return memory
+
+    def save_active(self, memory: MemoryObject) -> MemoryObject:
+        # Automatic policy auto-save: write an active memory directly. Still
+        # forbidden-content + scope guarded (auto-active must never hold secrets
+        # / raw audio, and must respect Project↔Assistant separation). Auditable
+        # (source_event, version), reversible (update), supersedable (supersede).
+        forbidden = self._policy.check_forbidden_content(memory)
+        if forbidden:
+            raise ValueError(f"refused forbidden content: {forbidden}")
+        self._policy.validate_scope(memory)
+        memory.status = MemoryStatus.ACTIVE
+        memory.auto_saved = True
         self._insert(memory)
         return memory
 
@@ -293,8 +320,8 @@ class LocalSQLiteMemoryStore(MemoryStore):
             "INSERT INTO memory_objects (id, scope, type, content, "
             "source_event, project_id, user_id, workspace_id, confidence, "
             "status, created_at, updated_at, supersedes, contradicted_by_json,"
-            " tags_json, entities_json, visibility, sync_state, version) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " tags_json, entities_json, visibility, sync_state, version, "
+            "extra_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             self._to_params(mem))
         self._conn.commit()
 
@@ -304,9 +331,19 @@ class LocalSQLiteMemoryStore(MemoryStore):
             "source_event=?, project_id=?, user_id=?, workspace_id=?, "
             "confidence=?, status=?, created_at=?, updated_at=?, supersedes=?, "
             "contradicted_by_json=?, tags_json=?, entities_json=?, "
-            "visibility=?, sync_state=?, version=? WHERE id=?",
+            "visibility=?, sync_state=?, version=?, extra_json=? WHERE id=?",
             self._to_params(mem)[1:] + (mem.id,))
         self._conn.commit()
+
+    @staticmethod
+    def _extra_json(mem: MemoryObject) -> str:
+        return json.dumps({
+            "auto_saved": getattr(mem, "auto_saved", False),
+            "requires_review": getattr(mem, "requires_review", False),
+            "policy_decision": getattr(mem, "policy_decision", ""),
+            "risk_level": getattr(mem, "risk_level", ""),
+            "review_reason": getattr(mem, "review_reason", ""),
+        })
 
     @staticmethod
     def _to_params(mem: MemoryObject) -> tuple:
@@ -316,10 +353,18 @@ class LocalSQLiteMemoryStore(MemoryStore):
             mem.confidence, mem.status.value, mem.created_at, mem.updated_at,
             mem.supersedes, json.dumps(mem.contradicted_by),
             json.dumps(mem.tags), json.dumps(mem.entities), mem.visibility,
-            mem.sync_state.value, mem.version)
+            mem.sync_state.value, mem.version,
+            LocalSQLiteMemoryStore._extra_json(mem))
 
     @staticmethod
     def _row_to_obj(row: sqlite3.Row) -> MemoryObject:
+        extra = {}
+        keys = row.keys()
+        if "extra_json" in keys and row["extra_json"]:
+            try:
+                extra = json.loads(row["extra_json"])
+            except (TypeError, ValueError):
+                extra = {}
         return MemoryObject(
             id=row["id"], scope=MemoryScope(row["scope"]),
             type=row["type"], content=row["content"],
@@ -334,7 +379,12 @@ class LocalSQLiteMemoryStore(MemoryStore):
             entities=json.loads(row["entities_json"] or "[]"),
             visibility=row["visibility"] or "private",
             sync_state=SyncState(row["sync_state"] or "local_only"),
-            version=row["version"] or 1)
+            version=row["version"] or 1,
+            auto_saved=bool(extra.get("auto_saved", False)),
+            requires_review=bool(extra.get("requires_review", False)),
+            policy_decision=extra.get("policy_decision", "") or "",
+            risk_level=extra.get("risk_level", "") or "",
+            review_reason=extra.get("review_reason", "") or "")
 
     def _require(self, memory_id: str) -> MemoryObject:
         mem = self.get(memory_id)

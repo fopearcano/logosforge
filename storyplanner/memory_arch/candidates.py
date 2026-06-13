@@ -26,7 +26,7 @@ import re
 from dataclasses import dataclass, field
 
 from storyplanner.memory_arch.contradictions import contradicts
-from storyplanner.memory_arch.policy import MemoryWriterPolicy
+from storyplanner.memory_arch.policy import MemoryWriterPolicy, PolicyDecision
 from storyplanner.memory_arch.schema import (
     EventLogEntry,
     MemoryObject,
@@ -276,23 +276,70 @@ def process_event_for_memory_candidates(
     out.warnings.extend(extracted.warnings)
 
     for cand in extracted.candidates:
-        # Non-blocking contradiction surface: warn, never auto-mutate/supersede.
-        # Compare against all same-scope memory so negated variants are caught.
+        # Same-scope memory: used for the (non-blocking) contradiction warning
+        # and for the policy decision (duplicate / contradiction gating).
         try:
-            for other in store.search("", scope=cand.scope,
-                                      project_id=cand.project_id):
-                reason = contradicts(cand, other)
-                if reason:
-                    out.warnings.append(
-                        f"possible contradiction with {other.id}: {reason}")
-        except Exception:                             # never let a warn-path fail a write
-            pass
+            existing = store.search("", scope=cand.scope,
+                                    project_id=cand.project_id)
+        except Exception:
+            existing = []
+        for other in existing:
+            reason = contradicts(cand, other)
+            if reason:
+                out.warnings.append(
+                    f"possible contradiction with {other.id}: {reason}")
+
+        # Automatic, policy-governed decision: auto-save safe memory as active;
+        # flag uncertain/sensitive/conflicting/scope-ambiguous for review.
+        decision = policy.decide(cand, existing=existing, context=context)
+        cand.policy_decision = decision.value
+
+        if decision is PolicyDecision.REJECT:
+            out.skipped.append({"content": cand.content,
+                                "reason": "policy: rejected (unsafe content)"})
+            continue
+        if decision is PolicyDecision.IGNORE:
+            out.skipped.append({
+                "content": cand.content,
+                "reason": "policy: ignored (duplicate of active memory)"})
+            continue
+
         try:
-            out.written.append(store.write_candidate(cand))
+            if decision is PolicyDecision.AUTO_SAVE_ACTIVE:
+                cand.status = MemoryStatus.ACTIVE
+                cand.auto_saved = True
+                cand.risk_level = "low"
+                out.written.append(store.save_active(cand))
+            elif decision is PolicyDecision.SAVE_SPECULATIVE:
+                cand.status = MemoryStatus.SPECULATIVE
+                out.written.append(store.write_candidate(cand))
+            elif decision in _REVIEW_DECISIONS:
+                cand.status = MemoryStatus.REVIEW_REQUIRED
+                cand.requires_review = True
+                cand.review_reason = _REVIEW_REASONS[decision]
+                cand.risk_level = ("high"
+                                   if decision is PolicyDecision.FLAG_SENSITIVE
+                                   else "medium")
+                out.written.append(store.write_candidate(cand))
+            else:                                     # SAVE_PROPOSED
+                cand.status = MemoryStatus.PROPOSED
+                out.written.append(store.write_candidate(cand))
         except ValueError as exc:                     # policy/store refusal
             out.skipped.append({"content": cand.content, "reason": str(exc)})
 
     return out
+
+
+_REVIEW_DECISIONS = (
+    PolicyDecision.REQUIRE_REVIEW, PolicyDecision.FLAG_SENSITIVE,
+    PolicyDecision.FLAG_CONTRADICTION, PolicyDecision.NEEDS_SCOPE_CONFIRMATION,
+)
+_REVIEW_REASONS = {
+    PolicyDecision.REQUIRE_REVIEW: "low confidence / needs review",
+    PolicyDecision.FLAG_SENSITIVE: "sensitive-looking content",
+    PolicyDecision.FLAG_CONTRADICTION: "possible contradiction with active memory",
+    PolicyDecision.NEEDS_SCOPE_CONFIRMATION: "scope/ownership needs confirmation",
+}
 
 
 def _redact(text: str, policy: MemoryWriterPolicy) -> str:

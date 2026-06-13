@@ -39,6 +39,13 @@ class MemoryStore(abc.ABC):
     def write_candidate(self, memory: MemoryObject) -> MemoryObject: ...
 
     @abc.abstractmethod
+    def save_active(self, memory: MemoryObject) -> MemoryObject:
+        """Write an already-active memory (the automatic policy pipeline's
+        auto-save path). Must be auditable, reversible, and supersedable; must
+        never store secrets/raw-audio. Distinct from `write_candidate`, which
+        only ever accepts non-active candidates."""
+
+    @abc.abstractmethod
     def approve_candidate(self, memory_id: str) -> MemoryObject: ...
 
     @abc.abstractmethod
@@ -92,13 +99,24 @@ class InMemoryMemoryStore(MemoryStore):
         return sorted(out, key=lambda e: e.created_at)
 
     def write_candidate(self, memory: MemoryObject) -> MemoryObject:
-        # A candidate is never silently made active: only proposed/speculative
-        # are accepted here. Promotion is explicit via approve_candidate.
+        # A candidate is never silently made active here: proposed / speculative
+        # / review_required are accepted. Activation is explicit (approve) or via
+        # the policy auto-save path (save_active).
         if memory.status not in (MemoryStatus.PROPOSED,
-                                 MemoryStatus.SPECULATIVE):
+                                 MemoryStatus.SPECULATIVE,
+                                 MemoryStatus.REVIEW_REQUIRED):
             raise ValueError(
-                "write_candidate accepts proposed/speculative status only; "
-                "use approve_candidate to activate.")
+                "write_candidate accepts proposed/speculative/review_required "
+                "status only; use approve_candidate or save_active to activate.")
+        self._memories[memory.id] = memory
+        return memory
+
+    def save_active(self, memory: MemoryObject) -> MemoryObject:
+        # Automatic policy auto-save: store an active memory directly. The
+        # caller (policy pipeline) has already gated safety; nothing here makes
+        # memory active without a policy/approval decision upstream.
+        memory.status = MemoryStatus.ACTIVE
+        memory.auto_saved = True
         self._memories[memory.id] = memory
         return memory
 

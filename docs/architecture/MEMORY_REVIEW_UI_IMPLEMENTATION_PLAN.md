@@ -234,3 +234,25 @@ remembers. **No contradictions found.**
 providers are replaceable backends, not memory; Project Memory and Assistant
 Meta-Memory stay separate; nothing becomes active without explicit approval;
 Jordan is memory-grounded, not conscious. **This document implements nothing.**
+
+
+## Direction Correction — Memory Review is optional & exception-based
+
+> **This section supersedes any earlier wording implying every memory must be
+> approved in this UI.**
+
+The **default** memory experience is the automatic, policy-governed pipeline
+(`MEMORY_ARCHITECTURE.md` → *Direction Correction*): safe, high-confidence,
+durable memory **auto-saves as active**; only uncertain / sensitive /
+contradictory / scope-ambiguous memory is flagged. **Memory Review is therefore
+an optional audit / control / exception-resolution layer — not a mandatory gate
+for every memory.**
+
+The default Memory Review queue shows only: `review_required` · `proposed` ·
+sensitive-flagged · contradictions · low-confidence · scope-ambiguous (and
+`speculative` / recently auto-saved memory only when the user enables those
+views). Ordinary safe auto-saved memory is **not** forced into review; it is
+visible in an audit/active view. All other guarantees stand: explicit action for
+any change; Project ↔ Assistant separation; secrets/raw-audio redacted; GitHub
+preview-first/optional; cloud sync future/pro; no provider calls; auto-active
+memory remains auditable, reversible, and supersedable.

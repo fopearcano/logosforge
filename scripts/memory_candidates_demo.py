@@ -10,7 +10,8 @@ It is never imported or started by the app. It touches **no** database file
 
 What it shows:
 * only *marked* spans become candidates (raw chat is ignored);
-* candidates are written **proposed/speculative**, never active;
+* policy auto-saves safe, high-confidence, durable memory as **active**, and
+  flags uncertain/sensitive/conflicting/speculative memory for review;
 * Project Memory and Assistant Meta-Memory stay separate by scope;
 * approve / reject / supersede are explicit and non-destructive;
 * a deterministic local session summary;
@@ -40,7 +41,7 @@ def main() -> int:
     tools = AssistantTools(store=LocalSQLiteMemoryStore(":memory:"))
     project_id, user_id, session_id = "demo-project", "demo-user", "demo-sess"
 
-    banner("1) Process an interaction event into PROPOSED candidates")
+    banner("1) Process an event — policy auto-saves safe memory, flags the rest")
     ev = tools.log_event(
         "chat", session_id=session_id, project_id=project_id, user_id=user_id,
         content=(

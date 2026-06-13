@@ -178,3 +178,65 @@ onto the existing app (content-area route, `ui/safe_dialogs.py`, a default-off
 settings flag, the review service/store) with a staged rollout (headless
 service/view-model layer first). The orchestrator and context builder are
 unchanged; approval stays explicit. **No code implemented in Phase 8.**
+
+
+## Direction Correction — Automatic, policy-governed memory (supersedes the approval-first framing)
+
+> **This section supersedes any earlier wording implying every memory needs
+> manual approval.** Core principle unchanged: *the model generates; LogosForge
+> remembers, retrieves, structures, updates, and syncs.*
+
+**New principle:** *LogosForge remembers automatically when confidence and
+policy allow it, and asks the user only when memory is uncertain, sensitive,
+contradictory, or scope-ambiguous.*
+
+The **default** is an automatic RAG/memory pipeline: 1) observe events →
+2) extract candidates → 3) classify (scope/type/confidence/status/risk) →
+4) **policy decision** → 5) durable write → 6) retrieval (active only) →
+7) **optional, exception-based** review for flagged cases.
+
+**Policy decisions** (`MemoryWriterPolicy.decide` → `PolicyDecision`):
+`AUTO_SAVE_ACTIVE` · `SAVE_PROPOSED` · `SAVE_SPECULATIVE` · `REQUIRE_REVIEW` ·
+`IGNORE` · `REJECT` · `FLAG_CONTRADICTION` · `FLAG_SENSITIVE` ·
+`NEEDS_SCOPE_CONFIRMATION`.
+
+- **Auto-save active** when ALL hold: high confidence; durable/safe type; clear
+  scope; not sensitive; no contradiction; no secret/raw-audio; not speculative.
+  Examples that may auto-save: an explicit stable user preference; a confirmed
+  project / architecture / repo / workflow decision; a user correction of the
+  assistant; a confirmed release-blocker rule; a confirmed model/backend
+  preference; "desktop alpha first, cloud later"; "local Whisper buffering for
+  desktop voice"; "Graphic Novel uses Act → Page → Scene → Panel"; "GitHub is
+  optional export/archive, not the default backend".
+- **Require review** when: low/medium confidence; sensitive-looking; possible
+  secret/private path; contradiction with active memory; ambiguous scope;
+  workspace/team memory; major assistant-identity/rule change; speculative-but-
+  maybe; or a project fact appearing outside its project.
+- **Speculative** for clear maybes/ideas; **ignore** transient mood/jokes/
+  duplicates/noise; **reject** API keys/secrets/passwords/raw audio/raw paths.
+
+Auto-active memory is **auditable** (`source_event`, `version`, `auto_saved`,
+`policy_decision`, `risk_level`, `review_reason`), **reversible** (edit/reject),
+and **supersedable** — and never holds secrets/raw-audio. **Memory Review is now
+an optional, exception-based audit/control layer**, not a mandatory gate for
+every item.
+
+**Status model:** `active · proposed · review_required · speculative · rejected
+· deprecated · superseded · contradicted`. Retrieval returns **active only** by
+default (auto-saved + approved); `review_required`/`proposed`/`speculative`/
+archived are excluded from normal context and shown only in review/diagnostic
+mode.
+
+**Unchanged:** Project Memory and Assistant Meta-Memory stay separate; providers
+(LM Studio / Ollama / vLLM / OpenAI / Anthropic / OpenRouter) are generation
+backends, **not memory**; GitHub is optional; cloud sync is future/pro;
+local-first is default; raw chat spam is not durable memory; Jordan is
+memory-grounded through LogosForge, **not conscious and not provider-bound**.
+
+**Implemented now (still isolated; no provider/cloud/GitHub/UI):** `PolicyDecision`
++ `MemoryWriterPolicy.decide`; `MemoryStatus.REVIEW_REQUIRED`; `MemoryObject`
+policy metadata; `MemoryStore.save_active`; policy-routed
+`process_event_for_memory_candidates`. The pipeline is not yet wired to live app
+events — so the running Alpha still auto-saves nothing until a store + event
+source are explicitly wired (a later step). Tests:
+`tests/test_memory_policy_direction.py`.

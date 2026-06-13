@@ -46,6 +46,7 @@ class MemoryType(str, Enum):
 class MemoryStatus(str, Enum):
     ACTIVE = "active"
     PROPOSED = "proposed"
+    REVIEW_REQUIRED = "review_required"  # auto-pipeline flagged it for the user
     SPECULATIVE = "speculative"
     REJECTED = "rejected"          # Phase 4: reviewed and declined (kept, not deleted)
     DEPRECATED = "deprecated"
@@ -96,6 +97,16 @@ class MemoryObject:
     visibility: str = "private"
     sync_state: SyncState = SyncState.LOCAL_ONLY
     version: int = 1
+    # -- automatic policy-governed pipeline metadata (Direction Correction) ---
+    # Safe optional fields; defaults preserve every existing construction call.
+    # auto_saved: written active directly by policy (not via manual approval).
+    # requires_review: flagged for the user (uncertain/sensitive/conflicting).
+    # policy_decision / risk_level / review_reason: audit of why it landed here.
+    auto_saved: bool = False
+    requires_review: bool = False
+    policy_decision: str = ""
+    risk_level: str = ""
+    review_reason: str = ""
 
     def __post_init__(self) -> None:
         # Coerce string values to enums so callers may pass either form.

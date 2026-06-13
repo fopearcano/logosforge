@@ -26,8 +26,9 @@ from storyplanner.memory_arch.schema import (
 )
 from storyplanner.memory_arch.store import MemoryStore
 
-# Candidate statuses awaiting a review decision.
-_REVIEWABLE = (MemoryStatus.PROPOSED, MemoryStatus.SPECULATIVE)
+# Candidate statuses awaiting a review decision (incl. policy-flagged items).
+_REVIEWABLE = (MemoryStatus.PROPOSED, MemoryStatus.REVIEW_REQUIRED,
+               MemoryStatus.SPECULATIVE)
 
 # Fields a plain edit may touch — status transitions go through the dedicated
 # methods so promotion/rejection stay explicit and auditable.
