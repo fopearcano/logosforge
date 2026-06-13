@@ -154,7 +154,7 @@ Tests: `tests/test_memory_architecture_stubs.py` (21). The Alpha assistant (`ass
 
 Phase 4 builds the curated-memory layer (layer 2) on top of the Phase 3 store: a deterministic, local-only pipeline that turns interaction events into **reviewable candidates** — extract, classify, review, approve, reject, supersede, and export — **without destructive writes** and **without a model call, embeddings, or network**.
 
-- **Anti-spam by construction:** only spans carrying an explicit memory **marker** become candidates; raw chat is discarded. Nothing is durable or active without explicit human approval.
+- **Anti-spam by construction:** only spans carrying an explicit memory **marker** become candidates; raw chat is discarded. (Phase 4 wrote candidates only; **superseded by the Direction Correction** below — safe, high-confidence memory now auto-saves as active, with review reserved for flagged cases.)
 - **Conservative defaults:** every candidate is `proposed` (or `speculative`); confidence is tiered (0.3 / 0.6 / 0.9); secrets / raw-audio / debug are dropped; scope/id integrity is enforced so Project Memory and Assistant Meta-Memory never mix.
 - **Non-destructive lifecycle:** the new `MemoryStatus.REJECTED`, plus `superseded` / `contradicted`, are auditable status transitions that preserve the object and its history — **no delete**.
 - **Heuristic, not magical:** contradiction detection is keyword-overlap + opposing-polarity and only *surfaces* conflicts; the deterministic `summarize_session` produces a redaction-safe proposed summary. Semantic/model-driven versions remain future work.

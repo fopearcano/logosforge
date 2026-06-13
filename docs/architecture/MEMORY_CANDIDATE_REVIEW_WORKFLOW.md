@@ -114,7 +114,10 @@ reject new · mark both needing-review · edit candidate · mark old deprecated.
 
 ## Invariants the workflow must preserve
 
-- No candidate becomes `active` without explicit approval.
+- No candidate becomes `active` without **either** an explicit approval **or** a
+  policy `AUTO_SAVE_ACTIVE` decision (safe, high-confidence, durable memory
+  auto-saves; uncertain/sensitive/conflicting/scope-ambiguous memory is flagged
+  for review, never silently activated).
 - No durable write happens during context build/retrieval (read-only).
 - Project Memory and Assistant Meta-Memory never mix.
 - Secrets / raw audio / raw audio paths are never stored or shown.

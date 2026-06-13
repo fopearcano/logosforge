@@ -6,9 +6,12 @@
 > tested backend** so implementation later is a wiring exercise, not a redesign.
 
 Core principle (unchanged): **the model generates; LogosForge remembers,
-retrieves, structures, updates, and syncs.** Memory Review is how the user
-*controls* what LogosForge remembers — nothing becomes durable/active without
-explicit human approval.
+retrieves, structures, updates, and syncs.** Memory becomes active
+**automatically when confidence and policy allow it** (see
+`MEMORY_ARCHITECTURE.md` → *Direction Correction*); Memory Review is the
+**optional, exception-based** layer where the user audits auto-saved memory and
+resolves the cases the policy flags (uncertain / sensitive / contradictory /
+scope-ambiguous). It is **not** a gate on every memory.
 
 ---
 
@@ -24,9 +27,11 @@ the assistant is conscious or that providers own memory.
 
 ## 2. Purpose
 
-A place where the user can **inspect what LogosForge proposes to remember**
-before it becomes durable assistant/project memory — and inspect/curate what is
-already remembered. It is the human gate on the memory-writer pipeline.
+A place where the user can **inspect and curate what LogosForge remembers** —
+audit auto-saved memory and review the flagged exceptions (proposed /
+review-required / sensitive / contradictions), then correct, revoke, or
+supersede anything. It is an **optional audit & control layer** over the
+automatic memory-writer pipeline, **not a mandatory gate**.
 
 ## 3. Backend grounding (this spec is not inventing a new model)
 
@@ -213,8 +218,8 @@ state · **no provider calls**. (Mirrors the already-passing backend tests:
 
 **Reaffirmed:** the model generates; LogosForge remembers and retrieves;
 providers are replaceable backends, not memory; Project Memory and Assistant
-Meta-Memory stay separate; nothing becomes durable/active without explicit
-approval; Jordan is memory-grounded through LogosForge's externalized memory,
+Meta-Memory stay separate; safe memory auto-saves as active while review is the
+exception (see Direction Correction); Jordan is memory-grounded through LogosForge's externalized memory,
 not conscious. **This document implements no UI.**
 
 

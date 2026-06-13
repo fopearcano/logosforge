@@ -101,8 +101,10 @@ user-specific preferences · provider-capability awareness.**
 Jordan remains: **not conscious · not self-aware in a human sense · not
 permanently learning inside model weights · not tied to one provider.** Editing
 the self-model is an explicit, auditable human action (approve / reject / edit /
-supersede with reasons); nothing becomes active automatically. **Billy / Logos /
-Dexter are not renamed. No code changes in Phase 7.**
+supersede with reasons). Policy may **auto-save** safe, high-confidence self-model
+memory (e.g., a confirmed workflow rule or a user correction); uncertain /
+sensitive / conflicting changes are flagged for review (see Direction
+Correction). **Billy / Logos / Dexter are not renamed. No code changes in Phase 7.**
 
 
 ## Direction Correction — Automatic, policy-governed memory (supersedes the approval-first framing)

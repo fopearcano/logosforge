@@ -151,7 +151,7 @@ Tests: `tests/test_memory_architecture_stubs.py` (21). The Alpha assistant (`ass
 **Implemented now** (`storyplanner/memory_arch/candidates.py`, `review.py`; `contradictions.py` upgraded to a heuristic; `assistant_arch/tools.py` extended) — deterministic, local-only, **no model call / no embeddings / no network**:
 
 - **Extract → classify → propose.** `extract_candidates(...)` and `process_event_for_memory_candidates(store, event)` turn an interaction event into candidates via an ordered **marker** heuristic (correction → release_blocker → architecture → deferred → workflow → project_decision → preference → speculative). Only *marked* spans become candidates — **raw chat is never auto-saved as fact**; per-event and per-candidate caps add anti-spam guards.
-- **Candidates only.** Every write is `proposed` (or `speculative` for speculative ideas) — **never active without explicit approval**. Confidence is tiered low/medium/high → 0.3 / 0.6 / 0.9.
+- **Candidates (Phase 4).** Every write was `proposed`/`speculative`; **superseded by the Direction Correction** — policy now auto-saves safe, high-confidence, durable memory as active and flags only the uncertain/sensitive/conflicting cases. Confidence is tiered low/medium/high → 0.3 / 0.6 / 0.9.
 - **Scope integrity.** Project-scope spans without a `project_id` (and user-scope spans without a `user_id`) are **skipped with a warning**, never mis-filed; Project Memory and Assistant Meta-Memory stay separate.
 - **Safety.** Secrets / raw-audio / debug spans are dropped by the writer policy before any write; the session summary redacts forbidden excerpts.
 - **Review service** (`MemoryCandidateReviewService`): `list_candidates` / `get` / `approve` / `reject` / `edit` / `supersede` / `mark_speculative` / `mark_contradicted`. **No destructive delete** — `reject` (new `MemoryStatus.REJECTED`) and `supersede` preserve the object for audit; transitions require a reason; `edit` refuses to change status.
@@ -209,7 +209,7 @@ The future user-facing review surface is **specified, not implemented**, in:
 - `MEMORY_PRIVACY_AND_GOVERNANCE.md` — the 18 governance rules (two-memory-systems boundary, redaction, auditability, local-first).
 - `MEMORY_UI_ROADMAP.md` — MVP → Pro → Team → optional GitHub-export stages.
 
-These reaffirm this spec's **two memory systems**: Project Memory and Assistant Meta-Memory stay separate in storage, retrieval, prompt, UI, and export. Nothing becomes active without explicit approval. **No UI/code is implemented in Phase 7.**
+These reaffirm this spec's **two memory systems**: Project Memory and Assistant Meta-Memory stay separate in storage, retrieval, prompt, UI, and export. (Activation policy: see the Direction Correction — safe memory auto-saves, review is the exception.) **No UI/code is implemented in Phase 7.**
 
 
 ## Direction Correction — Automatic, policy-governed memory (supersedes the approval-first framing)

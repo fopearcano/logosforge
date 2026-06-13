@@ -8,9 +8,11 @@
 > wiring exercise that cannot regress the Alpha.
 
 Principle (unchanged): **the model generates; LogosForge remembers, retrieves,
-structures, updates, and syncs.** Memory Review is a local, read/curate surface
-gated behind a default-off flag. Nothing becomes active without explicit
-approval; no provider is ever called; no memory is written automatically.
+structures, updates, and syncs.** The automatic policy pipeline writes safe
+memory (`MEMORY_ARCHITECTURE.md` → *Direction Correction*); Memory Review is a
+local, read/curate **audit & exception** surface gated behind a default-off
+flag. It performs **no provider call** and makes no durable write of its own
+beyond the user's explicit review actions (approve / reject / edit / supersede).
 
 ---
 
@@ -232,8 +234,9 @@ remembers. **No contradictions found.**
 
 **Reaffirmed:** the model generates; LogosForge remembers and retrieves;
 providers are replaceable backends, not memory; Project Memory and Assistant
-Meta-Memory stay separate; nothing becomes active without explicit approval;
-Jordan is memory-grounded, not conscious. **This document implements nothing.**
+Meta-Memory stay separate; safe memory auto-saves as active while review is the
+exception (see Direction Correction); Jordan is memory-grounded, not conscious.
+**This document implements nothing.**
 
 
 ## Direction Correction — Memory Review is optional & exception-based
