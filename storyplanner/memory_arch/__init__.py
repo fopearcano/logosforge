@@ -23,6 +23,10 @@ from storyplanner.memory_arch.schema import (
     SyncState,
 )
 from storyplanner.memory_arch.store import InMemoryMemoryStore, MemoryStore
+from storyplanner.memory_arch.local_store import (
+    LocalSQLiteMemoryStore,
+    default_memory_db_path,
+)
 
 __all__ = [
     "EventLogEntry",
@@ -33,4 +37,6 @@ __all__ = [
     "SyncState",
     "MemoryStore",
     "InMemoryMemoryStore",
+    "LocalSQLiteMemoryStore",
+    "default_memory_db_path",
 ]

@@ -3,6 +3,8 @@ __pycache__/
 *.pyo
 *.db
 *.sqlite
+*.sqlite3
+logosforge_memory.sqlite3
 .venv/
 build_venv/
 dist/
