@@ -96,3 +96,24 @@ Tests: `tests/test_memory_architecture_stubs.py` (21). The Alpha assistant (`ass
 **Still NOT implemented:** automatic memory extraction from chats; vector embeddings; cloud sync; GitHub auto-export; memory-approval UI; model-provider memory; provider calls; full contradiction reasoning (`find_contradictions` only surfaces already-flagged `contradicted` rows).
 
 **Reaffirmed:** the model generates, LogosForge remembers; GitHub is optional only; Project Memory and Assistant Meta-Memory stay separate; Jordan has an externalized self-model, not consciousness.
+
+
+## Phase 4 — Memory Candidate Workflow MVP
+
+**The "remember" loop is now concrete and deterministic** (`storyplanner/memory_arch/candidates.py`, `review.py`) — still **no model call / no embeddings / no network**, and still **not wired into the running assistant**:
+
+1. **Interaction event** → `process_event_for_memory_candidates(store, event)`.
+2. **Extract** marked spans only (ordered marker heuristic; unmarked chat is discarded — no auto-save).
+3. **Classify** type + scope + confidence (low/medium/high → 0.3 / 0.6 / 0.9) + status.
+4. **Guard**: drop forbidden content; skip-with-warning when a project/user span lacks its required id (no mis-filing); honor Project↔Assistant separation.
+5. **Contradiction-check** (heuristic, non-blocking) → warnings only.
+6. **Write proposed/speculative** candidates — **never active**.
+7. **Human review** via `MemoryCandidateReviewService` (approve / reject / edit / supersede / mark_speculative / mark_contradicted) — every transition explicit, reasoned, and **non-destructive**.
+
+`summarize_session(session_id)` closes the loop with a deterministic, redaction-safe **proposed** `session_summary` at assistant scope. The Phase-2 `MemoryCandidateExtractor` placeholder in `context_builder.py` is intentionally **unchanged** (still returns `[]`); the real heuristic lives in the new `candidates.py` so the two never collide.
+
+Tests: `tests/test_memory_candidate_workflow.py` (31). Dev demo: `scripts/memory_candidates_demo.py`.
+
+**Still NOT implemented:** model-driven extraction/classification; semantic contradiction/retrieval; auto-approval; cloud sync; GitHub auto-export; memory-approval UI; any wiring into the running Alpha assistant/providers.
+
+**Reaffirmed (Phase 4):** the model generates, LogosForge remembers, retrieves, structures, updates, and syncs; nothing becomes durable/active without explicit approval; GitHub is optional only; Project Memory and Assistant Meta-Memory stay separate; Jordan has an externalized self-model, not consciousness.

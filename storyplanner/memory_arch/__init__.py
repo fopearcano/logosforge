@@ -27,6 +27,14 @@ from storyplanner.memory_arch.local_store import (
     LocalSQLiteMemoryStore,
     default_memory_db_path,
 )
+from storyplanner.memory_arch.candidates import (
+    ExtractionResult,
+    PipelineResult,
+    extract_candidates,
+    process_event_for_memory_candidates,
+    summarize_session,
+)
+from storyplanner.memory_arch.review import MemoryCandidateReviewService
 
 __all__ = [
     "EventLogEntry",
@@ -39,4 +47,10 @@ __all__ = [
     "InMemoryMemoryStore",
     "LocalSQLiteMemoryStore",
     "default_memory_db_path",
+    "ExtractionResult",
+    "PipelineResult",
+    "extract_candidates",
+    "process_event_for_memory_candidates",
+    "summarize_session",
+    "MemoryCandidateReviewService",
 ]

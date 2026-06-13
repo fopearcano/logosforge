@@ -118,6 +118,24 @@ class LocalSQLiteMemoryStore(MemoryStore):
             "SELECT * FROM memory_events WHERE id = ?", (event_id,)).fetchone()
         if row is None:
             return None
+        return self._row_to_event(row)
+
+    def list_events(self, session_id: str | None = None,
+                    project_id: str | None = None) -> list[EventLogEntry]:
+        sql = "SELECT * FROM memory_events WHERE 1=1"
+        args: list = []
+        if session_id is not None:
+            sql += " AND session_id = ?"
+            args.append(session_id)
+        if project_id is not None:
+            sql += " AND project_id = ?"
+            args.append(project_id)
+        sql += " ORDER BY created_at"
+        rows = self._conn.execute(sql, args).fetchall()
+        return [self._row_to_event(r) for r in rows]
+
+    @staticmethod
+    def _row_to_event(row: sqlite3.Row) -> EventLogEntry:
         return EventLogEntry(
             id=row["id"], event_type=row["event_type"], content=row["content"],
             user_id=row["user_id"], project_id=row["project_id"],

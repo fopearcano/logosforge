@@ -148,3 +148,17 @@ Tests: `tests/test_memory_architecture_stubs.py` (21). The Alpha assistant (`ass
 **Still NOT implemented:** automatic memory extraction from chats; vector embeddings; cloud sync; GitHub auto-export; memory-approval UI; model-provider memory; provider calls; full contradiction reasoning (`find_contradictions` only surfaces already-flagged `contradicted` rows).
 
 **Reaffirmed:** the model generates, LogosForge remembers; GitHub is optional only; Project Memory and Assistant Meta-Memory stay separate; Jordan has an externalized self-model, not consciousness.
+
+
+## Phase 4 — Memory Candidate Workflow MVP
+
+Phase 4 builds the curated-memory layer (layer 2) on top of the Phase 3 store: a deterministic, local-only pipeline that turns interaction events into **reviewable candidates** — extract, classify, review, approve, reject, supersede, and export — **without destructive writes** and **without a model call, embeddings, or network**.
+
+- **Anti-spam by construction:** only spans carrying an explicit memory **marker** become candidates; raw chat is discarded. Nothing is durable or active without explicit human approval.
+- **Conservative defaults:** every candidate is `proposed` (or `speculative`); confidence is tiered (0.3 / 0.6 / 0.9); secrets / raw-audio / debug are dropped; scope/id integrity is enforced so Project Memory and Assistant Meta-Memory never mix.
+- **Non-destructive lifecycle:** the new `MemoryStatus.REJECTED`, plus `superseded` / `contradicted`, are auditable status transitions that preserve the object and its history — **no delete**.
+- **Heuristic, not magical:** contradiction detection is keyword-overlap + opposing-polarity and only *surfaces* conflicts; the deterministic `summarize_session` produces a redaction-safe proposed summary. Semantic/model-driven versions remain future work.
+
+New code: `storyplanner/memory_arch/candidates.py`, `review.py`; upgraded `contradictions.py`; extended `assistant_arch/tools.py`. Tests: `tests/test_memory_candidate_workflow.py` (31). Dev demo: `scripts/memory_candidates_demo.py`. Nothing is wired into the running Alpha; importing creates no DB and touches no provider.
+
+**Reaffirmed (Phase 4):** the model generates, LogosForge remembers, retrieves, structures, updates, and syncs; nothing becomes durable/active without explicit approval; GitHub is optional only; Project Memory and Assistant Meta-Memory stay separate; Jordan has an externalized self-model, not consciousness.

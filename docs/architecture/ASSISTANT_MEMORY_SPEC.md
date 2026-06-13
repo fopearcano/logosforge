@@ -144,3 +144,22 @@ Tests: `tests/test_memory_architecture_stubs.py` (21). The Alpha assistant (`ass
 **Still NOT implemented:** automatic memory extraction from chats; vector embeddings; cloud sync; GitHub auto-export; memory-approval UI; model-provider memory; provider calls; full contradiction reasoning (`find_contradictions` only surfaces already-flagged `contradicted` rows).
 
 **Reaffirmed:** the model generates, LogosForge remembers; GitHub is optional only; Project Memory and Assistant Meta-Memory stay separate; Jordan has an externalized self-model, not consciousness.
+
+
+## Phase 4 — Memory Candidate Workflow MVP
+
+**Implemented now** (`storyplanner/memory_arch/candidates.py`, `review.py`; `contradictions.py` upgraded to a heuristic; `assistant_arch/tools.py` extended) — deterministic, local-only, **no model call / no embeddings / no network**:
+
+- **Extract → classify → propose.** `extract_candidates(...)` and `process_event_for_memory_candidates(store, event)` turn an interaction event into candidates via an ordered **marker** heuristic (correction → release_blocker → architecture → deferred → workflow → project_decision → preference → speculative). Only *marked* spans become candidates — **raw chat is never auto-saved as fact**; per-event and per-candidate caps add anti-spam guards.
+- **Candidates only.** Every write is `proposed` (or `speculative` for speculative ideas) — **never active without explicit approval**. Confidence is tiered low/medium/high → 0.3 / 0.6 / 0.9.
+- **Scope integrity.** Project-scope spans without a `project_id` (and user-scope spans without a `user_id`) are **skipped with a warning**, never mis-filed; Project Memory and Assistant Meta-Memory stay separate.
+- **Safety.** Secrets / raw-audio / debug spans are dropped by the writer policy before any write; the session summary redacts forbidden excerpts.
+- **Review service** (`MemoryCandidateReviewService`): `list_candidates` / `get` / `approve` / `reject` / `edit` / `supersede` / `mark_speculative` / `mark_contradicted`. **No destructive delete** — `reject` (new `MemoryStatus.REJECTED`) and `supersede` preserve the object for audit; transitions require a reason; `edit` refuses to change status.
+- **Deterministic `summarize_session(session_id)`** — event counts + redacted excerpts → **one proposed** `session_summary` candidate at **assistant** scope (no model).
+- **Heuristic contradiction surface** — `contradicts()` / `pairwise_contradictions()` flag same-scope statements with high keyword overlap + opposing polarity; surfaced as warnings/metadata only, **never auto-superseded**.
+
+Tests: `tests/test_memory_candidate_workflow.py` (31). Dev demo: `scripts/memory_candidates_demo.py`.
+
+**Still NOT implemented:** model-driven extraction/classification; semantic (embedding) contradiction or retrieval; auto-approval; cloud sync; GitHub auto-export; memory-approval UI; any wiring into the running Alpha assistant/providers.
+
+**Reaffirmed (Phase 4):** the model generates, LogosForge remembers, retrieves, structures, updates, and syncs; nothing becomes durable/active without explicit approval; GitHub is optional only; Project Memory and Assistant Meta-Memory stay separate; Jordan has an externalized self-model, not consciousness.

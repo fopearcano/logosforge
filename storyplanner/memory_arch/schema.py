@@ -47,6 +47,7 @@ class MemoryStatus(str, Enum):
     ACTIVE = "active"
     PROPOSED = "proposed"
     SPECULATIVE = "speculative"
+    REJECTED = "rejected"          # Phase 4: reviewed and declined (kept, not deleted)
     DEPRECATED = "deprecated"
     SUPERSEDED = "superseded"
     CONTRADICTED = "contradicted"

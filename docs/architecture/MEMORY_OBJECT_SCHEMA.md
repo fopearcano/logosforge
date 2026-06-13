@@ -92,3 +92,20 @@ Tests: `tests/test_memory_architecture_stubs.py` (21). The Alpha assistant (`ass
 **Still NOT implemented:** automatic memory extraction from chats; vector embeddings; cloud sync; GitHub auto-export; memory-approval UI; model-provider memory; provider calls; full contradiction reasoning (`find_contradictions` only surfaces already-flagged `contradicted` rows).
 
 **Reaffirmed:** the model generates, LogosForge remembers; GitHub is optional only; Project Memory and Assistant Meta-Memory stay separate; Jordan has an externalized self-model, not consciousness.
+
+
+## Phase 4 — Memory Candidate Workflow MVP
+
+**Schema change (additive):** `MemoryStatus` gains **`REJECTED = "rejected"`** — a reviewed-and-declined candidate. It is a status transition (via `update` with a reason), **not a delete**: the object and its history are preserved. The full candidate lifecycle is now `proposed`/`speculative` → (`active` | `rejected` | `superseded` | `contradicted`), all non-destructive. `REJECTED` round-trips by value through the local SQLite store with no migration (new rows only).
+
+**Implemented now** (`storyplanner/memory_arch/candidates.py`, `review.py`; `contradictions.py` upgraded to a heuristic):
+
+- Candidates are constructed as `MemoryObject`s with tiered `confidence` (low/medium/high → 0.3 / 0.6 / 0.9), `status` `proposed` (or `speculative` for speculative ideas), `source_event` linking back to the originating `EventLogEntry`, and the matched marker recorded in `tags`. Project-scope candidates always carry `project_id`; user-scope candidates always carry `user_id` (spans missing the required id are skipped, never mis-filed).
+- Contradiction is heuristic and read-only: same-scope statements with high keyword overlap + opposing polarity are flagged; resolution is explicit (`supersede` / `mark_contradicted`), preserving the loser.
+- `EventLogEntry` is now queryable for summaries via `list_events(session_id|project_id)` on the store; `summarize_session` writes one **proposed** `session_summary` object at **assistant** scope.
+
+Tests: `tests/test_memory_candidate_workflow.py` (31). Dev demo: `scripts/memory_candidates_demo.py`.
+
+**Still NOT implemented:** model-driven extraction/classification; semantic (embedding) contradiction or retrieval; auto-approval; cloud sync; GitHub auto-export; memory-approval UI; any wiring into the running Alpha assistant/providers.
+
+**Reaffirmed (Phase 4):** the model generates, LogosForge remembers, retrieves, structures, updates, and syncs; nothing becomes durable/active without explicit approval; GitHub is optional only; Project Memory and Assistant Meta-Memory stay separate; Jordan has an externalized self-model, not consciousness.

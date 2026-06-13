@@ -16,6 +16,7 @@ from storyplanner.memory_arch.schema import (
     MemoryObject,
     MemoryScope,
     MemoryStatus,
+    MemoryType,
 )
 
 
@@ -26,6 +27,13 @@ class MemoryStore(abc.ABC):
 
     @abc.abstractmethod
     def add_event(self, event: EventLogEntry) -> EventLogEntry: ...
+
+    @abc.abstractmethod
+    def get_event(self, event_id: str) -> EventLogEntry | None: ...
+
+    @abc.abstractmethod
+    def list_events(self, session_id: str | None = None,
+                    project_id: str | None = None) -> list[EventLogEntry]: ...
 
     @abc.abstractmethod
     def write_candidate(self, memory: MemoryObject) -> MemoryObject: ...
@@ -71,6 +79,18 @@ class InMemoryMemoryStore(MemoryStore):
         self._events[event.id] = event
         return event
 
+    def get_event(self, event_id: str) -> EventLogEntry | None:
+        return self._events.get(event_id)
+
+    def list_events(self, session_id: str | None = None,
+                    project_id: str | None = None) -> list[EventLogEntry]:
+        out = [
+            ev for ev in self._events.values()
+            if (session_id is None or ev.session_id == session_id)
+            and (project_id is None or ev.project_id == project_id)
+        ]
+        return sorted(out, key=lambda e: e.created_at)
+
     def write_candidate(self, memory: MemoryObject) -> MemoryObject:
         # A candidate is never silently made active: only proposed/speculative
         # are accepted here. Promotion is explicit via approve_candidate.
@@ -96,6 +116,9 @@ class InMemoryMemoryStore(MemoryStore):
                project_id: str | None = None,
                filters: dict | None = None) -> list[MemoryObject]:
         q = (query or "").lower()
+        filters = filters or {}
+        want_type = filters.get("type")
+        want_status = filters.get("status")
         out = []
         for mem in self._memories.values():
             if scope is not None and mem.scope is not MemoryScope(scope):
@@ -103,6 +126,11 @@ class InMemoryMemoryStore(MemoryStore):
             if project_id is not None and mem.project_id != project_id:
                 continue
             if q and q not in mem.content.lower():
+                continue
+            if want_type is not None and mem.type is not MemoryType(want_type):
+                continue
+            if want_status is not None \
+                    and mem.status is not MemoryStatus(want_status):
                 continue
             out.append(mem)
         return out
