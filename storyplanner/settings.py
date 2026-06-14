@@ -88,6 +88,16 @@ DEFAULTS: dict[str, object] = {
     # Dev/diagnostics: also surface retrieval warnings/exclusions (labelled,
     # never secrets). Default-OFF.
     "assistant_memory_context_diagnostics_enabled": False,
+    # -- LogosForge automatic memory capture (controlled passive runtime) ----
+    # Opt-in, default-OFF. When enabled AND a memory store is registered, after
+    # a completed assistant exchange LogosForge may build a safe event and run
+    # the policy pipeline (safe memory auto-saves active; risky/uncertain goes
+    # to review). Never runs before response generation; never calls a provider;
+    # disabled keeps runtime behavior exactly as before.
+    "assistant_auto_memory_enabled": False,
+    # Dev/diagnostics: return safe processing summaries/counts (never secrets,
+    # never raw chat, never raw audio paths). Default-OFF.
+    "assistant_auto_memory_diagnostics_enabled": False,
     "connector_enabled": False,
     "connector_allow_writes": False,
     "connector_confirm_writes": True,

@@ -165,6 +165,18 @@ class AssistantTools:
         return _candidates.summarize_session(self.store, session_id,
                                              policy=self.policy)
 
+    def capture_interaction(self, user_message: str = "",
+                            assistant_response: str = "", *,
+                            source: str = "assistant_panel", **context) -> dict:
+        """Controlled passive runtime capture of a completed exchange. No-op
+        unless ``assistant_auto_memory_enabled`` is on; runs the policy pipeline
+        over a sanitized event (safe memory auto-saves, risky goes to review);
+        never calls a provider/cloud/GitHub; never stores secrets/raw audio."""
+        from storyplanner.assistant_arch import auto_memory
+        return auto_memory.capture_interaction(
+            user_message=user_message, assistant_response=assistant_response,
+            source=source, store=self.store, policy=self.policy, **context)
+
     def approve_memory_candidate(self, memory_id: str) -> MemoryObject:
         return self.review.approve(memory_id)
 

@@ -267,3 +267,45 @@ policy-routed. The pipeline is not yet wired to live app events — the running
 Alpha still auto-saves nothing until a store + event source are explicitly
 wired. Tests: `tests/test_memory_policy_direction.py`,
 `tests/test_automatic_memory_policy.py`.
+
+
+## Controlled Passive Runtime Integration
+
+**Implemented now** (`storyplanner/assistant_arch/auto_memory.py`;
+`AssistantTools.capture_interaction`; settings flags
+`assistant_auto_memory_enabled` / `assistant_auto_memory_diagnostics_enabled`,
+both **default-OFF**) — optional post-interaction memory processing, local-only,
+**no provider / cloud / GitHub**:
+
+- **Opt-in / default-off.** Disabled → a pure no-op; runtime behavior is exactly
+  as before. Runs **after** a completed exchange — never before response
+  generation, never blocking the reply.
+- **Policy-governed.** A sanitized `EventLogEntry` (secrets / raw-audio /
+  raw-audio paths redacted; capped excerpt; **no full transcript**) is logged,
+  then `process_event_for_memory_candidates` applies the writer policy: safe
+  high-confidence durable memory **auto-saves active**; uncertain / sensitive /
+  contradictory / scope-ambiguous memory becomes `review_required` / `proposed`
+  / `speculative`; secrets/raw-audio rejected; duplicates/noise ignored.
+- **Fail-safe & local.** Missing/failed store → safe status, no crash. Uses the
+  app-registered local store (`passive_context.register_memory_store`); none is
+  wired in production, so enabling the flag alone is inert until a store is
+  registered. **Never** calls a provider, cloud sync, or GitHub; never stores
+  raw audio.
+- **Scope-safe.** Project ↔ Assistant separation preserved; wrong-project memory
+  is not written.
+- **Safe diagnostics.** With the diagnostics flag, returns **counts only**
+  (events_processed / candidates_extracted / auto_saved / review_required /
+  proposed / speculative / ignored / rejected / contradiction) + redacted
+  warnings — never secrets, raw chat, raw-audio paths, or provider keys.
+
+**Feature flags (all default-off):** `assistant_memory_context_enabled`,
+`assistant_auto_memory_enabled`, `assistant_auto_memory_diagnostics_enabled`.
+
+Tests: `tests/test_assistant_auto_memory_runtime_integration.py`.
+
+**Still NOT implemented:** Memory Review UI; cloud sync; GitHub export
+automation; embeddings/vector DB; LLM-based extraction; team/workspace
+permission model; full audit UI; and the live UI call-site wiring (the
+capability is exposed via `AssistantTools.capture_interaction`, intentionally
+not wired into UI workers — the running Alpha auto-saves nothing until a store +
+call site are explicitly wired).

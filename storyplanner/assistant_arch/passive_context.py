@@ -64,6 +64,13 @@ def register_model_gateway(gateway) -> None:
     _registered_gateway = gateway
 
 
+def get_memory_store():
+    """The app-registered read/write memory store (or None). Shared by the
+    passive context builder and the automatic memory capture path so a single
+    `register_memory_store(...)` wires both. None → nothing is wired."""
+    return _registered_store
+
+
 def is_enabled() -> bool:
     try:
         from storyplanner.settings import get_manager
