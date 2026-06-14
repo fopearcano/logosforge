@@ -22,11 +22,16 @@ control of what becomes durable.
 4. **No provider secrets** stored or shown.
 5. **No private logs by default** — raw event logs are not durable memory and
    are shown only via a redacted source preview, opt-in.
-6. **User approval for durable memory** — nothing becomes `active` without an
-   explicit `review.approve(...)`.
-7. **Scope clarity before approval** — a candidate's scope (and required
+6. **Policy-governed activation** — durable memory is governed by
+   `MemoryWriterPolicy`: safe, high-confidence, durable, in-scope memory may
+   **auto-save as active**; uncertain / sensitive / contradictory /
+   scope-ambiguous memory becomes `review_required` / `proposed` / `speculative`
+   and needs explicit `review.approve(...)`. **Nothing unsafe ever
+   auto-activates**, and the user can always inspect / revoke / supersede.
+7. **Scope clarity before activation** — a candidate's scope (and required
    `project_id`/`user_id`/`workspace_id`) must be unambiguous; ambiguous-scope
-   candidates carry a warning and cannot be silently misfiled.
+   candidates are flagged (`NEEDS_SCOPE_CONFIRMATION`) and cannot be silently
+   misfiled.
 8. **Project facts stay project-scoped** (`scope=project`).
 9. **Assistant rules stay assistant-scoped** (`scope=assistant`).
 10. **User preferences stay user-scoped** (`scope=user`).
