@@ -341,6 +341,13 @@ class MainWindow(QMainWindow):
         self._versions = VersionManager(db, project_id, parent=self)
         self._versions.start()
         self._cached_scenes_view: ScenesView | None = None
+        # Manuscript editor is cached per-project so navigating to another
+        # section and back does NOT destroy/recreate it (which reset scroll,
+        # focus, selection, and the current screenplay element type). Refreshed
+        # only when data changed elsewhere; reset on project switch.
+        self._cached_manuscript_view: QWidget | None = None
+        self._manuscript_needs_refresh = False
+        self._pre_fullscreen_geometry = None
         self._cached_scene_entry_scene: int | None = None
         self._cached_scene_entry_ids: set[int] | None = None
         self._update_title()
@@ -795,12 +802,44 @@ class MainWindow(QMainWindow):
         """Replace the content area inside the assistant dock with a new view."""
         self._psyke_console.clear_previous_focus()
         old = self._assistant_dock.set_content(widget)
-        if old is not None and old is not self._cached_scenes_view:
-            old.deleteLater()
-        elif old is self._cached_scenes_view:
-            old.hide()
+        # Preserve (hide, don't destroy) the cached scenes + manuscript views so
+        # their in-memory state survives navigation; destroy everything else.
+        if old is not None:
+            if old in (self._cached_scenes_view, self._cached_manuscript_view):
+                old.hide()
+            else:
+                old.deleteLater()
         self.content_area = widget
         widget.show()
+
+    # -- Full screen (always reversible) ---------------------------------------
+    def toggle_fullscreen(self) -> None:
+        """Flip between full screen and normal — always reversible."""
+        if self.isFullScreen():
+            self.exit_fullscreen()
+        else:
+            self.enter_fullscreen()
+
+    def enter_fullscreen(self) -> None:
+        if self.isFullScreen():
+            return
+        try:
+            self._pre_fullscreen_geometry = self.saveGeometry()
+        except Exception:
+            self._pre_fullscreen_geometry = None
+        self.showFullScreen()
+
+    def exit_fullscreen(self) -> None:
+        """Guaranteed way out of full screen; restores the prior geometry."""
+        if not self.isFullScreen():
+            return
+        self.showNormal()
+        geo = getattr(self, "_pre_fullscreen_geometry", None)
+        if geo is not None:
+            try:
+                self.restoreGeometry(geo)
+            except Exception:
+                pass
 
     def _build_initial_content(self) -> QWidget:
         scenes = self._db.get_all_scenes(self._project_id)
@@ -1003,6 +1042,21 @@ class MainWindow(QMainWindow):
         # writing unit (no inline whole-project structure). Storage is unchanged
         # (Scene-based); the add-button LABEL is mode-aware ("+ Chapter" in Novel,
         # "+ Scene" otherwise) via the primary-unit adapter inside WritingCoreView.
+        #
+        # REUSE the cached editor across navigation: returning from another
+        # section must not reset scroll / focus / selection / screenplay element
+        # type. Only rebuild for a new project (cache cleared in _switch_project);
+        # refresh in place (state-preserving) when data changed elsewhere.
+        if self._cached_manuscript_view is not None:
+            if self.content_area is not self._cached_manuscript_view:
+                self._set_content(self._cached_manuscript_view)
+            if self._manuscript_needs_refresh:
+                try:
+                    self._cached_manuscript_view.refresh()
+                except Exception:
+                    pass
+                self._manuscript_needs_refresh = False
+            return
         view = WritingCoreView(
             self._db,
             self._project_id,
@@ -1029,6 +1083,7 @@ class MainWindow(QMainWindow):
                 view.on_open_review = self._show_series_review
         except Exception:
             pass
+        self._cached_manuscript_view = view
         self._set_content(view)
 
     def _show_series_review(self) -> None:
@@ -2642,6 +2697,18 @@ class MainWindow(QMainWindow):
         # -- View ---------------------------------------------------------------
         view_menu = menu_bar.addMenu("View")
 
+        # Full screen — always provide an in-app way OUT of full screen so the
+        # window can never trap the user (in addition to the native control).
+        self._fullscreen_action = QAction("Toggle Full Screen", self)
+        self._fullscreen_action.setShortcut(QKeySequence("F11"))
+        self._fullscreen_action.triggered.connect(self.toggle_fullscreen)
+        view_menu.addAction(self._fullscreen_action)
+
+        exit_fullscreen_action = QAction("Exit Full Screen", self)
+        exit_fullscreen_action.triggered.connect(self.exit_fullscreen)
+        view_menu.addAction(exit_fullscreen_action)
+        view_menu.addSeparator()
+
         toggle_sidebar_action = QAction("Toggle Sidebar", self)
         toggle_sidebar_action.setShortcut(QKeySequence("Ctrl+B"))
         toggle_sidebar_action.triggered.connect(self._toggle_sidebar)
@@ -3472,6 +3539,8 @@ class MainWindow(QMainWindow):
 
         # 3. Drop MainWindow's own per-project caches.
         self._cached_scenes_view = None
+        self._cached_manuscript_view = None
+        self._manuscript_needs_refresh = False
         self._cached_scene_entry_scene = None
         self._cached_scene_entry_ids = None
         self._external_change_warned = False
@@ -3544,6 +3613,9 @@ class MainWindow(QMainWindow):
     def _on_data_changed(self) -> None:
         self._dirty = True
         self._modified_since_save = True
+        # A data change anywhere means the cached Manuscript editor should pick
+        # it up (state-preservingly) the next time it is shown.
+        self._manuscript_needs_refresh = True
         self._update_title()
         if not self._read_only:
             self._autosave.mark_dirty()

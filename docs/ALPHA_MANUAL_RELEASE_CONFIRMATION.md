@@ -94,3 +94,21 @@ git push origin :refs/tags/v0.9.0-alpha.1
 - [ ] **User authorization to tag (`TAG IT`):** ________
 
 Signed off by: ____________________  Date: ____________
+
+
+## Manuscript navigation + fullscreen stability (manual)
+
+> See `docs/ALPHA_UI_STABILITY_NOTES.md`. Mark PASS only when directly tested.
+
+1. [ ] Open a sample Screenplay project → Manuscript; type a line: ____
+2. [ ] Switch to Outline, back to Manuscript — line remains: ____
+3. [ ] Switch to Notes, back — line remains: ____
+4. [ ] Switch to Assistant, back — line remains; scroll/focus acceptable: ____
+5. [ ] Enter full screen (View → Toggle Full Screen / F11 / native control): ____
+6. [ ] In full screen: type, switch sections, return — text + render OK: ____
+7. [ ] Exit full screen (View → Exit Full Screen / native) — app exits cleanly: ____
+8. [ ] Toggle full screen 3× — no lock; main navigation stays visible: ____
+9. [ ] Save + reload — text persists: ____
+10. [ ] Graphic Novel Manuscript (full screen) uses shared renderer; old page manager absent: ____
+11. [ ] Graphic Novel Outline uses shared block/card outline; standalone Pages disabled: ____
+12. [ ] Dexter opens after full screen; no raw-audio/memory side effect: ____
