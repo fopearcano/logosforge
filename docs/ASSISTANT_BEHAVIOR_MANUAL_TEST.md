@@ -1,0 +1,91 @@
+# Assistant Behavior — Manual Test
+
+> Verifies the assistant adapts to the current **section**, **writing mode**,
+> **action**, and the user's request. Automated coverage:
+> `tests/test_assistant_action_routing.py`. These manual checks confirm the real
+> UI end-to-end. Assistant output is always **preview-first** — Copy / Replace /
+> Insert / Append are explicit; nothing auto-applies.
+
+Behavior model (implemented in `storyplanner/assistant_contract.py`, wired in
+`ui/assistant_view.py`): direct manuscript-writing actions (Generate / Dialogue
+/ Rewrite / Expand / Continue / Tension) produce **mode-formatted manuscript
+content**; planning structure / analysis belong to Outline/planning sections or
+explicit analysis actions (Suggest / Summarize / Diagnose / Next Beat /
+Alternatives). A response validator flags structure/analysis leakage before it
+is shown, and never auto-applies.
+
+---
+
+## A. Screenplay · Manuscript · Dialogue  (the reported bug)
+
+1. Open a Screenplay project (e.g. `sample_projects/manual_alpha/alpha_sample_screenplay.json`).
+2. Go to **Manuscript**. Use a scene like:
+   ```
+   INT. ARCHIVE - DAWN
+
+   Ada North enters carrying a notebook.
+
+   MILO VOSS
+   You are late.
+
+   ADA NORTH
+   The door was not supposed to be open.
+   ```
+3. In the Assistant panel type: `continue the dialogue between Milo and Ada`.
+4. Click **Dialogue**.
+
+**Expected:** direct screenplay continuation — CHARACTER cues + dialogue, minimal
+action lines. **No** markdown, **no** "Suggested Scene Structure", **no**
+"Production Notes", **no** "Key Questions", **no** bracketed `[INTRODUCING]`
+labels, **no** prose/analysis. If the model still leaks structure, a ⚠ warning
+banner appears above the response and nothing is auto-applied.
+
+## B. Screenplay · Manuscript · Generate
+Type a request, click the main send (Generate). **Expected:** screenplay scene
+content, not an outline/analysis.
+
+## C. Novel · Manuscript · Generate / Dialogue
+**Expected:** pure prose (narrative + integrated dialogue); no screenplay slugs
+or CHARACTER-cue blocks unless explicitly requested; no outline/analysis.
+
+## D. Graphic Novel · Manuscript · Dialogue
+**Expected:** panel-level content (Panel N · Visual / Caption / Dialogue / SFX /
+Notes), Act → Page → Scene → Panel. **No** old "Comics Script"/page-manager
+language and **no** ComfyUI/image prompts.
+
+## E. Stage Script · Manuscript · Dialogue
+**Expected:** CHARACTER cues + dialogue with (stage directions) where needed; no
+novel narration; no screenplay slugs unless requested.
+
+## F. Outline · Generate
+**Expected:** structured outline (acts/chapters/scenes/beats) — structure is
+allowed here.
+
+## G. PSYKE · Generate
+**Expected:** codex / story-bible entity content; no manuscript scene prose
+unless requested.
+
+## H. Notes · Generate
+**Expected:** note content — organize / brainstorm / summarize.
+
+## I. Action routing
+- The **Dialogue** button must produce dialogue, not a "Structure" response.
+- **Suggest** may return concise suggestions (analysis) — that is expected and
+  is *not* flagged by the validator.
+- A "Structure"/planning notion must not override the **Dialogue**/**Generate**
+  buttons in Manuscript.
+
+## J. Apply targets
+- **Replace** only when a selection / current block exists.
+- **Insert / Append** target the current scene/block and preserve mode format.
+- No auto-apply — every apply is an explicit click.
+
+---
+
+### Notes / limitations
+- Output quality still depends on the selected model backend (LM Studio /
+  Ollama / vLLM / OpenAI / Anthropic / OpenRouter). The contract + validator
+  make the *instruction* and *guardrails* mode-correct; a weak local model may
+  still drift — the ⚠ validator warning surfaces that and blocks silent apply.
+- Providers remain generation backends only; this change adds no provider, no
+  network call, and no memory writes.

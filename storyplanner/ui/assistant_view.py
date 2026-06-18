@@ -86,13 +86,13 @@ from storyplanner.ui.quantum_timeline import QuantumTimelineWidget
 
 SECTION_SYSTEM_PROMPTS: dict[str, str] = {
     "Manuscript": (
-        "You are a skilled fiction writer. "
-        "The user is writing their manuscript. "
-        "ALWAYS generate pure prose — narrative text, dialogue, "
-        "action, description, and inner thought. Write directly "
-        "in the voice of the story as if writing a novel. "
-        "NEVER output outlines, bullet points, headers, scene "
-        "breakdowns, or structural analysis. Just write the story."
+        "You are helping the user write their manuscript. Generate or edit the "
+        "actual manuscript content in the project's writing-mode format "
+        "(prose for Novel, screenplay format for Screenplay, panel script for "
+        "Graphic Novel, stage-script format for Stage Script). Write directly in "
+        "the voice of the story. NEVER output outlines, bullet points, headers, "
+        "scene breakdowns, or structural analysis unless the user explicitly "
+        "asks. Just write the content."
     ),
     "Outline": (
         "You are a story planning assistant. "
@@ -1111,7 +1111,7 @@ class AssistantPanel(QWidget):
         messages = build_messages(
             action_prompt, scene_ctx,
             structural_context=gather_structural_context(self._db, self._project_id),
-            system_prompt=self._get_section_system_prompt(),
+            system_prompt=self._get_section_system_prompt(canonical),
         )
 
         if not self.isVisible():
@@ -1120,16 +1120,31 @@ class AssistantPanel(QWidget):
         self._start_request(messages)
         return True
 
-    def _get_section_system_prompt(self) -> str:
+    def _get_section_system_prompt(self, action: str = "") -> str:
+        from storyplanner.assistant_contract import (
+            is_direct_manuscript_writing, output_contract,
+        )
         base = SECTION_SYSTEM_PROMPTS.get(self._active_section, "")
+        mode = "novel"
+        overlay = ""
         try:
             from storyplanner.narrative_engines import engine_for_project
             project = self._db.get_project_by_id(self._project_id)
             engine = engine_for_project(project)
-            if engine.system_prompt_overlay:
-                return base + "\n\n" + engine.system_prompt_overlay if base else engine.system_prompt_overlay
+            mode = getattr(engine, "name", "novel") or "novel"
+            overlay = engine.system_prompt_overlay or ""
         except Exception:
             pass
+        # Remember the (mode, section, action) for response validation.
+        self._last_contract = (mode, self._active_section, action)
+        # Direct manuscript-writing actions get a strict, mode-correct OUTPUT
+        # contract — NOT the section base + the engine's critique/"key questions"
+        # overlay, which makes the model emit analysis/structure instead of text.
+        if is_direct_manuscript_writing(self._active_section, action):
+            return output_contract(writing_mode=mode,
+                                   section=self._active_section, action=action)
+        if overlay:
+            return base + "\n\n" + overlay if base else overlay
         return base
 
     # -- Sending requests ------------------------------------------------------
@@ -1239,9 +1254,20 @@ class AssistantPanel(QWidget):
         # Prepended to structural_ctx so the Assistant has the engine's
         # priorities + structural terminology + review checks when it reasons.
         try:
+            from storyplanner.assistant_contract import (
+                is_direct_manuscript_writing,
+            )
             from storyplanner.narrative_engines import engine_for_project
             project = self._db.get_project_by_id(self._project_id)
-            engine_block = engine_for_project(project).format_context_block()
+            engine = engine_for_project(project)
+            # For direct manuscript writing, use the MINIMAL writing block (units
+            # + terminology only). The full block carries the engine's critique
+            # "key questions" / review checks, which make a direct-writing action
+            # (e.g. Dialogue) emit analysis/structure instead of manuscript text.
+            if is_direct_manuscript_writing(self._active_section, action_key):
+                engine_block = engine.format_writing_block()
+            else:
+                engine_block = engine.format_context_block()
             if engine_block:
                 structural_ctx = (
                     engine_block + "\n\n" + structural_ctx
@@ -1397,7 +1423,7 @@ class AssistantPanel(QWidget):
             structural_context=struct_ctx,
             irrational_context=irr_ctx,
             controlling_idea_context=idea_ctx,
-            system_prompt=self._get_section_system_prompt(),
+            system_prompt=self._get_section_system_prompt(action_key),
         )
         self._update_ctx_viewer(
             scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, action_prompt,
@@ -1434,7 +1460,7 @@ class AssistantPanel(QWidget):
             structural_context=struct_ctx,
             irrational_context=irr_ctx,
             controlling_idea_context=idea_ctx,
-            system_prompt=self._get_section_system_prompt(),
+            system_prompt=self._get_section_system_prompt("generate"),
         )
         self._update_ctx_viewer(
             scene_ctx, outline_ctx, story_memory_ctx, psyke_ctx, prompt,
@@ -1799,10 +1825,29 @@ class AssistantPanel(QWidget):
     # -- Response handling -----------------------------------------------------
 
     def _on_response(self, text: str, from_cache: bool) -> None:
-        self._response_output.setPlainText(text)
+        self._response_output.setPlainText(self._maybe_warn(text))
         self._cache_label.setVisible(from_cache)
         self._set_busy(False)
         self._worker = None
+
+    def _maybe_warn(self, text: str) -> str:
+        """Prepend a non-blocking warning when a direct manuscript-writing
+        response looks like planning/structure/analysis instead of content.
+        Never auto-applies; Copy/Replace/Insert/Append remain explicit."""
+        try:
+            from storyplanner.assistant_contract import validate_response
+            mode, section, action = getattr(
+                self, "_last_contract", ("novel", "", ""))
+            issues = validate_response(text, writing_mode=mode,
+                                       section=section, action=action)
+            if issues:
+                label = mode.replace("_", " ")
+                return (f"⚠ This looks like planning/structure output, not "
+                        f"direct {label} manuscript text — review before "
+                        f"applying ({'; '.join(issues[:3])}).\n\n" + text)
+        except Exception:
+            pass
+        return text
 
     def _on_error(self, error: str) -> None:
         self._response_output.setPlainText(f"Error:\n\n{error}")

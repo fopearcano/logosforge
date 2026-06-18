@@ -74,3 +74,19 @@ class NarrativeEngine:
             lines.append("")
             lines.append(self.system_prompt_overlay)
         return "\n".join(lines)
+
+    def format_writing_block(self) -> str:
+        """Minimal mode block for DIRECT WRITING actions — structural units and
+        terminology only, with **no** reasoning/critique overlay, review checks,
+        or feedback signals. Those induce analysis/structure output during direct
+        manuscript writing (e.g. a "Dialogue" action should yield dialogue, not a
+        scene critique), so they are intentionally omitted here."""
+        lines = [
+            f"[Writing mode: {self.label}]",
+            f"Structural units: {', '.join(self.structural_units)}",
+        ]
+        if self.assistant_terminology:
+            terms = ", ".join(f"{k} = {v}"
+                              for k, v in self.assistant_terminology.items())
+            lines.append(f"Terminology: {terms}")
+        return "\n".join(lines)

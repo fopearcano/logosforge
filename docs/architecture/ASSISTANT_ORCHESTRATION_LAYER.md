@@ -282,3 +282,31 @@ permission model; full audit UI; and the live UI call-site wiring (the
 capability is exposed via `AssistantTools.capture_interaction`, intentionally
 not wired into UI workers — the running Alpha auto-saves nothing until a store +
 call site are explicitly wired).
+
+
+## Context-aware assistant output contracts (Assistant Behavior fix)
+
+The Assistant Engine's prompt builder is **section / writing-mode / action
+aware** (`storyplanner/assistant_contract.py`, wired in `ui/assistant_view.py`):
+
+- **Direct manuscript-writing actions** (Generate / Dialogue / Rewrite / Expand
+  / Continue / Tension) in the Manuscript/Scenes section produce **manuscript
+  content in the project's mode format** — screenplay text in Screenplay, prose
+  in Novel, panel script (Act → Page → Scene → Panel) in Graphic Novel,
+  stage-script text in Stage Script. The system prompt is a strict mode-specific
+  **output contract** that forbids markdown headings, outlines, "Suggested Scene
+  Structure", "Production Notes", "Key Questions", `[INTRODUCING]`-style labels,
+  analysis, and meta-commentary.
+- For direct-writing actions the engine's **critique overlay** ("key questions",
+  review checks) is suppressed from context (`NarrativeEngine.format_writing_block`),
+  because it induced analysis/structure output during writing.
+- **Planning sections** (Outline / Plot / Acts / Beats) and **analysis actions**
+  (Suggest / Summarize / Diagnose / Next Beat / Alternatives) keep structured
+  output; PSYKE produces codex content; Notes produces note content.
+- A response **validator** flags structure/analysis leakage in direct-writing
+  responses with a non-blocking ⚠ warning; output stays **preview-first**
+  (Copy / Replace / Insert / Append are explicit; no auto-apply).
+
+No provider/network/memory changes. Tests:
+`tests/test_assistant_action_routing.py`; manual:
+`docs/ASSISTANT_BEHAVIOR_MANUAL_TEST.md`.
