@@ -325,3 +325,18 @@ structure/analysis leakage (markdown headings, "Suggested Scene Structure",
 "Production Notes", `[INTRODUCING]`, etc.) with a non-blocking warning; apply
 stays explicit (preview-first). No provider/network/memory changes. Tests:
 `tests/test_assistant_action_routing.py`.
+
+
+## Assistant contract system (routing · validation · cache · apply)
+
+`storyplanner/assistant_contract.py` is the single source of truth for Assistant
+behavior: `route(...)` → `AssistantTaskContract` (section × mode × action ×
+target × request → output_kind / validator_profile / apply_allowed / cache key);
+`validate(...)` → `AssistantValidationResult` (status / apply_allowed /
+copy_allowed / cache_allowed / diagnostic_only / retry_recommended);
+`cache_key(...)` (unique per request shape + contract/validator version);
+`strict_retry_instruction(...)`. The panel enforces these: invalid output is not
+shown/cached/applied (cached responses re-validated), secrets/raw-audio withheld,
+hidden context never surfaced, modifiers can't change the output kind. No
+provider/network/memory changes. Tests: `tests/test_assistant_routing_matrix.py`,
+`tests/test_assistant_response_validation.py`, `tests/test_assistant_apply_safety.py`.

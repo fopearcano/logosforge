@@ -310,3 +310,32 @@ aware** (`storyplanner/assistant_contract.py`, wired in `ui/assistant_view.py`):
 No provider/network/memory changes. Tests:
 `tests/test_assistant_action_routing.py`; manual:
 `docs/ASSISTANT_BEHAVIOR_MANUAL_TEST.md`.
+
+
+## Assistant contract system (routing · validation · cache · apply)
+
+Every Assistant request is classified by `assistant_contract.route(...)` into an
+**AssistantTaskContract** = section × writing mode × action × target × user
+request → `output_kind` (direct_content / structure / codex / notes / timeline /
+analysis / suggestions / answer / transcript / clarification), `validator_profile`,
+`apply_allowed`, and `cache_key`. **No provider request is built without a
+contract.** Action + section + explicit instruction drive the output kind;
+assistant mode/personality are modifiers only and never change it.
+
+- **Validation enforced, not advisory** (`validate` → `AssistantValidationResult`):
+  invalid direct output (planning/meta/markdown/context dumps) is **not shown as
+  valid, not cached as valid, and Apply is disabled** (in `AssistantPanel._on_response`
+  + the central `_get_response_text` guard) — for cached responses too. Secrets /
+  raw-audio output is **withheld**; hidden-context labels (PSYKE / memory / AI
+  Mode) are invalid in any profile. A strict-retry directive
+  (`strict_retry_instruction`) is available for one re-ask on direct-content
+  leakage.
+- **Cache safety:** `cache_key(...)` is unique per entry-point / section / mode /
+  action / target / instruction / selected-text and per output-contract +
+  validator version, so a result is never replayed for a different request shape.
+- **Apply safety:** Replace/Insert/Append enabled only for valid, apply-eligible
+  output; Copy per `copy_allowed`; suggestions/analysis don't apply as manuscript
+  by default; Outline applies valid structure through its own pipeline.
+
+No provider/network/memory changes. Tests: `tests/test_assistant_routing_matrix.py`,
+`tests/test_assistant_response_validation.py`, `tests/test_assistant_apply_safety.py`.

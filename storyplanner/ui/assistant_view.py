@@ -1122,7 +1122,7 @@ class AssistantPanel(QWidget):
 
     def _get_section_system_prompt(self, action: str = "") -> str:
         from storyplanner.assistant_contract import (
-            is_direct_manuscript_writing, output_contract,
+            is_direct_manuscript_writing, output_contract, route,
         )
         base = SECTION_SYSTEM_PROMPTS.get(self._active_section, "")
         mode = "novel"
@@ -1137,6 +1137,15 @@ class AssistantPanel(QWidget):
             pass
         # Remember the (mode, section, action) for response validation.
         self._last_contract = (mode, self._active_section, action)
+        # Full routing contract drives validation / apply / cache enforcement.
+        try:
+            instr = self._prompt_input.toPlainText().strip()
+        except Exception:
+            instr = ""
+        self._task_contract = route(
+            entry_point="assistant_panel", section=self._active_section,
+            writing_mode=mode, action=action, user_instruction=instr,
+            has_target=True)
         # Direct manuscript-writing actions get a strict, mode-correct OUTPUT
         # contract — NOT the section base + the engine's critique/"key questions"
         # overlay, which makes the model emit analysis/structure instead of text.
@@ -1825,29 +1834,62 @@ class AssistantPanel(QWidget):
     # -- Response handling -----------------------------------------------------
 
     def _on_response(self, text: str, from_cache: bool) -> None:
-        self._response_output.setPlainText(self._maybe_warn(text))
-        self._cache_label.setVisible(from_cache)
+        # Validate against the routed task contract BEFORE the response is
+        # treated as usable. Invalid direct output is shown as an error (or
+        # withheld if it leaks secrets), and Apply is disabled — for cached
+        # responses too, so an invalid result is never replayed as valid.
         self._set_busy(False)
         self._worker = None
-
-    def _maybe_warn(self, text: str) -> str:
-        """Prepend a non-blocking warning when a direct manuscript-writing
-        response looks like planning/structure/analysis instead of content.
-        Never auto-applies; Copy/Replace/Insert/Append remain explicit."""
+        self._cache_label.setVisible(from_cache)
+        self._response_valid = True
+        self._copy_allowed = True
         try:
-            from storyplanner.assistant_contract import validate_response
-            mode, section, action = getattr(
-                self, "_last_contract", ("novel", "", ""))
-            issues = validate_response(text, writing_mode=mode,
-                                       section=section, action=action)
-            if issues:
-                label = mode.replace("_", " ")
-                return (f"⚠ This looks like planning/structure output, not "
-                        f"direct {label} manuscript text — review before "
-                        f"applying ({'; '.join(issues[:3])}).\n\n" + text)
+            from storyplanner.assistant_contract import validate
+            contract = getattr(self, "_task_contract", None)
+            res = validate(text, contract) if contract is not None else None
         except Exception:
-            pass
-        return text
+            res = None
+
+        if res is None or res.status == "valid":
+            self._response_output.setPlainText(text)
+            self._response_valid = True
+            # Manuscript Apply only for direct content; Outline mode applies
+            # valid structure through its own outline pipeline.
+            self._apply_ok = (True if res is None
+                              else bool(res.apply_allowed) or self._is_outline_mode())
+            self._copy_allowed = True
+        elif res.diagnostic_only:
+            self._response_output.setPlainText(
+                "⚠ Response withheld: it contained sensitive content "
+                "(a secret or raw-audio path). Nothing was applied.")
+            self._response_valid = False
+            self._apply_ok = False
+            self._copy_allowed = False
+        else:
+            reasons = "; ".join(res.reasons[:3])
+            label = getattr(contract, "writing_mode", "manuscript").replace(
+                "_", " ")
+            self._response_output.setPlainText(
+                f"⚠ Invalid output — this is planning/structure/meta, not "
+                f"usable {label} content, so Apply is disabled "
+                f"({reasons}). Refine your request or run the action again.\n\n"
+                f"— raw model output (not applied) —\n{text}")
+            self._response_valid = False
+            self._apply_ok = False
+            self._copy_allowed = False
+        self._apply_response_gating()
+
+    def _apply_response_gating(self) -> None:
+        """Enable manuscript Apply (Replace/Insert/Append) only for valid,
+        apply-eligible output; Copy only when allowed. Invalid output (planning
+        leak / secret) can never be applied — for cached responses too."""
+        apply_ok = getattr(self, "_apply_ok", True)
+        copy_ok = getattr(self, "_copy_allowed", True)
+        for btn in getattr(self, "_apply_buttons", []):
+            if btn is getattr(self, "_copy_btn", None):
+                btn.setEnabled(copy_ok)
+            else:
+                btn.setEnabled(apply_ok)
 
     def _on_error(self, error: str) -> None:
         self._response_output.setPlainText(f"Error:\n\n{error}")
@@ -1863,6 +1905,8 @@ class AssistantPanel(QWidget):
             btn.setEnabled(not busy)
 
     def _copy_response(self) -> None:
+        if not getattr(self, "_copy_allowed", True):
+            return
         text = self._response_output.toPlainText()
         if text:
             QApplication.clipboard().setText(text)
@@ -1870,6 +1914,10 @@ class AssistantPanel(QWidget):
     # -- Apply to editor / scene -----------------------------------------------
 
     def _get_response_text(self) -> str | None:
+        # Hard guard: never apply output the validator rejected (planning leak,
+        # secret, hidden-context dump) — covers Replace/Insert/Append + outline.
+        if not getattr(self, "_response_valid", True):
+            return None
         text = self._response_output.toPlainText().strip()
         if not text or text == "Thinking..." or text.startswith("Error:"):
             return None

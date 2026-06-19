@@ -89,3 +89,40 @@ unless requested.
   still drift — the ⚠ validator warning surfaces that and blocks silent apply.
 - Providers remain generation backends only; this change adds no provider, no
   network call, and no memory writes.
+
+---
+
+## Full routing contract + validation + apply/cache safety
+
+Every request is routed to an **AssistantTaskContract**
+(`storyplanner/assistant_contract.route`) =
+**section × writing mode × action × target × user request** → `output_kind`
+(direct_content / structure / codex / notes / timeline / analysis / suggestions
+/ answer / transcript / clarification), a `validator_profile`, `apply_allowed`,
+and a `cache_key`. The response is validated (`validate`) before it is usable.
+
+| Section / action | Expected output kind | Forbidden | Apply | Cache |
+|---|---|---|---|---|
+| Manuscript · Generate/Rewrite/Expand/Dialogue/Continue | direct content (mode format) | planning/markdown/analysis/context dumps | Replace/Insert/Append (valid only) | only valid |
+| Manuscript · Suggest | suggestions | applying as manuscript by default | Copy only | only valid |
+| Manuscript · Structure (explicit) | structure | — | Apply-to-Outline | only valid |
+| Outline · Generate/Suggest | structure | full prose pages | Apply-to-Outline | only valid |
+| Notes · summarize/organize/extract/convert | note ops | direct manuscript | Copy | only valid |
+| PSYKE · create/update/extract | codex/entity | direct manuscript | Copy | only valid |
+| Timeline · event/continuity/reorder | timeline ops | direct manuscript | Copy | only valid |
+| Chat · "continue/rewrite" (context) | direct content | planning essay | Copy | only valid |
+| Chat · "analyze" / "structure" / "what is…" | analysis / structure / answer | — | Copy | only valid |
+| Dexter · format/route transcript | transcript | raw audio / audio paths | route to target | only valid |
+
+**Hard rules verified by tests:** invalid direct output (planning/meta/markdown
+/ "Key Questions" / "Production Notes" / "Let me" / "PSYKE Context" / "Global
+Story Memory" / "[AI Mode:]") is **not shown as valid, not cached as valid, and
+Apply is disabled** — for cached responses too; secrets / raw-audio output is
+**withheld**; hidden context (PSYKE / memory / mode labels) never appears in
+user-facing output; assistant mode/personality are modifiers that cannot change
+the output kind. Missing target for a direct-writing request → a short
+clarification, never a planning essay.
+
+Automated: `tests/test_assistant_routing_matrix.py`,
+`tests/test_assistant_response_validation.py`,
+`tests/test_assistant_apply_safety.py`, `tests/test_assistant_action_routing.py`.
