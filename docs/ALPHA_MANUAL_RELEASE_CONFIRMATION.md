@@ -112,3 +112,5 @@ Signed off by: ____________________  Date: ____________
 10. [ ] Graphic Novel Manuscript (full screen) uses shared renderer; old page manager absent: ____
 11. [ ] Graphic Novel Outline uses shared block/card outline; standalone Pages disabled: ____
 12. [ ] Dexter opens after full screen; no raw-audio/memory side effect: ____
+
+13. [ ] Writer QA harness run, **0 BLOCKER**: `python tools/writer_qa/run_writer_qa.py --suite all`: ____

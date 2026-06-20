@@ -338,3 +338,21 @@ limitations for this RC:
   and the **ComfyUI connector is a disabled stub** (`comfyui_available()` is
   `False`; `send_to_comfyui` raises). **No image generation runs**, and no
   image/ComfyUI action exists in the Logos/Assistant registry.
+
+
+## Writer QA harness (required before Alpha release confirmation)
+
+Assistant behavior is now verified by the **Writer QA harness** (behavior, not
+just code): `python tools/writer_qa/run_writer_qa.py --suite all` drives the real
+Assistant contract layer with a deterministic fake provider across a section ×
+mode × action × target × response matrix and writes `reports/writer_qa/latest.{json,md}`.
+GitHub-only/CI runs catch contract / routing / validation / cache / apply
+failures but **not** all GUI/render/fullscreen issues — local PC (Level 2 API /
+Level 3 GUI computer-use) is recommended for final human-like acceptance. Test
+projects only; no real provider keys; no cloud/GitHub. See
+`docs/WRITER_QA_AGENT_PLAN.md`.
+
+**First-run findings (to fix before release):** 5 BLOCKER — wrong-mode Assistant
+output is applyable; 5 HIGH — empty output is applyable; 1 MEDIUM — Chat does not
+clarify on a missing target. Alpha release confirmation is **blocked** until the
+Writer QA suite reports **0 BLOCKER**.

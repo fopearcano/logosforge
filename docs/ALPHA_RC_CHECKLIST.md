@@ -173,3 +173,4 @@ per-mode export tests.)
 - [ ] No **ComfyUI / image-generation** module, action, or settings.
 - [ ] No **production scheduling / rehearsal / writers-room** management.
 - [ ] No **showrunner automation** that mutates data.
+- [ ] **Writer QA harness**: 0 BLOCKER findings (`tools/writer_qa/run_writer_qa.py --suite all`).

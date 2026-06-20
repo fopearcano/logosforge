@@ -126,3 +126,7 @@ clarification, never a planning essay.
 Automated: `tests/test_assistant_routing_matrix.py`,
 `tests/test_assistant_response_validation.py`,
 `tests/test_assistant_apply_safety.py`, `tests/test_assistant_action_routing.py`.
+
+## Writer QA harness
+
+Automated behavior coverage of this matrix lives in the Writer QA harness (`tools/writer_qa/`, `tests/test_writer_qa_harness.py`): `python tools/writer_qa/run_writer_qa.py --suite all`. See `docs/WRITER_QA_AGENT_PLAN.md`.
