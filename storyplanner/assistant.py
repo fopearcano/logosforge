@@ -372,6 +372,17 @@ def chat_completion(
     use_cache: bool = True,
     response_language: str = "",
 ) -> tuple[str, bool]:
+    # Local Writer QA mode (OFF by default). When LOGOSFORGE_QA_MODE is enabled,
+    # short-circuit to a deterministic fake provider BEFORE any credential is
+    # resolved or any network call is made — so an external writer/QA agent can
+    # exercise the real assistant pipeline (routing → validation → apply) with no
+    # provider, no network, no keys. Disabled → no behavior change whatsoever.
+    from storyplanner import qa_mode
+    if qa_mode.is_qa_mode():
+        # provider_error profile raises FakeProviderError → surfaced to the UI
+        # worker exactly like a real provider failure (no network involved).
+        return qa_mode.fake_completion(messages), False
+
     if provider is None:
         provider = ProviderConfig(
             name="LM Studio",

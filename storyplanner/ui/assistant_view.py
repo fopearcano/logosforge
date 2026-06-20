@@ -1879,6 +1879,37 @@ class AssistantPanel(QWidget):
             self._copy_allowed = False
         self._apply_response_gating()
 
+        # Local Writer QA mode (OFF by default): record a redacted structured
+        # event so an external writer/QA agent can audit routing / validation /
+        # apply without exposing secrets, raw audio, local paths, or full
+        # manuscripts. Fully env-gated and fail-safe; disabled → no-op.
+        try:
+            from storyplanner import qa_mode
+            if qa_mode.is_qa_mode():
+                c = getattr(self, "_task_contract", None)
+                qa_mode.log_event(
+                    "assistant_response",
+                    entry_point=getattr(c, "entry_point", "assistant_panel"),
+                    section=getattr(c, "section", self._active_section),
+                    writing_mode=getattr(c, "writing_mode", ""),
+                    action=getattr(c, "action", ""),
+                    target=getattr(c, "target", ""),
+                    output_kind=getattr(c, "output_kind", ""),
+                    validator_profile=getattr(c, "validator_profile", ""),
+                    validation_status=(res.status if res is not None else "none"),
+                    validation_reasons=(list(res.reasons)
+                                        if res is not None else []),
+                    response_valid=bool(getattr(self, "_response_valid", False)),
+                    apply_allowed=bool(getattr(self, "_apply_ok", False)),
+                    copy_allowed=bool(getattr(self, "_copy_allowed", False)),
+                    withheld=bool(res is not None and res.diagnostic_only),
+                    from_cache=bool(from_cache),
+                    profile=qa_mode.fake_provider_profile(),
+                    response_excerpt=text,
+                )
+        except Exception:
+            pass
+
     def _apply_response_gating(self) -> None:
         """Enable manuscript Apply (Replace/Insert/Append) only for valid,
         apply-eligible output; Copy only when allowed. Invalid output (planning

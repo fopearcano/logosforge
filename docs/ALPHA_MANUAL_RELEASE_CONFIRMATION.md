@@ -114,3 +114,8 @@ Signed off by: ____________________  Date: ____________
 12. [ ] Dexter opens after full screen; no raw-audio/memory side effect: ____
 
 13. [ ] Writer QA harness run, **0 BLOCKER**: `python tools/writer_qa/run_writer_qa.py --suite all`: ____
+14. [ ] Local QA mode (`LOGOSFORGE_QA_MODE=1`) drives the real UI with the fake
+    provider — no real provider/network/keys; run the 20-scenario script in
+    `docs/LOCAL_WRITER_QA_AGENT_SCRIPT.md` (planning leak blocked, secret
+    withheld, empty/provider-error handled, navigation + fullscreen stable);
+    confirm QA mode is OFF by default: ____

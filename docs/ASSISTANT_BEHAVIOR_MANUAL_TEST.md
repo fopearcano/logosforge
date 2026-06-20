@@ -130,3 +130,13 @@ Automated: `tests/test_assistant_routing_matrix.py`,
 ## Writer QA harness
 
 Automated behavior coverage of this matrix lives in the Writer QA harness (`tools/writer_qa/`, `tests/test_writer_qa_harness.py`): `python tools/writer_qa/run_writer_qa.py --suite all`. See `docs/WRITER_QA_AGENT_PLAN.md`.
+
+## Local QA mode (drive the real UI deterministically)
+
+To run these checks in the real app with a deterministic fake provider (no real
+provider / network / cloud / keys), enable local QA mode: `LOGOSFORGE_QA_MODE=1`
+(default OFF), open a `sample_projects/writer_qa/` project, and optionally force a
+response shape with `LOGOSFORGE_FAKE_PROVIDER_PROFILE` (e.g.
+`invalid_planning_markdown` to confirm leakage is blocked, `invalid_secret_leak`
+to confirm withholding). Full scripted checklist + 20 scenarios + bug template:
+`docs/LOCAL_WRITER_QA_AGENT_SCRIPT.md`. Tests: `tests/test_local_writer_qa_mode.py`.

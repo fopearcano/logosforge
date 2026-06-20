@@ -98,6 +98,12 @@ DEFAULTS: dict[str, object] = {
     # Dev/diagnostics: return safe processing summaries/counts (never secrets,
     # never raw chat, never raw audio paths). Default-OFF.
     "assistant_auto_memory_diagnostics_enabled": False,
+    # -- Local Writer QA agent mode (OFF by default) -------------------------
+    # Optional fake-provider profile used ONLY when LOGOSFORGE_QA_MODE is
+    # enabled (see storyplanner/qa_mode.py). Empty → the env var
+    # LOGOSFORGE_FAKE_PROVIDER_PROFILE (or the "valid_auto" default) decides.
+    # Has NO effect unless QA mode is explicitly turned on.
+    "qa_fake_provider_profile": "",
     "connector_enabled": False,
     "connector_allow_writes": False,
     "connector_confirm_writes": True,

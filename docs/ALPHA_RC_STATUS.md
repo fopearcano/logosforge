@@ -594,3 +594,36 @@ projects only; no real provider keys; no cloud/GitHub. See
 output is applyable; 5 HIGH — empty output is applyable; 1 MEDIUM — Chat does not
 clarify on a missing target. Alpha release confirmation is **blocked** until the
 Writer QA suite reports **0 BLOCKER**.
+
+
+## Local Writer QA agent mode (2026-06-20)
+
+Added a **local PC QA mode** (`storyplanner/qa_mode.py`) so an external GUI /
+computer-use writer agent (or a human) can drive the **real app** deterministically
+with **no real provider, network, cloud, or credentials**.
+
+- **OFF by default** — enabled only by `LOGOSFORGE_QA_MODE` in {1,true,yes,on}.
+  Disabled, runtime behavior is unchanged (verified: with QA off,
+  `chat_completion` takes the real provider path; the default settings key
+  `qa_fake_provider_profile` is empty).
+- **Deterministic fake provider, QA-only.** `chat_completion` short-circuits to
+  `qa_mode.fake_completion` *before* any credential/network use. Profiles A–O
+  (valid per mode/section, planning/context/meta/wrong-mode/empty/secret-leak,
+  provider error); default `valid_auto` returns mode-correct content. Selection:
+  settings → `LOGOSFORGE_FAKE_PROVIDER_PROFILE` → default.
+- **Redacted logging + report export.** Assistant responses log redacted events
+  (secrets/tokens/local paths/raw audio removed; long content truncated) under
+  `logs/writer_qa/`; `export_report()` and the test-only CLI
+  `tools/writer_qa/export_local_report.py` write
+  `reports/writer_qa/local_latest.{json,md}`. All generated artifacts are
+  git-ignored.
+- **Fixtures + script + tests.** `sample_projects/writer_qa/` (per-mode + Notes/
+  PSYKE), `docs/LOCAL_WRITER_QA_AGENT_SCRIPT.md` (20 scenarios + bug template),
+  `tests/test_local_writer_qa_mode.py`.
+
+**Verification:** `tests/test_local_writer_qa_mode.py` **30 passed**; existing
+`tests/test_writer_qa_harness.py` **16 passed**; alpha release gate
+(`tests/test_alpha_release_gate.py`) **35 passed** — no regressions. The local
+report run is offline and leak-free (forced `invalid_secret_leak` → all responses
+withheld, nothing leaked into logs/report). **Classification: A** — additive,
+default-off; no production behavior change.

@@ -29,6 +29,14 @@ panel** yet:
 - **HTML export** — preview-grade.
 - **HTTP API LAN / remote modes** — experimental; alpha targets desktop/localhost.
 - **Go McKee** plugin and **Connector write actions** — **off by default**.
+- **Local Writer QA agent mode** — a **local/dev testing aid**, **off by default**
+  (`LOGOSFORGE_QA_MODE`; `storyplanner/qa_mode.py`). When enabled it replaces the
+  model with a **deterministic fake provider** (no real provider/network/cloud/
+  keys) so a human or external GUI/computer-use writer agent can exercise the real
+  Assistant pipeline, Manuscript navigation, and fullscreen reproducibly. It does
+  **not** assess real model output quality and adds no provider, sync, Memory
+  Review UI, or image generation. Generated QA logs/reports/screenshots are
+  redacted and **git-ignored**. See `docs/LOCAL_WRITER_QA_AGENT_SCRIPT.md`.
 - **Local voice-to-script (MVP)** — **off by default** (`enable_voice_mode`;
   `voice_backend_mode` defaults to `"disabled"`). Local-first **near-live segmented
   dictation** with manual plain-text commit, in two backend modes: **Local PC**

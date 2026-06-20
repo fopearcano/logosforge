@@ -36,17 +36,46 @@ opt-in test build.
 user's PC/macOS, opens the real app, types writer requests, screenshots
 responses, records failures. Useful for final human-like acceptance; slower and
 less deterministic, so it must follow a scripted checklist
-(`docs/ASSISTANT_BEHAVIOR_MANUAL_TEST.md`). PySide/`pytest-qt` for the Qt app, or
-an OS-level computer-use agent. Not implemented (framework GUI automation is
-fragile); documented only.
+(`docs/LOCAL_WRITER_QA_AGENT_SCRIPT.md`, `docs/ASSISTANT_BEHAVIOR_MANUAL_TEST.md`).
+PySide/`pytest-qt` for the Qt app, or an OS-level computer-use agent. The GUI
+automation itself is not bundled (it is fragile and environment-specific), but
+the **local QA mode it depends on is implemented** (below).
+
+## Local QA mode (implemented)
+
+`storyplanner/qa_mode.py` makes the real app testable end-to-end **with no real
+provider, network, cloud, or credentials** — so an external GUI/computer-use
+writer agent (or a human) can drive the real UI deterministically.
+
+- **OFF by default.** Enabled only by `LOGOSFORGE_QA_MODE` in {1,true,yes,on}.
+- **Deterministic fake provider, reachable only in QA mode.** `chat_completion`
+  short-circuits to `qa_mode.fake_completion` *before* any credential/network
+  use; disabled → behavior is byte-for-byte unchanged. Profile selection:
+  settings key `qa_fake_provider_profile` → env `LOGOSFORGE_FAKE_PROVIDER_PROFILE`
+  → default `valid_auto` (mode-correct valid content). Profiles A–O cover valid
+  per mode/section, planning/context/meta/wrong-mode/empty/secret-leak, and a
+  provider error.
+- **Redacted structured logging.** Each assistant response logs a redacted event
+  (section/mode/action/target/output_kind/validation/apply) under
+  `logs/writer_qa/`; secrets, tokens, local/OS paths, and raw audio are redacted
+  and long content truncated — raw manuscripts are never written verbatim.
+- **Report export.** `qa_mode.export_report()` and the test-only CLI
+  `tools/writer_qa/export_local_report.py` write
+  `reports/writer_qa/local_latest.{json,md}` (git-ignored).
+- **Sample projects.** `sample_projects/writer_qa/` (one per mode + a Notes/PSYKE
+  fixture) load via the app's own importer.
+- **Agent script.** `docs/LOCAL_WRITER_QA_AGENT_SCRIPT.md` (setup, role, rules,
+  20 scenarios, bug template). Tests: `tests/test_local_writer_qa_mode.py`.
 
 ## Setup options
 
 - **A. GitHub-only / CI:** Level 1 headless harness + static tests. Catches
   contract / routing / validation / cache / apply failures. Cannot perceive real
   GUI rendering or fullscreen.
-- **B. Local PC:** run the app + Level 1 harness; optionally let a computer-use
-  agent operate the GUI (Level 3) and collect screenshots/logs.
+- **B. Local PC:** run the app with **local QA mode** (`LOGOSFORGE_QA_MODE=1`,
+  fake provider — no real provider/network/keys) + the Level 1 harness;
+  optionally let a computer-use agent operate the GUI (Level 3) and collect
+  redacted logs/reports. See `docs/LOCAL_WRITER_QA_AGENT_SCRIPT.md`.
 - **C. Internal API:** add the Level-2 test-only commands (preferred over raw
   GUI for reliability).
 
